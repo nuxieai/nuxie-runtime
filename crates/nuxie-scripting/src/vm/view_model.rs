@@ -480,6 +480,130 @@ impl ScriptViewModelFrameContext {
 /// slice of C++ `src/lua/lua_properties.cpp`.
 struct ScriptedViewModelHandle {
     model: ScriptViewModel,
+    /// For an instance a script created (`Data.X.new`, `model:new()`):
+    /// what [`instance_host_bytes`] estimates it holds; empty otherwise.
+    _charge: HostMemoryCharge,
+}
+
+/// Host memory of view-model instances a script creates or adds to lists.
+///
+/// The runtime does not report what an instance allocates, so the charge is
+/// an estimate from its shape: each core object counts its own size plus a
+/// stated slot overhead (the arena entry and handle identity).
+mod instance_bytes {
+    use std::mem::size_of;
+
+    use nuxie_runtime::ScriptViewModel;
+    use nuxie_runtime::ScriptViewModelProperty;
+    use nuxie_runtime::source::viewmodel::{
+        viewmodel_instance::ViewModelInstance,
+        viewmodel_instance_artboard::ViewModelInstanceArtboard,
+        viewmodel_instance_asset_blob::ViewModelInstanceAssetBlob,
+        viewmodel_instance_asset_font::ViewModelInstanceAssetFont,
+        viewmodel_instance_asset_image::ViewModelInstanceAssetImage,
+        viewmodel_instance_boolean::ViewModelInstanceBoolean,
+        viewmodel_instance_color::ViewModelInstanceColor,
+        viewmodel_instance_enum::ViewModelInstanceEnum,
+        viewmodel_instance_list::ViewModelInstanceList,
+        viewmodel_instance_list_item::ViewModelInstanceListItem,
+        viewmodel_instance_number::ViewModelInstanceNumber,
+        viewmodel_instance_string::ViewModelInstanceString,
+        viewmodel_instance_trigger::ViewModelInstanceTrigger,
+        viewmodel_instance_viewmodel::ViewModelInstanceViewModel,
+    };
+
+    /// The arena slot and handle identity of one core object: a stated
+    /// bound, not a measurement.
+    const CORE_OBJECT_OVERHEAD: usize = 64;
+
+    const fn object<T>() -> usize {
+        size_of::<T>().saturating_add(CORE_OBJECT_OVERHEAD)
+    }
+
+    const fn max(mut sizes: &[usize]) -> usize {
+        let mut largest = 0;
+        while let [size, rest @ ..] = sizes {
+            if *size > largest {
+                largest = *size;
+            }
+            sizes = rest;
+        }
+        largest
+    }
+
+    /// One instance object.
+    pub(super) const INSTANCE: usize = object::<ViewModelInstance>();
+    /// One property value: the largest value object.
+    pub(super) const PROPERTY: usize = max(&[
+        object::<ViewModelInstanceArtboard>(),
+        object::<ViewModelInstanceAssetBlob>(),
+        object::<ViewModelInstanceAssetFont>(),
+        object::<ViewModelInstanceAssetImage>(),
+        object::<ViewModelInstanceBoolean>(),
+        object::<ViewModelInstanceColor>(),
+        object::<ViewModelInstanceEnum>(),
+        object::<ViewModelInstanceList>(),
+        object::<ViewModelInstanceNumber>(),
+        object::<ViewModelInstanceString>(),
+        object::<ViewModelInstanceTrigger>(),
+        object::<ViewModelInstanceViewModel>(),
+    ]);
+    /// One list entry, without the instance it holds.
+    pub(super) const LIST_ITEM: usize = object::<ViewModelInstanceListItem>();
+    /// The most instances one estimate visits: it bounds the work, and a
+    /// cycle a script made by assigning an instance into itself stops here.
+    const MAX_VISITED: usize = 4096;
+
+    /// What `model` and the instances nested in it (view-model properties
+    /// and list items) hold, estimated from their shape; strings and assets
+    /// they hold are charged where they are set.
+    pub(super) fn of(model: &ScriptViewModel) -> usize {
+        let mut bytes = 0_usize;
+        let mut pending = vec![model.clone()];
+        let mut visited = 0_usize;
+        while let Some(model) = pending.pop() {
+            if visited >= MAX_VISITED {
+                break;
+            }
+            visited = visited.saturating_add(1);
+            bytes = bytes.saturating_add(INSTANCE);
+            for (name, kind) in model.properties() {
+                bytes = bytes
+                    .saturating_add(PROPERTY)
+                    .saturating_add(name.len());
+                match kind {
+                    ScriptViewModelProperty::ViewModel => {
+                        pending.extend(model.view_model(name));
+                    }
+                    ScriptViewModelProperty::List => {
+                        let len = model.list_len(name).unwrap_or(0);
+                        let room = MAX_VISITED.saturating_sub(visited.saturating_add(pending.len()));
+                        for index in 0..len.min(room) {
+                            bytes = bytes.saturating_add(LIST_ITEM);
+                            pending.extend(model.list_item(name, index));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        bytes
+    }
+}
+
+/// A view-model instance for `model`, charged before it is created.
+fn new_charged_instance(
+    lua: &Lua,
+    model: &ScriptViewModel,
+    name: Option<&str>,
+) -> crate::luau::Result<(ScriptViewModel, HostMemoryCharge)> {
+    // The new instance has the shape of the one it is created from.
+    let charge = HostMemoryCharge::for_lua(lua, instance_bytes::of(model))?;
+    let instance = model
+        .named_instance(name)
+        .or_else(|| model.named_instance(None))
+        .ok_or_else(|| crate::luau::Error::runtime("view-model instance not found"))?;
+    Ok((instance, charge))
 }
 
 impl UserData for ScriptedViewModelHandle {}
@@ -496,13 +620,23 @@ fn create_scripted_view_model_with_listener_owner(
     model: ScriptViewModel,
     listener_owner: Option<ScriptedPropertyListenerOwner>,
 ) -> crate::luau::Result<Table> {
+    create_charged_scripted_view_model(lua, model, listener_owner, HostMemoryCharge::default())
+}
+
+/// A view-model table whose handle keeps `charge` for the instance.
+fn create_charged_scripted_view_model(
+    lua: &Lua,
+    model: ScriptViewModel,
+    listener_owner: Option<ScriptedPropertyListenerOwner>,
+    charge: HostMemoryCharge,
+) -> crate::luau::Result<Table> {
     if lua
         .named_registry_value::<Function>(PROPERTY_METATABLE_PATCHER)
         .is_err()
     {
         install_property_binding_support(lua)?;
     }
-    create_scripted_view_model_retained(lua, model, listener_owner)
+    create_scripted_view_model_retained(lua, model, listener_owner, charge)
 }
 
 pub(super) fn install_property_binding_support(lua: &Lua) -> crate::luau::Result<()> {
@@ -850,6 +984,7 @@ fn create_scripted_view_model_retained(
     lua: &Lua,
     model: ScriptViewModel,
     listener_owner: Option<ScriptedPropertyListenerOwner>,
+    charge: HostMemoryCharge,
 ) -> crate::luau::Result<Table> {
     let frame_context = ScriptViewModelFrameContext::for_lua(lua);
     let table = lua.create_table();
@@ -857,6 +992,7 @@ fn create_scripted_view_model_retained(
         "__rive_model",
         lua.create_userdata(ScriptedViewModelHandle {
             model: model.clone(),
+            _charge: charge,
         })?,
     )?;
 
@@ -1034,11 +1170,8 @@ fn create_scripted_view_model_retained(
                     }
                     _ => None,
                 };
-                let model = model
-                    .named_instance(name.as_deref())
-                    .or_else(|| model.named_instance(None))
-                    .ok_or_else(|| crate::luau::Error::runtime("view-model instance not found"))?;
-                create_scripted_view_model_with_listener_owner(lua, model, listener_owner.clone())
+                let (model, charge) = new_charged_instance(lua, &model, name.as_deref())?;
+                create_charged_scripted_view_model(lua, model, listener_owner.clone(), charge)
                     .map(Value::Table)
             })
         };
@@ -3142,11 +3275,8 @@ pub(super) fn install_data_global(
                     [_] => return Ok(Value::Nil),
                     _ => None,
                 };
-                let instance = model
-                    .named_instance(name.as_deref())
-                    .or_else(|| model.named_instance(None))
-                    .ok_or_else(|| crate::luau::Error::runtime("view-model instance not found"))?;
-                create_scripted_view_model(lua, instance).map(Value::Table)
+                let (instance, charge) = new_charged_instance(lua, &model, name.as_deref())?;
+                create_charged_scripted_view_model(lua, instance, None, charge).map(Value::Table)
             })?,
         )?;
         data.set(name, definition)?;
@@ -5306,6 +5436,58 @@ mod tests {
         assert!(!ok, "expected a refusal");
         assert!(error.contains("host memory budget"), "{error}");
         error
+    }
+
+    fn fixture_file(asset: &str) -> nuxie_runtime::RuntimeFileHandle {
+        let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+            .join("tests/unit_tests/assets")
+            .join(asset);
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+        native_test_file(&bytes)
+    }
+
+    // Inventory row 24: `Data.X.new` made a full instance per call with no
+    // charge.
+    #[test]
+    fn data_new_is_charged_for_the_instance() {
+        let file = fixture_file("script_create_viewmodel_instance.riv");
+        let models = nuxie_runtime::script_view_models(&file);
+        let (name, model) = models.iter().next().expect("a view model");
+        let expected = super::instance_bytes::of(model);
+        assert!(expected > 0);
+        let lua = budget_lua(64 * 1024);
+        install_data_global(&lua, &models).unwrap();
+        lua.globals().set("name", name.clone()).unwrap();
+        lua.load("kept = Data[name].new()").exec().unwrap();
+        assert_eq!(budget_used(&lua), expected);
+        refused_by_budget(
+            &lua,
+            "local all = {} for i = 1, 100000 do all[i] = Data[name].new() end",
+        );
+        lua.load("kept = nil").exec().unwrap();
+        lua.gc_collect().unwrap();
+        assert_eq!(budget_used(&lua), 0, "a collected instance refunds");
+    }
+
+    // Inventory row 24: `model:new()` / `model:instance()` is the same
+    // constructor as `Data.X.new`.
+    #[test]
+    fn model_new_is_charged_for_the_instance() {
+        let file = fixture_file("script_create_viewmodel_instance.riv");
+        let model = nuxie_runtime::script_view_models(&file)
+            .into_values()
+            .find_map(|model| model.named_instance(None))
+            .expect("an instance");
+        let lua = budget_lua(64 * 1024);
+        let table = create_scripted_view_model(&lua, model).expect("scripted model");
+        lua.globals().set("model", table).unwrap();
+        refused_by_budget(
+            &lua,
+            "local all = {} for i = 1, 100000 do all[i] = model:new() end",
+        );
     }
 
     // Inventory row 24: the Blob setter copied a script's bytes into the

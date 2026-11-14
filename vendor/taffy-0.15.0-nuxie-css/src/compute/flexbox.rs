@@ -1873,7 +1873,9 @@ fn determine_flex_base_size(
         // https://github.com/w3c/csswg-drafts/issues/10997
         let hypothetical_inner_min_main = child
             .resolved_minimum_main_size
-            .maybe_max(transferred_min_size.main(constants.dir))
+            // nuxie-css: the item's own maximum caps a minimum the ratio transfers
+            // (Chrome: `aspect-ratio: 1; min-height: 30px; max-width: 10px` is 10 wide).
+            .maybe_max(transferred_min_size.main(constants.dir).maybe_min(child.max_size.main(constants.dir)))
             .maybe_max(padding_border_axes_sums.main(constants.dir));
         let hypothetical_inner_size =
             child.flex_basis.maybe_clamp(Some(hypothetical_inner_min_main), transferred_max_size.main(constants.dir));
@@ -2450,10 +2452,12 @@ fn intrinsic_line_item_sum(
                     // nuxie-css: a minimum width the ratio transfers from `min-height` is
                     // part of the item's contribution, as an authored `min-width` is
                     // (Chrome: a `fit-content` row around `aspect-ratio: 1; min-height:
-                    // 30px` and a 40 wide box is 70 wide).
+                    // 30px` and a 40 wide box is 70 wide). Unlike an authored `min-width`
+                    // it does not exceed the item's `max-width`.
                     let sized = item.size_style.map(|d| !d.is_auto());
-                    let transferred_min =
-                        transfer_into_unsized(item.min_size, item.ratio, sized, false).main(dir);
+                    let transferred_min = transfer_into_unsized(item.min_size, item.ratio, sized, false)
+                        .main(dir)
+                        .maybe_min(style_max);
                     inner_main_size.maybe_clamp(style_min.or(transferred_min), style_max)
                 } else {
                     inner_main_size.max(item.flex_basis).maybe_clamp(style_min, style_max)

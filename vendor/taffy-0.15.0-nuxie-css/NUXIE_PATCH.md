@@ -1481,8 +1481,13 @@ min-height: 30px; flex-grow: 1` and a 40 wide picture is 70 wide, and the
 two sit on one line. The fork made the row 40 wide and wrapped the picture.
 
 `intrinsic_line_item_sum` now floors a measured row item's contribution by
-the transferred minimum when the item has no `min-width` of its own.
+the transferred minimum when the item has no `min-width` of its own. The
+item's `max-width` caps that floor (Chrome: with `max-width: 10px` the
+item counts as 10 wide). The same cap holds for the item's hypothetical
+size in `determine_flex_base_size`, where the transferred minimum won over
+`max-width` (Chrome: `aspect-ratio: 1; min-height: 30px; max-width: 10px`
+is 10 wide; the fork made it 30 wide).
 
-Of the 29,914 layouts, 115 more match and one that matched differs: a
+Of the 29,914 layouts, 118 more match and one that matched differs: a
 `width: max-content` ratio grid around a wrapping row whose item grows
 through the same ratio item (Chrome 440 wide, 400 here).

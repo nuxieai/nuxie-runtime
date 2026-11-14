@@ -1091,6 +1091,25 @@ mod layout_bound_tests {
         ]
     }
 
+    // Codex review (lane H2): a line's copies were bounded by their
+    // sources' capacities and twice the run count, so a relayout no larger
+    // than the layout it replaced was refused at that size.
+    #[test]
+    fn a_relayout_fits_where_the_layout_it_replaces_did() {
+        let font = HbFont::decode(ROBOTO).expect("roboto");
+        let mut t = text();
+        for i in 0..3_u32 {
+            t.append(" ", None, font.clone(), 16.0, -1.0, 0.0, 0xff000000 | i);
+        }
+        t.set_sizing(TextSizing::AutoWidth);
+        t.set_max_width(100.0);
+        assert!(t.lay_out_within(usize::MAX).expect("unbounded"));
+        let held = t.heap_bytes();
+        t.set_max_width(50.0);
+        assert!(t.lay_out_within(held).is_ok(), "refused at {held}");
+        assert_eq!(t.heap_bytes(), held);
+    }
+
     // Lane H2: a layout is refused before it holds more than its allowance
     // (but for the glyph lookup, built once the layout is admitted), and
     // the allowance it needs stays within twice what it holds.

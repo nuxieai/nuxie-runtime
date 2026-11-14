@@ -20,12 +20,16 @@ use nuxie_runtime::{
             raw_text::RawText,
         },
         text_engine::{
-            GlyphRenderKind, GlyphRun, OrderedLine, TextDirection, TextOrigin, TextOverflow,
-            TextSizing, TextWordBreak, TextWrap,
+            Font, FontRef, GlyphRenderKind, GlyphRun, OrderedLine, TextDirection, TextOrigin,
+            TextOverflow, TextSizing, TextWordBreak, TextWrap,
         },
     },
 };
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, Weak},
+};
 
 /// Host bytes one appended input byte is charged: a code point (4 bytes; a
 /// byte is at most one code point) and the shaped glyph data it may become
@@ -62,9 +66,18 @@ struct TextLayout {
     charge: HostMemoryCharge,
     /// Bytes the content appended since the last clear needs.
     content_bytes: usize,
-    /// The charges of decoded fonts the content was shaped with, which the
-    /// runs keep alive; one entry per change of font between appends.
-    fonts: Vec<Rc<HostMemoryCharge>>,
+    /// The decoded fonts the content was shaped with and their charges,
+    /// one entry per change of font between appends. Shaped runs keep the
+    /// faces alive past a clear (until the next layout), so like `charge`
+    /// this is kept for the Text's life.
+    fonts: Vec<TextFont>,
+}
+
+/// A face appended to a Text, known by address only (a `Weak` does not keep
+/// the face's data), and the charge for its bytes.
+struct TextFont {
+    face: Weak<dyn Font>,
+    charge: Rc<HostMemoryCharge>,
 }
 
 impl TextLayout {
@@ -93,6 +106,16 @@ impl TextLayout {
     fn text(&mut self) -> &mut RawText {
         self.sync();
         &mut self.text
+    }
+
+    /// The charge for `font`'s face if it was appended here; a font the
+    /// shaper fell back to was not decoded by the script.
+    fn font_charge(&self, font: &FontRef) -> Rc<HostMemoryCharge> {
+        self.fonts
+            .iter()
+            .rev()
+            .find(|entry| std::ptr::addr_eq(entry.face.as_ptr(), Arc::as_ptr(font)))
+            .map_or_else(Rc::default, |entry| Rc::clone(&entry.charge))
     }
 
     /// The text, if nothing changed since `epoch`.
@@ -393,6 +416,7 @@ impl UserData for ScriptedText {
                         .saturating_add(TEXT_STYLE_BYTES),
                 )?;
                 let styles = layout.text.style_count();
+                let face = Arc::downgrade(&font);
                 layout.text().append(
                     &bytes,
                     paint,
@@ -405,12 +429,15 @@ impl UserData for ScriptedText {
                 if !layout
                     .fonts
                     .last()
-                    .is_some_and(|last| Rc::ptr_eq(last, &font_charge))
+                    .is_some_and(|last| Weak::ptr_eq(&last.face, &face))
                 {
                     // Within the run's charge; a failed reservation only
                     // leaves the font uncounted here, it stays alive anyway.
                     if layout.fonts.try_reserve(1).is_ok() {
-                        layout.fonts.push(font_charge);
+                        layout.fonts.push(TextFont {
+                            face,
+                            charge: font_charge,
+                        });
                     }
                 }
                 let new_style = if layout.text.style_count() > styles {
@@ -429,7 +456,6 @@ impl UserData for ScriptedText {
             let mut layout = t.layout.borrow_mut();
             layout.text().clear();
             layout.content_bytes = 0;
-            layout.fonts.clear();
             Ok(())
         });
         methods.add_method_lent(
@@ -699,7 +725,15 @@ impl UserData for ScriptedGlyph {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("id", |_, g| g.with(|r| glyph_value(&r.glyphs, g.glyph)));
         fields.add_field_method_get("font", |lua, g| {
-            super::lua_font::push_font(lua, g.with(|r| run_font(r).cloned())?)
+            // A decoded font's face is shared with the font it came from.
+            let (font, charge) = {
+                let mut layout = g.layout.borrow_mut();
+                let line = line_at(layout.fresh(g.epoch)?, g.line)?;
+                let font = run_font(run_at(line, g.run)?)?.clone();
+                let charge = layout.font_charge(&font);
+                (font, charge)
+            };
+            super::lua_font::push_charged_font(lua, font, charge)
         });
         fields.add_field_method_get("size", |_, g| g.with(|r| Ok(r.size)));
         fields.add_field_method_get("x", |_, g| g.with(|_| Ok(g.position.x)));

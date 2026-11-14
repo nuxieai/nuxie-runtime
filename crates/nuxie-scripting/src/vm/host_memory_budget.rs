@@ -456,8 +456,32 @@ mod binding_tests {
         vm.vm.eval::<()>("derived = nil").unwrap();
         vm.vm.lua().gc_collect().unwrap();
         assert_eq!(vm.used(), 226_004 + text_bytes, "the text keeps the face");
+        // Shaped runs keep the face past a clear, so the charge stays too.
         vm.vm.eval::<()>("text:clear()").unwrap();
-        assert_eq!(vm.used(), text_bytes, "a clear lets go of the face");
+        assert_eq!(vm.used(), 226_004 + text_bytes, "a clear keeps the face");
+        vm.vm.eval::<()>("text = nil").unwrap();
+        vm.vm.lua().gc_collect().unwrap();
+        assert_eq!(vm.used(), 0);
+    }
+
+    // Codex review: `glyph.font` returned an uncharged font that kept the
+    // decoded face alive after the font and the Text were collected.
+    #[test]
+    fn a_glyph_font_shares_the_decoded_charge() {
+        let vm = font_vm(1024 * 1024);
+        vm.vm
+            .eval::<()>(
+                "local font = Font.decode(fontBytes) \
+                 local text = Text.new() \
+                 text:append('x', {font = font}) \
+                 for _, line in text:lines() do \
+                   for _, glyph in line:glyphs() do kept = glyph.font end \
+                 end",
+            )
+            .unwrap();
+        assert!(vm.vm.eval::<bool>("return kept ~= nil").unwrap());
+        vm.vm.lua().gc_collect().unwrap();
+        assert_eq!(vm.used(), 226_004, "the glyph's font keeps the face");
     }
 
     // Inventory row 13: appended characters, runs and styles.

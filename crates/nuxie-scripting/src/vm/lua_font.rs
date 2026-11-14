@@ -245,7 +245,7 @@ pub(super) fn create_asset_font(lua: &Lua, font: ScriptFont) -> Result<Option<An
 }
 
 /// A font that keeps bytes `charge` paid for.
-fn push_charged_font(
+pub(super) fn push_charged_font(
     lua: &Lua,
     font: FontRef,
     charge: Rc<HostMemoryCharge>,

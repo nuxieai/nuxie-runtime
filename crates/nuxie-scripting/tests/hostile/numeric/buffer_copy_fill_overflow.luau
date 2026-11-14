@@ -1,0 +1,46 @@
+--! attacks: buffer.copy and buffer.fill with offset+count overflowing 32 and 53 bits, negative and NaN offsets and counts, and overlapping self-copies; expect: ok; within: 20s
+local LOG = {}
+local function try(name, f, ...)
+  local r = table.pack(pcall(f, ...))
+  local err = tostring(r[2])
+  assert(not string.find(err, "rust panic", 1, true), name .. ": " .. err)
+  table.insert(LOG, name .. " => " .. tostring(r[1]) .. " " .. string.sub(err, 1, 120))
+  return r[1], r[2], r
+end
+local function refused(name, f, ...)
+  local ok, err = try(name, f, ...)
+  assert(not ok, name .. ": accepted")
+  return tostring(err)
+end
+local nan, inf = 0 / 0, math.huge
+local a = buffer.create(64)
+local b = buffer.create(64)
+refused("copy target 2^32-1", buffer.copy, a, 2 ^ 32 - 1, b, 0, 2)
+refused("copy target 2^32", buffer.copy, a, 2 ^ 32, b, 0, 1)
+refused("copy source 2^32-1", buffer.copy, a, 0, b, 2 ^ 32 - 1, 2)
+refused("copy count 2^32", buffer.copy, a, 0, b, 0, 2 ^ 32)
+refused("copy count 2^32+1", buffer.copy, a, 0, b, 0, 2 ^ 32 + 1)
+refused("copy source 1 count 2^32-1", buffer.copy, a, 0, b, 1, 2 ^ 32 - 1)
+refused("copy count 65", buffer.copy, a, 0, b, 0, 65)
+refused("copy target -1", buffer.copy, a, -1, b, 0, 1)
+refused("copy count -1", buffer.copy, a, 0, b, 0, -1)
+refused("copy source 2^53", buffer.copy, a, 0, b, 2 ^ 53, 1)
+try("copy target nan", buffer.copy, a, nan, b, 0, 1)
+try("copy count nan", buffer.copy, a, 0, b, 0, nan)
+try("copy source inf", buffer.copy, a, 0, b, inf)
+-- overlapping self copies in both directions, full length
+buffer.writestring(a, 0, string.rep("0123456789abcdef", 4))
+buffer.copy(a, 1, a, 0, 63)
+buffer.copy(a, 0, a, 1, 63)
+buffer.copy(a, 64, a, 0, 0)
+refused("fill off 2^32-1", buffer.fill, a, 2 ^ 32 - 1, 0, 2)
+refused("fill count 2^32-2", buffer.fill, a, 4, 0, 2 ^ 32 - 2)
+refused("fill count 2^32", buffer.fill, a, 0, 0, 2 ^ 32)
+refused("fill count 65", buffer.fill, a, 0, 0, 65)
+refused("fill off -1", buffer.fill, a, -1, 0, 2)
+refused("fill count -1", buffer.fill, a, 0, 0, -1)
+try("fill value 2^40", buffer.fill, a, 0, 2 ^ 40)
+try("fill value nan", buffer.fill, a, 0, nan)
+try("fill count nan", buffer.fill, a, 0, 1, nan)
+try("fill off len count 0", buffer.fill, a, 64, 1, 0)
+return {}

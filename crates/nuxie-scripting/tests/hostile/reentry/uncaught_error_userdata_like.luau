@@ -1,0 +1,13 @@
+--! attacks: an uncaught error whose value is host userdata (Path, Paint) or a table whose __tostring yields; expect: error; within: 10s
+local ok, err = pcall(error, Path.new())
+assert(not ok and type(err) == "userdata", typeof(err))
+ok, err = pcall(error, Paint.new())
+assert(not ok)
+local co = coroutine.wrap(function()
+  error(setmetatable({}, { __tostring = function() coroutine.yield(1); return "yielded" end }))
+end)
+ok, err = pcall(co)
+assert(not ok)
+local ok2 = pcall(tostring, err)
+assert(not ok2, "yield from __tostring outside a coroutine must fail")
+error(Path.new())

@@ -1,0 +1,26 @@
+--! attacks: Path methods and Path.add given wrong types; expect: ok; within: 10s
+local p = Path.new()
+local function refused(f, ...)
+  local ok, err = pcall(f, ...)
+  assert(not ok, "call was accepted")
+  assert(not string.find(tostring(err), "rust panic", 1, true), tostring(err))
+end
+refused(function() p:moveTo("x") end)
+refused(function() p:lineTo(nil) end)
+refused(function() p:quadTo(Vector.xy(1, 1)) end)
+refused(function() p:cubicTo(1, 2, 3) end)
+refused(function() p:add(5) end)
+refused(function() p:add(Paint.new()) end)
+refused(function() p:add(p, 5) end)
+refused(function() p:add(p, Paint.new()) end)
+refused(function() p:add() end)
+refused(function() p.add(nil, p) end)
+refused(function() p.moveTo(Paint.new(), Vector.xy(0, 0)) end)
+refused(function() p:measure():extract("a", "b", p) end)
+p:moveTo(Vector.xy(0, 0)) p:lineTo(Vector.xy(10, 0))
+refused(function() p:measure():extract(0, 10, "not a path") end)
+refused(function() p:contours():extract(0, 10, Paint.new()) end)
+refused(function() return p.nonexistent.field end)
+-- Self-add through the function form with a matrix that is not a Mat2D.
+refused(function() Path.new().add(p, p, Vector.xy(1, 1)) end)
+return {}

@@ -440,6 +440,9 @@ mod binding_tests {
         assert_eq!((empty, contour), (0, 0));
     }
 
+    /// A Text's first font-list growth: four 24-byte entries.
+    const FONT_LIST_BYTES: usize = 4 * 24;
+
     fn font_vm(budget: usize) -> Vm {
         let vm = Vm::with_budget(budget);
         let bytes = include_bytes!("../../../../fixtures/fonts/ibm-plex-sans-arabic.ttf");
@@ -471,7 +474,7 @@ mod binding_tests {
             )
             .unwrap();
         vm.vm.lua().gc_collect().unwrap();
-        let text_bytes = 24 + 64 + 256;
+        let text_bytes = 24 + 64 + 256 + FONT_LIST_BYTES;
         assert_eq!(vm.used(), 226_004 + text_bytes);
         vm.vm.eval::<()>("derived = nil").unwrap();
         vm.vm.lua().gc_collect().unwrap();
@@ -527,7 +530,11 @@ mod binding_tests {
             )
             .unwrap();
         let charged = vm.used() - fonts - 226_004;
-        assert_eq!(charged, 24 * 1000 + 64 + 256, "a clear keeps the high-water charge");
+        assert_eq!(
+            charged,
+            24 * 1000 + 64 + 256 + FONT_LIST_BYTES,
+            "a clear keeps the high-water charge"
+        );
     }
 
     // Inventory row 13: a style id is a `u16`; the 65,537th distinct style
@@ -593,5 +600,24 @@ mod binding_tests {
             )
             .unwrap();
         assert_eq!(vm.used(), 1);
+    }
+
+    // Codex review: alternating fonts across clears grew the Text's font
+    // list without a charge.
+    #[test]
+    fn a_texts_font_list_is_charged_across_clears() {
+        let vm = font_vm(1024 * 1024);
+        vm.refused(
+            "local a = Font.decode(fontBytes) \
+             local b = a:withOptions({}, {}) \
+             local text = Text.new() \
+             local ok, err = pcall(function() \
+               for i = 1, 200000 do \
+                 text:clear() \
+                 text:append('x', {font = if i % 2 == 0 then a else b}) \
+               end \
+             end) \
+             return not ok, tostring(err)",
+        );
     }
 }

@@ -649,7 +649,13 @@ fn compute_inner(
     let container_outer_width = known_dimensions.width.unwrap_or_else(|| {
         let available_width = available_space.width.maybe_sub(content_box_inset.horizontal_axis_sum());
         let intrinsic_width =
-            determine_content_based_container_width(tree, &items, available_width, container_content_box_size.height)
+            determine_content_based_container_width(
+                tree,
+                &items,
+                available_width,
+                container_content_box_size.height,
+                !inputs.known_height_awaits_flexing,
+            )
             + content_box_inset.horizontal_axis_sum();
         intrinsic_width.maybe_clamp(min_size.width, max_size.width).maybe_max(Some(padding_border_size.width))
     });
@@ -717,6 +723,7 @@ fn compute_inner(
         children_margins_adjoin_own_edges,
         // nuxie-css: see `picture_stretch_height_resolves` there.
         !inputs.known_height_is_stretch_only || size.height.is_some(),
+        !inputs.known_height_awaits_flexing,
         #[cfg(feature = "content_size")]
         is_scroll_container,
         block_ctx,
@@ -1136,6 +1143,8 @@ fn determine_content_based_container_width(
     items: &[BlockItem],
     available_width: AvailableSpace,
     container_inner_height: Option<f32>,
+    // nuxie-css: see `LayoutInput::known_height_awaits_flexing`.
+    stretch_heights_resolve: bool,
 ) -> f32 {
     let available_space = Size { width: available_width, height: AvailableSpace::MinContent };
 
@@ -1147,7 +1156,9 @@ fn determine_content_based_container_width(
         // ratio gives the item's width from it.
         let stretch_height = resolve_stretch_height(
             item.size_style.height,
-            container_inner_height,
+            // Only a picture is measured without it (Chrome: a ratio box there still
+            // takes its width from the height).
+            container_inner_height.filter(|_| stretch_heights_resolve || !item.is_compressible_replaced),
             item.margin.resolve_or_zero(None, |val, basis| tree.calc(val, basis)),
             Line::FALSE,
         );
@@ -1245,6 +1256,8 @@ fn perform_final_layout_on_in_flow_children(
     // row sized by content, `LayoutInput::known_height_is_stretch_only`): Chrome leaves the
     // picture at its natural size there.
     picture_stretch_height_resolves: bool,
+    // nuxie-css: see `LayoutInput::known_height_awaits_flexing`.
+    stretch_heights_resolve: bool,
     #[cfg(feature = "content_size")] is_scroll_container: bool,
     block_ctx: &mut BlockContext<'_>,
     // nuxie-css: also returns the in-flow content's end after its trailing collapsed margins.
@@ -1254,6 +1267,7 @@ fn perform_final_layout_on_in_flow_children(
     let container_percentage_resolution_height =
         container_percentage_resolution_height.maybe_sub(resolved_content_box_inset.vertical_axis_sum());
     let parent_size = Size { width: Some(container_inner_width), height: container_percentage_resolution_height };
+    let stretch_resolution_height = container_percentage_resolution_height.filter(|_| stretch_heights_resolve);
     // Vertical available space in block flow is indefinite, NOT a min-content
     // constraint: MaxContent is taffy's representation of "indefinite".
     // Passing MinContent here made every descendant grid believe it was being
@@ -1336,7 +1350,7 @@ fn perform_final_layout_on_in_flow_children(
                 };
                 let item_known_height = resolve_stretch_height(
                     item.size_style.height,
-                    container_percentage_resolution_height,
+                    stretch_resolution_height,
                     item_non_auto_margin,
                     // The margins of a float never collapse
                     Line::FALSE,
@@ -1530,7 +1544,7 @@ fn perform_final_layout_on_in_flow_children(
                 // `height: stretch` in a 100-tall block is 50 by 100). Stock dropped it.
                 let keyword_height = resolve_stretch_height(
                     item.size_style.height,
-                    container_percentage_resolution_height,
+                    stretch_resolution_height,
                     item_non_auto_margin,
                     children_margins_adjoin_own_edges,
                 )
@@ -1571,7 +1585,7 @@ fn perform_final_layout_on_in_flow_children(
 
                 let keyword_height = resolve_stretch_height(
                     item.size_style.height,
-                    container_percentage_resolution_height,
+                    stretch_resolution_height,
                     item_non_auto_margin,
                     children_margins_adjoin_own_edges,
                 );
@@ -1632,6 +1646,7 @@ fn perform_final_layout_on_in_flow_children(
                 known_dimensions,
                 known_dimensions_are_definite: Size { width: true, height: true },
                 known_height_is_stretch_only: false,
+                known_height_awaits_flexing: false,
                 pictures_follow_stretch_height: false,
                 parent_size,
                 available_space: available_space.map_width(|_| AvailableSpace::Definite(stretch_width)),

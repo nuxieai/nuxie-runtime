@@ -92,6 +92,8 @@ struct CacheKey {
     known_height_is_stretch_only: bool,
     /// nuxie-css: see `LayoutInput::pictures_follow_stretch_height`.
     pictures_follow_stretch_height: bool,
+    /// nuxie-css: see `LayoutInput::known_height_awaits_flexing`.
+    known_height_awaits_flexing: bool,
 }
 
 impl CacheKey {
@@ -132,6 +134,7 @@ impl From<&LayoutInput> for CacheKey {
                 .zip_map(input.known_dimensions, |is_definite, kd| is_definite || kd.is_none()),
             known_height_is_stretch_only: input.known_height_is_stretch_only,
             pictures_follow_stretch_height: input.pictures_follow_stretch_height,
+            known_height_awaits_flexing: input.known_height_awaits_flexing,
         }
     }
 }
@@ -262,6 +265,7 @@ impl Cache {
                         && entry.key.known_dimensions_are_definite == key.known_dimensions_are_definite
                         && entry.key.known_height_is_stretch_only == key.known_height_is_stretch_only
                         && entry.key.pictures_follow_stretch_height == key.pictures_follow_stretch_height
+                        && entry.key.known_height_awaits_flexing == key.known_height_awaits_flexing
                         // nuxie-css: the whole parent size, not its width alone: a node's
                         // percentage heights resolve against the parent's height, so a width
                         // measured under one height is not the width under another.
@@ -380,6 +384,7 @@ mod tests {
             known_dimensions: Size { width: Some(width), height: None },
             known_dimensions_are_definite: Size { width: true, height: true },
             known_height_is_stretch_only: false,
+            known_height_awaits_flexing: false,
             pictures_follow_stretch_height: false,
             parent_size: Size::NONE,
             available_space: Size { width: AvailableSpace::MaxContent, height: AvailableSpace::MaxContent },

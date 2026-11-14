@@ -163,6 +163,13 @@ pub struct LayoutInput {
     /// 100 wide). A flex column asking for the width leaves the picture at its natural
     /// width (the same row as a column's item is 40 wide), so it does not set this.
     pub pictures_follow_stretch_height: bool,
+    /// nuxie-css: the known height is a column item's set height that still awaits flexing:
+    /// the column has no definite height and the item can grow or shrink. `stretch` keyword
+    /// heights inside the node do not resolve against it; percentage heights still do
+    /// (Chrome: in a column with no height, a 100 tall block around a 60 by 120 picture
+    /// with `height: stretch` leaves the picture 60 by 120, and with `flex-shrink: 0`
+    /// makes it 50 by 100).
+    pub known_height_awaits_flexing: bool,
     /// Parent size dimensions are intended to be used for percentage resolution.
     pub parent_size: Size<Option<f32>>,
     /// Available space represents an amount of space to layout into, and is used as a soft constraint
@@ -184,6 +191,7 @@ impl LayoutInput {
         known_dimensions: Size::NONE,
         known_dimensions_are_definite: Size { width: true, height: true },
         known_height_is_stretch_only: false,
+        known_height_awaits_flexing: false,
         pictures_follow_stretch_height: false,
         parent_size: Size::NONE,
         available_space: Size::MAX_CONTENT,
@@ -206,6 +214,7 @@ impl LayoutInput {
             known_dimensions: self.known_dimensions.transpose(),
             known_dimensions_are_definite: self.known_dimensions_are_definite.transpose(),
             known_height_is_stretch_only: false,
+            known_height_awaits_flexing: false,
             pictures_follow_stretch_height: false,
             parent_size: self.parent_size.transpose(),
             available_space: self.available_space.transpose(),

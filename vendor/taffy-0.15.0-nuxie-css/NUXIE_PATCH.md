@@ -1647,3 +1647,51 @@ are gone.
 
 Of the 29,914 layouts, 6 more match and none that matched differ. The 13
 Chrome probes left from the two changes above all match.
+
+## A column item's set height that still awaits flexing
+
+In a column with no definite height, an item that can grow or shrink has
+a height that is not settled until the column flexes it, even when the
+item's style sets it as a length. Chrome does not resolve `stretch`
+keyword heights inside such an item against that height. Percentage
+heights still resolve. Chrome, in a 200 wide column with
+`align-items: flex-start` and no height, for an item with
+`height: 100px` around a 60 by 120 picture with `height: stretch`:
+
+- the item is a block: the picture stays 60 by 120 and the block is 60
+  wide. With `flex-shrink: 0` the picture is 50 by 100 and the block 50
+  wide. With `height: 100%` on the picture it is 50 by 100 either way.
+- the item is a row: the row is measured 60 wide (the picture's natural
+  width) and the picture is then laid out 50 by 100.
+
+The fork resolved the keyword in both and made the block and the row 50
+wide.
+
+`LayoutInput::known_height_awaits_flexing` (new, part of the measure
+cache key) carries this. A column sets it for an item with a height of
+its own that can grow or shrink, when the column's height is not
+definite (`set_height_awaits_flexing` in `flexbox.rs`).
+
+- `block.rs`: under the flag `stretch` keyword heights of the block's
+  children do not resolve in the final layout, and a picture's does not
+  while the block's width is measured. A ratio box's still gives its
+  width there (Chrome: `aspect-ratio: 1; height: stretch` in that block
+  makes the block 100 wide).
+- `flexbox.rs`: under the flag a container being measured treats its
+  height as one it is only stretched to
+  (`known_height_is_stretch_only`). Its final layout is unchanged.
+
+With that case told apart, a row no longer needs a parent row or grid
+to ask before a picture with a `stretch` keyword height and an alignment
+other than stretch counts at its stretched width. It does so on a
+single line whenever the row's own style sets its height as a length
+(`AlgoConstants::height_is_set_length`) and that height is not
+stretch-only. Chrome: a 100 tall `align-items: flex-start` row with
+`width: fit-content` in a block, around the same picture, is 50 wide.
+The fork made it 60 wide. A row whose height is itself the `stretch`
+keyword keeps the natural width.
+
+Of the 29,914 layouts, 24 more match and none that matched differ. Of
+394 new Chrome probes of these shapes, 50 differed before and 2 still
+do: a grid with a set height, and a row with only a `min-height`, each
+as a start-aligned grid item around a picture with `height: stretch`.

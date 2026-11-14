@@ -7,7 +7,10 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use super::{IDENTITY, ScriptedMat4, invert, invert_affine, matrix_index, multiply, multiply_affine};
+use super::{
+    IDENTITY, ScriptedMat4, invert, invert_affine, matrix_index, multiply, multiply_affine,
+    transpose,
+};
 use crate::luau::vm::{self, HostCtx, HostError};
 use crate::luau::{Lua, Result};
 
@@ -145,8 +148,8 @@ fn is_number(ctx: &mut HostCtx<'_>, n: usize) -> std::result::Result<bool, HostE
 
 fn mat4_values(ctx: &mut HostCtx<'_>) -> std::result::Result<usize, HostError> {
     let mut values = [0.0; 16];
-    for (index, value) in values.iter_mut().enumerate() {
-        *value = number(ctx, index + 1)?;
+    for (value, n) in values.iter_mut().zip(1..) {
+        *value = number(ctx, n)?;
     }
     push_mat4(ctx, values)?;
     Ok(1)
@@ -433,13 +436,7 @@ fn mat4_invert_affine(ctx: &mut HostCtx<'_>) -> std::result::Result<usize, HostE
 
 fn mat4_transpose(ctx: &mut HostCtx<'_>) -> std::result::Result<usize, HostError> {
     let matrix = mat4_at(ctx, 1)?;
-    let mut values = [0.0; 16];
-    for row in 0..4 {
-        for column in 0..4 {
-            values[row * 4 + column] = matrix[column * 4 + row];
-        }
-    }
-    push_mat4(ctx, values)?;
+    push_mat4(ctx, transpose(matrix))?;
     Ok(1)
 }
 

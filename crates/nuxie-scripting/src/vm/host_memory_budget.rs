@@ -12,9 +12,13 @@
 //! The budget lives in the VM's app data, so every binding reaches it from
 //! the `Lua` it is called with; each charge keeps its own handle, so a
 //! payload refunds without a `Lua`.
+//!
+//! A charge is `Send + Sync`: the native value a charge pays for can hold it
+//! (a decoded font is an `Arc<dyn Font>`, which the runtime may hand to
+//! another thread), so it is refunded when that value is dropped, wherever.
 
-use std::cell::Cell;
-use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::luau::{Error, Lua, Result};
 
@@ -23,19 +27,19 @@ use crate::luau::{Error, Lua, Result};
 pub const DEFAULT_SCRIPT_HOST_MEMORY_BYTES: usize = super::DEFAULT_SCRIPT_VM_MEMORY_BYTES;
 
 struct BudgetState {
-    limit: Cell<usize>,
-    used: Cell<usize>,
+    limit: AtomicUsize,
+    used: AtomicUsize,
 }
 
 /// The host memory one script VM's bindings may hold, in bytes.
 #[derive(Clone)]
-pub(crate) struct HostMemoryBudget(Rc<BudgetState>);
+pub(crate) struct HostMemoryBudget(Arc<BudgetState>);
 
 impl HostMemoryBudget {
     fn new(limit: usize) -> Self {
-        Self(Rc::new(BudgetState {
-            limit: Cell::new(limit),
-            used: Cell::new(0),
+        Self(Arc::new(BudgetState {
+            limit: AtomicUsize::new(limit),
+            used: AtomicUsize::new(0),
         }))
     }
 
@@ -43,7 +47,7 @@ impl HostMemoryBudget {
     /// already installed (charges already made are kept).
     pub(crate) fn install(lua: &Lua, limit: usize) -> Result<()> {
         if let Some(budget) = lua.try_app_data_ref::<Self>()? {
-            budget.0.limit.set(limit);
+            budget.0.limit.store(limit, Ordering::Relaxed);
             return Ok(());
         }
         lua.try_set_app_data(Self::new(limit))?;
@@ -62,26 +66,33 @@ impl HostMemoryBudget {
     }
 
     pub(crate) fn limit(&self) -> usize {
-        self.0.limit.get()
+        self.0.limit.load(Ordering::Relaxed)
     }
 
     pub(crate) fn used(&self) -> usize {
-        self.0.used.get()
+        self.0.used.load(Ordering::Relaxed)
     }
 
     fn charge(&self, bytes: usize) -> Result<()> {
-        let used = self.0.used.get();
-        let remaining = self.limit().saturating_sub(used);
-        if bytes > remaining {
-            return Err(budget_exceeded(self.limit()));
-        }
-        // `bytes <= limit - used`, so the sum is at most `limit`.
-        self.0.used.set(used.saturating_add(bytes));
-        Ok(())
+        let limit = self.limit();
+        self.0
+            .used
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+                // `bytes <= limit - used`, so the sum is at most `limit`.
+                (bytes <= limit.saturating_sub(used)).then(|| used.saturating_add(bytes))
+            })
+            .map(drop)
+            .map_err(|_| budget_exceeded(limit))
     }
 
     fn refund(&self, bytes: usize) {
-        self.0.used.set(self.0.used.get().saturating_sub(bytes));
+        // The closure always returns `Some`, so the update cannot fail.
+        let _ = self
+            .0
+            .used
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+                Some(used.saturating_sub(bytes))
+            });
     }
 }
 
@@ -223,6 +234,20 @@ pub(crate) fn grown_capacity(capacity: usize, len: usize, additional: usize) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Lane H2: native values that keep a charge (fonts, blobs) are shared
+    // across threads, so a charge must be able to go with them.
+    #[test]
+    fn a_charge_can_live_in_a_shared_native_value() {
+        fn shared<T: Send + Sync + 'static>() {}
+        shared::<HostMemoryCharge>();
+        let lua = Lua::new();
+        HostMemoryBudget::install(&lua, 8).unwrap();
+        let budget = HostMemoryBudget::for_lua(&lua).unwrap();
+        let charge = HostMemoryCharge::for_lua(&lua, 8).unwrap();
+        std::thread::spawn(move || drop(charge)).join().unwrap();
+        assert_eq!(budget.used(), 0, "a charge dropped elsewhere refunds");
+    }
 
     #[test]
     fn charges_refund_on_drop_and_refuse_past_the_limit() {

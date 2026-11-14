@@ -12,6 +12,7 @@ use nuxie_render_api::{
 };
 
 use super::lua_image::ScriptedImage;
+use crate::gpu_canvas::ore::check_gpu_size;
 use super::lua_renderer::ScriptedRenderer;
 use super::lua_renderer_library::RendererBindings;
 
@@ -105,6 +106,7 @@ impl ScriptedCanvas {
             renderer: None,
         };
         if width != 0 && height != 0 {
+            check_gpu_size("context:canvas()", width, height, 1)?;
             if let Some(context) = canvas.render_context.as_mut() {
                 let backing = new_backing(
                     lua,
@@ -424,6 +426,7 @@ impl UserData for ScriptedCanvas {
             }) {
                 return Ok(());
             }
+            check_gpu_size("Canvas:resize()", width, height, 1)?;
             this.pending_width = width;
             this.pending_height = height;
             this.satisfy_pending(lua)
@@ -1052,6 +1055,46 @@ mod tests {
             creation
                 .to_string()
                 .contains("context:canvas() failed to create RenderCanvas")
+        );
+    }
+
+    // Inventory (lane E1) section 5 row 6: a 2D canvas's size had no cap.
+    #[test]
+    fn canvas_sizes_are_capped_before_allocation() {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let vm = ScriptVm::new();
+        let mut factory = PersistentFactory::new(TestCanvasFactory::new(events.clone()));
+        vm.install_render_factory(&mut factory).unwrap();
+        vm.install_rive_globals().unwrap();
+        let error = ScriptedCanvas::create(vm.lua(), vm.renderer_bindings.clone(), 8193, 1)
+            .err()
+            .unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("context:canvas(): width and height must be at most 8192 (got 8193x1)"),
+            "{error}"
+        );
+        let canvas = ScriptedCanvas::create(vm.lua(), vm.renderer_bindings.clone(), 4, 3).unwrap();
+        vm.lua().globals().set("canvas", canvas).unwrap();
+        vm.lua()
+            .load(
+                r#"
+            local ok, message = pcall(function() canvas:resize(1, 8193) end)
+            assert(not ok and string.find(tostring(message), 'Canvas:resize(): width and height must be at most 8192', 1, true), tostring(message))
+            ok, message = pcall(function() canvas:resize(8192, 2049) end)
+            assert(not ok and string.find(tostring(message), 'Canvas:resize(): 8192x2049x1 is more than 16777216 pixels', 1, true), tostring(message))
+            assert(canvas.width == 4 and canvas.height == 3, 'a refused resize keeps the backing')
+            canvas:resize(8192, 2)
+            assert(canvas.width == 8192)
+        "#,
+            )
+            .exec()
+            .unwrap();
+        assert_eq!(
+            &*events.borrow(),
+            &["allocate:4x3".to_owned(), "allocate:8192x2".to_owned()],
+            "refused sizes never reach the factory"
         );
     }
 }

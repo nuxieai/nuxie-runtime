@@ -411,9 +411,14 @@ def main():
         labels = materialize(options, packages_from_workspace())
         bazel = bazel_command()
         flags = ["--config=release"] if options["profile"] != "debug" else []
+        panic = os.environ.get("NUX_RUNTIME_PANIC", "unwind")
+        if panic not in ("unwind", "abort"):
+            raise ValueError("NUX_RUNTIME_PANIC must be unwind or abort")
+        if panic == "abort":
+            flags.append("--config=panic-abort")
         flags += ["--@rules_rust//rust/settings:extra_rustc_flag=" + flag for flag in shlex.split(os.environ.get("RUSTFLAGS", ""))]
         flags += BazelRuntime.provenance_options()
-        flags += ["--action_env=" + name for name in sorted(os.environ) if name not in PROVENANCE_KEYS and name.startswith(("NUX_RUNTIME_", "RIVE_", "EMSDK", "EM_CONFIG", "EMDAWN"))]
+        flags += ["--action_env=" + name for name in sorted(os.environ) if name not in PROVENANCE_KEYS and name != "NUX_RUNTIME_PANIC" and name.startswith(("NUX_RUNTIME_", "RIVE_", "EMSDK", "EM_CONFIG", "EMDAWN"))]
         if options["profile"] == "release-size":
             flags += ["--@rules_rust//rust/settings:extra_rustc_flag=-Copt-level=" + os.environ.get("CARGO_PROFILE_RELEASE_SIZE_OPT_LEVEL", "z"), "--@rules_rust//rust/settings:extra_rustc_flag=-Cstrip=symbols"]
         elif options["profile"] == "release-apple":

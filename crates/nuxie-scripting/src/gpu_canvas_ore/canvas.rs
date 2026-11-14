@@ -191,10 +191,10 @@ impl UserData for Canvas {
             this.satisfy_pending(lua)?;let resource=this.color_view.clone().ok_or_else(||Error::runtime("GPUCanvas:colorView() has no backing texture. Call resize(w, h) with non-zero dimensions first."))?;
             lua.create_userdata(TextureView {resource, retained_image:None, follows:None, charge: this.charge.clone()})
         });
-        methods.add_method("beginRenderPass", |lua, this, descriptor: Value| {
+        methods.add_method_lent("beginRenderPass", |lua, this, mut loan, descriptor: Value| {
             check_begin_pass(lua, "GPUCanvas")?;
             let table = Table::from_lua(descriptor, lua)?;
-            begin_pass(lua, "GPUCanvas", this.color_view.as_ref(), false, &table)
+            begin_pass(lua, &mut loan, "GPUCanvas", this.color_view.as_ref(), false, &table)
         });
     }
 }
@@ -227,6 +227,7 @@ pub(super) fn check_begin_pass(lua: &Lua, type_name: &str) -> Result<OreContextH
 }
 pub(super) fn begin_pass(
     lua: &Lua,
+    loan: &mut Loan<'_>,
     type_name: &str,
     target_view: Option<&AnyResourceHandle>,
     host_target: bool,
@@ -235,7 +236,7 @@ pub(super) fn begin_pass(
     let context = check_begin_pass(lua, type_name)?;
     let mut dropped = false;
     // lua_isstring accepts strings and numbers, and ignores other values.
-    let label = string(table, "label")?;
+    let label = string(table, loan, "label")?;
     let mut sample_count = None;
     let mut sample_label = String::new();
     let mut record_sample = |samples: u32, label: &str| -> Result<()> {
@@ -252,12 +253,12 @@ pub(super) fn begin_pass(
         Ok(())
     };
     let mut colors = Vec::new();
-    if let Some(entries) = optional_table(table, "color")? {
+    if let Some(entries) = optional_table(table, loan, "color")? {
         for index in 1..=4 {
             let Value::Table(entry) = entries.raw_get::<Value>(index)? else {
                 break;
             };
-            let view = match entry.get::<Option<AnyUserData>>("view")? {
+            let view = match entry.get_with::<Option<AnyUserData>>(reborrow_loan(loan), "view")? {
                 Some(value) => Some(value.borrow::<TextureView>()?.clone()),
                 None => match target_view {
                     Some(resource) => Some(TextureView {
@@ -281,7 +282,7 @@ pub(super) fn begin_pass(
                 record_sample(view.sample_count()?, &format!("color[{index}]"))?;
             }
             let resolve = entry
-                .get::<Option<AnyUserData>>("resolveTarget")?
+                .get_with::<Option<AnyUserData>>(reborrow_loan(loan), "resolveTarget")?
                 .map(|value| value.borrow::<TextureView>().map(|view| view.clone()))
                 .transpose()?;
             if let Some(resolve) = &resolve {
@@ -307,10 +308,10 @@ pub(super) fn begin_pass(
                     )));
                 }
             }
-            let load_operation = load_op(checked_string(&entry, "loadOp")?);
-            let store=checked_string(&entry,"storeOp")?.ok_or_else(||Error::runtime(format!("beginRenderPass: color[{index}].storeOp is required — use 'discard' for MSAA color (after resolve) or 'store' to keep the rendered output")))?;
+            let load_operation = load_op(checked_string(&entry, loan, "loadOp")?);
+            let store=checked_string(&entry, loan, "storeOp")?.ok_or_else(||Error::runtime(format!("beginRenderPass: color[{index}].storeOp is required — use 'discard' for MSAA color (after resolve) or 'store' to keep the rendered output")))?;
             let mut clear = ClearColor::default();
-            if let Some(values) = optional_table(&entry, "clearColor")? {
+            if let Some(values) = optional_table(&entry, loan, "clearColor")? {
                 let component = |index| -> Result<f32> {
                     Ok(number_value(lua, values.raw_get::<Value>(index)?, 0.0)? as f32)
                 };
@@ -326,8 +327,8 @@ pub(super) fn begin_pass(
     }
     let mut depth_desc = DepthStencilAttachment::default();
     let mut depth = None;
-    if let Some(entry) = optional_table(table, "depthStencil")? {
-        let value: Value = entry.get("view")?;
+    if let Some(entry) = optional_table(table, loan, "depthStencil")? {
+        let value: Value = entry.get_with(reborrow_loan(loan), "view")?;
         if matches!(value, Value::Nil) {
             return Err(Error::runtime(
                 "beginRenderPass: depthStencil.view is required — pass GPUTexture:view()",
@@ -336,9 +337,9 @@ pub(super) fn begin_pass(
         let data = AnyUserData::from_lua(value, lua)?;
         let view = data.borrow::<TextureView>()?.clone();
         record_sample(view.sample_count()?, "depthStencil")?;
-        depth_desc.depthLoadOp = load_op(checked_string(&entry, "depthLoadOp")?);
-        depth_desc.depthStoreOp=store_op(&checked_string(&entry,"depthStoreOp")?.ok_or_else(||Error::runtime("beginRenderPass: depthStencil.depthStoreOp is required — use 'discard' for transient/MSAA depth or 'store' if you need to read it later"))?);
-        depth_desc.depthClearValue = match entry.get::<Value>("depthClearValue")? {
+        depth_desc.depthLoadOp = load_op(checked_string(&entry, loan, "depthLoadOp")?);
+        depth_desc.depthStoreOp=store_op(&checked_string(&entry, loan, "depthStoreOp")?.ok_or_else(||Error::runtime("beginRenderPass: depthStencil.depthStoreOp is required — use 'discard' for transient/MSAA depth or 'store' if you need to read it later"))?);
+        depth_desc.depthClearValue = match entry.get_with::<Value>(reborrow_loan(loan), "depthClearValue")? {
             Value::Nil => 1.0,
             value => number_value(lua, value, 0.0)? as f32,
         };

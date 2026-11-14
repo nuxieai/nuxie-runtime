@@ -809,7 +809,8 @@ impl UserData for GpuCanvas {
                 &["color", "depthStencil", "label"],
                 "GPU render-pass descriptor",
             )?;
-            let label = ore::string(&descriptor, "label")?;
+            // The direct path has no renderer loan to pass on.
+            let label = ore::string(&descriptor, &mut None, "label")?;
             let mut sample_count = None;
             let mut color_attachments = Vec::new();
             if let Some(colors) = descriptor.get::<Option<Table>>("color")? {

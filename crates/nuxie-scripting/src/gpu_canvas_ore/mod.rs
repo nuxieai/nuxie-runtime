@@ -4,8 +4,8 @@
 use crate::vm::RendererBindings;
 use crate::vm::host_memory_budget::HostMemoryCharge;
 use crate::luau::{
-    AnyUserData, Buffer as LuaBuffer, Error, Lua, Result, Table, UserData, UserDataFields,
-    UserDataMethods, Value,
+    AnyUserData, Buffer as LuaBuffer, Error, Loan, Lua, Result, Table, UserData, UserDataFields,
+    UserDataMethods, Value, reborrow_loan,
 };
 use nuxie_ore_metal::{context::ContextApi, gpu_resource::AnyResourceHandle, types::*};
 use nuxie_render_api::OreContextHandle;
@@ -139,27 +139,29 @@ fn context(lua: &Lua) -> Result<OreContextHandle> {
         .and_then(|bindings| bindings.ore_context())
         .ok_or_else(|| Error::runtime("GPU context not initialized"))
 }
-fn number(table: &Table, key: &str, default: f64) -> Result<f64> {
-    number_value(&table.lua(), table.get::<Value>(key)?, default)
+// Descriptor reads honor `__index`, and pass on the loan of the call that
+// reads them, so a metamethod reached during a draw can still draw.
+fn number(table: &Table, loan: &mut Loan<'_>, key: &str, default: f64) -> Result<f64> {
+    number_value(&table.lua(), table.get_with::<Value>(reborrow_loan(loan), key)?, default)
 }
 fn number_value(lua: &Lua, value: Value, default: f64) -> Result<f64> {
     // lua_isnumber/lua_tonumber accept integral numbers and Lua numeric strings.
     Ok(lua.coerce_number(value)?.unwrap_or(default))
 }
-fn optional_table(table: &Table, key: &str) -> Result<Option<Table>> {
-    Ok(match table.get::<Value>(key)? {
+fn optional_table(table: &Table, loan: &mut Loan<'_>, key: &str) -> Result<Option<Table>> {
+    Ok(match table.get_with::<Value>(reborrow_loan(loan), key)? {
         Value::Table(value) => Some(value),
         _ => None,
     })
 }
-fn boolean(table: &Table, key: &str, default: bool) -> Result<bool> {
-    Ok(match table.get::<Value>(key)? {
+fn boolean(table: &Table, loan: &mut Loan<'_>, key: &str, default: bool) -> Result<bool> {
+    Ok(match table.get_with::<Value>(reborrow_loan(loan), key)? {
         Value::Boolean(value) => value,
         _ => default,
     })
 }
-pub(super) fn string(table: &Table, key: &str) -> Result<Option<String>> {
-    string_value(&table.lua(), table.get::<Value>(key)?)
+pub(super) fn string(table: &Table, loan: &mut Loan<'_>, key: &str) -> Result<Option<String>> {
+    string_value(&table.lua(), table.get_with::<Value>(reborrow_loan(loan), key)?)
 }
 fn string_value(lua: &Lua, value: Value) -> Result<Option<String>> {
     if !matches!(
@@ -180,8 +182,8 @@ fn string_value(lua: &Lua, value: Value) -> Result<Option<String>> {
         .map(|value| Some(value.to_owned()))
         .map_err(|error| Error::runtime(error.to_string()))
 }
-fn checked_string(table: &Table, key: &str) -> Result<Option<String>> {
-    let value = table.get::<Value>(key)?;
+fn checked_string(table: &Table, loan: &mut Loan<'_>, key: &str) -> Result<Option<String>> {
+    let value = table.get_with::<Value>(reborrow_loan(loan), key)?;
     if matches!(value, Value::Nil) {
         return Ok(None);
     }
@@ -232,10 +234,15 @@ fn check_guard(guard: impl FnOnce(&mut String) -> bool) -> Result<()> {
 fn constructor(
     lua: &Lua,
     name: &str,
-    function: impl Fn(&Lua, Table) -> Result<AnyUserData> + 'static,
+    function: impl Fn(&Lua, &mut Loan<'_>, Table) -> Result<AnyUserData> + 'static,
 ) -> Result<()> {
     let table = lua.create_table();
-    table.set("new", lua.create_function(function)?)?;
+    table.set(
+        "new",
+        lua.create_function_lent(move |lua, mut loan, descriptor: Table| {
+            function(lua, &mut loan, descriptor)
+        })?,
+    )?;
     table.set_readonly(true);
     lua.globals().set(name, table)
 }

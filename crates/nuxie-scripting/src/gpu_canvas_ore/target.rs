@@ -67,13 +67,13 @@ impl UserData for Target {
         });
     }
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("beginRenderPass", |lua, _, descriptor: Value| {
+        methods.add_method_lent("beginRenderPass", |lua, _, mut loan, descriptor: Value| {
             let context = super::canvas::check_begin_pass(lua, "GPUTarget")?;
             let table = Table::from_lua(descriptor, lua)?;
             let target = context.borrow_mut().targetView();
             // luaur propagates errors as Result: the owned view drops on every
             // error path, including descriptor callbacks and stale-view errors.
-            super::canvas::begin_pass(lua, "GPUTarget", target.as_ref(), true, &table)
+            super::canvas::begin_pass(lua, &mut loan, "GPUTarget", target.as_ref(), true, &table)
         });
     }
 }

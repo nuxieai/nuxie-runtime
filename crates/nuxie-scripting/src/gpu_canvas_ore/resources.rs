@@ -116,7 +116,8 @@ impl UserData for Texture {
         fields.add_field_method_get("format", |_, this| Ok(format_string(this.desc.format)));
     }
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("view", |lua, this, table: Value| {
+        methods.add_method_lent("view", |lua, this, mut loan, table: Value| {
+            let loan = &mut loan;
             let mut desc = TextureViewDesc {
                 texture: Some(&this.resource),
                 mipCount: 0,
@@ -130,7 +131,7 @@ impl UserData for Texture {
                 ..TextureViewDesc::default()
             };
             if let Value::Table(table) = table {
-                if let Some(value) = string(&table, "dimension")? {
+                if let Some(value) = string(&table, loan, "dimension")? {
                     desc.dimension = match value.as_str() {
                         "2d" => TextureViewDimension::texture2D,
                         "cube" => TextureViewDimension::cube,
@@ -139,11 +140,11 @@ impl UserData for Texture {
                         _ => desc.dimension,
                     };
                 }
-                desc.baseMipLevel = number(&table, "baseMipLevel", 0.0)? as u32;
-                desc.mipCount = number(&table, "mipCount", 0.0)? as u32;
-                desc.baseLayer = number(&table, "baseLayer", 0.0)? as u32;
-                desc.layerCount = number(&table, "layerCount", 0.0)? as u32;
-                if let Some(value) = string(&table, "aspect")? {
+                desc.baseMipLevel = number(&table, loan, "baseMipLevel", 0.0)? as u32;
+                desc.mipCount = number(&table, loan, "mipCount", 0.0)? as u32;
+                desc.baseLayer = number(&table, loan, "baseLayer", 0.0)? as u32;
+                desc.layerCount = number(&table, loan, "layerCount", 0.0)? as u32;
+                if let Some(value) = string(&table, loan, "aspect")? {
                     desc.aspect = match value.as_str() {
                         "depth-only" => TextureAspect::depthOnly,
                         "stencil-only" => TextureAspect::stencilOnly,
@@ -167,22 +168,23 @@ impl UserData for Texture {
                 charge: Some(Rc::clone(&this.charge)),
             })
         });
-        methods.add_method("upload", |_, this, table: Table| {
-            let data: LuaBuffer = table.get("data")?;
+        methods.add_method_lent("upload", |_, this, mut loan, table: Table| {
+            let loan = &mut loan;
+            let data: LuaBuffer = table.get_with(reborrow_loan(loan), "data")?;
             let bytes = data.to_vec();
             let desc = TextureDataDesc {
                 data: Some(&bytes),
                 dataSize: bytes.len() as u32,
-                width: number(&table, "width", 0.0)? as u32,
-                height: number(&table, "height", 0.0)? as u32,
-                depth: number(&table, "depth", 1.0)? as u32,
-                x: number(&table, "x", 0.0)? as u32,
-                y: number(&table, "y", 0.0)? as u32,
-                z: number(&table, "z", 0.0)? as u32,
-                mipLevel: number(&table, "mipLevel", 0.0)? as u32,
-                layer: number(&table, "layer", 0.0)? as u32,
-                bytesPerRow: number(&table, "bytesPerRow", 0.0)? as u32,
-                rowsPerImage: number(&table, "rowsPerImage", 0.0)? as u32,
+                width: number(&table, loan, "width", 0.0)? as u32,
+                height: number(&table, loan, "height", 0.0)? as u32,
+                depth: number(&table, loan, "depth", 1.0)? as u32,
+                x: number(&table, loan, "x", 0.0)? as u32,
+                y: number(&table, loan, "y", 0.0)? as u32,
+                z: number(&table, loan, "z", 0.0)? as u32,
+                mipLevel: number(&table, loan, "mipLevel", 0.0)? as u32,
+                layer: number(&table, loan, "layer", 0.0)? as u32,
+                bytesPerRow: number(&table, loan, "bytesPerRow", 0.0)? as u32,
+                rowsPerImage: number(&table, loan, "rowsPerImage", 0.0)? as u32,
             };
             this.resource
                 .upload(&desc)
@@ -214,15 +216,15 @@ pub(super) fn format_string(format: TextureFormat) -> &'static str {
 }
 
 pub(super) fn install(lua: &Lua) -> Result<()> {
-    constructor(lua, "GPUBuffer", |lua, table| {
+    constructor(lua, "GPUBuffer", |lua, loan, table| {
         let context = context(lua)?;
-        let size = number(&table, "size", 0.0)?;
+        let size = number(&table, loan, "size", 0.0)?;
         if !(size >= 1.0 && size <= u32::MAX as f64 && size == size as u32 as f64) {
             return Err(Error::runtime(
                 "GPUBuffer.new: 'size' must be a positive integer number of bytes",
             ));
         }
-        let usage = match table.get::<Value>("usage")? {
+        let usage = match table.get_with::<Value>(reborrow_loan(loan), "usage")? {
             Value::String(value) => buffer_usage(&value.to_str()?)?,
             Value::Table(values) => {
                 if values.raw_len() != 1 {
@@ -238,9 +240,9 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
                 ));
             }
         };
-        let immutable = boolean(&table, "immutable", false)?;
+        let immutable = boolean(&table, loan, "immutable", false)?;
         let bytes = table
-            .get::<Option<LuaBuffer>>("data")?
+            .get_with::<Option<LuaBuffer>>(reborrow_loan(loan), "data")?
             .map(|data| data.to_vec());
         if bytes
             .as_ref()
@@ -253,7 +255,7 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
                 "GPUBuffer.new: immutable=true requires 'data' (the GPU buffer is GPU-only after creation)",
             ));
         }
-        let label = string(&table, "label")?;
+        let label = string(&table, loan, "label")?;
         let desc = BufferDesc {
             usage,
             size: size as u32,
@@ -275,18 +277,18 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             charge,
         })
     })?;
-    constructor(lua, "GPUTexture", |lua, table| {
+    constructor(lua, "GPUTexture", |lua, loan, table| {
         let context = context(lua)?;
         let mut desc = TextureDesc {
-            width: number(&table, "width", 0.0)? as u32,
-            height: number(&table, "height", 0.0)? as u32,
+            width: number(&table, loan, "width", 0.0)? as u32,
+            height: number(&table, loan, "height", 0.0)? as u32,
             ..TextureDesc::default()
         };
         if desc.width == 0 || desc.height == 0 {
             return Err(Error::runtime("GPUTexture requires width and height"));
         }
         check_gpu_size("GPUTexture.new", desc.width, desc.height, 1)?;
-        if let Some(value) = string(&table, "format")? {
+        if let Some(value) = string(&table, loan, "format")? {
             desc.format = texture_format(&value)?;
         }
         {
@@ -299,14 +301,14 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
                 )
             })?;
         }
-        if let Some(value) = string(&table, "type")? {
+        if let Some(value) = string(&table, loan, "type")? {
             desc.r#type = texture_type(&value)?;
         }
-        desc.renderTarget = boolean(&table, "renderTarget", false)?;
-        desc.sampleCount = number(&table, "sampleCount", 1.0)? as u32;
+        desc.renderTarget = boolean(&table, loan, "renderTarget", false)?;
+        desc.sampleCount = number(&table, loan, "sampleCount", 1.0)? as u32;
         check_sample_count(&*context.borrow(), desc.sampleCount)?;
-        desc.numMipmaps = number(&table, "mipmaps", 1.0)? as u32;
-        desc.depthOrArrayLayers = number(&table, "layers", 1.0)? as u32;
+        desc.numMipmaps = number(&table, loan, "mipmaps", 1.0)? as u32;
+        desc.depthOrArrayLayers = number(&table, loan, "layers", 1.0)? as u32;
         check_gpu_size("GPUTexture.new", desc.width, desc.height, desc.depthOrArrayLayers)?;
         let charge = charge_gpu_bytes(lua, texture_bytes(&desc))?;
         // Lua field access can invoke __index, including another ORE call.
@@ -351,34 +353,35 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
     let sampler = lua.create_table();
     sampler.set(
         "new",
-        lua.create_function(|lua, table: Value| {
+        lua.create_function_lent(|lua, mut loan, table: Value| {
+            let loan = &mut loan;
             let context = context(lua)?;
             let mut desc = SamplerDesc::default();
             if let Value::Table(table) = table {
-                if let Some(value) = string(&table, "min")? {
+                if let Some(value) = string(&table, loan, "min")? {
                     desc.minFilter = filter(&value)?;
                 }
-                if let Some(value) = string(&table, "mag")? {
+                if let Some(value) = string(&table, loan, "mag")? {
                     desc.magFilter = filter(&value)?;
                 }
-                if let Some(value) = string(&table, "mipmap")? {
+                if let Some(value) = string(&table, loan, "mipmap")? {
                     desc.mipmapFilter = filter(&value)?;
                 }
-                if let Some(value) = string(&table, "wrapU")? {
+                if let Some(value) = string(&table, loan, "wrapU")? {
                     desc.wrapU = wrap_mode(&value)?;
                 }
-                if let Some(value) = string(&table, "wrapV")? {
+                if let Some(value) = string(&table, loan, "wrapV")? {
                     desc.wrapV = wrap_mode(&value)?;
                 }
-                if let Some(value) = string(&table, "wrapW")? {
+                if let Some(value) = string(&table, loan, "wrapW")? {
                     desc.wrapW = wrap_mode(&value)?;
                 }
-                if let Some(value) = string(&table, "compare")? {
+                if let Some(value) = string(&table, loan, "compare")? {
                     desc.compare = compare(&value)?;
                 }
-                desc.minLod = number(&table, "minLod", 0.0)? as f32;
-                desc.maxLod = number(&table, "maxLod", 32.0)? as f32;
-                desc.maxAnisotropy = number(&table, "maxAnisotropy", 1.0)? as u32;
+                desc.minLod = number(&table, loan, "minLod", 0.0)? as f32;
+                desc.maxLod = number(&table, loan, "maxLod", 32.0)? as f32;
+                desc.maxAnisotropy = number(&table, loan, "maxAnisotropy", 1.0)? as u32;
                 let ctx = context.borrow();
                 check_guard(|error| {
                     nuxie_ore_metal::script_guards::validateSamplerDesc(

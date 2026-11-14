@@ -116,8 +116,8 @@ fn make_bind_group(
 }
 impl UserData for BindGroup {}
 
-fn tables(table: &Table, key: &str, max: usize) -> Result<Vec<Table>> {
-    let Some(values) = optional_table(table, key)? else {
+fn tables(table: &Table, loan: &mut Loan<'_>, key: &str, max: usize) -> Result<Vec<Table>> {
+    let Some(values) = optional_table(table, loan, key)? else {
         return Ok(Vec::new());
     };
     (1..=values.raw_len().min(max))
@@ -147,38 +147,38 @@ fn write_mask(value: &str) -> Result<ColorWriteMask> {
     }
     Ok(ColorWriteMask(bits))
 }
-fn stencil(table: Option<Table>) -> Result<StencilFaceState> {
+fn stencil(table: Option<Table>, loan: &mut Loan<'_>) -> Result<StencilFaceState> {
     let mut face = StencilFaceState::default();
     if let Some(table) = table {
-        if let Some(value) = string(&table, "compare")? {
+        if let Some(value) = string(&table, loan, "compare")? {
             face.compare = compare(&value)?;
         }
-        if let Some(value) = string(&table, "failOp")? {
+        if let Some(value) = string(&table, loan, "failOp")? {
             face.failOp = stencil_op(&value)?;
         }
-        if let Some(value) = string(&table, "depthFailOp")? {
+        if let Some(value) = string(&table, loan, "depthFailOp")? {
             face.depthFailOp = stencil_op(&value)?;
         }
-        if let Some(value) = string(&table, "passOp")? {
+        if let Some(value) = string(&table, loan, "passOp")? {
             face.passOp = stencil_op(&value)?;
         }
     }
     Ok(face)
 }
 pub(super) fn install(lua: &Lua) -> Result<()> {
-    constructor(lua, "GPUBindGroup", |lua, table| {
-        let layout_data: AnyUserData = table.get("layout")?;
+    constructor(lua, "GPUBindGroup", |lua, loan, table| {
+        let layout_data: AnyUserData = table.get_with(reborrow_loan(loan), "layout")?;
         let layout = layout_data.borrow::<Layout>()?;
         let mut ubos = Vec::new();
         let mut charges = Vec::new();
-        for entry in tables(&table, "ubos", 8)? {
-            let slot = number(&entry, "slot", 0.0)? as u32;
+        for entry in tables(&table, loan, "ubos", 8)? {
+            let slot = number(&entry, loan, "slot", 0.0)? as u32;
             if slot > 7 {
                 return Err(Error::runtime(format!(
                     "GPUBindGroup.new: UBO slot must be 0-7 (got {slot})"
                 )));
             }
-            let buffer: AnyUserData = entry.get("buffer")?;
+            let buffer: AnyUserData = entry.get_with(reborrow_loan(loan), "buffer")?;
             let resource = {
                 let buffer = buffer.borrow::<Buffer>()?;
                 charges.push(Rc::clone(&buffer.charge));
@@ -187,20 +187,20 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             ubos.push((
                 slot,
                 resource,
-                number(&entry, "offset", 0.0)? as u32,
-                number(&entry, "size", 0.0)? as u32,
+                number(&entry, loan, "offset", 0.0)? as u32,
+                number(&entry, loan, "size", 0.0)? as u32,
             ));
         }
         let mut textures = Vec::new();
         let mut views = Vec::new();
-        for entry in tables(&table, "textures", 8)? {
-            let slot = number(&entry, "slot", 0.0)? as u32;
+        for entry in tables(&table, loan, "textures", 8)? {
+            let slot = number(&entry, loan, "slot", 0.0)? as u32;
             if slot > 7 {
                 return Err(Error::runtime(format!(
                     "GPUBindGroup.new: texture slot must be 0-7 (got {slot})"
                 )));
             }
-            let view: AnyUserData = entry.get("view")?;
+            let view: AnyUserData = entry.get_with(reborrow_loan(loan), "view")?;
             let (resource, follows) = {
                 let view = view.borrow::<TextureView>()?;
                 charges.extend(view.charge.clone());
@@ -210,14 +210,14 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             views.push((slot, view, follows));
         }
         let mut samplers = Vec::new();
-        for entry in tables(&table, "samplers", 8)? {
-            let slot = number(&entry, "slot", 0.0)? as u32;
+        for entry in tables(&table, loan, "samplers", 8)? {
+            let slot = number(&entry, loan, "slot", 0.0)? as u32;
             if slot > 7 {
                 return Err(Error::runtime(format!(
                     "GPUBindGroup.new: sampler slot must be 0-7 (got {slot})"
                 )));
             }
-            let sampler: AnyUserData = entry.get("sampler")?;
+            let sampler: AnyUserData = entry.get_with(reborrow_loan(loan), "sampler")?;
             samplers.push((slot, sampler.borrow::<Sampler>()?.resource.clone()));
         }
         let resource = make_bind_group(lua, &layout.resource, &ubos, &textures, &samplers)?;
@@ -239,14 +239,14 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             _charges: charges,
         })
     })?;
-    constructor(lua, "GPUPipeline", |lua, table| {
+    constructor(lua, "GPUPipeline", |lua, loan, table| {
         let context = context(lua)?;
         let (vertex_shader, vertex) =
-            resolve_stage_entry(&table, "vertex", ShaderStage::vertex)?
+            resolve_stage_entry(&table, loan, "vertex", ShaderStage::vertex)?
                 .ok_or_else(|| Error::runtime("GPUPipeline.new: 'vertex' is required"))?;
         let mut fragment =
-            resolve_stage_entry(&table, "fragment", ShaderStage::fragment)?.map(|(_, entry)| entry);
-        let layouts: Table = table.get("vertexLayout")?;
+            resolve_stage_entry(&table, loan, "fragment", ShaderStage::fragment)?.map(|(_, entry)| entry);
+        let layouts: Table = table.get_with(reborrow_loan(loan), "vertexLayout")?;
         let mut owned_attributes = Vec::new();
         let mut strides = Vec::new();
         let mut total_attributes: usize = 0;
@@ -263,14 +263,14 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         for index in 1..=layouts.raw_len() {
             let layout: Table = layouts.raw_get(index)?;
             strides.push((
-                number(&layout, "stride", 0.0)? as u32,
-                if string(&layout, "stepMode")?.as_deref() == Some("instance") {
+                number(&layout, loan, "stride", 0.0)? as u32,
+                if string(&layout, loan, "stepMode")?.as_deref() == Some("instance") {
                     VertexStepMode::instance
                 } else {
                     VertexStepMode::vertex
                 },
             ));
-            let attributes_value = layout.get::<Value>("attributes")?;
+            let attributes_value = layout.get_with::<Value>(reborrow_loan(loan), "attributes")?;
             // The source reads lua_objlen before checking its fixed array
             // budget. This includes raw string/buffer/userdata byte lengths,
             // even though a later lua_rawgeti requires a table.
@@ -297,11 +297,11 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
                 for index in 1..=attribute_count {
                     let attribute: Table = attributes.raw_get(index)?;
                     let mut attr = VertexAttribute::default();
-                    if let Some(value) = string(&attribute, "format")? {
+                    if let Some(value) = string(&attribute, loan, "format")? {
                         attr.format = vertex_format(&value)?;
                     }
-                    attr.shaderSlot = number(&attribute, "slot", 0.0)? as u32;
-                    attr.offset = number(&attribute, "offset", 0.0)? as u32;
+                    attr.shaderSlot = number(&attribute, loan, "slot", 0.0)? as u32;
+                    attr.offset = number(&attribute, loan, "offset", 0.0)? as u32;
                     owned.push(attr);
                 }
             }
@@ -324,7 +324,7 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             vertexBufferCount: vertex_buffers.len() as u32,
             ..PipelineDesc::default()
         };
-        if let Some(colors) = optional_table(&table, "colorTargets")? {
+        if let Some(colors) = optional_table(&table, loan, "colorTargets")? {
             if colors.raw_len() > 4 {
                 return Err(Error::runtime(format!(
                     "GPUPipeline.new: colorTargets count {} exceeds maximum of 4",
@@ -335,30 +335,30 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             // At most four entries (checked above), one per target slot.
             for (index, target) in (1..=colors.raw_len()).zip(desc.colorTargets.iter_mut()) {
                 let color: Table = colors.raw_get(index)?;
-                if let Some(value) = string(&color, "format")? {
+                if let Some(value) = string(&color, loan, "format")? {
                     target.format = texture_format(&value)?;
                 }
-                if let Some(value) = string(&color, "writeMask")? {
+                if let Some(value) = string(&color, loan, "writeMask")? {
                     target.writeMask = write_mask(&value)?;
                 }
-                if let Some(blend) = optional_table(&color, "blend")? {
+                if let Some(blend) = optional_table(&color, loan, "blend")? {
                     target.blendEnabled = true;
-                    if let Some(value) = string(&blend, "srcColor")? {
+                    if let Some(value) = string(&blend, loan, "srcColor")? {
                         target.blend.srcColor = blend_factor(&value)?;
                     }
-                    if let Some(value) = string(&blend, "dstColor")? {
+                    if let Some(value) = string(&blend, loan, "dstColor")? {
                         target.blend.dstColor = blend_factor(&value)?;
                     }
-                    if let Some(value) = string(&blend, "colorOp")? {
+                    if let Some(value) = string(&blend, loan, "colorOp")? {
                         target.blend.colorOp = blend_op(&value)?;
                     }
-                    if let Some(value) = string(&blend, "srcAlpha")? {
+                    if let Some(value) = string(&blend, loan, "srcAlpha")? {
                         target.blend.srcAlpha = blend_factor(&value)?;
                     }
-                    if let Some(value) = string(&blend, "dstAlpha")? {
+                    if let Some(value) = string(&blend, loan, "dstAlpha")? {
                         target.blend.dstAlpha = blend_factor(&value)?;
                     }
-                    if let Some(value) = string(&blend, "alphaOp")? {
+                    if let Some(value) = string(&blend, loan, "alphaOp")? {
                         target.blend.alphaOp = blend_op(&value)?;
                     }
                 }
@@ -375,24 +375,24 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         desc.vertexEntryPoint = Some(&vertex.physical);
         desc.fragmentModule = fragment.as_ref().map(|entry| &entry.module);
         desc.fragmentEntryPoint = fragment.as_ref().map(|entry| entry.physical.as_str());
-        if let Some(depth) = optional_table(&table, "depthStencil")? {
-            if let Some(value) = string(&depth, "format")? {
+        if let Some(depth) = optional_table(&table, loan, "depthStencil")? {
+            if let Some(value) = string(&depth, loan, "format")? {
                 desc.depthStencil.format = texture_format(&value)?;
             }
-            if let Some(value) = string(&depth, "compare")? {
+            if let Some(value) = string(&depth, loan, "compare")? {
                 desc.depthStencil.depthCompare = compare(&value)?;
             }
-            desc.depthStencil.depthWriteEnabled = boolean(&depth, "write", false)?;
-            desc.depthStencil.depthBias = number(&depth, "depthBias", 0.0)? as i32;
+            desc.depthStencil.depthWriteEnabled = boolean(&depth, loan, "write", false)?;
+            desc.depthStencil.depthBias = number(&depth, loan, "depthBias", 0.0)? as i32;
             desc.depthStencil.depthBiasSlopeScale =
-                number(&depth, "depthBiasSlopeScale", 0.0)? as f32;
-            desc.depthStencil.depthBiasClamp = number(&depth, "depthBiasClamp", 0.0)? as f32;
+                number(&depth, loan, "depthBiasSlopeScale", 0.0)? as f32;
+            desc.depthStencil.depthBiasClamp = number(&depth, loan, "depthBiasClamp", 0.0)? as f32;
         }
-        desc.stencilFront = stencil(optional_table(&table, "stencilFront")?)?;
-        desc.stencilBack = stencil(optional_table(&table, "stencilBack")?)?;
-        desc.stencilReadMask = number(&table, "stencilReadMask", 255.0)? as u8;
-        desc.stencilWriteMask = number(&table, "stencilWriteMask", 255.0)? as u8;
-        let (layouts, auto) = if let Some(layouts) = optional_table(&table, "bindGroupLayouts")? {
+        desc.stencilFront = stencil(optional_table(&table, loan, "stencilFront")?, loan)?;
+        desc.stencilBack = stencil(optional_table(&table, loan, "stencilBack")?, loan)?;
+        desc.stencilReadMask = number(&table, loan, "stencilReadMask", 255.0)? as u8;
+        desc.stencilWriteMask = number(&table, loan, "stencilWriteMask", 255.0)? as u8;
+        let (layouts, auto) = if let Some(layouts) = optional_table(&table, loan, "bindGroupLayouts")? {
             if layouts.raw_len() > kMaxBindGroups as usize {
                 return Err(Error::runtime(
                     "GPUPipeline.new: bindGroupLayouts count exceeds maximum",
@@ -424,16 +424,16 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             .collect();
         desc.bindGroupLayouts = Some(&layout_refs);
         desc.bindGroupLayoutCount = layout_refs.len() as u32;
-        if let Some(value) = string(&table, "cullMode")? {
+        if let Some(value) = string(&table, loan, "cullMode")? {
             desc.cullMode = cull_mode(&value)?;
         }
-        if let Some(value) = string(&table, "winding")? {
+        if let Some(value) = string(&table, loan, "winding")? {
             desc.winding = winding(&value)?;
         }
-        if let Some(value) = string(&table, "topology")? {
+        if let Some(value) = string(&table, loan, "topology")? {
             desc.topology = topology(&value)?;
         }
-        desc.sampleCount = number(&table, "sampleCount", 1.0)? as u32;
+        desc.sampleCount = number(&table, loan, "sampleCount", 1.0)? as u32;
         let mut error = String::new();
         let mut ctx = context.borrow_mut();
         check_guard(|error| {

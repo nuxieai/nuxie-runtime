@@ -17,7 +17,7 @@ use nuxie_runtime::{
     ScriptAnimation, ScriptAnimationTime, ScriptArtboard, ScriptMethod, ScriptNode,
 };
 
-use nuxie_runtime::mechanical_port::source::renderer::from_render_raw_path;
+use nuxie_runtime::mechanical_port::source::math::raw_path::RawPath;
 
 use super::lua_mat2d::ScriptedMat2D;
 use super::lua_paint::ScriptedPaintData;
@@ -205,11 +205,15 @@ impl UserData for ScriptedArtboard {
                     .add_to_path(&mut added, transform)
                     .map_err(|error| Error::runtime(error.to_string()))?;
                 // Charged and reserved before the path grows, as every path
-                // command is; the measured commands are then appended as they
-                // are, without rebuilding the path.
-                let added = from_render_raw_path(&added);
-                path.reserve(lua, added.verbs().len(), added.points().len())?;
-                path.raw_path.add_path(&added, None);
+                // command is (one more move, which a command after a closed
+                // contour injects); the measured commands are then appended
+                // as commands, without rebuilding the path.
+                path.reserve(
+                    lua,
+                    added.verbs().len().saturating_add(1),
+                    added.points().len().saturating_add(1),
+                )?;
+                append_commands(&mut path.raw_path, &added);
                 path.mark_dirty();
                 Ok(())
             },
@@ -615,6 +619,42 @@ impl UserData for ScriptedNode {
 /// producer. Source compilation stays in the test tool; normal builds omit it.
 /// `bytecode` is loaded through the VM's own bytecode validation, so it needs
 /// no trust marker.
+/// Appends `added`'s commands to `path` as commands, the way a script's own
+/// would be (and as rebuilding the path from its render copy did): the
+/// path's contour state follows them, so a later command after a closed
+/// contour starts a new one. Copying the buffers alone would leave the state
+/// as it was before.
+fn append_commands(path: &mut RawPath, added: &nuxie_render_api::RawPath) {
+    use nuxie_render_api::PathVerb;
+    let mut points = added.points().iter();
+    for verb in added.verbs() {
+        match verb {
+            PathVerb::Move => {
+                let Some(p) = points.next() else { return };
+                path.move_to(p.x, p.y);
+            }
+            PathVerb::Line => {
+                let Some(p) = points.next() else { return };
+                path.line_to(p.x, p.y);
+            }
+            PathVerb::Quad => {
+                let (Some(c), Some(p)) = (points.next(), points.next()) else {
+                    return;
+                };
+                path.quad_to(c.x, c.y, p.x, p.y);
+            }
+            PathVerb::Cubic => {
+                let (Some(a), Some(b), Some(p)) = (points.next(), points.next(), points.next())
+                else {
+                    return;
+                };
+                path.cubic_to(a.x, a.y, b.x, b.y, p.x, p.y);
+            }
+            PathVerb::Close => path.close(),
+        }
+    }
+}
+
 #[cfg(feature = "upstream-test-seams")]
 pub fn upstream_test_scripted_artboard_render(
     bytes: &[u8],
@@ -1210,6 +1250,35 @@ end
     // Lane H2: addToPath checked the grown path with a charge it dropped at
     // once, so a path added to once and kept held its commands uncharged: a
     // script keeping many such paths held many budgets' worth.
+    // Codex review (lane H2): addToPath copied the artboard's commands into
+    // the path's buffers, leaving its contour state as it was; a command
+    // after the artboard's closed contour then drew on from the close, with
+    // no move.
+    #[test]
+    fn a_command_after_add_to_path_starts_a_new_contour() {
+        use nuxie_runtime::mechanical_port::source::math::path_types::PathVerb;
+        let lua = Lua::new();
+        lua.globals()
+            .set("artboard", fixture_userdata(&lua, "fix_rectangle.riv", None))
+            .unwrap();
+        lua.load("artboard:advance(0) open = Path.new()").exec().unwrap();
+        let open: AnyUserData = lua.globals().get("open").unwrap();
+        {
+            let mut path = open.borrow_mut::<ScriptedPath>().unwrap();
+            path.raw_path.move_to(0.0, 0.0);
+            path.raw_path.line_to(1.0, 1.0);
+        }
+        lua.load("artboard:addToPath(open)").exec().unwrap();
+        let mut path = open.borrow_mut::<ScriptedPath>().unwrap();
+        assert_eq!(path.raw_path.verbs().last(), Some(&PathVerb::Close));
+        path.raw_path.line_to(2.0, 2.0);
+        let verbs = path.raw_path.verbs();
+        assert_eq!(
+            &verbs[verbs.len() - 3..],
+            &[PathVerb::Close, PathVerb::Move, PathVerb::Line]
+        );
+    }
+
     #[test]
     fn a_path_added_to_keeps_the_charge_for_what_it_holds() {
         let lua = Lua::new();

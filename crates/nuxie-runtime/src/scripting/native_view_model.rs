@@ -879,13 +879,24 @@ impl ScriptViewModel {
 fn copy_shape_of(file: &File, source: CoreHandle, max_instances: usize) -> CopyShape {
     use crate::host_viewmodel::ViewModelCopyShape;
     use crate::mechanical_port::source::viewmodel::viewmodel::ViewModel;
+    // As `File::copy_view_model_instance` copies: each source once (a source
+    // reached again, or a back-edge to one being copied, shares the copy),
+    // nested ones only while the depth is under 256; in its order, so the
+    // depth a source is first reached at is the copy's.
+    const MAX_DEPTH: usize = 256;
     let mut shape = ViewModelCopyShape::default();
-    let mut pending = vec![source];
-    while let Some(instance) = pending.pop() {
+    let mut seen = std::collections::HashSet::new();
+    let mut pending = vec![(source, 1_usize)];
+    while let Some((instance, depth)) = pending.pop() {
+        if !seen.insert(instance.clone()) {
+            continue;
+        }
         if shape.instances >= max_instances {
             return CopyShape::Unbounded;
         }
         shape.instances = shape.instances.saturating_add(1);
+        let nest = depth < MAX_DEPTH;
+        let mut children = Vec::new();
         let Some((model_id, values)) = instance
             .with(|instance| {
                 let instance = instance.as_view_model_instance()?;
@@ -935,7 +946,7 @@ fn copy_shape_of(file: &File, source: CoreHandle, max_instances: usize) -> CopyS
                             .with_downcast::<ViewModel, _>(|model| model.instance_at(index))
                             .flatten()
                     });
-                pending.extend(source);
+                children.extend(source.filter(|_| nest));
                 continue;
             }
             let items = value
@@ -955,9 +966,158 @@ fn copy_shape_of(file: &File, source: CoreHandle, max_instances: usize) -> CopyS
                             .with_downcast::<ViewModel, _>(|model| model.instance_at(instance_id))
                             .flatten()
                     });
-                pending.extend(source);
+                children.extend(source.filter(|_| nest));
             }
         }
+        // Visited in order: the first child is popped first.
+        pending.extend(children.into_iter().rev().map(|child| (child, depth + 1)));
     }
     CopyShape::Shape(shape)
+}
+
+#[cfg(test)]
+mod copy_shape_tests {
+    use super::*;
+    use crate::mechanical_port::source::generated::{
+        core_registry::CoreRegistry,
+        viewmodel::{
+            viewmodel_instance_viewmodel_base::ViewModelInstanceViewModelBase,
+            viewmodel_property_viewmodel_base::ViewModelPropertyViewModelBase,
+        },
+    };
+    use crate::mechanical_port::source::viewmodel::{
+        viewmodel::ViewModel, viewmodel_instance_viewmodel::ViewModelInstanceViewModel,
+    };
+    use nuxie_render_api::{PersistentFactory, RecordingFactory};
+    use std::collections::HashSet;
+
+    fn import(asset: &str) -> RuntimeFileHandle {
+        let root = std::path::PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR").expect("pinned upstream checkout"),
+        );
+        let bytes = std::fs::read(root.join("tests/unit_tests/assets").join(asset)).unwrap();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let factory = crate::RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+        File::import(&bytes, factory, None, None, None).unwrap()
+    }
+
+    fn authored(file: &File) -> Vec<CoreHandle> {
+        (0..file.view_model_count())
+            .filter_map(|i| file.view_model_handle(i))
+            .flat_map(|model| {
+                let count = model
+                    .with_downcast::<ViewModel, _>(ViewModel::instance_count)
+                    .unwrap_or(0);
+                (0..count)
+                    .filter_map(|j| {
+                        model
+                            .with_downcast::<ViewModel, _>(|model| model.instance_at(j))
+                            .flatten()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+
+    /// The instances a copy made: the copied one and each nested one it
+    /// reaches, once each.
+    fn made(copy: &CoreHandle) -> usize {
+        let mut seen = HashSet::new();
+        let mut pending = vec![copy.clone()];
+        while let Some(instance) = pending.pop() {
+            if !seen.insert(instance.clone()) {
+                continue;
+            }
+            let values = instance
+                .with_downcast::<ViewModelInstance, _>(|i| i.property_values().to_vec())
+                .unwrap_or_default();
+            for value in values {
+                pending.extend(
+                    value
+                        .with_downcast::<ViewModelInstanceViewModel, _>(
+                            ViewModelInstanceViewModel::reference_view_model_instance,
+                        )
+                        .flatten(),
+                );
+                let items = value
+                    .with_downcast::<ViewModelInstanceList, _>(|l| l.list_items().to_vec())
+                    .unwrap_or_default();
+                pending.extend(items.iter().filter_map(|item| {
+                    item.with_downcast::<ViewModelInstanceListItem, _>(
+                        ViewModelInstanceListItem::view_model_instance,
+                    )
+                    .flatten()
+                }));
+            }
+        }
+        seen.len()
+    }
+
+    fn assert_measured(file: &RuntimeFileHandle, asset: &str) {
+        file.with_file(|file| {
+            for source in authored(file) {
+                let shape = copy_shape_of(file, source.clone(), 4096);
+                let copy = file.copy_view_model_instance(Some(&source)).expect("copy");
+                match shape {
+                    CopyShape::Shape(shape) => {
+                        assert_eq!(shape.instances, made(&copy), "{asset}")
+                    }
+                    other => panic!("{asset}: {other:?}"),
+                }
+            }
+        });
+    }
+
+    // Lane H2 (codex review): the measure walked a cycle the copy cuts until
+    // it gave up, so a named copy the runtime makes was refused.
+    #[test]
+    fn a_measured_copy_is_what_the_copy_makes() {
+        for asset in [
+            "rebind_with_nested_viewmodel.riv",
+            "component_list_virtualized.riv",
+            "viewmodel_deep_chain.riv",
+        ] {
+            assert_measured(&import(asset), asset);
+        }
+        // A self-referential authored instance, made as the upstream cycle
+        // test makes one.
+        let file = import("rebind_with_nested_viewmodel.riv");
+        let found = file.with_file(|file| {
+            for i in 0..file.view_model_count() {
+                let model = file.view_model_handle(i)?;
+                let count = model.with_downcast::<ViewModel, _>(ViewModel::instance_count)?;
+                for j in 0..count {
+                    let instance = model
+                        .with_downcast::<ViewModel, _>(|model| model.instance_at(j))
+                        .flatten()?;
+                    let values = instance
+                        .with_downcast::<ViewModelInstance, _>(|i| i.property_values().to_vec())?;
+                    for value in values {
+                        let Some(id) = value.with_downcast::<ViewModelInstanceViewModel, _>(
+                            |value| value.base.view_model_property_id(),
+                        ) else {
+                            continue;
+                        };
+                        let property = model
+                            .with_downcast::<ViewModel, _>(|m| m.property_at(id as usize))
+                            .flatten()?;
+                        return Some((i, j, property, value));
+                    }
+                }
+            }
+            None
+        });
+        let (model, instance, property, value) = found.expect("a nested reference");
+        assert!(CoreRegistry::set_uint_handle(
+            &property,
+            i32::from(ViewModelPropertyViewModelBase::VIEW_MODEL_REFERENCE_ID_PROPERTY_KEY),
+            model as u32,
+        ));
+        assert!(CoreRegistry::set_uint_handle(
+            &value,
+            i32::from(ViewModelInstanceViewModelBase::PROPERTY_VALUE_PROPERTY_KEY),
+            instance as u32,
+        ));
+        assert_measured(&file, "self-referential");
+    }
 }

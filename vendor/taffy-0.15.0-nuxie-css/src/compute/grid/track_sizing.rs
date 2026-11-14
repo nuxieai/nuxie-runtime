@@ -347,23 +347,6 @@ pub(super) fn track_sizing_algorithm<Tree: LayoutPartialTree>(
         }
     };
 
-    // nuxie-css: a grid with no width of its own in a definite space shrinks to fit it: its
-    // flexible columns expand to the items' max-content contributions, but the grid is no
-    // wider than the space (Chrome lays the grid out at its fit-content width: one `1fr`
-    // column around a 120 wide picture with `max-width: 100%`, in a 90 wide column with
-    // `align-items: flex-start`, is 90 wide). The space bounds the expansion as the grid's
-    // own `max-width` does.
-    let shrink_to_fit_space = match available_grid_space.get(axis) {
-        AvailableSpace::Definite(space) if axis == AbstractAxis::Inline && inner_node_size.get(axis).is_none() => {
-            Some(space)
-        }
-        _ => None,
-    };
-    let expansion_max_size = match (axis_max_size, shrink_to_fit_space) {
-        (Some(max), Some(space)) => Some(f32_min(max, space)),
-        (max, space) => max.or(space),
-    };
-
     // 11.7. Expand Flexible Tracks
     // This step sizes flexible tracks using the largest value it can assign to an fr without exceeding the available space.
     expand_flexible_tracks(
@@ -373,7 +356,7 @@ pub(super) fn track_sizing_algorithm<Tree: LayoutPartialTree>(
         other_axis_tracks,
         items,
         axis_min_size,
-        expansion_max_size,
+        axis_max_size,
         axis_available_space_for_expansion,
         inner_node_size,
         get_track_size_estimate,

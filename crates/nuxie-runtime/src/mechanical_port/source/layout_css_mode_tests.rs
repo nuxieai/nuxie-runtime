@@ -22146,6 +22146,11 @@ const TAFFY_FORK_REPLACED_ROWS: &[(&str, &str, &str, &str)] = &[
     ("ib-blk-frfr-abs-two", "position:relative;width:90px", "2>1>display:grid;grid-template-columns:1fr 1fr;position:absolute> & 3>2>width:60px;height:10px> & 4>2>width:100px;height:10px>", "1=0,0,90,0 2=0,0,160,10 3=0,0,60,10 4=60,0,100,10"),
     ("ib-blk-mmfr-abs-min0", "position:relative;width:90px", "2>1>display:grid;grid-template-columns:minmax(50px,1fr);position:absolute> & 3>2>width:120px;height:10px;min-width:0> & 4>2>height:10px>", "1=0,0,90,0 2=0,0,90,20 3=0,0,120,10 4=0,10,90,10"),
     ("ib-gauto-autofr-abs-pic", "position:relative;display:grid;grid-template-columns:auto auto;width:90px", "2>1>display:grid;grid-template-columns:auto 1fr;position:absolute> & 3>2>picture:120x60;max-width:100%>", "1=0,0,90,0 2=0,0,90,45 3=0,0,90,45"),
+    ("id-fcol-mmh-box240", "display:flex;flex-direction:column;align-items:flex-start;width:90px", "2>1>display:grid;grid-template-columns:minmax(0,0.5fr)> & 3>2>width:240px;height:10px>", "1=0,0,90,10 2=0,0,90,10 3=0,0,240,10"),
+    ("id-fcol-mm0-box240", "display:flex;flex-direction:column;align-items:flex-start;width:90px", "2>1>display:grid;grid-template-columns:minmax(0,1fr)> & 3>2>width:240px;height:10px>", "1=0,0,90,10 2=0,0,90,10 3=0,0,240,10"),
+    ("id-fcol-mm0-pic", "display:flex;flex-direction:column;align-items:flex-start;width:90px", "2>1>display:grid;grid-template-columns:minmax(0,1fr)> & 3>2>picture:120x60;max-width:100%>", "1=0,0,90,45 2=0,0,90,45 3=0,0,90,45"),
+    ("id-gstart-mmh-box240", "display:grid;justify-items:start;width:90px", "2>1>display:grid;grid-template-columns:minmax(0,0.5fr)> & 3>2>width:240px;height:10px>", "1=0,0,90,10 2=0,0,90,10 3=0,0,240,10"),
+    ("id-abs-mmh-box240", "position:relative;width:90px", "2>1>display:grid;grid-template-columns:minmax(0,0.5fr);position:absolute> & 3>2>width:240px;height:10px>", "1=0,0,90,0 2=0,0,90,10 3=0,0,240,10"),
 ];
 
 #[test]

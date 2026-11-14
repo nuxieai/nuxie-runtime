@@ -16,10 +16,15 @@ struct SlotPage {
 }
 
 fn slot_page() -> SlotPage {
-    let mut factory = PersistentFactory::new(RecordingFactory::new());
     let bytes = css_paint_fixture_shaped(PaintCase::MixedModes, PaintShape::SlotCopies).unwrap();
+    page(&bytes, "v")
+}
+
+/// `bytes`' page, played to its first frame, with A's placement `name`.
+fn page(bytes: &[u8], name: &str) -> SlotPage {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
     let file = File::import(
-        &bytes,
+        bytes,
         RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
         None,
         None,
@@ -35,7 +40,7 @@ fn slot_page() -> SlotPage {
     machine.advance_and_apply(0.0);
     let screen = crate::live_move::screens(&root).unwrap()["A"].clone();
     let placement = screen
-        .with_artboard(|b| b.find_handle::<NestedArtboardLayout>("v"))
+        .with_artboard(|b| b.find_handle::<NestedArtboardLayout>(name))
         .unwrap();
     SlotPage {
         _factory: factory,
@@ -93,4 +98,63 @@ fn a_placements_offset_under_a_parent_scaled_to_0_has_no_answer() {
     assert_eq!((offset.x, offset.y), (30.0, 20.0));
     let flat = Mat2D::new(0.0, 0.0, 0.0, 0.0, 10.0, 20.0);
     assert!(super::offset_in(flat, Mat2D::from_translation(Vec2D::new(30.0, 40.0))).is_none());
+}
+
+/// A held placement's cover anchor is where it rests. The keyed page's
+/// card on A places "unit x", here with its origin at its center, so where
+/// its content starts follows its size. Held at twice its resting size, as
+/// a Layout-mode copy is laid out mid-flight, its anchor is still the box
+/// it had before the hold.
+#[test]
+fn a_held_placements_cover_anchor_is_where_it_rests() {
+    use crate::css_layout::flight_hold;
+    use crate::live_move_fixture::{InPlaceFixture, KeyedKind, in_place_fixture};
+    use crate::source::{artboard::Artboard, math::vec2d::Vec2D};
+    let keyed = page(
+        &in_place_fixture(InPlaceFixture::Keyed(KeyedKind::Placement)),
+        "card",
+    );
+    let (screen, placement, machine) = (&keyed.screen, &keyed.placement, &keyed.machine);
+    let flying = super::Flying::of(placement).unwrap();
+    let root = flying.layout_node().clone();
+    root.with_downcast_mut::<Artboard, _>(|root| {
+        root.set_origin_x(0.5);
+        root.set_origin_y(0.5);
+    });
+    machine.advance_and_apply(0.0);
+    let board = screen.core_handle();
+    let resting = super::super::follow::resting_anchor_box(&board, placement).expect("an anchor");
+    let size = flying.resting_size();
+    assert!(flight_hold::begin(&root, (size.x, size.y)), "the hold begins");
+    flight_hold::set_size(&root, (size.x * 2.0, size.y * 2.0));
+    machine.advance_and_apply(0.0);
+    let (laid_out, origin_now, origin_at_rest) = root
+        .with_downcast::<Artboard, _>(|root| {
+            (
+                Vec2D::new(root.layout_width(), root.layout_height()),
+                root.content_origin(),
+                root.content_origin_at(size),
+            )
+        })
+        .unwrap();
+    assert_eq!(
+        (laid_out.x, laid_out.y),
+        (size.x * 2.0, size.y * 2.0),
+        "held at twice its size"
+    );
+    assert_ne!(
+        (origin_now.x, origin_now.y),
+        (origin_at_rest.x, origin_at_rest.y),
+        "where its content starts follows its size"
+    );
+    let held = super::super::follow::resting_anchor_box(&board, placement).expect("an anchor");
+    let near = |a: f32, b: f32| (a - b).abs() < 1e-3;
+    assert!(
+        near(held.min_x, resting.min_x)
+            && near(held.min_y, resting.min_y)
+            && near(held.max_x, resting.max_x)
+            && near(held.max_y, resting.max_y),
+        "held {held:?}, at rest {resting:?}"
+    );
+    flight_hold::end(&root);
 }

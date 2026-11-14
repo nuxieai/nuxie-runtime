@@ -13518,6 +13518,50 @@ fn in_place_a_flight_key_on_a_component_placement_flies() {
     flies_keyed(fixture::KeyedKind::Placement);
 }
 
+/// A bound component that swaps its artboard while its placement flies
+/// changes the root that is its box: the step cancels, as when a copy is
+/// gone, and the page goes on drawing.
+#[test]
+fn in_place_a_placement_swapped_mid_flight_cancels_the_step() {
+    use nuxie_runtime::source::viewmodel::viewmodel_instance_artboard::ViewModelInstanceArtboard;
+    let page = InPlacePage::load(fixture::InPlaceFixture::Keyed(
+        fixture::KeyedKind::Placement,
+    ));
+    let mut moves = LiveMoves::default();
+    moves.prepare(&page.root).unwrap();
+    moves.step_begin(&page.root, "B", Some("t1")).unwrap();
+    page.frame(&mut moves, 0.1);
+    assert_eq!(
+        moves.flight_controls(&page.root).len(),
+        2,
+        "both copies fly"
+    );
+    let a = screens(&page.root).unwrap()["A"].clone();
+    let placement = a.with_artboard(|b| b.find_all_handles::<NestedArtboard>())[0].clone();
+    let before = child(&placement).unwrap().core_handle();
+    let value = placement
+        .insert_sibling(ViewModelInstanceArtboard::default())
+        .unwrap();
+    let asset = page
+        ._file
+        .with_file(|f| f.bindable_artboard_named("unit x"))
+        .unwrap();
+    value.with_downcast_mut::<ViewModelInstanceArtboard, _>(|v| v.set_asset(Some(asset)));
+    NestedArtboard::update_artboard_occurrence(&placement, Some(value));
+    assert_ne!(
+        child(&placement).unwrap().core_handle(),
+        before,
+        "the placement shows a new root"
+    );
+    page.frame(&mut moves, 0.1);
+    assert!(
+        moves.flight_controls(&page.root).is_empty(),
+        "the step cancels"
+    );
+    page.frame(&mut moves, 0.1);
+    assert!(page.draw().contains("drawPath"), "the page draws");
+}
+
 #[test]
 fn in_place_a_flight_key_on_a_shape_is_refused() {
     refuses_a_keyed(fixture::KeyedKind::Shape);

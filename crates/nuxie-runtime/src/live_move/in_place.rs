@@ -163,6 +163,20 @@ impl Flying {
         Self::read(element).ok_or_else(|| anyhow::anyhow!("a flight key names no layout box"))
     }
 
+    /// Whether `element` still reads as this box: a placement still shows
+    /// the root it took off with, a host still hosts its participant. A
+    /// bound component that swaps its artboard while its placement flies
+    /// changes its box's layout node, and the step cancels as when a copy
+    /// is gone.
+    pub(super) fn still_reads(&self) -> bool {
+        Self::read(&self.element).is_some_and(|now| match (&self.shape, &now.shape) {
+            (Shape::Css, Shape::Css) => true,
+            (Shape::Hosted(was), Shape::Hosted(is))
+            | (Shape::Placement(was), Shape::Placement(is)) => was == is,
+            _ => false,
+        })
+    }
+
     /// The node that holds the box's place in layout.
     pub(super) fn layout_node(&self) -> &CoreHandle {
         match &self.shape {
@@ -379,7 +393,7 @@ impl Flying {
             }
             Shape::Placement(root) => Some((
                 self.element.clone(),
-                frame_origin(root)?,
+                resting_frame_origin(root)?,
                 self.resting_size(),
             )),
         }
@@ -389,9 +403,21 @@ impl Flying {
 /// A placed root's frame origin: where its draw puts its content's origin,
 /// before its own transform.
 fn frame_origin(root: &CoreHandle) -> Option<Mat2D> {
+    frame_origin_at(root, |root| {
+        Vec2D::new(root.layout_width(), root.layout_height())
+    })
+}
+
+/// A placed root's frame origin where it rests: at its resting size while
+/// its hold lays it out at another.
+fn resting_frame_origin(root: &CoreHandle) -> Option<Mat2D> {
+    frame_origin_at(root, |root| root.resting_layout().1)
+}
+
+fn frame_origin_at(root: &CoreHandle, size: impl FnOnce(&Artboard) -> Vec2D) -> Option<Mat2D> {
     root.with_downcast::<Artboard, _>(|root| {
         if root.frame_origin() {
-            Mat2D::from_translation(root.content_origin())
+            Mat2D::from_translation(root.content_origin_at(size(root)))
         } else {
             Mat2D::identity()
         }
@@ -717,10 +743,12 @@ impl InPlaceFlight {
         self.lift.0.borrow_mut().picture.release();
     }
 
-    /// Whether the copy, its Screen and its record are all still there: a
-    /// structural change that drops one cancels the step.
+    /// Whether the copy, its Screen and its record are all still there, and
+    /// the copy still reads as the box it took off as: a structural change
+    /// that drops one, or swaps a placement's root, cancels the step.
     pub(super) fn is_whole(&self, rows: &HashSet<CoreHandle>) -> bool {
-        rows.contains(&self.row)
+        self.flying.still_reads()
+            && rows.contains(&self.row)
             && rows.contains(&self.board)
             && rows.contains(&self.from_row)
             && rows.contains(&self.to_row)

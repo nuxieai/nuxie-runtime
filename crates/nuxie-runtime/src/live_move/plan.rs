@@ -813,7 +813,7 @@ impl Plan {
             .iter()
             .cloned()
             .collect::<HashSet<_>>();
-        // A zoomed version is laid out where it rests: it has no Size.
+        // A zoomed version is held at its departure size: it has no Size.
         let frames = self
             .lifted
             .iter()

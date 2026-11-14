@@ -9832,6 +9832,38 @@ mod paint_order {
         }
     }
 
+    /// A zoomed version keeps its departure size for the step, as the slot
+    /// path lays a zoomed unit out (`zoom::Pair::size`): the pair's box and
+    /// clip read that size. `Zoom(Plain)` goes to B and, half way, a's own
+    /// width grows by 40: in place a stays laid out at its departure width
+    /// until landing, and lands at the new width.
+    #[test]
+    fn in_place_a_zoomed_version_keeps_its_departure_size() {
+        use css_layout::{keys::WIDTH_KIND, record};
+        let case = PaintCase::Zoom(fixture::ZoomCase::Plain);
+        let mut s = PaintScene::shaped(case, PaintShape::InPlace);
+        let a = s.layout("A", "a");
+        let width = |a: &CoreHandle| {
+            a.with(|o| o.as_layout_component().map(|l| l.layout_width()))
+                .flatten()
+                .unwrap()
+        };
+        let departure = width(&a);
+        s.begin("B", "go");
+        s.to(0.5);
+        let css = a
+            .with(|o| record::find_in(o.as_container_component().unwrap().children()))
+            .flatten()
+            .unwrap();
+        set(&css, i32::from(WIDTH_KIND) + 1, departure + 40.0);
+        for p in [0.6, 0.75, 0.9] {
+            s.to(p);
+            close(width(&a), departure);
+        }
+        s.end("B", "go");
+        close(width(&a), departure + 40.0);
+    }
+
     /// The lines of `row`'s one text, each as its first and last
     /// characters and its box (left, top, bottom) in the text's own space.
     fn text_lines(s: &PaintScene, row: &str) -> Vec<(Option<usize>, Option<usize>, [f32; 3])> {

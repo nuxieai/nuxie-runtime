@@ -149,25 +149,46 @@ fn drawn_size(element: &CoreHandle) -> Vec2D {
 /// as a frame's own transform is built (`hosted_frame::self_transform`), a
 /// box turning and scaling about its pivot taken from `size`, with its CSS
 /// translate unscaled. A component placement's own transform is its local
-/// matrix without its translation, which its place holds.
+/// matrix without its translation, which its place holds, then its placed
+/// root's content transform, which the root's draw applies; stretched, the
+/// root's is built with the stretch, as a flying unit's root draws in a
+/// flight slot (`Artboard::content_transform_stretched`).
 fn own_transforms(element: &CoreHandle, size: Vec2D, stretch: Vec2D) -> Option<(Mat2D, Mat2D)> {
-    element
+    let css_box = element
         .with(|object| {
-            if let Some(layout) = object
+            let layout = object
                 .as_layout_component()
-                .filter(|layout| layout.is_css_mode() && !layout.is_artboard())
-            {
-                let mut sized = layout.own_transform_sized(size);
-                sized.scale_by_values(stretch.x, stretch.y);
-                return Some((layout.build_own_transform(), sized));
-            }
-            let local = object.as_transform_component()?.transform();
-            let own = Mat2D::new(local[0], local[1], local[2], local[3], 0.0, 0.0);
-            let mut sized = own;
+                .filter(|layout| layout.is_css_mode() && !layout.is_artboard())?;
+            let mut sized = layout.own_transform_sized(size);
             sized.scale_by_values(stretch.x, stretch.y);
-            Some((own, sized))
+            Some((layout.build_own_transform(), sized))
         })
-        .flatten()
+        .flatten();
+    if css_box.is_some() {
+        return css_box;
+    }
+    let (local, root) = element
+        .with(|object| {
+            let local = object.as_transform_component()?.transform();
+            let root = object
+                .as_nested_artboard()
+                .and_then(|nested| nested.artboard_instance_default());
+            Some((
+                Mat2D::new(local[0], local[1], local[2], local[3], 0.0, 0.0),
+                root,
+            ))
+        })
+        .flatten()?;
+    let content = |stretch: Vec2D| {
+        root.as_ref().map_or_else(
+            || Mat2D::from_scale(stretch.x, stretch.y),
+            |root| root.with_artboard(|board| board.content_transform_stretched(stretch)),
+        )
+    };
+    Some((
+        local * content(Vec2D::new(1.0, 1.0)),
+        local * content(stretch),
+    ))
 }
 
 /// One end: the element's place in its parent without its own transform, as
@@ -280,12 +301,13 @@ pub struct InPlaceFlight {
     /// draws every lift.
     pub board: CoreHandle,
     pub size_mode: SizeMode,
-    /// A version of a zoomed pair (`InPlacePair`): laid out where it rests,
-    /// with no corners or shadow, and solved onto the pair's box.
+    /// A version of a zoomed pair (`InPlacePair`): held at its departure
+    /// size, with no corners or shadow, and solved onto the pair's box.
     pub zoomed: bool,
     /// The copy's own resting size when the step started.
     departure: Vec2D,
-    /// The node a Layout-mode copy holds; None in Scale mode and in a zoom.
+    /// The node a Layout-mode copy or a zoomed version holds; None in Scale
+    /// mode.
     held: Option<CoreHandle>,
     pub(crate) lift: Lift,
     /// Each end as last read, kept for a Screen asleep mid-step.
@@ -318,11 +340,13 @@ impl InPlaceFlight {
             from.clone()
         };
         let departure = resting_size(&element);
-        let held = (size_mode == SizeMode::Layout && !zoomed).then(|| box_of(&element));
+        // A zoomed version is held at its departure size: its hold begins
+        // there and has no Size barrier to change it.
+        let held = (size_mode == SizeMode::Layout || zoomed).then(|| box_of(&element));
         if let Some(node) = &held {
             ensure!(
                 flight_hold::can_begin(node),
-                "a Layout-mode flight needs an element laid out by a parent"
+                "a held flight needs an element laid out by a parent"
             );
         }
         Ok(Self {
@@ -538,8 +562,11 @@ impl InPlaceFlight {
 /// way, with each version solved onto it through its lift. A version's lift
 /// takes the box as its transform, at λ in place of the frame's stretch, the
 /// box in its content space as its clip, and the hand-over as its opacity;
-/// the copy leaves its own opacity and its ancestors' out. Neither version
-/// is held: each is laid out where it rests, its departure size.
+/// the copy leaves its own opacity and its ancestors' out. Each version is
+/// held at its departure size for the step, as `zoom::Pair::size` lays a
+/// zoomed unit out: its place in layout stays its rest, and a size change
+/// during the step, from a binding or a parent's percentage, leaves its
+/// inside as it took off, the size the pair's box and clip read.
 pub(super) struct InPlacePair {
     /// The leaving version's copy, then the arriving one's.
     pub(super) copies: [CoreHandle; 2],

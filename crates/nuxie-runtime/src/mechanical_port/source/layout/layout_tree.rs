@@ -60,15 +60,6 @@ pub(crate) enum LayoutNodeKind {
     Participant,
     /// The measured content of a CSS leaf, with no corresponding provider.
     Content,
-    /// A held element's resting place, holding the element itself while it
-    /// flies in place (css_layout/flight_hold.rs). Its owner is the element,
-    /// whose own node it doesn't replace.
-    Held,
-    /// A held element's resting baseline: a zero-size, in-flow leaf at the
-    /// top of its placeholder that reports the baseline the element rested
-    /// with, so the placeholder aligns as the element did. Present only when
-    /// the element rested with a baseline of its own.
-    HeldBaseline,
 }
 
 #[derive(Clone)]
@@ -95,6 +86,9 @@ pub(crate) struct LayoutTree {
     /// Available size of the last root style resolution (NaN: unbounded).
     pub(crate) root_available: (f32, f32),
     pub(crate) intrinsic_height: Option<(NodeId, u32, f32)>,
+    /// Elements flying in place (css_layout/flight_hold.rs) and their flight
+    /// sizes: each solve lays their insides out again at that size.
+    pub(crate) held: Vec<(NodeId, (f32, f32))>,
 }
 
 impl LayoutTree {
@@ -122,8 +116,22 @@ impl LayoutTree {
                 owner: root_owner,
             }),
             intrinsic_height: None,
+            held: Vec::new(),
             root,
             root_available: (f32::NAN, f32::NAN),
+        }
+    }
+
+    /// Record whether `id` is held and at which flight size.
+    pub(crate) fn set_held(&mut self, id: NodeId, size: Option<(f32, f32)>) {
+        let at = self.held.iter().position(|(node, _)| *node == id);
+        match (at, size) {
+            (Some(at), Some(size)) => self.held[at].1 = size,
+            (Some(at), None) => {
+                self.held.swap_remove(at);
+            }
+            (None, Some(size)) => self.held.push((id, size)),
+            (None, None) => {}
         }
     }
 
@@ -188,15 +196,15 @@ impl LayoutTree {
             }
             pending.extend(self.taffy.child_ids(node).collect::<Vec<_>>());
             if let Some(context) = self.taffy.get_node_context(node)
-                && !matches!(
-                    context.kind,
-                    LayoutNodeKind::Content | LayoutNodeKind::Held | LayoutNodeKind::HeldBaseline
-                )
+                && context.kind != LayoutNodeKind::Content
             {
                 dropped.push((context.owner.clone(), self.link(node)));
             }
             self.taffy.remove(node).expect("live layout node");
             removed.insert(node);
+        }
+        if !removed.is_empty() {
+            self.held.retain(|(node, _)| !removed.contains(node));
         }
         dropped
     }

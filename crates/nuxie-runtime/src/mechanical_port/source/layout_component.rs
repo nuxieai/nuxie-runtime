@@ -4722,8 +4722,9 @@ impl LayoutComponent {
                 Self::measure_tree_node,
             )
             .expect("valid layout calculation");
+        let flights = Self::fly_held_elements(&mut tree, &mut touched);
         tree.intrinsic_height = None;
-        Self::publish_layout_tree(&tree, &touched);
+        Self::publish_layout_tree(&tree, &touched, &flights);
         #[cfg(debug_assertions)]
         Self::verify_layout_against_fresh_solve(owner, (size.x, size.y));
         owner.with_mut(|object| {
@@ -4735,18 +4736,40 @@ impl LayoutComponent {
         });
     }
 
+    /// The flight pass (css_layout/flight_hold.rs): after the parent pass
+    /// has placed every held element at rest, lay each one's inside out at
+    /// its flight size, outer elements first. Their subtrees are republished.
+    fn fly_held_elements(
+        tree: &mut LayoutTree,
+        touched: &mut Vec<taffy::prelude::NodeId>,
+    ) -> Vec<(taffy::prelude::NodeId, taffy::tree::LayoutOutput)> {
+        use taffy::TraversePartialTree;
+        if tree.held.is_empty() {
+            return Vec::new();
+        }
+        let depth = |taffy: &taffy::TaffyTree<_>, id| {
+            std::iter::successors(Some(id), |&node| taffy.parent(node)).count()
+        };
+        let mut held = tree.held.clone();
+        held.sort_by_cached_key(|&(id, _)| depth(&tree.taffy, id));
+        let mut flights = Vec::with_capacity(held.len());
+        for (id, size) in held {
+            if let Some(flight) =
+                crate::css_layout::flight_hold::fly(&mut tree.taffy, id, size, Self::measure_tree_node)
+            {
+                touched.push(id);
+                flights.push((id, flight));
+            }
+        }
+        flights
+    }
+
     fn measure_tree_node(
         inputs: taffy::tree::LayoutInput,
         _node: taffy::prelude::NodeId,
         context: Option<&mut crate::source::layout::layout_tree::LayoutNodeContext>,
         style: &taffy::prelude::Style,
     ) -> taffy::tree::LayoutOutput {
-        if let Some(context) = context
-            .as_ref()
-            .filter(|context| context.kind == LayoutNodeKind::HeldBaseline)
-        {
-            return Self::held_baseline_output(&context.owner);
-        }
         if let Some(output) = context
             .as_ref()
             .and_then(|context| Self::measure_picture_node(&context.owner, inputs, style))
@@ -4789,231 +4812,14 @@ impl LayoutComponent {
         )
     }
 
-    /// The width of `owner`'s containing block where it rests, which its
-    /// percentage padding and border resolve against (css_layout/
-    /// flight_hold.rs). Taffy keeps no containing block per node, and the
-    /// width depends on what lays the element out: a flex line, a block, a
-    /// grid area, or for an absolute element its nearest positioned
-    /// ancestor (or the root) and any grid area it is placed in there. So a
-    /// scratch copy of that box's settled subtree is laid out at its
-    /// resting box with the element's left padding at 100%, which resolves
-    /// to exactly the width.
-    pub(crate) fn resting_percent_base(
-        owner: &CoreHandle,
-        link: &crate::source::layout::layout_tree::LayoutNodeLink,
-    ) -> Option<f32> {
-        use taffy::prelude::{
-            AvailableSpace, Dimension, LengthPercentage, LengthPercentageAuto, Size, TaffyTree,
-        };
-        use taffy::style::Position;
-        let (mut scratch, copy, element, size) = link
-            .root_owner()
-            .with(|o| {
-                let tree = o.as_layout_component()?.layout_tree.as_ref()?;
-                if !tree.owns(link, owner) {
-                    return None;
-                }
-                let id = link.id();
-                let absolute = tree.taffy.style(id).ok()?.position == Position::Absolute;
-                // The box that lays the element out, and the way down to it.
-                let mut path = Vec::new();
-                let mut at = id;
-                loop {
-                    let parent = tree.taffy.parent(at)?;
-                    let index = tree
-                        .taffy
-                        .children(parent)
-                        .ok()?
-                        .iter()
-                        .position(|&c| c == at)?;
-                    path.push(index);
-                    at = parent;
-                    if !absolute
-                        || at == tree.root
-                        || tree.taffy.style(at).ok()?.position != Position::Static
-                    {
-                        break;
-                    }
-                }
-                let mut scratch = TaffyTree::new();
-                scratch.disable_rounding();
-                let copy = Self::copy_layout_subtree(&tree.taffy, at, &mut scratch)?;
-                let mut element = copy;
-                for &index in path.iter().rev() {
-                    element = *scratch.children(element).ok()?.get(index)?;
-                }
-                let solved = tree.taffy.layout(at).ok()?;
-                let mut style = scratch.style(copy).ok()?.clone();
-                style.box_sizing = taffy::BoxSizing::BorderBox;
-                style.size = Size {
-                    width: Dimension::length(solved.size.width),
-                    height: Dimension::length(solved.size.height),
-                };
-                style.min_size = Size {
-                    width: LengthPercentageAuto::length(solved.size.width),
-                    height: LengthPercentageAuto::length(solved.size.height),
-                };
-                style.max_size = style.min_size;
-                style.padding = solved.padding.map(LengthPercentage::length);
-                style.border = solved.border.map(LengthPercentage::length);
-                style.margin = taffy::geometry::Rect {
-                    left: LengthPercentageAuto::length(0.0),
-                    right: LengthPercentageAuto::length(0.0),
-                    top: LengthPercentageAuto::length(0.0),
-                    bottom: LengthPercentageAuto::length(0.0),
-                };
-                style.position = Position::Relative;
-                scratch.set_style(copy, style).ok()?;
-                let mut item = scratch.style(element).ok()?.clone();
-                item.padding.left = LengthPercentage::percent(1.0);
-                scratch.set_style(element, item).ok()?;
-                Some((scratch, copy, element, solved.size))
-            })
-            .flatten()?;
-        let probe = crate::page_player::IntrinsicProbe::enter();
-        scratch
-            .compute_layout_with_measure(
-                copy,
-                Size {
-                    width: AvailableSpace::Definite(size.width),
-                    height: AvailableSpace::Definite(size.height),
-                },
-                Self::measure_tree_node,
-            )
-            .ok()?;
-        if probe.failed() {
-            return None;
-        }
-        let width = scratch.layout(element).ok()?.padding.left;
-        width.is_finite().then_some(width)
-    }
-
-    /// A copy of `id`'s subtree in `scratch`, styles and contexts included.
-    fn copy_layout_subtree(
-        tree: &taffy::prelude::TaffyTree<crate::source::layout::layout_tree::LayoutNodeContext>,
-        id: taffy::prelude::NodeId,
-        scratch: &mut taffy::prelude::TaffyTree<
-            crate::source::layout::layout_tree::LayoutNodeContext,
-        >,
-    ) -> Option<taffy::prelude::NodeId> {
-        let style = tree.style(id).ok()?.clone();
-        let new = match tree.get_node_context(id) {
-            Some(context) => scratch.new_leaf_with_context(style, context.clone()).ok()?,
-            None => scratch.new_leaf(style).ok()?,
-        };
-        let children = tree
-            .children(id)
-            .ok()?
-            .into_iter()
-            .map(|child| Self::copy_layout_subtree(tree, child, scratch))
-            .collect::<Option<Vec<_>>>()?;
-        scratch.set_children(new, &children).ok()?;
-        Some(new)
-    }
-
-    /// The first baseline `owner` rests with, from the top of its border box
-    /// `rest`, when it has one of its own (css_layout/flight_hold.rs). Taffy
-    /// keeps no baselines after a solve, so a scratch copy of the settled
-    /// subtree is laid out at `rest` beside an empty box in a
-    /// baseline-aligned row: the box sits on the copy's baseline. Without a
-    /// baseline of its own the copy aligns by its border box's bottom,
-    /// which a placeholder of the same size already does: None. The copy
-    /// keeps the padding and border `resolved` at rest, since its scratch
-    /// row is not its containing block.
-    pub(crate) fn resting_baseline(
-        owner: &CoreHandle,
-        link: &crate::source::layout::layout_tree::LayoutNodeLink,
-        rest: Layout,
-        (padding, border): (taffy::geometry::Rect<f32>, taffy::geometry::Rect<f32>),
-    ) -> Option<f32> {
-        use taffy::prelude::{
-            AlignItems, AvailableSpace, Dimension, LengthPercentageAuto, Size, Style, TaffyTree,
-        };
-        let root = link.root_owner();
-        let mut scratch = TaffyTree::new();
-        scratch.disable_rounding();
-        let node = root
-            .with(|o| {
-                let tree = o.as_layout_component()?.layout_tree.as_ref()?;
-                if !tree.owns(link, owner) || tree.taffy.children(link.id()).ok()?.is_empty() {
-                    // A leaf reports no baseline of its own.
-                    return None;
-                }
-                Self::copy_layout_subtree(&tree.taffy, link.id(), &mut scratch)
-            })
-            .flatten()?;
-        let (w, h) = (rest.width(), rest.height());
-        let mut style = scratch.style(node).ok()?.clone();
-        style.box_sizing = taffy::BoxSizing::BorderBox;
-        style.size = Size {
-            width: Dimension::length(w),
-            height: Dimension::length(h),
-        };
-        style.min_size = Size {
-            width: LengthPercentageAuto::length(w),
-            height: LengthPercentageAuto::length(h),
-        };
-        style.max_size = style.min_size;
-        style.padding = padding.map(taffy::prelude::LengthPercentage::length);
-        style.border = border.map(taffy::prelude::LengthPercentage::length);
-        style.margin = taffy::geometry::Rect {
-            left: LengthPercentageAuto::length(0.0),
-            right: LengthPercentageAuto::length(0.0),
-            top: LengthPercentageAuto::length(0.0),
-            bottom: LengthPercentageAuto::length(0.0),
-        };
-        style.position = taffy::style::Position::Relative;
-        style.inset = taffy::geometry::Rect {
-            left: LengthPercentageAuto::auto(),
-            right: LengthPercentageAuto::auto(),
-            top: LengthPercentageAuto::auto(),
-            bottom: LengthPercentageAuto::auto(),
-        };
-        style.flex_grow = 0.0;
-        style.flex_shrink = 0.0;
-        style.flex_basis = Dimension::auto();
-        style.align_self = Some(AlignItems::BASELINE);
-        scratch.set_style(node, style).ok()?;
-        let marker = scratch
-            .new_leaf(Style {
-                align_self: Some(AlignItems::BASELINE),
-                ..crate::css_layout::flight_hold::FlightHold::marker_style()
-            })
-            .ok()?;
-        let row = scratch
-            .new_with_children(
-                Style {
-                    display: taffy::Display::Flex,
-                    align_items: AlignItems::BASELINE,
-                    ..Style::default()
-                },
-                &[node, marker],
-            )
-            .ok()?;
-        let probe = crate::page_player::IntrinsicProbe::enter();
-        scratch
-            .compute_layout_with_measure(
-                row,
-                Size {
-                    width: AvailableSpace::MaxContent,
-                    height: AvailableSpace::MaxContent,
-                },
-                Self::measure_tree_node,
-            )
-            .ok()?;
-        if probe.failed() {
-            return None;
-        }
-        let at = |id| scratch.layout(id).ok().map(|layout| layout.location.y);
-        let baseline = at(marker)? - at(node)?;
-        (baseline.is_finite() && baseline != h).then_some(baseline)
-    }
-
     /// Measure a settled subtree with the same engine and leaf measurers, but
     /// never publish its scratch tree. Only this Screen's nodes are copied.
     /// Repeated reads reuse the answer until the owning tree next solves.
     pub(crate) fn intrinsic_height_occurrence(owner: &CoreHandle, width: f32) -> Option<f32> {
-        use taffy::prelude::{AvailableSpace, Dimension, LengthPercentageAuto, Size, TaffyTree};
+        use crate::source::layout::layout_tree::LayoutNodeContext;
+        use taffy::prelude::{
+            AvailableSpace, Dimension, LengthPercentageAuto, NodeId, Size, TaffyTree,
+        };
         let link = owner
             .with(|o| o.as_layout_component()?.layout_data.node().cloned())
             .flatten()?;
@@ -5029,7 +4835,25 @@ impl LayoutComponent {
         if cached.is_some() {
             return cached;
         }
-        let copy = Self::copy_layout_subtree;
+        fn copy(
+            tree: &TaffyTree<LayoutNodeContext>,
+            id: NodeId,
+            scratch: &mut TaffyTree<LayoutNodeContext>,
+        ) -> Option<NodeId> {
+            let style = tree.style(id).ok()?.clone();
+            let new = match tree.get_node_context(id) {
+                Some(context) => scratch.new_leaf_with_context(style, context.clone()).ok()?,
+                None => scratch.new_leaf(style).ok()?,
+            };
+            let children = tree
+                .children(id)
+                .ok()?
+                .into_iter()
+                .map(|child| copy(tree, child, scratch))
+                .collect::<Option<Vec<_>>>()?;
+            scratch.set_children(new, &children).ok()?;
+            Some(new)
+        }
         let mut scratch = TaffyTree::new();
         scratch.disable_rounding();
         let node = root
@@ -5125,34 +4949,19 @@ impl LayoutComponent {
                 }
             }
         };
-        /// A node to compare: its owner, its node, and while the owner is
-        /// held, its placeholder.
-        type Built = (CoreHandle, NodeId, Option<NodeId>);
         fn build(
             taffy: &mut TaffyTree<Context>,
             owner: &CoreHandle,
-            nodes: &mut Vec<Built>,
+            nodes: &mut Vec<(CoreHandle, NodeId)>,
             parent: Option<&Style>,
             is_root: bool,
         ) -> Option<NodeId> {
-            // A held element (css_layout/flight_hold.rs) sits alone in a
-            // placeholder with its frozen resting style, as in the tree.
-            let (rest_style, rest_baseline) = owner
-                .with_mut(|object| {
-                    LayoutComponent::layout_data_of(object)
-                        .and_then(|data| data.flight_hold.as_ref())
-                        .map(|hold| (hold.rest_style().clone(), hold.baseline.is_some()))
-                })
-                .flatten()
-                .filter(|_| !is_root)
-                .unzip();
-            let parent = rest_style.as_ref().or(parent);
             let parent_is_flex =
                 parent.is_some_and(|parent| parent.display == taffy::Display::Flex);
             let (mut style, kind, measured, children, virtual_tracks) = owner.with(|object| {
                 if let Some(layout) = object.as_layout_component() {
                     Some((
-                        layout.layout_data.tree_style().into_owned(),
+                        layout.layout_data.style().clone(),
                         LayoutNodeKind::Layout,
                         layout.is_intrinsic_leaf(),
                         layout.layout_children.clone(),
@@ -5167,7 +4976,7 @@ impl LayoutComponent {
                         .downcast_ref::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>()?
                         .native_layout_data()?;
                     Some((
-                        data.tree_style().into_owned(),
+                        data.style().clone(),
                         LayoutNodeKind::Participant,
                         true,
                         Vec::new(),
@@ -5212,35 +5021,8 @@ impl LayoutComponent {
                 .new_leaf_with_context(style, (owner.clone(), kind, measured, supported))
                 .ok()?;
             taffy.set_children(id, &ids).ok()?;
-            let Some(rest_style) = rest_style else {
-                nodes.push((owner.clone(), id, None));
-                return Some(id);
-            };
-            let placeholder = taffy
-                .new_leaf_with_context(
-                    rest_style,
-                    (owner.clone(), LayoutNodeKind::Held, false, [true; 2]),
-                )
-                .ok()?;
-            let mut held = vec![id];
-            if rest_baseline == Some(true) {
-                held.push(
-                    taffy
-                        .new_leaf_with_context(
-                            crate::css_layout::flight_hold::FlightHold::marker_style(),
-                            (
-                                owner.clone(),
-                                LayoutNodeKind::HeldBaseline,
-                                false,
-                                [true; 2],
-                            ),
-                        )
-                        .ok()?,
-                );
-            }
-            taffy.set_children(placeholder, &held).ok()?;
-            nodes.push((owner.clone(), id, Some(placeholder)));
-            Some(placeholder)
+            nodes.push((owner.clone(), id));
+            Some(id)
         }
         let mut taffy = TaffyTree::<Context>::new();
         taffy.disable_rounding();
@@ -5259,20 +5041,10 @@ impl LayoutComponent {
                 taffy::prelude::AvailableSpace::Definite(value)
             }
         };
-        taffy
-            .compute_layout_with_measure(
-                root,
-                Size {
-                    width: space(available.0),
-                    height: space(available.1),
-                },
-                |inputs, _node, context, style| {
-                    if let Some(context) = context
-                        .as_ref()
-                        .filter(|context| context.1 == LayoutNodeKind::HeldBaseline)
-                    {
-                        return Self::held_baseline_output(&context.0);
-                    }
+        let measure = |inputs: taffy::tree::LayoutInput,
+                       _node: NodeId,
+                       context: Option<&mut Context>,
+                       style: &Style| {
                     if let Some(output) = context
                         .as_ref()
                         .and_then(|context| Self::measure_picture_node(&context.0, inputs, style))
@@ -5313,31 +5085,53 @@ impl LayoutComponent {
                             None => Size::ZERO,
                         },
                     )
+                };
+        taffy
+            .compute_layout_with_measure(
+                root,
+                Size {
+                    width: space(available.0),
+                    height: space(available.1),
                 },
+                measure,
             )
             .expect("fresh layout");
-        let solved = |id: NodeId| {
-            let output = taffy.layout(id).expect("fresh node");
-            let hoisted = Self::hoisted_offset_in(&taffy, id);
-            Layout::new(
-                output.location.x - hoisted.x,
-                output.location.y - hoisted.y,
-                output.size.width,
-                output.size.height,
-            )
-        };
-        for (node_owner, id, placeholder) in nodes {
-            let mut fresh = solved(id);
-            let rest = placeholder.map(solved);
-            if let Some(rest) = rest {
-                // Published at its placeholder's place.
-                fresh = Layout::new(
-                    fresh.left() + rest.left(),
-                    fresh.top() + rest.top(),
-                    fresh.width(),
-                    fresh.height(),
-                );
+        // The flight pass, as the persistent tree runs it: outer elements
+        // first (a node is built after its descendants).
+        let mut flights = Vec::new();
+        for (node_owner, id) in nodes.iter().rev() {
+            let size = node_owner
+                .with_mut(|object| {
+                    Self::layout_data_of(object)?
+                        .flight_hold
+                        .as_ref()
+                        .map(|hold| hold.size())
+                })
+                .flatten();
+            if let Some(size) = size
+                && let Some(flight) =
+                    crate::css_layout::flight_hold::fly(&mut taffy, *id, size, measure)
+            {
+                flights.push((*id, flight));
             }
+        }
+        for (node_owner, id) in nodes {
+            let slot = crate::css_layout::flight_hold::resting_slot(&taffy, id).expect("fresh node");
+            let flight = flights
+                .iter()
+                .find(|(node, _)| *node == id)
+                .map(|(_, flight)| crate::css_layout::flight_hold::flight_layout(&slot, flight));
+            let hoisted = Self::hoisted_offset_in(&taffy, id);
+            let placed = |layout: &taffy::Layout| {
+                Layout::new(
+                    layout.location.x - hoisted.x,
+                    layout.location.y - hoisted.y,
+                    layout.size.width,
+                    layout.size.height,
+                )
+            };
+            let fresh = placed(flight.as_ref().unwrap_or(&slot));
+            let rest = flight.is_some().then(|| placed(&slot));
             let published = node_owner
                 .with_mut(|object| {
                     let data = Self::layout_data_of(object)?;
@@ -5356,14 +5150,67 @@ impl LayoutComponent {
                     node_owner.core_type()
                 ));
             }
-            if held_rest.is_some() != rest.is_some()
-                || held_rest.zip(rest).is_some_and(|(a, b)| a != b)
-            {
+            if held_rest != rest {
                 record(format!(
                     "mismatch: core type {:?} held rest {held_rest:?} fresh {rest:?}",
                     node_owner.core_type()
                 ));
             }
+        }
+    }
+
+    /// The nodes of the root's layout tree.
+    #[cfg(test)]
+    pub(crate) fn layout_tree_node_count(root: &CoreHandle) -> Option<usize> {
+        root.with(|object| {
+            Some(
+                object
+                    .as_layout_component()?
+                    .layout_tree
+                    .as_ref()?
+                    .taffy
+                    .total_node_count(),
+            )
+        })
+        .flatten()
+    }
+
+    /// The layout component whose layout lays `object` out: its parent's
+    /// layout node owner.
+    pub(crate) fn layout_parent_of(
+        object: &dyn crate::mechanical_port::source::core::CoreObject,
+    ) -> Option<CoreHandle> {
+        let key = if let Some(layout) = object.as_layout_component() {
+            layout.layout_node_key(0)
+        } else {
+            object
+                .as_any()
+                .downcast_ref::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>()?
+                .layout_node_key(0)
+        }?;
+        key.owner.borrow().clone()
+    }
+
+    /// Ask the element's artboard for a layout solve without invalidating
+    /// any layout: the element queued itself for its tree
+    /// (css_layout/flight_hold.rs).
+    pub(crate) fn request_layout_solve(element: &CoreHandle) {
+        let layout = if element
+            .with(|object| object.as_layout_component().is_some())
+            .unwrap_or(false)
+        {
+            Some(element.clone())
+        } else {
+            element.with(Self::layout_parent_of).flatten()
+        };
+        let Some(layout) = layout else {
+            return;
+        };
+        let artboard = layout
+            .with(|object| object.as_layout_component()?.artboard_handle())
+            .flatten();
+        if let Some(artboard) = artboard {
+            Artboard::mark_layout_dirty_occurrence(&artboard, layout, None);
         }
     }
 
@@ -5379,146 +5226,6 @@ impl LayoutComponent {
             .as_any_mut()
             .downcast_mut::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>()?
             .native_layout_data_mut()
-    }
-
-    /// The layout owner whose node holds `object`'s node: its layout parent.
-    pub(crate) fn layout_parent_of(
-        object: &dyn crate::mechanical_port::source::core::CoreObject,
-    ) -> Option<CoreHandle> {
-        let key = if let Some(layout) = object.as_layout_component() {
-            layout.layout_node_key(0)
-        } else {
-            object
-                .as_any()
-                .downcast_ref::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>()?
-                .layout_node_key(0)
-        }?;
-        key.owner.borrow().clone()
-    }
-
-    /// The root's layout tree: (nodes, nodes reachable from the root,
-    /// placeholders among them, baseline markers among them).
-    #[cfg(test)]
-    pub(crate) fn layout_tree_counts(root: &CoreHandle) -> Option<(usize, usize, usize, usize)> {
-        use taffy::TraversePartialTree;
-        root.with(|object| {
-            let tree = object.as_layout_component()?.layout_tree.as_ref()?;
-            let (mut reachable, mut held, mut markers) = (0, 0, 0);
-            let mut stack = vec![tree.root];
-            while let Some(id) = stack.pop() {
-                reachable += 1;
-                match tree.taffy.get_node_context(id).map(|context| context.kind) {
-                    Some(LayoutNodeKind::Held) => held += 1,
-                    Some(LayoutNodeKind::HeldBaseline) => markers += 1,
-                    _ => {}
-                }
-                stack.extend(tree.taffy.child_ids(id));
-            }
-            Some((tree.taffy.total_node_count(), reachable, held, markers))
-        })
-        .flatten()
-    }
-
-    /// The padding and border Taffy last resolved for `node`, in points:
-    /// percentages resolved against the containing block it was laid out in.
-    pub(crate) fn solved_padding_and_border(
-        node: &crate::mechanical_port::source::layout::layout_tree::LayoutNodeLink,
-    ) -> Option<(taffy::geometry::Rect<f32>, taffy::geometry::Rect<f32>)> {
-        node.root_owner()
-            .with(|object| {
-                let tree = object.as_layout_component()?.layout_tree.as_ref()?;
-                let layout = tree.taffy.layout(node.id()).ok()?;
-                Some((layout.padding, layout.border))
-            })
-            .flatten()
-    }
-
-    /// A child of `parent` began or ended a flight hold, or the hold's size
-    /// changed: the next solve syncs `parent`'s children, where the child's
-    /// placeholder stands or goes (css_layout/flight_hold.rs).
-    pub(crate) fn flight_hold_changed(parent: &CoreHandle) {
-        Self::mark_layout_tree_topology_dirty_occurrence(parent);
-        Self::mark_layout_node_dirty_occurrence(parent, false);
-    }
-
-    /// What a held element's baseline marker lays out to.
-    fn held_baseline_output(owner: &CoreHandle) -> taffy::tree::LayoutOutput {
-        owner
-            .with_mut(|object| {
-                Some(
-                    Self::layout_data_of(object)?
-                        .flight_hold
-                        .as_ref()?
-                        .marker_output(),
-                )
-            })
-            .flatten()
-            .unwrap_or(taffy::tree::LayoutOutput::HIDDEN)
-    }
-
-    /// The placeholder standing in for a held element among its parent's
-    /// children, made on first use, with the element's frozen resting style.
-    /// None for an element that isn't held. With it, the baseline marker
-    /// it holds when the element rested with a baseline of its own.
-    fn flight_placeholder(
-        tree: &mut LayoutTree,
-        owner: &CoreHandle,
-        touched: &mut Vec<taffy::prelude::NodeId>,
-    ) -> Option<(taffy::prelude::NodeId, Option<taffy::prelude::NodeId>)> {
-        let (existing, existing_marker, wants_marker, style) = owner
-            .with_mut(|object| {
-                let hold = Self::layout_data_of(object)?.flight_hold.as_ref()?;
-                Some((
-                    hold.placeholder,
-                    hold.marker,
-                    hold.baseline.is_some(),
-                    hold.rest_style().clone(),
-                ))
-            })
-            .flatten()?;
-        let live = |tree: &LayoutTree, id: Option<taffy::prelude::NodeId>, kind| {
-            id.filter(|&id| {
-                tree.taffy
-                    .get_node_context(id)
-                    .is_some_and(|c| c.kind == kind && &c.owner == owner)
-            })
-        };
-        let id = match live(tree, existing, LayoutNodeKind::Held) {
-            Some(id) => id,
-            None => {
-                let id = tree.new_node(owner.clone(), LayoutNodeKind::Held);
-                owner.with_mut(|object| {
-                    if let Some(hold) =
-                        Self::layout_data_of(object).and_then(|data| data.flight_hold.as_mut())
-                    {
-                        hold.placeholder = Some(id);
-                    }
-                });
-                id
-            }
-        };
-        if tree.sync_style(id, &style) {
-            touched.push(id);
-        }
-        let marker = wants_marker.then(|| {
-            live(tree, existing_marker, LayoutNodeKind::HeldBaseline).unwrap_or_else(|| {
-                let marker = tree.new_node(owner.clone(), LayoutNodeKind::HeldBaseline);
-                tree.sync_style(
-                    marker,
-                    &crate::css_layout::flight_hold::FlightHold::marker_style(),
-                );
-                touched.push(marker);
-                owner.with_mut(|object| {
-                    if let Some(hold) =
-                        Self::layout_data_of(object).and_then(|data| data.flight_hold.as_mut())
-                    {
-                        hold.marker = Some(marker);
-                    }
-                });
-                marker
-            })
-        });
-        Some((id, marker))
     }
 
     fn layout_tree_root_is_current(owner: &CoreHandle, tree: &LayoutTree) -> bool {
@@ -5624,21 +5331,12 @@ impl LayoutComponent {
     ) {
         use taffy::TraversePartialTree;
         let mut ids = Vec::with_capacity(children.len());
-        let mut held = Vec::new();
         for child in children {
             let Some(child_owner) = layout_node_owner_for(child) else {
                 continue;
             };
             if let Some(child_id) = Self::ensure_layout_node(tree, &child_owner, touched, removed) {
-                // A held element sits under its placeholder, which takes its
-                // place here.
-                match Self::flight_placeholder(tree, &child_owner, touched) {
-                    Some((placeholder, marker)) => {
-                        ids.push(placeholder);
-                        held.push((placeholder, child_id, marker));
-                    }
-                    None => ids.push(child_id),
-                }
+                ids.push(child_id);
             }
         }
         ids.extend(tree.sync_virtual_items(id, virtual_rows, virtual_columns));
@@ -5652,22 +5350,6 @@ impl LayoutComponent {
             removed.extend(old.into_iter().filter(|child| !kept.contains(child)));
             tree.taffy.set_children(id, &ids).expect("live layout node");
             touched.push(id);
-        }
-        for (placeholder, element, marker) in held {
-            // The element, out of flow, then its baseline marker, the
-            // placeholder's only in-flow content.
-            let children = std::iter::once(element).chain(marker).collect::<Vec<_>>();
-            if tree
-                .taffy
-                .child_ids(placeholder)
-                .ne(children.iter().copied())
-            {
-                tree.taffy
-                    .set_children(placeholder, &children)
-                    .expect("live placeholder");
-                touched.push(placeholder);
-                touched.push(element);
-            }
         }
     }
 
@@ -5754,18 +5436,6 @@ impl LayoutComponent {
         let children = tree
             .taffy
             .child_ids(id)
-            // A held element sits under its placeholder.
-            .flat_map(|child| {
-                let held = tree
-                    .taffy
-                    .get_node_context(child)
-                    .is_some_and(|context| context.kind == LayoutNodeKind::Held);
-                if held {
-                    tree.taffy.child_ids(child).collect::<Vec<_>>()
-                } else {
-                    vec![child]
-                }
-            })
             .filter_map(|child| {
                 tree.taffy
                     .get_node_context(child)
@@ -5811,15 +5481,17 @@ impl LayoutComponent {
                 let Some(data) = Self::layout_data_of(object) else {
                     return None;
                 };
+                let held = data.flight_hold.as_ref().map(|hold| hold.size());
                 let Some(update) = data.take_update(&link) else {
                     return virtual_tracks;
                 };
+                tree.set_held(id, held);
                 let mut invalidate = update.invalidated;
                 if let Some(style) = update.style {
                     invalidate |= if is_root {
-                        tree.sync_style(id, &root_style(&style, root_available))
+                        tree.sync_style(id, &root_style(style, root_available))
                     } else {
-                        tree.sync_style(id, &style)
+                        tree.sync_style(id, style)
                     };
                 }
                 if let Some(measured) = measured {
@@ -5878,9 +5550,6 @@ impl LayoutComponent {
                     return None;
                 }
                 Some(match kind {
-                    // A placeholder's style is frozen at its element's
-                    // resting box, minima included.
-                    LayoutNodeKind::Held | LayoutNodeKind::HeldBaseline => Vec::new(),
                     LayoutNodeKind::Participant => object
                         .as_any()
                         .downcast_ref::<LayoutParticipant>()
@@ -6056,18 +5725,7 @@ impl LayoutComponent {
             let Some(context) = tree.taffy.get_node_context(id) else {
                 return;
             };
-            if matches!(
-                context.kind,
-                LayoutNodeKind::Content | LayoutNodeKind::HeldBaseline
-            ) {
-                return;
-            }
-            // A placeholder keeps its frozen style; its element is visited
-            // as any child.
-            if context.kind == LayoutNodeKind::Held {
-                for child in tree.taffy.child_ids(id).collect::<Vec<_>>() {
-                    update(tree, child, affected, touched);
-                }
+            if context.kind == LayoutNodeKind::Content {
                 return;
             }
             let (owner, kind, measured, old_supported, old_zero) = (
@@ -6082,7 +5740,7 @@ impl LayoutComponent {
                 owner
                     .with(|object| {
                         if let Some(layout) = object.as_layout_component() {
-                            layout.layout_data.tree_style().into_owned()
+                            layout.layout_data.style().clone()
                         } else {
                             object
                                 .as_any()
@@ -6090,8 +5748,8 @@ impl LayoutComponent {
                                 .unwrap()
                                 .native_layout_data()
                                 .unwrap()
-                                .tree_style()
-                                .into_owned()
+                                .style()
+                                .clone()
                         }
                     })
                     .unwrap()
@@ -6418,11 +6076,6 @@ impl LayoutComponent {
             measured
         };
         let measured = match kind {
-            // A placeholder always holds its element, so it is never a
-            // measured leaf.
-            LayoutNodeKind::Held | LayoutNodeKind::HeldBaseline => {
-                return taffy::prelude::Size::ZERO;
-            }
             LayoutNodeKind::Participant => {
                 let Some((host, width_mode, height_mode)) = owner
                     .with(|object| {
@@ -6609,31 +6262,14 @@ impl LayoutComponent {
         }
         offset
     }
-    /// What a node's published offset subtracts from its solved one. A held
-    /// element is published at its placeholder's place, relative to its
-    /// layout parent, as it would rest (css_layout/flight_hold.rs).
-    fn published_offset(tree: &LayoutTree, id: taffy::prelude::NodeId) -> Vec2D {
-        use taffy::TraversePartialTree;
-        let hoisted = Self::hoisted_offset(tree, id);
-        let Some(placeholder) = tree.taffy.parent(id).filter(|&parent| {
-            tree.taffy
-                .get_node_context(parent)
-                .is_some_and(|context| context.kind == LayoutNodeKind::Held)
-        }) else {
-            return hoisted;
-        };
-        let at = tree
-            .taffy
-            .layout(placeholder)
-            .expect("solved placeholder")
-            .location;
-        let up = Self::hoisted_offset(tree, placeholder);
-        Vec2D::new(hoisted.x - (at.x - up.x), hoisted.y - (at.y - up.y))
-    }
     /// Publish solved layouts to their owners. Descends only into nodes whose
     /// result changed or whose subtree held a touched node: Taffy leaves an
     /// untouched subtree's results in place when its parent's result holds.
-    fn publish_layout_tree(tree: &LayoutTree, touched: &[taffy::prelude::NodeId]) {
+    fn publish_layout_tree(
+        tree: &LayoutTree,
+        touched: &[taffy::prelude::NodeId],
+        flights: &[(taffy::prelude::NodeId, taffy::tree::LayoutOutput)],
+    ) {
         use crate::mechanical_port::source::layout::layout_tree::{
             grid_lines, is_grid, resolve_gap,
         };
@@ -6655,34 +6291,18 @@ impl LayoutComponent {
             let Some(context) = tree.taffy.get_node_context(id) else {
                 continue;
             };
-            if matches!(
-                context.kind,
-                LayoutNodeKind::Content | LayoutNodeKind::HeldBaseline
-            ) {
+            if context.kind == LayoutNodeKind::Content {
                 continue;
             }
-            // A placeholder publishes its element's resting box to the hold
-            // and always opens the way to the element it holds.
-            if context.kind == LayoutNodeKind::Held {
-                let output = tree.taffy.layout(id).expect("solved placeholder");
-                let hoisted = Self::hoisted_offset(tree, id);
-                let rest = Layout::new(
-                    output.location.x - hoisted.x,
-                    output.location.y - hoisted.y,
-                    output.size.width,
-                    output.size.height,
-                );
-                context.owner.with_mut(|object| {
-                    if let Some(hold) =
-                        Self::layout_data_of(object).and_then(|data| data.flight_hold.as_mut())
-                    {
-                        hold.rest = rest;
-                    }
-                });
-                stack.extend(tree.taffy.child_ids(id).map(|child| (child, false)));
-                continue;
-            }
-            let output = tree.taffy.layout(id).expect("solved layout node");
+            // A held element is published at its flight layout; its hold
+            // keeps its resting slot (css_layout/flight_hold.rs).
+            let slot = crate::css_layout::flight_hold::resting_slot(&tree.taffy, id)
+                .expect("solved layout node");
+            let flight = flights
+                .iter()
+                .find(|(node, _)| *node == id)
+                .map(|(_, flight)| crate::css_layout::flight_hold::flight_layout(&slot, flight));
+            let output = flight.unwrap_or(slot);
             let content_layout = context
                 .content_item
                 .map(|item| {
@@ -6719,13 +6339,21 @@ impl LayoutComponent {
                             )
                         })
                 });
-            let hoisted = Self::published_offset(tree, id);
+            let hoisted = Self::hoisted_offset(tree, id);
             let next = Layout::new(
                 output.location.x - hoisted.x,
                 output.location.y - hoisted.y,
                 output.size.width,
                 output.size.height,
             );
+            let rest = flight.is_some().then(|| {
+                Layout::new(
+                    slot.location.x - hoisted.x,
+                    slot.location.y - hoisted.y,
+                    slot.size.width,
+                    slot.size.height,
+                )
+            });
             let padding = LayoutPadding::new(
                 output.padding.left,
                 output.padding.top,
@@ -6787,6 +6415,9 @@ impl LayoutComponent {
                         let changed = padding_changed || layout.layout_data.solved_layout != next;
                         layout.layout_data.has_new_layout |= touched || changed;
                         layout.layout_data.solved_layout = next;
+                        if let (Some(hold), Some(rest)) = (&mut layout.layout_data.flight_hold, rest) {
+                            hold.rest = rest;
+                        }
                         changed
                     } else if let Some(data) = Self::layout_data_of(object) {
                         let changed = data.solved_layout != next
@@ -6794,6 +6425,9 @@ impl LayoutComponent {
                         data.has_new_layout |= touched || changed;
                         data.solved_layout = next;
                         data.solved_content_layout = content_layout;
+                        if let (Some(hold), Some(rest)) = (&mut data.flight_hold, rest) {
+                            hold.rest = rest;
+                        }
                         changed
                     } else {
                         false

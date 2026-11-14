@@ -6,7 +6,6 @@ use crate::mechanical_port::source::{
     },
     layout_component::Layout,
 };
-use std::borrow::Cow;
 use taffy::prelude::Style;
 
 pub struct LayoutData {
@@ -61,43 +60,13 @@ impl Default for LayoutData {
 /// What a layout tree must do for a queued node.
 pub(crate) struct LayoutDataUpdate<'a> {
     /// The resynced style, to compare against the tree's copy.
-    pub style: Option<Cow<'a, Style>>,
+    pub style: Option<&'a Style>,
     pub invalidated: bool,
 }
 
 impl LayoutData {
     pub fn style(&self) -> &Style {
         &self.style
-    }
-    /// The style the owner's layout tree receives: the synced style, or
-    /// while the owner is held, the held element's (css_layout/flight_hold.rs).
-    /// Every other reader keeps reading the synced style.
-    pub(crate) fn tree_style(&self) -> Cow<'_, Style> {
-        match &self.flight_hold {
-            None => Cow::Borrowed(&self.style),
-            Some(hold) => {
-                let mut style = self.style.clone();
-                hold.apply_to_element(&mut style);
-                Cow::Owned(style)
-            }
-        }
-    }
-    /// The hold began, ended or changed size: the tree takes the owner's
-    /// style again and discards its cached results.
-    pub(crate) fn hold_changed(&mut self) {
-        self.style_synced = true;
-        self.invalidated = true;
-        self.enqueue();
-    }
-    /// The next bounds update after a hold ends takes the layout at once.
-    pub(crate) fn snap_bounds_once(&mut self) {
-        self.snap_bounds = true;
-    }
-    /// Whether the owner's own box may interpolate to its new layout in this
-    /// bounds update: not while held, nor in the update a hold ends in.
-    pub(crate) fn bounds_animate(&mut self, animate: bool) -> bool {
-        let snap = std::mem::take(&mut self.snap_bounds) || self.flight_hold.is_some();
-        animate && !snap
     }
     /// Take the style out for the appliers; [`LayoutData::set_style`] returns it.
     pub fn take_style(&mut self) -> Style {
@@ -114,6 +83,21 @@ impl LayoutData {
     pub fn mark_dirty(&mut self) {
         self.invalidated = true;
         self.enqueue();
+    }
+    /// Revisit the node in the next solve without discarding cached
+    /// results: a held element's flight size changed (css_layout/flight_hold.rs).
+    pub(crate) fn request_solve(&mut self) {
+        self.enqueue();
+    }
+    /// The next bounds update after a hold ends takes the layout at once.
+    pub(crate) fn snap_bounds_once(&mut self) {
+        self.snap_bounds = true;
+    }
+    /// Whether the owner's own box may interpolate to its new layout in this
+    /// bounds update: not while held, nor in the update a hold ends in.
+    pub(crate) fn bounds_animate(&mut self, animate: bool) -> bool {
+        let snap = std::mem::take(&mut self.snap_bounds) || self.flight_hold.is_some();
+        animate && !snap
     }
     /// Whether the node changed since its layout tree last solved.
     pub fn is_dirty(&self) -> bool {
@@ -143,7 +127,11 @@ impl LayoutData {
         self.queued = false;
         self.invalidated = false;
         self.style_synced = false;
-        self.tree_style().into_owned()
+        if self.flight_hold.is_some() {
+            // The new tree learns of the hold from its queue.
+            self.enqueue();
+        }
+        self.style.clone()
     }
     pub(crate) fn unlink(&mut self, node: &LayoutNodeLink) {
         if self.node.as_ref() == Some(node) {
@@ -157,10 +145,9 @@ impl LayoutData {
         }
         self.queued = false;
         let synced = std::mem::take(&mut self.style_synced);
-        let invalidated = std::mem::take(&mut self.invalidated);
         Some(LayoutDataUpdate {
-            style: synced.then(|| self.tree_style()),
-            invalidated,
+            style: synced.then_some(&self.style),
+            invalidated: std::mem::take(&mut self.invalidated),
         })
     }
     pub fn add_applier(&mut self, applier: CoreHandle) {

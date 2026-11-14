@@ -12,8 +12,11 @@
 //! fresh-solve checker on:
 //! - every box outside E rests where it rested;
 //! - E's inside is laid out exactly as in the oracle;
-//! - the tree holds exactly one placeholder (and its baseline marker);
-//! - after the step, the resting tree comes back.
+//! - the tree holds the same nodes as at rest: the hold adds none;
+//! - after the step, the resting layout comes back.
+//!
+//! The table at the end runs every parent kind against every child
+//! property: held at its resting size, nothing differs from rest at all.
 use super::*;
 use crate::css_layout::flight_hold::{begin, end, resting_box, set_size};
 use crate::source::layout::layout_participant::LayoutParticipant;
@@ -155,9 +158,9 @@ fn lerp(a: (f32, f32), b: (f32, f32), p: f32) -> (f32, f32) {
     (a.0 + (b.0 - a.0) * p, a.1 + (b.1 - a.1) * p)
 }
 
-/// (nodes, reachable nodes, placeholders, baseline markers).
-fn counts(scene: &Scene) -> (usize, usize, usize, usize) {
-    LayoutComponent::layout_tree_counts(&scene.artboard.core_handle()).expect("a layout root")
+/// The nodes of the Screen's layout tree.
+fn node_count(scene: &Scene) -> usize {
+    LayoutComponent::layout_tree_node_count(&scene.artboard.core_handle()).expect("a layout root")
 }
 
 fn dirty(scene: &Scene, names: &[&str]) -> Vec<String> {
@@ -239,7 +242,7 @@ fn fly_unchecked(screen: &Screen, from: (f32, f32), to: (f32, f32), stop: f32) -
     scene.advance(2);
     let rest = boxes(&scene, screen.names);
     let rest_world: Vec<_> = screen.names.iter().map(|n| world(&scene, n)).collect();
-    let rest_counts = counts(&scene);
+    let rest_nodes = node_count(&scene);
     let e = scene.named("E");
     let e_rest = scene.bounds("E");
     assert!(begin(&e, from));
@@ -267,7 +270,7 @@ fn fly_unchecked(screen: &Screen, from: (f32, f32), to: (f32, f32), stop: f32) -
             [e_rest[0], e_rest[1], size.0, size.1],
             "E at p {p}"
         );
-        // Its resting box, as the placeholder solved it, is its box at rest.
+        // Its resting box, its slot in the row, is its box at rest.
         assert_eq!(rect(resting_box(&e).unwrap()), e_rest, "rest at p {p}");
         // Its inside equals a fresh load with E authored at the flight size.
         let oracle = (screen.make)(size);
@@ -279,22 +282,15 @@ fn fly_unchecked(screen: &Screen, from: (f32, f32), to: (f32, f32), stop: f32) -
                 "{name} at p {p}, size {size:?}"
             );
         }
-        // One placeholder in the tree, with its baseline marker, nothing more.
-        let (_, reachable, held, markers) = counts(&scene);
-        assert_eq!(held, 1, "one placeholder at p {p}");
-        assert!(markers <= 1, "at most one baseline marker at p {p}");
-        assert_eq!(reachable, rest_counts.1 + 1 + markers, "tree size at p {p}");
+        // The hold adds no node.
+        assert_eq!(node_count(&scene), rest_nodes, "tree size at p {p}");
     }
     end(&e);
     scene.advance(1);
     assert_eq!(boxes(&scene, screen.names), rest, "after the step");
     let after_world: Vec<_> = screen.names.iter().map(|n| world(&scene, n)).collect();
     assert_eq!(after_world, rest_world, "drawn places after the step");
-    assert_eq!(
-        counts(&scene),
-        rest_counts,
-        "the resting tree after the step"
-    );
+    assert_eq!(node_count(&scene), rest_nodes, "the resting tree after the step");
     assert_eq!(rect(resting_box(&e).unwrap()), e_rest);
     assert_eq!(dirty(&scene, screen.names), Vec::<String>::new());
     // A fresh load of the same Screen gives the same boxes.
@@ -366,7 +362,8 @@ fn in_place_hold_wraps_the_text_at_the_flight_width() {
 /// A slot step lays the element out as a unit: its own root at a definite
 /// size. The held element's inside, relative to the element, equals that
 /// unit's at every size the step passes through. An absolute child ("Pin")
-/// resolves against the held element, as against a unit root.
+/// resolves against the held element, positioned as the file makes it, as
+/// against a unit root.
 #[test]
 fn in_place_hold_inside_matches_a_unit_root() {
     let pinned = |size: (f32, f32)| {
@@ -386,7 +383,8 @@ fn in_place_hold_inside_matches_a_unit_root() {
             ],
             vec![],
         ));
-        element_with(size, &[], children)
+        // Positioned, as the file makes a matched element.
+        element_with(size, &[U(POSITION, 1)], children)
     };
     let upper_pinned = |size| upper_with(pinned(size));
     checked(|| {
@@ -420,8 +418,8 @@ fn in_place_hold_inside_matches_a_unit_root() {
 // Shapes the first test Screens leave out.
 
 /// E is the third cell of a three-column grid, placed there by a
-/// GridItemPlacement; N1 and N2 are placed automatically before it. The
-/// placement moves to the placeholder.
+/// GridItemPlacement; N1 and N2 are placed automatically before it. Held,
+/// E keeps its placement.
 #[test]
 fn in_place_hold_a_grid_item() {
     const POINTS: u64 = 1;
@@ -527,8 +525,8 @@ fn in_place_hold_an_absolute_grid_item_pads_against_its_area() {
     assert_eq!(fly(&screen, LOWER_SIZE, UPPER_SIZE, 1.0), 21);
 }
 
-/// E has margins and is relatively positioned with insets: the placeholder
-/// keeps both, and E publishes the placeholder's place.
+/// E has margins and is relatively positioned with insets: held, it keeps
+/// both, and its place.
 #[test]
 fn in_place_hold_margins_and_relative_insets() {
     let extra = [
@@ -556,8 +554,8 @@ fn in_place_hold_margins_and_relative_insets() {
 }
 
 /// E's top and left padding are percentages, which resolve against the
-/// row's width: held, E's containing block is its placeholder, yet its
-/// inside sits as a fresh load at the flight size lays it out.
+/// row's width: held, its inside sits as a fresh load at the flight size
+/// lays it out.
 #[test]
 fn in_place_hold_percentage_padding() {
     const PADDING_TOP_PERCENT: u16 = 61064;
@@ -603,8 +601,7 @@ fn in_place_hold_percentage_padding() {
 }
 
 /// E's top padding is 0% at take-off and keyed to 5% halfway through the
-/// flight: it resolves against the row's width, as at rest, not against
-/// the placeholder.
+/// flight: it resolves against the row's width, as at rest.
 #[test]
 fn in_place_hold_a_percentage_keyed_from_zero() {
     const PADDING_TOP_PERCENT: u16 = 61064;
@@ -759,7 +756,14 @@ fn in_place_hold_sizes_a_content_box_element_as_the_slot_path_does() {
                 assert_eq!(scene.bounds(name), oracle.bounds(name), "{name} at p {p}");
             }
             assert_eq!(scene.bounds("N2"), n2, "N2 at p {p}");
-            assert_eq!(rect(resting_box(&e).unwrap()), e_rest, "rest at p {p}");
+            // The rest follows the keyed padding, as at rest.
+            let at_rest = make(from, top);
+            at_rest.advance(2);
+            assert_eq!(
+                rect(resting_box(&e).unwrap()),
+                at_rest.bounds("E"),
+                "rest at p {p}"
+            );
         }
         end(&e);
         scene.advance(1);
@@ -774,10 +778,11 @@ fn in_place_hold_sizes_a_content_box_element_as_the_slot_path_does() {
 /// finding 1, and the coordinator's ruling): a matched element is the
 /// containing block of its absolutely placed descendants, at rest and in
 /// flight. The file makes a keyed element positioned at rest; given that,
-/// no absolute child moves at take-off or landing. A file that leaves the
+/// its absolute child follows the flight, in its corner at every flight
+/// size, and nothing moves at take-off or landing. A file that leaves the
 /// element static breaks the contract: its absolute child is placed against
-/// a farther ancestor at rest and against the element while held, so it
-/// moves at take-off and back at landing.
+/// a farther ancestor (here the Screen) at rest and stays there while held,
+/// so it does not follow the flight.
 #[test]
 fn in_place_a_static_element_with_an_absolute_child_is_placed_as_documented() {
     let pinned = |position: u64| {
@@ -799,7 +804,8 @@ fn in_place_a_static_element_with_an_absolute_child_is_placed_as_documented() {
         ));
         upper_with(element_with(UPPER_SIZE, &[U(POSITION, position)], children))
     };
-    // Take-off and landing at the resting size: only the hold changes.
+    // Take-off at the resting size, then a flight at the lower size, then
+    // landing. Returns Pin's drawn place at rest, held at rest and in flight.
     let around = |position: u64| {
         checked(|| {
             let scene = pinned(position);
@@ -809,45 +815,43 @@ fn in_place_a_static_element_with_an_absolute_child_is_placed_as_documented() {
             assert!(begin(&e, UPPER_SIZE));
             scene.advance(1);
             let held = world(&scene, "Pin");
+            set_size(&e, LOWER_SIZE);
+            scene.advance(1);
+            let flying = world(&scene, "Pin");
             end(&e);
             scene.advance(1);
             assert_eq!(world(&scene, "Pin"), rest, "landing puts Pin back");
-            (rest, held)
+            (rest, held, flying, world(&scene, "E"))
         })
     };
     // Kept: E relative, as the file makes a keyed element.
-    let (rest, held) = around(1);
+    let (rest, held, flying, e) = around(1);
     assert_eq!(held, rest, "nothing moves at take-off");
-    let e_at = |position| {
-        let scene = pinned(position);
-        scene.advance(2);
-        world(&scene, "E")
-    };
-    let e = e_at(1);
     assert_eq!(
         rest,
         (e.0 + UPPER_SIZE.0 - 26.0, e.1 + UPPER_SIZE.1 - 14.0),
         "Pin in E's corner"
     );
-    // Broken: E static, so at rest Pin is placed against the Screen.
-    let (rest, held) = around(0);
+    assert_eq!(
+        flying,
+        (e.0 + LOWER_SIZE.0 - 26.0, e.1 + LOWER_SIZE.1 - 14.0),
+        "Pin follows E's flight"
+    );
+    // Broken: E static, so Pin is placed against the Screen, held too.
+    let (rest, held, flying, _) = around(0);
     assert_eq!(
         rest,
         (400.0 - 26.0, 300.0 - 14.0),
         "Pin in the Screen's corner"
     );
-    let e = e_at(0);
-    assert_eq!(
-        held,
-        (e.0 + UPPER_SIZE.0 - 26.0, e.1 + UPPER_SIZE.1 - 14.0),
-        "held, Pin moves to E's corner"
-    );
+    assert_eq!(held, rest, "nothing moves at take-off");
+    assert_eq!(flying, rest, "Pin does not follow the flight");
 }
 
 /// The row aligns its items by their baselines. E, a flex column, has a
 /// baseline of its own, which places it below its neighbors' synthesized
-/// ones; held, its placeholder reports the baseline E rested with, so
-/// nothing in the row moves.
+/// ones; held, the row reads E's own resting baseline, so nothing in the
+/// row moves.
 #[test]
 fn in_place_hold_in_a_baseline_aligned_row() {
     const BASELINE: u64 = 9;
@@ -885,21 +889,11 @@ fn in_place_hold_in_a_baseline_aligned_row() {
     };
     assert_eq!(fly(&screen, LOWER_SIZE, UPPER_SIZE, 1.0), 21);
     assert_eq!(fly(&screen, UPPER_SIZE, LOWER_SIZE, 0.5), 11);
-    // The placeholder holds a baseline marker.
-    let scene = make(UPPER_SIZE);
-    scene.advance(2);
-    let e = scene.named("E");
-    assert!(begin(&e, LOWER_SIZE));
-    scene.advance(1);
-    assert_eq!(counts(&scene).3, 1);
-    end(&e);
-    scene.advance(1);
-    assert_eq!(counts(&scene).3, 0);
 }
 
 /// A baseline-aligned row whose element is a block with percentage top
 /// padding: its baseline sits under that padding, which resolves against
-/// the row, so the placeholder reports the baseline at the same depth.
+/// the row, as the row reads it held.
 #[test]
 fn in_place_hold_in_a_baseline_aligned_row_with_percentage_padding() {
     const BASELINE: u64 = 9;
@@ -979,8 +973,8 @@ fn in_place_hold_inside_a_group_layout_sees_through() {
     assert_eq!(fly(&screen, LOWER_SIZE, UPPER_SIZE, 1.0), 21);
 }
 
-/// E is absolute: already out of flow. The placeholder is absolute too and
-/// holds its insets; N1 and N2 close up as they do at rest.
+/// E is absolute: already out of flow, held as at rest at its insets; N1
+/// and N2 close up as they do at rest.
 #[test]
 fn in_place_hold_an_absolute_element() {
     let extra = [
@@ -1043,14 +1037,12 @@ fn in_place_hold_over_a_running_layout_animation() {
             );
             assert_eq!(rect(resting_box(&e).unwrap()), rest);
             assert_eq!(scene.bounds("N2"), n2);
-            assert_eq!(counts(&scene).2, 1);
         }
         end(&e);
         scene.advance(1);
         assert_eq!(scene.bounds("E"), rest, "E takes its rest at once");
         scene.advance(60);
         assert_eq!(scene.bounds("E"), rest);
-        assert_eq!(counts(&scene).2, 0);
     });
 }
 
@@ -1070,7 +1062,7 @@ fn in_place_hold_a_structural_change_inside() {
         let scene = make(UPPER_SIZE, false);
         scene.advance(2);
         let rest = boxes(&scene, &UPPER_NAMES);
-        let rest_counts = counts(&scene);
+        let rest_nodes = node_count(&scene);
         let e = scene.named("E");
         let fill = scene.record("Fill");
         assert!(begin(&e, LOWER_SIZE));
@@ -1103,35 +1095,31 @@ fn in_place_hold_a_structural_change_inside() {
                     "Fill at step {step}"
                 );
             }
-            assert_eq!(counts(&scene).2, 1);
         }
         end(&e);
         scene.advance(1);
         assert_eq!(boxes(&scene, &UPPER_NAMES), rest);
-        assert_eq!(counts(&scene), rest_counts);
+        assert_eq!(node_count(&scene), rest_nodes);
     });
 }
 
-/// The rest is frozen at take-off: E is 30% of a row that grows during the
-/// step. E's rest keeps its take-off width while the row's other boxes
-/// follow the new row; when the hold ends E takes its new width.
+/// The rest follows the parent through the step: E is 30% of a row that
+/// grows during the step. Its resting slot and every box around it follow
+/// the new row as they would at rest, while E flies at its flight size at
+/// that slot's place; when the hold ends E keeps its new rest.
 #[test]
-fn in_place_hold_keeps_its_rest_through_a_resize() {
-    // E authored at 30% of the frame, or at a length.
-    let make = |frame: f32, e: Option<(f32, f32)>| {
-        let e = match e {
-            Some(size) => element(size),
-            None => css(
-                "E",
-                [
-                    element_props().as_slice(),
-                    &[U(WIDTH_KIND, 1), F(WIDTH, 0.0), F(WIDTH_PERCENT, 30.0)],
-                    &height(100.0),
-                ]
-                .concat(),
-                inside(),
-            ),
-        };
+fn in_place_hold_rest_follows_a_parent_resize() {
+    let make = |frame: f32| {
+        let e = css(
+            "E",
+            [
+                element_props().as_slice(),
+                &[U(WIDTH_KIND, 1), F(WIDTH, 0.0), F(WIDTH_PERCENT, 30.0)],
+                &height(100.0),
+            ]
+            .concat(),
+            inside(),
+        );
         scene(
             (800.0, 300.0),
             css(
@@ -1147,14 +1135,12 @@ fn in_place_hold_keeps_its_rest_through_a_resize() {
         )
     };
     checked(|| {
-        let scene = make(400.0, None);
+        let scene = make(400.0);
         scene.advance(2);
         let e_rest = scene.bounds("E");
         assert_eq!(e_rest[..2], [90.0, 0.0]);
         assert!((e_rest[2] - 120.0).abs() < 1e-3, "30% of 400: {e_rest:?}");
         let e = scene.named("E");
-        // Where layout solved E, which the hold freezes.
-        let solved = rect(resting_box(&e).unwrap());
         assert!(begin(&e, LOWER_SIZE));
         scene.advance(1);
         assert!(CoreRegistry::set_double_handle(
@@ -1162,25 +1148,67 @@ fn in_place_hold_keeps_its_rest_through_a_resize() {
             WIDTH.into(),
             600.0
         ));
+        let fresh = make(600.0);
+        fresh.advance(2);
+        let at = fresh.bounds("E");
+        assert!((at[2] - 180.0).abs() < 1e-3, "30% of 600: {at:?}");
         for _ in 0..3 {
             scene.advance(1);
-            // The row is 600 wide; E keeps resting at its take-off width.
-            assert_eq!(scene.bounds("Frame")[2], 600.0);
-            assert_eq!(rect(resting_box(&e).unwrap()), solved);
-            let frozen = make(600.0, Some((solved[2], solved[3])));
-            frozen.advance(2);
             for name in ["Frame", "N1", "N2"] {
-                assert_eq!(scene.bounds(name), frozen.bounds(name), "{name}");
+                assert_eq!(scene.bounds(name), fresh.bounds(name), "{name}");
             }
-            assert_eq!(scene.bounds("E"), [90.0, 0.0, LOWER_SIZE.0, LOWER_SIZE.1]);
+            assert_eq!(rect(resting_box(&e).unwrap()), at, "E's slot follows");
+            assert_eq!(scene.bounds("E"), [at[0], at[1], LOWER_SIZE.0, LOWER_SIZE.1]);
         }
         end(&e);
         scene.advance(1);
-        // At rest E is 30% of 600.
-        let fresh = make(600.0, None);
-        fresh.advance(2);
-        assert_eq!(fresh.bounds("E")[2], 180.0);
         assert_eq!(boxes(&scene, &UPPER_NAMES), boxes(&fresh, &UPPER_NAMES));
+    });
+}
+
+/// Content inside E changes during the step: E is sized by its content
+/// (no authored width) and its child Fill grows. E's resting slot, and its
+/// neighbors, follow as they would at rest; E flies at its flight size.
+#[test]
+fn in_place_hold_content_changing_inside_moves_the_neighbors_as_at_rest() {
+    let make = |fill: f32| {
+        upper_with(css(
+            "E",
+            [element_props().as_slice(), &height(100.0)].concat(),
+            vec![sized("Fill", fill, 30.0)],
+        ))
+    };
+    let names = ["Frame", "N1", "E", "N2", "Fill"];
+    checked(|| {
+        let scene = make(40.0);
+        scene.advance(2);
+        assert_eq!(scene.bounds("E")[2], 60.0, "Fill and E's padding");
+        let e = scene.named("E");
+        assert!(begin(&e, (60.0, 100.0)));
+        for (step, fill) in [40.0, 70.0, 100.0, 130.0].into_iter().enumerate() {
+            let size = (90.0 + step as f32 * 10.0, 80.0);
+            assert!(CoreRegistry::set_double_handle(
+                &scene.record("Fill"),
+                WIDTH.into(),
+                fill
+            ));
+            set_size(&e, size);
+            scene.advance(1);
+            let fresh = make(fill);
+            fresh.advance(2);
+            for name in ["Frame", "N1", "N2"] {
+                assert_eq!(scene.bounds(name), fresh.bounds(name), "{name} with Fill {fill}");
+            }
+            let at = fresh.bounds("E");
+            assert_eq!(rect(resting_box(&e).unwrap()), at, "E's slot with Fill {fill}");
+            assert_eq!(scene.bounds("E"), [at[0], at[1], size.0, size.1]);
+            assert_eq!(scene.bounds("Fill"), fresh.bounds("Fill"));
+        }
+        end(&e);
+        scene.advance(1);
+        let fresh = make(130.0);
+        fresh.advance(2);
+        assert_eq!(boxes(&scene, &names), boxes(&fresh, &names));
     });
 }
 
@@ -1248,7 +1276,7 @@ fn in_place_hold_an_image() {
         );
         let n1 = scene.bounds("N1");
         assert_eq!(n1, [110.0, 0.0, 80.0, 100.0]);
-        let rest_counts = counts(&scene);
+        let rest_nodes = node_count(&scene);
         assert!(begin(&image, (100.0, 30.0)));
         for step in 0..=10 {
             let size = lerp((100.0, 30.0), (200.0, 60.0), step as f32 / 10.0);
@@ -1262,12 +1290,12 @@ fn in_place_hold_an_image() {
             assert_eq!(rect(resting_box(&image).unwrap()), rest);
             assert_eq!(scene.bounds("N1"), n1);
             assert_eq!(scene.bounds("Frame"), [0.0, 0.0, 400.0, 300.0]);
-            assert_eq!(counts(&scene).2, 1);
+            assert_eq!(node_count(&scene), rest_nodes);
         }
         end(&image);
         scene.advance(1);
         assert_eq!(participant_bounds(&image), rest);
-        assert_eq!(counts(&scene), rest_counts);
+        assert_eq!(node_count(&scene), rest_nodes);
     });
 }
 
@@ -1367,5 +1395,576 @@ fn in_place_hold_resting_box_and_refusals() {
         "the root"
     );
     assert_eq!(holds_begun(), holds);
-    assert_eq!(counts(&scene).2, 0);
+}
+
+// ---------------------------------------------------------------------------
+// The table: every parent kind against every child property. With E held
+// at its resting size, every box, inside E too, is as at rest. As the
+// flight size changes, every box outside E stays as at rest, E keeps its
+// resting slot and is laid out at the flight size there, and its inside
+// equals a fresh load with E authored at that size in the same place.
+
+const ROW_GAP: u16 = 61075;
+const ALIGN_SELF: u16 = 61014;
+const ASPECT_RATIO: u16 = 61020;
+const MIN_WIDTH_KIND: u16 = 61027;
+const MIN_WIDTH: u16 = 61028;
+const MAX_WIDTH_KIND: u16 = 61033;
+const MAX_WIDTH: u16 = 61034;
+const MARGIN_RIGHT: u16 = 61043;
+const PADDING_TOP_PERCENT: u16 = 61064;
+const PADDING_LEFT_PERCENT: u16 = 61070;
+const TRACK_AUTO: u64 = 0;
+const TRACK_POINTS: u64 = 1;
+const TRACK_FR: u64 = 3;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ParentKind {
+    Block,
+    FlexRow,
+    FlexColumn,
+    Grid,
+    BaselineRow,
+}
+
+/// A child property: what sizes E (left out of the oracle, which authors
+/// E at the flight size), what else E carries (kept in the oracle), and
+/// E's children when not the usual inside.
+struct Case {
+    name: &'static str,
+    sizing: Vec<P>,
+    other: Vec<P>,
+    content_box: bool,
+    children: Option<fn() -> Vec<B>>,
+    /// E's own min and max width: a flight size is a CSS width, so they
+    /// clamp it, as they clamp a keyed width.
+    width_limits: Option<(f32, f32)>,
+    /// E's percentages resolve against its parent's area. In a grid that
+    /// area is an `auto` track, which in the oracle follows the authored
+    /// size; held, it stays at rest, so the oracle does not apply.
+    area_percentages: bool,
+}
+
+fn case(name: &'static str, sizing: Vec<P>, other: Vec<P>) -> Case {
+    Case {
+        name,
+        sizing,
+        other,
+        content_box: false,
+        children: None,
+        width_limits: None,
+        area_percentages: false,
+    }
+}
+
+fn fixed() -> Vec<P> {
+    [width(120.0), height(100.0)].concat()
+}
+
+fn cases() -> Vec<Case> {
+    vec![
+        case("a fixed size", fixed(), vec![]),
+        case("a size from its content", vec![], vec![]),
+        case(
+            "margins",
+            fixed(),
+            vec![
+                F(MARGIN_TOP, 7.0),
+                F(MARGIN_RIGHT, 5.0),
+                F(MARGIN_BOTTOM, 9.0),
+                F(MARGIN_LEFT, 15.0),
+            ],
+        ),
+        case(
+            "relative insets",
+            fixed(),
+            vec![
+                U(POSITION, 1),
+                U(INSET_LEFT_KIND, 1),
+                F(INSET_LEFT, 7.0),
+                U(INSET_TOP_KIND, 1),
+                F(INSET_TOP, 4.0),
+            ],
+        ),
+        Case {
+            area_percentages: true,
+            ..case(
+            "percentage padding",
+            fixed(),
+            // The lengths cleared: a side is a length or a percentage.
+            vec![
+                F(PADDING_LEFT, 0.0),
+                F(PADDING_TOP, 0.0),
+                F(PADDING_LEFT_PERCENT, 5.0),
+                F(PADDING_TOP_PERCENT, 5.0),
+            ],
+        )
+        },
+        case(
+            "a percentage width",
+            [
+                [U(WIDTH_KIND, 1), F(WIDTH, 0.0), F(WIDTH_PERCENT, 30.0)].as_slice(),
+                &height(100.0),
+            ]
+            .concat(),
+            vec![],
+        ),
+        case(
+            "flex grow and shrink",
+            [
+                [F(FLEX_GROW, 1.0), F(FLEX_SHRINK, 1.0)].as_slice(),
+                &height(100.0),
+            ]
+            .concat(),
+            vec![],
+        ),
+        case(
+            "a stretched cross size",
+            [U(ALIGN_SELF, 10)].to_vec(),
+            vec![],
+        ),
+        Case {
+            width_limits: Some((90.0, 150.0)),
+            ..case(
+            "min and max widths",
+            [
+                [
+                    U(MIN_WIDTH_KIND, 1),
+                    F(MIN_WIDTH, 90.0),
+                    U(MAX_WIDTH_KIND, 1),
+                    F(MAX_WIDTH, 150.0),
+                ]
+                .as_slice(),
+                &height(100.0),
+            ]
+            .concat(),
+            vec![],
+        )
+        },
+        case(
+            "an aspect ratio",
+            [[F(ASPECT_RATIO, 1.5)].as_slice(), &width(120.0)].concat(),
+            vec![],
+        ),
+        Case {
+            content_box: true,
+            ..case(
+                "a content box",
+                [width(100.0), height(80.0)].concat(),
+                vec![U(BOX_SIZING, 0)],
+            )
+        },
+        Case {
+            children: Some(|| vec![sized("Wide", 300.0, 30.0)]),
+            ..case("resting overflow", fixed(), vec![])
+        },
+        case("a scroll container", fixed(), vec![U(OVERFLOW_X, 3)]),
+        case(
+            "an absolute position",
+            fixed(),
+            vec![
+                U(POSITION, 2),
+                U(INSET_LEFT_KIND, 1),
+                F(INSET_LEFT, 30.0),
+                U(INSET_TOP_KIND, 1),
+                F(INSET_TOP, 20.0),
+            ],
+        ),
+        Case {
+            children: Some(|| {
+                vec![css(
+                    "Fill",
+                    [[F(MARGIN_TOP, 6.0)].as_slice(), &height(30.0)].concat(),
+                    vec![],
+                )]
+            }),
+            // A block with no top padding: Fill's margin collapses through
+            // E's top in a block parent.
+            ..case(
+                "a margin collapsing through",
+                vec![U(HEIGHT_KIND, 0)],
+                vec![
+                    U(DISPLAY, 0),
+                    F(PADDING_TOP, 0.0),
+                    F(MARGIN_TOP, 4.0),
+                    U(WIDTH_KIND, 1),
+                    F(WIDTH, 120.0),
+                ],
+            )
+        },
+    ]
+}
+
+/// E's names inside: its children's.
+fn case_inside(case: &Case) -> Vec<&'static str> {
+    match case.children {
+        Some(children) => children().iter().map(|child| child.name).collect(),
+        None => INSIDE.to_vec(),
+    }
+}
+
+/// The table's Screen: Parent, of `kind`, holds N1, E and N2. E carries the
+/// case's properties, or for the oracle, is authored at `authored` (its
+/// CSS width and height) with the case's other properties.
+/// One record's properties, each key once: a later value replaces an
+/// earlier one (the importer refuses a key set twice).
+fn merged(props: Vec<P>) -> Vec<P> {
+    let key = |prop: &P| match prop {
+        U(key, _) | F(key, _) => *key,
+    };
+    let mut out: Vec<P> = Vec::new();
+    for prop in props {
+        out.retain(|kept| key(kept) != key(&prop));
+        out.push(prop);
+    }
+    out
+}
+
+/// Equal to within float noise: `bounds` adds and subtracts places.
+fn assert_near(a: [f32; 4], b: [f32; 4], what: &str) {
+    assert!(
+        a.iter().zip(b).all(|(a, b)| (a - b).abs() < 1e-3),
+        "{what}: {a:?} vs {b:?}"
+    );
+}
+
+fn table_scene(kind: ParentKind, case: &Case, authored: Option<(f32, f32)>) -> Scene {
+    let sizing = match authored {
+        Some((w, h)) => [[F(FLEX_GROW, 0.0), F(FLEX_SHRINK, 0.0)].as_slice(), &width(w), &height(h)]
+            .concat(),
+        None => case.sizing.clone(),
+    };
+    let e = css(
+        "E",
+        merged([element_props().as_slice(), &case.other, &sizing].concat()),
+        case.children.map_or_else(inside, |children| children()),
+    );
+    let e = B {
+        placement: (kind == ParentKind::Grid).then_some((2, 1)),
+        ..e
+    };
+    let neighbor = |name| {
+        css(
+            name,
+            [
+                [F(FLEX_SHRINK, 0.0), F(MARGIN_BOTTOM, 8.0)].as_slice(),
+                &width(60.0),
+                &height(40.0),
+            ]
+            .concat(),
+            vec![],
+        )
+    };
+    let parent_props: Vec<P> = match kind {
+        ParentKind::Block => vec![],
+        ParentKind::FlexRow => vec![U(DISPLAY, 1), F(COLUMN_GAP, 10.0)],
+        ParentKind::FlexColumn => vec![U(DISPLAY, 1), U(FLEX_DIRECTION, 2), F(ROW_GAP, 10.0)],
+        ParentKind::Grid => vec![U(DISPLAY, 2), F(COLUMN_GAP, 10.0)],
+        ParentKind::BaselineRow => vec![U(DISPLAY, 1), U(ALIGN_ITEMS, 9), F(COLUMN_GAP, 10.0)],
+    };
+    let parent = B {
+        tracks: if kind == ParentKind::Grid {
+            vec![(0, TRACK_POINTS, 80.0), (0, TRACK_AUTO, 0.0), (0, TRACK_FR, 1.0)]
+        } else {
+            Vec::new()
+        },
+        ..css(
+            "Parent",
+            [
+                [U(POSITION, 1)].as_slice(),
+                &padding(5.0),
+                &width(360.0),
+                parent_props.as_slice(),
+            ]
+            .concat(),
+            vec![neighbor("N1"), e, neighbor("N2")],
+        )
+    };
+    scene(
+        (400.0, 400.0),
+        css(
+            "Frame",
+            [width(400.0), height(400.0)].concat(),
+            vec![parent],
+        ),
+    )
+}
+
+fn table_row(kind: ParentKind, case: &Case) {
+    let label = format!("{kind:?}, {}", case.name);
+    let inside = case_inside(case);
+    let outside = ["Frame", "Parent", "N1", "N2"];
+    let all: Vec<&str> = outside.iter().copied().chain(["E"]).chain(inside.iter().copied()).collect();
+    eprintln!("table row: {label}");
+    checked(|| {
+        let scene = table_scene(kind, case, None);
+        scene.advance(2);
+        let rest_outside = boxes(&scene, &outside);
+        let rest_all = boxes(&scene, &all);
+        let nodes = node_count(&scene);
+        let slot = scene.bounds("E");
+        // E's CSS size at rest under its box-sizing (padding 10 a side).
+        let inset = if case.content_box { 20.0 } else { 0.0 };
+        let own = (slot[2] - inset, slot[3] - inset);
+        let e = scene.named("E");
+        assert!(begin(&e, own), "{label}: begin");
+        scene.advance(1);
+        // Held at its rest size: around E exactly as at rest, E and its
+        // inside to within float noise (a flex item's inside is laid out at
+        // the size the flex pass computed, a little off the published one).
+        assert_eq!(boxes(&scene, &outside), rest_outside, "{label}: held at its rest size");
+        for (name, at) in &rest_all {
+            assert_near(scene.bounds(name), *at, &format!("{label}: {name} held at its rest size"));
+        }
+        // Never below E's padding and border, which floor a border box.
+        for size in [
+            ((own.0 * 0.5).max(40.0), (own.1 * 0.5).max(40.0)),
+            (own.0 + 60.0, own.1 + 40.0),
+            (own.0 + 60.0, own.1 * 0.7),
+            own,
+        ] {
+            set_size(&e, size);
+            scene.advance(1);
+            // A CSS width: E's own limits clamp it.
+            let size = case
+                .width_limits
+                .map_or(size, |(min, max)| (size.0.clamp(min, max), size.1));
+            assert_eq!(boxes(&scene, &outside), rest_outside, "{label}: around E at {size:?}");
+            assert_near(
+                rect(resting_box(&e).unwrap()),
+                slot,
+                &format!("{label}: E's slot at {size:?}"),
+            );
+            assert_near(
+                scene.bounds("E"),
+                [slot[0], slot[1], size.0 + inset, size.1 + inset],
+                &format!("{label}: E at {size:?}"),
+            );
+            assert_eq!(node_count(&scene), nodes, "{label}: nodes at {size:?}");
+            if case.area_percentages && kind == ParentKind::Grid {
+                continue;
+            }
+            let oracle = table_scene(kind, case, Some(size));
+            oracle.advance(2);
+            for name in &inside {
+                assert_near(
+                    scene.bounds(name),
+                    oracle.bounds(name),
+                    &format!("{label}: {name} at {size:?}"),
+                );
+            }
+        }
+        end(&e);
+        scene.advance(1);
+        assert_eq!(boxes(&scene, &all), rest_all, "{label}: after the step");
+        assert_eq!(node_count(&scene), nodes, "{label}: nodes after the step");
+    });
+}
+
+#[test]
+fn in_place_hold_table_block_parent() {
+    for case in &cases() {
+        table_row(ParentKind::Block, case);
+    }
+}
+
+#[test]
+fn in_place_hold_table_flex_row_parent() {
+    for case in &cases() {
+        table_row(ParentKind::FlexRow, case);
+    }
+}
+
+#[test]
+fn in_place_hold_table_flex_column_parent() {
+    for case in &cases() {
+        table_row(ParentKind::FlexColumn, case);
+    }
+}
+
+#[test]
+fn in_place_hold_table_grid_parent() {
+    for case in &cases() {
+        table_row(ParentKind::Grid, case);
+    }
+}
+
+#[test]
+fn in_place_hold_table_baseline_row_parent() {
+    for case in &cases() {
+        table_row(ParentKind::BaselineRow, case);
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// The vendored Taffy call the flight pass uses, on plain Taffy
+// (vendor/taffy-0.15.0-nuxie-css/NUXIE_PATCH.md).
+
+/// A block parent 300 wide holding an element (a positioned block with 10%
+/// left padding) and then a 20-tall sibling. The element holds a half-wide
+/// 30-tall child whose 12-point top margin collapses through the element,
+/// and an absolutely placed child. The element is sized by its content, or
+/// styled at `element_size`.
+fn taffy_relayout_fixture(
+    element_size: Option<taffy::prelude::Size<f32>>,
+) -> (
+    taffy::TaffyTree,
+    taffy::prelude::NodeId,
+    taffy::prelude::NodeId,
+    taffy::prelude::NodeId,
+    [taffy::prelude::NodeId; 2],
+) {
+    use taffy::prelude::*;
+    let mut taffy: TaffyTree = TaffyTree::new();
+    taffy.disable_rounding();
+    let inner = taffy
+        .new_leaf(Style {
+            size: Size {
+                width: percent(0.5),
+                height: length(30.0),
+            },
+            margin: taffy::geometry::Rect {
+                left: zero(),
+                right: zero(),
+                top: length(12.0),
+                bottom: zero(),
+            },
+            ..Default::default()
+        })
+        .unwrap();
+    let absolute = taffy
+        .new_leaf(Style {
+            position: taffy::style::Position::Absolute,
+            inset: taffy::geometry::Rect {
+                left: length(5.0),
+                right: length(5.0),
+                top: length(0.0),
+                bottom: auto(),
+            },
+            size: Size {
+                width: auto(),
+                height: length(10.0),
+            },
+            ..Default::default()
+        })
+        .unwrap();
+    let mut style = Style {
+        display: Display::Block,
+        position: taffy::style::Position::Relative,
+        padding: taffy::geometry::Rect {
+            left: percent(0.1),
+            right: zero(),
+            top: zero(),
+            bottom: zero(),
+        },
+        ..Default::default()
+    };
+    if let Some(size) = element_size {
+        style.size = Size {
+            width: length(size.width),
+            height: length(size.height),
+        };
+    }
+    let element = taffy.new_with_children(style, &[inner, absolute]).unwrap();
+    let sibling = taffy
+        .new_leaf(Style {
+            size: Size {
+                width: auto(),
+                height: length(20.0),
+            },
+            ..Default::default()
+        })
+        .unwrap();
+    let root = taffy
+        .new_with_children(
+            Style {
+                display: Display::Block,
+                size: Size {
+                    width: length(300.0),
+                    height: auto(),
+                },
+                ..Default::default()
+            },
+            &[element, sibling],
+        )
+        .unwrap();
+    taffy.compute_layout(root, Size::MAX_CONTENT).unwrap();
+    (taffy, root, element, sibling, [inner, absolute])
+}
+
+fn taffy_plain_measure(
+    inputs: taffy::tree::LayoutInput,
+    _node: taffy::prelude::NodeId,
+    _context: Option<&mut ()>,
+    style: &taffy::prelude::Style,
+) -> taffy::tree::LayoutOutput {
+    taffy::compute_leaf_layout(inputs, style, |_, _| 0.0, |_, _| taffy::prelude::Size::ZERO)
+}
+
+/// Laid out again at 120 by 80, the element's inside equals a fresh tree
+/// whose element is styled 120 by 80. Its own place and its sibling's stay
+/// as at rest, a second call gives the same output, and a parent pass lays
+/// the inside out at rest again.
+#[test]
+fn taffy_relayout_at_size_equals_a_fresh_layout_at_that_size() {
+    use taffy::prelude::*;
+    let size = Size {
+        width: 120.0,
+        height: 80.0,
+    };
+    let (mut taffy, root, element, sibling, inside) = taffy_relayout_fixture(None);
+    let at = |taffy: &TaffyTree, node| *taffy.layout(node).unwrap();
+    let (element_rest, sibling_rest) = (at(&taffy, element), at(&taffy, sibling));
+    let inside_rest = inside.map(|node| at(&taffy, node));
+    // The inner child's margin collapses through the element's top.
+    assert_eq!(element_rest.location.y, 12.0);
+    assert_eq!(inside_rest[0].location.y, 0.0);
+    let output = taffy
+        .relayout_at_size(element, size, taffy_plain_measure)
+        .unwrap();
+    let (fresh, _, fresh_element, _, fresh_inside) = taffy_relayout_fixture(Some(size));
+    assert_eq!(output.size, size);
+    assert_eq!(output.size, fresh.layout(fresh_element).unwrap().size);
+    for (node, fresh_node) in inside.iter().zip(fresh_inside) {
+        assert_eq!(
+            at(&taffy, *node),
+            at(&fresh, fresh_node),
+            "the inside is laid out at the size"
+        );
+    }
+    assert_ne!(at(&taffy, inside[1]).size, inside_rest[1].size, "it moved");
+    // The element's own place and its parent's other children are the parent's.
+    assert_eq!(at(&taffy, element), element_rest);
+    assert_eq!(at(&taffy, sibling), sibling_rest);
+    // The remembered input stays the parent's: a second call is the same,
+    // and a parent pass lays the inside out at rest again.
+    let again = taffy
+        .relayout_at_size(element, size, taffy_plain_measure)
+        .unwrap();
+    assert_eq!(again, output);
+    taffy.mark_dirty(element).unwrap();
+    taffy.compute_layout(root, Size::MAX_CONTENT).unwrap();
+    assert_eq!(inside.map(|node| at(&taffy, node)), inside_rest);
+    assert_eq!(at(&taffy, element), element_rest);
+}
+
+/// A node that was never laid out has no request to repeat.
+#[test]
+fn taffy_relayout_at_size_needs_a_full_layout_first() {
+    use taffy::prelude::*;
+    let mut taffy: TaffyTree = TaffyTree::new();
+    let node = taffy.new_leaf(Style::default()).unwrap();
+    assert!(
+        taffy
+            .relayout_at_size(
+                node,
+                Size {
+                    width: 1.0,
+                    height: 1.0
+                },
+                taffy_plain_measure
+            )
+            .is_none()
+    );
 }

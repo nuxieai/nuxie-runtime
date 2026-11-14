@@ -174,13 +174,16 @@ impl ScriptedRenderer {
         Ok((userdata, scope))
     }
 
+    /// A `Renderer` userdata drawing into a canvas frame; with no frame
+    /// (a deferred host gave the frame no renderer) it has no target, and
+    /// every call on it is the "no longer valid" error.
     pub(super) fn create_canvas_userdata(
         lua: &crate::luau::Lua,
-        frame: Rc<RefCell<Box<dyn RenderCanvasFrame>>>,
+        frame: Option<Rc<RefCell<Box<dyn RenderCanvasFrame>>>>,
         bindings: RendererBindings,
     ) -> Result<AnyUserData> {
         lua.create_userdata(Self {
-            target: RefCell::new(Some(RendererTarget::CanvasFrame(frame))),
+            target: RefCell::new(frame.map(RendererTarget::CanvasFrame)),
             bindings,
             save_count: Cell::new(0),
             in_use: Cell::new(false),

@@ -22,8 +22,68 @@ pub(super) struct ScriptedCanvas {
     pending_width: u32,
     pending_height: u32,
     image: Option<AnyUserData>,
-    frame: Option<Rc<RefCell<Box<dyn RenderCanvasFrame>>>>,
+    frame: Option<OpenFrame>,
     renderer: Option<AnyUserData>,
+}
+
+/// A frame between `beginFrame` and `endFrame`.
+enum OpenFrame {
+    /// The frame the `Renderer` userdata draws into.
+    Drawing(Rc<RefCell<Box<dyn RenderCanvasFrame>>>),
+    /// A deferred host's content pass that came back without a renderer.
+    /// Its `Renderer` userdata has no target, so every call on it is the
+    /// binding's ordinary "no longer valid" error; ending the frame still
+    /// ends the host's content pass.
+    WithoutRenderer {
+        host: DeferredCanvasHostHandle,
+        canvas: RenderCanvasHandle,
+    },
+}
+
+impl OpenFrame {
+    fn drawing(frame: Box<dyn RenderCanvasFrame>) -> Self {
+        OpenFrame::Drawing(Rc::new(RefCell::new(frame)))
+    }
+
+    /// What the frame's `Renderer` userdata draws into, if anything.
+    fn drawing_target(&self) -> Option<Rc<RefCell<Box<dyn RenderCanvasFrame>>>> {
+        match self {
+            OpenFrame::Drawing(frame) => Some(Rc::clone(frame)),
+            OpenFrame::WithoutRenderer { .. } => None,
+        }
+    }
+
+    fn finish(self) -> Result<()> {
+        match self {
+            OpenFrame::Drawing(frame) => Rc::try_unwrap(frame)
+                .map_err(|_| {
+                    crate::luau::Error::runtime("Canvas frame retained after renderer invalidation")
+                })?
+                .into_inner()
+                .finish()
+                .map_err(|error| crate::luau::Error::runtime(error.to_string())),
+            OpenFrame::WithoutRenderer { host, canvas } => {
+                host.borrow_mut().end_canvas_content(&canvas);
+                Ok(())
+            }
+        }
+    }
+}
+
+/// A new backing canvas and the `Image` userdata that shows it.
+fn new_backing(
+    lua: &Lua,
+    bindings: &RendererBindings,
+    context: &mut PersistentFactoryContext,
+    width: u32,
+    height: u32,
+    caller: &str,
+) -> Result<(RenderCanvasHandle, AnyUserData)> {
+    let canvas = allocate_script_render_canvas(bindings, context, width, height).map_err(|_| {
+        crate::luau::Error::runtime(format!("{caller} failed to create RenderCanvas"))
+    })?;
+    let image = lua.create_userdata(ScriptedImage::from_render_canvas(Rc::clone(&canvas)))?;
+    Ok((canvas, image))
 }
 
 impl ScriptedCanvas {
@@ -45,7 +105,17 @@ impl ScriptedCanvas {
             renderer: None,
         };
         if width != 0 && height != 0 {
-            if canvas.render_context.is_none() {
+            if let Some(context) = canvas.render_context.as_mut() {
+                let backing = new_backing(
+                    lua,
+                    &canvas.bindings,
+                    context,
+                    width,
+                    height,
+                    "context:canvas()",
+                )?;
+                canvas.set_backing(backing);
+            } else {
                 if canvas.bindings.deferred_canvas_host().is_none() {
                     return Err(crate::luau::Error::runtime(
                         "context:canvas() requires a RenderContext — call setRenderContext() first",
@@ -53,28 +123,16 @@ impl ScriptedCanvas {
                 }
                 canvas.pending_width = width;
                 canvas.pending_height = height;
-            } else {
-                canvas.replace_backing(lua, width, height, "context:canvas()")?;
             }
         }
         lua.create_userdata(canvas)
     }
 
-    fn replace_backing(&mut self, lua: &Lua, width: u32, height: u32, caller: &str) -> Result<()> {
-        let context = self
-            .render_context
-            .as_mut()
-            .expect("present allocation device");
-        let canvas = allocate_script_render_canvas(&self.bindings, context, width, height)
-            .map_err(|_| {
-                crate::luau::Error::runtime(format!("{caller} failed to create RenderCanvas"))
-            })?;
-        let image = lua.create_userdata(ScriptedImage::from_render_canvas(Rc::clone(&canvas)))?;
+    fn set_backing(&mut self, (canvas, image): (RenderCanvasHandle, AnyUserData)) {
         self.image = Some(image);
         self.canvas = Some(canvas);
         self.pending_width = 0;
         self.pending_height = 0;
-        Ok(())
     }
 
     fn satisfy_pending(&mut self, lua: &Lua) -> Result<()> {
@@ -84,26 +142,25 @@ impl ScriptedCanvas {
         let Some(context) = self.bindings.render_context() else {
             return Ok(());
         };
-        self.render_context = Some(context);
-        self.replace_backing(
+        let context = self.render_context.insert(context);
+        let backing = new_backing(
             lua,
+            &self.bindings,
+            context,
             self.pending_width,
             self.pending_height,
             "Canvas:resize()",
-        )
+        )?;
+        self.set_backing(backing);
+        Ok(())
     }
 
-    fn end_frame(&mut self, userdata: &AnyUserData) -> Result<()> {
+    /// Ends `frame`, the one this canvas held open (taken out of
+    /// `self.frame` by the caller).
+    fn end_frame(&mut self, userdata: &AnyUserData, frame: OpenFrame) -> Result<()> {
         self.bindings.unregister_open_canvas_frame(userdata);
         self.end_renderer();
-        let frame = self.frame.take().expect("active Canvas frame");
-        Rc::try_unwrap(frame)
-            .map_err(|_| {
-                crate::luau::Error::runtime("Canvas frame retained after renderer invalidation")
-            })?
-            .into_inner()
-            .finish()
-            .map_err(|error| crate::luau::Error::runtime(error.to_string()))
+        frame.finish()
     }
 
     fn end_renderer(&mut self) {
@@ -142,8 +199,8 @@ pub(crate) fn close_orphan_canvas_frames(bindings: &RendererBindings, token: u64
     let had_orphans = !frames.is_empty();
     for userdata in frames {
         let mut canvas = userdata.borrow_mut::<ScriptedCanvas>()?;
-        if canvas.frame.is_some() {
-            canvas.end_frame(&userdata)?;
+        if let Some(frame) = canvas.frame.take() {
+            canvas.end_frame(&userdata, frame)?;
         }
     }
     Ok(had_orphans)
@@ -152,7 +209,7 @@ pub(crate) fn close_orphan_canvas_frames(bindings: &RendererBindings, token: u64
 struct DeferredCanvasFrame {
     host: DeferredCanvasHostHandle,
     canvas: RenderCanvasHandle,
-    renderer: Option<Box<dyn Renderer>>,
+    renderer: Box<dyn Renderer>,
 }
 
 impl RenderCanvasFrame for DeferredCanvasFrame {
@@ -167,9 +224,7 @@ impl RenderCanvasFrame for DeferredCanvasFrame {
 
 impl DeferredCanvasFrame {
     fn target(&mut self) -> &mut dyn Renderer {
-        self.renderer
-            .as_deref_mut()
-            .expect("deferred host returned a null renderer")
+        &mut *self.renderer
     }
 }
 
@@ -304,10 +359,10 @@ impl Renderer for DeferredCanvasFrame {
     // Upstream hands the host's recorder to the scripted renderer directly,
     // so its transform and opacity queries answer through this frame.
     fn current_transform(&self) -> Option<Mat2D> {
-        self.renderer.as_deref()?.current_transform()
+        self.renderer.current_transform()
     }
     fn current_modulated_opacity(&self) -> Option<f32> {
-        self.renderer.as_deref()?.current_modulated_opacity()
+        self.renderer.current_modulated_opacity()
     }
 }
 
@@ -403,19 +458,22 @@ impl UserData for ScriptedCanvas {
                     }
                     _ => 0,
                 };
-                let frame: Box<dyn RenderCanvasFrame> = if let Some(host) = this.bindings.deferred_canvas_host() {
+                let frame = if let Some(host) = this.bindings.deferred_canvas_host() {
                     let renderer = host.borrow_mut().begin_canvas_content(Rc::clone(&canvas), clear_color);
-                    Box::new(DeferredCanvasFrame { host, canvas, renderer })
+                    match renderer {
+                        Some(renderer) => OpenFrame::drawing(Box::new(DeferredCanvasFrame { host, canvas, renderer })),
+                        None => OpenFrame::WithoutRenderer { host, canvas },
+                    }
                 } else {
-                    canvas.borrow_mut().begin_frame(clear_color)
-                        .map_err(|error| crate::luau::Error::runtime(error.to_string()))?
+                    OpenFrame::drawing(canvas.borrow_mut().begin_frame(clear_color)
+                        .map_err(|error| crate::luau::Error::runtime(error.to_string()))?)
                 };
-                let frame = Rc::new(RefCell::new(frame));
-                this.frame = Some(Rc::clone(&frame));
+                let drawing = frame.drawing_target();
+                this.frame = Some(frame);
                 this.bindings.register_open_canvas_frame(userdata.clone());
                 let renderer = ScriptedRenderer::create_canvas_userdata(
                     lua,
-                    Rc::clone(&frame),
+                    drawing,
                     this.bindings.clone(),
                 )?;
                 this.renderer = Some(renderer.clone());
@@ -424,12 +482,12 @@ impl UserData for ScriptedCanvas {
         );
         methods.add_function("endFrame", |_, userdata: AnyUserData| {
             let mut this = userdata.borrow_mut::<Self>()?;
-            if this.frame.is_none() {
+            let Some(frame) = this.frame.take() else {
                 return Err(crate::luau::Error::runtime(
                     "Canvas:endFrame() called without beginFrame()",
                 ));
-            }
-            this.end_frame(&userdata)
+            };
+            this.end_frame(&userdata, frame)
         });
     }
 }
@@ -745,6 +803,77 @@ mod tests {
             events.borrow().is_empty(),
             "a host failure must not fall back to context allocation"
         );
+    }
+
+    #[test]
+    fn a_frame_the_deferred_host_gave_no_renderer_errors_on_every_call_and_still_ends() {
+        struct Host {
+            canvas: RenderCanvasHandle,
+            ends: Rc<RefCell<usize>>,
+        }
+        impl nuxie_render_api::DeferredCanvasHost for Host {
+            fn make_content_canvas(&mut self, _: u32, _: u32) -> Option<RenderCanvasHandle> {
+                Some(self.canvas.clone())
+            }
+            fn content_canvas_image(
+                &mut self,
+                canvas: &RenderCanvasHandle,
+            ) -> Option<Rc<dyn RenderImage>> {
+                Some(canvas.borrow().render_image())
+            }
+            fn begin_canvas_content(
+                &mut self,
+                _: RenderCanvasHandle,
+                _: ColorInt,
+            ) -> Option<Box<dyn Renderer>> {
+                None
+            }
+            fn end_canvas_content(&mut self, _: &RenderCanvasHandle) {
+                *self.ends.borrow_mut() += 1;
+            }
+        }
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let ends = Rc::new(RefCell::new(0));
+        let canvas: RenderCanvasHandle = Rc::new(RefCell::new(Box::new(TestCanvas {
+            width: 4,
+            height: 3,
+            image: Rc::new(TestCanvasImage {
+                size_state: Default::default(),
+                identity: Rc::new(()),
+                width: 4,
+                height: 3,
+            }),
+            events: events.clone(),
+        })));
+        let vm = ScriptVm::new();
+        let mut factory = PersistentFactory::new(TestCanvasFactory::new(events.clone()));
+        factory.borrow_mut().host = Some(Rc::new(RefCell::new(Host {
+            canvas,
+            ends: ends.clone(),
+        })));
+        vm.install_render_factory(&mut factory).unwrap();
+        vm.install_rive_globals().unwrap();
+        factory.borrow_mut().ore = Some(Rc::new(RefCell::new(
+            nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::fromReal(None),
+        )));
+        let canvas = ScriptedCanvas::create(vm.lua(), vm.renderer_bindings.clone(), 4, 3).unwrap();
+        vm.lua().globals().set("canvas", canvas).unwrap();
+        vm.lua()
+            .load(
+                r#"
+            local renderer = canvas:beginFrame()
+            for _ = 1, 2 do
+                local ok, message = pcall(function() renderer:save() end)
+                assert(not ok and string.find(tostring(message), 'Renderer is no longer valid', 1, true), tostring(message))
+            end
+            canvas:endFrame()
+            local ok = pcall(function() canvas:endFrame() end)
+            assert(not ok)
+        "#,
+            )
+            .exec()
+            .unwrap();
+        assert_eq!(*ends.borrow(), 1);
     }
 
     #[test]

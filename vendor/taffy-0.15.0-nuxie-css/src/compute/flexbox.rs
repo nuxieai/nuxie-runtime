@@ -239,6 +239,13 @@ struct AlgoConstants {
     /// keyword heights of its items do not resolve against it while its width is measured.
     /// See `LayoutInput::known_height_is_stretch_only`.
     height_is_stretch_only: bool,
+    /// nuxie-css: the node's own style sets its height as a length. A picture with a
+    /// `stretch` keyword height on a single line then counts at the width that height
+    /// gives while the row's width is measured, whatever its alignment (Chrome: a 100 tall
+    /// `align-items: flex-start` row with `width: fit-content` around a 60 by 120 picture
+    /// with `height: stretch` is 50 wide). A row whose height is itself the `stretch`
+    /// keyword counts the picture at its natural width.
+    height_is_set_length: bool,
     /// nuxie-css: see `LayoutInput::pictures_follow_stretch_height`.
     pictures_follow_stretch_height: bool,
     /// nuxie-css: the inner height the container's ratio gives, when its used height is not
@@ -483,6 +490,10 @@ fn compute_preliminary(
         inputs.sizing_mode,
     );
     constants.height_is_stretch_only = inputs.known_height_is_stretch_only;
+    constants.height_is_set_length = {
+        let height = tree.get_flexbox_container_style(node).size().height;
+        !height.is_auto() && !height.is_sizing_keyword() && !height.into_raw().uses_percentage()
+    };
     constants.pictures_follow_stretch_height = inputs.pictures_follow_stretch_height;
 
     if inputs.sizing_mode == SizingMode::ContentSize && inputs.axis == RequestedAxis::Horizontal
@@ -1026,6 +1037,7 @@ fn compute_constants(
         known_main_size_is_definite,
         height_is_percentage_basis,
         height_is_stretch_only: false,
+        height_is_set_length: false,
         pictures_follow_stretch_height: false,
         ratio_percentage_height,
         has_definite_main_size,
@@ -1432,18 +1444,21 @@ fn determine_flex_base_size(
             // its alignment is (Chrome: `aspect-ratio: 2; height: stretch` in a 100-tall
             // `align-items: center` row is 200 wide). Stock looked at the alignment only,
             // so the item was measured without the height and its width did not follow it.
-            // A picture's does so once the row has its width, or while a row or a grid is
-            // asking for the row's width (`LayoutInput::pictures_follow_stretch_height`).
-            // Chrome measures a row that is an item of a column with the picture at its
-            // natural width (a 40 by 40 picture with `height: stretch` in a 100-tall row
-            // there is 100 wide in a row measured 40 wide).
+            // A picture's does so once the row has its width, while a row or a grid is
+            // asking for the row's width (`LayoutInput::pictures_follow_stretch_height`),
+            // or when the row's own style sets its height as a length
+            // (`AlgoConstants::height_is_set_length`). Chrome measures such a row at the
+            // picture's natural width when the row is a column's item whose content
+            // height Chrome measured first; the fork does not follow that (see
+            // `NUXIE_PATCH.md`, "Where the fork does not follow Chrome").
             let keyword_stretches = child.size_style.cross(dir).is_stretch()
                 && child.align_self != AlignSelf::STRETCH
                 && (!child_style.is_compressible_replaced()
                     || constants.node_inner_size.main(dir).is_some()
                     || (constants.is_row
-                        && constants.pictures_follow_stretch_height
-                        && constants.node_inner_size.height.is_some()));
+                        && constants.node_inner_size.height.is_some()
+                        && (constants.pictures_follow_stretch_height
+                            || (constants.height_is_set_length && !constants.height_is_stretch_only))));
             if (keyword_stretches
                 || (child.align_self == AlignSelf::STRETCH
                     && !child.margin_is_auto.cross_start(constants.dir)
@@ -2311,7 +2326,12 @@ fn measure_item_content_main_size(
         let is_picture = tree.get_flexbox_child_style(item.node).is_compressible_replaced();
         let keyword_stretches = item.size_style.cross(dir).is_stretch()
             && if is_picture {
-                item.align_self != AlignSelf::STRETCH && constants.is_row && constants.pictures_follow_stretch_height
+                item.align_self != AlignSelf::STRETCH
+                    && constants.is_row
+                    && (constants.pictures_follow_stretch_height
+                        || (!constants.is_wrap
+                            && constants.height_is_set_length
+                            && !constants.height_is_stretch_only))
             } else {
                 true
             };

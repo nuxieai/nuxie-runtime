@@ -156,7 +156,7 @@ struct EncodedValue {
     holds: Vec<SharedValue>,
 }
 fn encode(value: &SharedValue) -> Result<EncodedValue, String> {
-    let (size, _) = value.layout()?;
+    let (size, holds) = value.layout()?;
     let mut encoded = EncodedValue {
         bytes: Vec::new(),
         holds: Vec::new(),
@@ -164,6 +164,12 @@ fn encode(value: &SharedValue) -> Result<EncodedValue, String> {
     encoded
         .bytes
         .try_reserve_exact(size)
+        .map_err(|_| "cannot encode shared value")?;
+    // Exactly the handles' count: a ring or snapshot keeps this list, charged
+    // at its capacity.
+    encoded
+        .holds
+        .try_reserve_exact(holds)
         .map_err(|_| "cannot encode shared value")?;
     fn word(out: &mut Vec<u8>, value: usize) -> Result<(), String> {
         let value = u32::try_from(value).map_err(|_| "shared value too large")?;

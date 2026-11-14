@@ -199,17 +199,20 @@ impl ContextApi for ObservedContext {
     ) -> Option<AnyResourceHandle> {
         unsafe { self.inner.wrapCanvasTexture(value) }
     }
-    fn wrapCanvasTextureInfo(&mut self, value: CanvasTextureInfo) -> Option<AnyResourceHandle> {
+    unsafe fn wrapCanvasTextureInfo(
+        &mut self,
+        value: CanvasTextureInfo,
+    ) -> Option<AnyResourceHandle> {
         self.canvas_sizes
             .borrow_mut()
             .push((value.width, value.height));
-        self.inner.wrapCanvasTextureInfo(value)
+        unsafe { self.inner.wrapCanvasTextureInfo(value) }
     }
-    fn wrapCanvasSampleView(&mut self, value: CanvasTextureInfo) -> Option<AnyResourceHandle> {
-        self.inner.wrapCanvasSampleView(value)
-    }
-    fn wrapImageSampleView(&mut self, value: CanvasTextureInfo) -> Option<AnyResourceHandle> {
-        self.inner.wrapImageSampleView(value)
+    unsafe fn wrapCanvasSampleView(
+        &mut self,
+        value: CanvasTextureInfo,
+    ) -> Option<AnyResourceHandle> {
+        unsafe { self.inner.wrapCanvasSampleView(value) }
     }
     unsafe fn wrapRiveTexture(
         &mut self,

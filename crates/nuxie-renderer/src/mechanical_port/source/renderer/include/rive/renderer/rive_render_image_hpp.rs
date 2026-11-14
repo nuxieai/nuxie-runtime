@@ -425,8 +425,8 @@ impl nuxie_render_api::RenderImage for RiveRenderImageHandle {
         }
         let retained: Rc<dyn nuxie_render_api::RenderImage> = Rc::new(self.clone());
         Some(nuxie_ore_metal::context::CanvasTextureInfo {
-            canvas: None,
-            texture: Some(crate::ore_source_handle::source_texture_handle(texture)?),
+            canvas: std::ptr::null_mut(),
+            texture: texture.get().cast(),
             width: self.source().width().max(0) as u32,
             height: self.source().height().max(0) as u32,
             owner: Some(Rc::new(retained)),

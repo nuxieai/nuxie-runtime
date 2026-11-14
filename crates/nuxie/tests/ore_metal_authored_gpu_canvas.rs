@@ -156,9 +156,9 @@ impl RenderImage for MetalCanvasImage {
     }
     fn ore_texture_info(&self) -> Option<CanvasTextureInfo> {
         Some(CanvasTextureInfo {
-            canvas: Some(self.0.clone()),
+            canvas: Rc::as_ptr(&self.0).cast_mut().cast(),
             // Only the canvas color-view projection is used by this fixture.
-            texture: None,
+            texture: std::ptr::null_mut(),
             width: self.width(),
             height: self.height(),
             owner: Some(self.0.clone()),

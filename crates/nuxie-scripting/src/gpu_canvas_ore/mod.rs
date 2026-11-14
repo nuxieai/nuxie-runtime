@@ -307,6 +307,7 @@ pub(crate) fn image_texture_view(
         view
     } else {
         let mut ctx = context.borrow_mut();
+        #[allow(unsafe_code)]
         let view = if ctx.isRecording() {
             // Canvas provenance is authoritative: canvas backings can share
             // the same renderer type as decoded images. Recording must not
@@ -326,16 +327,18 @@ pub(crate) fn image_texture_view(
             view.ok_or_else(|| Error::runtime("Image:view() recording failed"))?
         } else if let Some(source_canvas) = source_canvas {
             // A canvas imports through the backend's own sampling wrap.
-            ctx.wrapCanvasSampleView(nuxie_render_api::canvas_texture_info(source_canvas))
-                .ok_or_else(|| Error::runtime("Image:view() not supported on this backend"))?
+            unsafe {
+                ctx.wrapCanvasSampleView(nuxie_render_api::canvas_texture_info(source_canvas))
+            }
+            .ok_or_else(|| Error::runtime("Image:view() not supported on this backend"))?
         } else {
             let info = image
                 .ore_texture_info()
                 .ok_or_else(|| Error::runtime("Image is not a GPU-backed RiveRenderImage"))?;
-            if info.texture.is_none() {
+            if info.texture.is_null() {
                 return Err(Error::runtime("Image GPU texture not available"));
             }
-            ctx.wrapImageSampleView(info)
+            unsafe { ctx.wrapImageSampleView(info) }
                 .ok_or_else(|| Error::runtime("Image:view() not supported on this backend"))?
         };
         *cached.borrow_mut() = Some(view.clone());

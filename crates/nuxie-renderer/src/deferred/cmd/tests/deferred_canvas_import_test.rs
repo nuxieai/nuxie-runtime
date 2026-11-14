@@ -85,7 +85,10 @@ impl ContextApi for RecordingOreContext {
     unsafe fn wrapCanvasTexture(&mut self, _: *mut c_void) -> Option<AnyResourceHandle> {
         None
     }
-    fn wrapCanvasSampleView(&mut self, canvas: CanvasTextureInfo) -> Option<AnyResourceHandle> {
+    unsafe fn wrapCanvasSampleView(
+        &mut self,
+        canvas: CanvasTextureInfo,
+    ) -> Option<AnyResourceHandle> {
         let canvas =
             nuxie_render_api::canvas_texture_owner(&canvas).expect("recorded canvas owner");
         self.sample_wraps

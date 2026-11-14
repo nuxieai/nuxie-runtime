@@ -1513,14 +1513,7 @@ impl ContextMetal {
         canvas: *mut C,
     ) -> Option<AnyResourceHandle> {
         debug_assert!(!canvas.is_null());
-        self.mtlWrapTargetHost(unsafe { &*canvas })
-    }
-
-    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
-    fn mtlWrapTargetHost<C: MetalRenderCanvasHost>(
-        &mut self,
-        canvas: &C,
-    ) -> Option<AnyResourceHandle> {
+        let canvas = unsafe { &*canvas };
         let mtlTexture = canvas.metalTargetTexture();
 
         let texDesc = TextureDesc {
@@ -1912,15 +1905,7 @@ impl ContextMetal {
         if gpuTex.is_null() {
             return None;
         }
-        self.wrapRiveTextureHost(unsafe { &*gpuTex }, w, h)
-    }
-
-    pub fn wrapRiveTextureHost<T: MetalRiveTextureHost>(
-        &mut self,
-        gpuTex: &T,
-        w: u32,
-        h: u32,
-    ) -> Option<AnyResourceHandle> {
+        let gpuTex = unsafe { &*gpuTex };
         let mtlTex = gpuTex.metalNativeTexture();
         if mtlTex.is_none() {
             return None;
@@ -2084,45 +2069,6 @@ impl ContextApi for ContextMetal {
                 width,
                 height,
             )
-        }
-    }
-
-    fn wrapCanvasTextureInfo(
-        &mut self,
-        canvas: crate::context::CanvasTextureInfo,
-    ) -> Option<AnyResourceHandle> {
-        #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
-        {
-            let bridge = canvas.canvas.as_deref()?.downcast_ref::<MetalRenderCanvasBridge>()?;
-            self.mtlWrapTargetHost(bridge)
-        }
-        #[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
-        {
-            let _ = canvas;
-            None
-        }
-    }
-
-    fn wrapCanvasSampleView(
-        &mut self,
-        canvas: crate::context::CanvasTextureInfo,
-    ) -> Option<AnyResourceHandle> {
-        self.wrapImageSampleView(canvas)
-    }
-
-    fn wrapImageSampleView(
-        &mut self,
-        image: crate::context::CanvasTextureInfo,
-    ) -> Option<AnyResourceHandle> {
-        #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
-        {
-            let bridge = image.texture.as_deref()?.downcast_ref::<MetalRiveTextureBridge>()?;
-            self.wrapRiveTextureHost(bridge, image.width, image.height)
-        }
-        #[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
-        {
-            let _ = image;
-            None
         }
     }
 

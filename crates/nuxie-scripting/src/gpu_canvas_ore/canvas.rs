@@ -68,9 +68,8 @@ impl Canvas {
             .bindings
             .ore_context()
             .ok_or_else(|| Error::runtime("GPU context not initialized"))?;
-        let color_view = ore
-            .borrow_mut()
-            .wrapCanvasTextureInfo(info)
+        #[allow(unsafe_code)]
+        let color_view = unsafe { ore.borrow_mut().wrapCanvasTextureInfo(info) }
             .ok_or_else(|| Error::runtime(format!("{caller} failed to wrap canvas texture")))?;
         // The recorder registers the canvas with its frame when it wraps it.
         keep_with_recording(&*ore.borrow(), &charge);

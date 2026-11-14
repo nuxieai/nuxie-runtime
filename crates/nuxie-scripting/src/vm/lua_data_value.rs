@@ -7,6 +7,7 @@ use crate::luau::{
 };
 use nuxie_runtime::{ScriptCoreString, ScriptValue};
 
+use super::host_memory_budget::HostMemoryCharge;
 use super::script_value_to_lua;
 
 const DATA_VALUE_METATABLE_PATCHER: &str = "rive_data_value_metatable_patcher";
@@ -48,9 +49,20 @@ mod upstream_checked_data_value_tests {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(super) struct ScriptedDataValue {
     value: ScriptValue,
+    /// The bytes of a string value, which live outside the VM.
+    charge: HostMemoryCharge,
+}
+
+/// Host bytes a value holds outside the VM: the buffer of a string.
+fn host_bytes(value: &ScriptValue) -> usize {
+    match value {
+        ScriptValue::String(value) => value.capacity(),
+        ScriptValue::CoreString(value) => value.as_bytes().len(),
+        _ => 0,
+    }
 }
 
 /// Checked counterpart of lua_todatavalue. The approved Rust wrapper unifies
@@ -74,8 +86,10 @@ pub(super) fn lua_todatavalue(value: &Value) -> Result<Option<ScriptValue>> {
 }
 
 impl ScriptedDataValue {
-    pub(super) fn new(value: ScriptValue) -> Self {
-        Self { value }
+    /// A value charged to the VM's budget for the string it holds.
+    pub(super) fn new(lua: &Lua, value: ScriptValue) -> Result<Self> {
+        let charge = HostMemoryCharge::for_lua(lua, host_bytes(&value))?;
+        Ok(Self { value, charge })
     }
 
     pub(super) fn value(&self) -> &ScriptValue {
@@ -120,16 +134,21 @@ pub(super) fn checked_string(lua: &Lua, value: Value) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
-fn set_value(lua: &Lua, current: &mut ScriptValue, value: Value) -> Result<()> {
-    *current = match current {
+/// Sets a value, charging a new string before it replaces the old one.
+fn set_value(
+    lua: &Lua,
+    current: &mut ScriptValue,
+    charge: &mut HostMemoryCharge,
+    value: Value,
+) -> Result<()> {
+    let next = match current {
         ScriptValue::Number(_) => ScriptValue::Number(checked_number(lua, value)? as f32 as f64),
-        ScriptValue::String(_) => {
-            let bytes = checked_string(lua, value)?;
-            match String::from_utf8(bytes.clone()) {
-                Ok(value) => ScriptValue::String(value),
-                Err(_) => ScriptValue::CoreString(ScriptCoreString::from_bytes(bytes)),
+        ScriptValue::String(_) => match String::from_utf8(checked_string(lua, value)?) {
+            Ok(value) => ScriptValue::String(value),
+            Err(error) => {
+                ScriptValue::CoreString(ScriptCoreString::from_bytes(error.into_bytes()))
             }
-        }
+        },
         ScriptValue::CoreString(_) => {
             ScriptValue::CoreString(ScriptCoreString::from_bytes(checked_string(lua, value)?))
         }
@@ -154,6 +173,9 @@ fn set_value(lua: &Lua, current: &mut ScriptValue, value: Value) -> Result<()> {
             )));
         }
     };
+    charge.attach(lua)?;
+    charge.set(host_bytes(&next))?;
+    *current = next;
     Ok(())
 }
 
@@ -163,7 +185,7 @@ impl UserData for ScriptedDataValue {
             Ok(script_value_to_lua(lua, &this.value))
         });
         fields.add_field_method_set("value", |lua, this, value: Value| {
-            set_value(lua, &mut this.value, value)
+            set_value(lua, &mut this.value, &mut this.charge, value)
         });
         for (name, shift) in [("red", 16), ("green", 8), ("blue", 0), ("alpha", 24)] {
             fields.add_field_method_get(name, move |_, this| this.color_channel(name, shift));
@@ -197,7 +219,7 @@ impl UserData for ScriptedDataValue {
 }
 
 pub(super) fn create_data_value(lua: &Lua, value: ScriptValue) -> Result<AnyUserData> {
-    let userdata = lua.create_userdata(ScriptedDataValue::new(value))?;
+    let userdata = lua.create_userdata(ScriptedDataValue::new(lua, value)?)?;
     let patcher = ensure_metatable_patcher(lua)?;
     patcher.call(userdata)
 }

@@ -262,3 +262,256 @@ mod tests {
         assert_eq!(grown_capacity(usize::MAX, usize::MAX, 1), usize::MAX);
     }
 }
+
+/// Each binding that grows host memory for a script, against a small budget:
+/// every case grew without limit before the budget.
+#[cfg(all(test, feature = "compiler"))]
+mod binding_tests {
+    use super::HostMemoryBudget;
+    use crate::vm::{ScriptExecutionLimits, ScriptVm};
+    use nuxie_render_api::{PersistentFactory, RecordingFactory};
+
+    const EXCEEDED: &str = "host memory budget";
+
+    struct Vm {
+        vm: ScriptVm,
+        _factory: PersistentFactory<RecordingFactory>,
+    }
+
+    impl Vm {
+        fn with_budget(bytes: usize) -> Self {
+            let vm = ScriptVm::new_with_execution_limits(
+                ScriptExecutionLimits::new()
+                    .with_max_host_memory_bytes(bytes)
+                    .with_max_interrupts_per_callback(1_000_000),
+            )
+            .unwrap();
+            let mut factory = PersistentFactory::new(RecordingFactory::new());
+            vm.install_render_factory(&mut factory).unwrap();
+            vm.install_rive_globals().unwrap();
+            Self {
+                vm,
+                _factory: factory,
+            }
+        }
+
+        fn used(&self) -> usize {
+            HostMemoryBudget::for_lua(self.vm.lua()).unwrap().used()
+        }
+
+        /// Runs `script`, which returns whether its guarded part failed and
+        /// the error text.
+        fn refused(&self, script: &str) -> String {
+            let (failed, error): (bool, String) = self.vm.eval(script).unwrap();
+            assert!(failed, "expected a refusal, got success");
+            assert!(error.contains(EXCEEDED), "{error}");
+            error
+        }
+
+        fn set_global(&self, name: &str, value: impl crate::luau::IntoLua) {
+            let globals = self.vm.lua().globals();
+            let readonly = globals.is_readonly();
+            globals.set_readonly(false);
+            globals.set(name, value).unwrap();
+            globals.set_readonly(readonly);
+        }
+    }
+
+    #[test]
+    fn the_limit_comes_from_the_execution_limits() {
+        let vm = Vm::with_budget(12_345);
+        let budget = HostMemoryBudget::for_lua(vm.vm.lua()).unwrap();
+        assert_eq!(budget.limit(), 12_345);
+        let default = ScriptVm::new();
+        assert_eq!(
+            HostMemoryBudget::for_lua(default.lua()).unwrap().limit(),
+            super::DEFAULT_SCRIPT_HOST_MEMORY_BYTES
+        );
+        assert_eq!(
+            ScriptExecutionLimits::new().max_host_memory_bytes(),
+            64 * 1024 * 1024
+        );
+    }
+
+    // Inventory row 1: each `p:add(p)` doubled the path with no bound.
+    #[test]
+    fn a_path_added_to_itself_stops_at_the_budget() {
+        let vm = Vm::with_budget(1024 * 1024);
+        let error = vm.refused(
+            "p = Path.new() \
+             p:moveTo(Vector.xy(0, 0)) p:lineTo(Vector.xy(1, 1)) \
+             local ok, err = pcall(function() for i = 1, 30 do p:add(p) end end) \
+             return not ok, tostring(err)",
+        );
+        assert!(error.contains("1048576-byte"), "{error}");
+        let verbs: usize = vm.vm.eval("return #p").unwrap();
+        // 27 bytes are charged per verb and point pair; the last doubling
+        // that fit left at most half the budget's worth.
+        assert!(verbs <= 1024 * 1024 / 27, "{verbs}");
+        assert!(vm.used() <= 1024 * 1024);
+        vm.vm.eval::<()>("p:reset()").unwrap();
+        assert_eq!(vm.used(), 0);
+    }
+
+    // Inventory row 12: drawing commands in a loop.
+    #[test]
+    fn path_commands_and_extracts_stop_at_the_budget() {
+        let vm = Vm::with_budget(64 * 1024);
+        vm.refused(
+            "local p = Path.new() \
+             local ok, err = pcall(function() \
+               for i = 1, 100000 do p:cubicTo(Vector.xy(i, 0), Vector.xy(i, 1), Vector.xy(i, 2)) end \
+             end) \
+             return not ok, tostring(err)",
+        );
+        vm.vm.lua().gc_collect().unwrap();
+        assert_eq!(vm.used(), 0, "a collected path refunds");
+        vm.refused(
+            "local source = Path.new() \
+             source:moveTo(Vector.xy(0, 0)) \
+             for i = 1, 200 do source:lineTo(Vector.xy(i, i % 2)) end \
+             local measure = source:measure() \
+             local destination = Path.new() \
+             local ok, err = pcall(function() \
+               for i = 1, 1000 do measure:extract(0, 1000, destination) end \
+             end) \
+             return not ok, tostring(err)",
+        );
+        vm.vm.lua().gc_collect().unwrap();
+        assert_eq!(vm.used(), 0, "every path refunds when collected");
+    }
+
+    // Inventory rows 10 and 11.
+    #[test]
+    fn vertex_and_triangle_buffers_stop_at_the_budget() {
+        let vm = Vm::with_budget(64 * 1024);
+        vm.refused(
+            "local v = VertexBuffer() \
+             local ok, err = pcall(function() for i = 1, 100000 do v:add(Vector.xy(i, i)) end end) \
+             return not ok, tostring(err)",
+        );
+        vm.vm.lua().gc_collect().unwrap();
+        assert_eq!(vm.used(), 0);
+        vm.refused(
+            "local t = TriangleBuffer() \
+             local ok, err = pcall(function() for i = 1, 100000 do t:add(0, 1, 2) end end) \
+             return not ok, tostring(err)",
+        );
+        vm.vm.lua().gc_collect().unwrap();
+        assert_eq!(vm.used(), 0);
+        // A reset keeps the capacity, and so the charge.
+        vm.vm
+            .eval::<()>("local t = TriangleBuffer() for i = 1, 100 do t:add(0, 1, 2) end t:reset() keep = t")
+            .unwrap();
+        assert_eq!(vm.used(), 512 * 2 * 2, "300 indices grow to 512 slots");
+    }
+
+    // The mesh instances' bytes are charged to the same budget; their own
+    // count limit and its text are unchanged (lua_renderer's test).
+    #[test]
+    fn mesh_instances_charge_the_shared_budget() {
+        let vm = Vm::with_budget(64 * 1024 * 1024);
+        vm.vm.eval::<()>("m = MeshInstances(1000)").unwrap();
+        assert_eq!(vm.used(), 1000 * 3 * 48);
+        let small = Vm::with_budget(100 * 144);
+        small.refused(
+            "local ok, err = pcall(function() return MeshInstances(101) end) \
+             return not ok, tostring(err)",
+        );
+    }
+
+    fn font_vm(budget: usize) -> Vm {
+        let vm = Vm::with_budget(budget);
+        let bytes = include_bytes!("../../../../fixtures/fonts/ibm-plex-sans-arabic.ttf");
+        vm.set_global("fontBytes", vm.vm.lua().create_buffer(bytes).unwrap());
+        vm
+    }
+
+    // Inventory row 20: a decoded font keeps its bytes.
+    #[test]
+    fn font_decode_is_charged() {
+        let vm = font_vm(100_000);
+        vm.refused(
+            "local ok, err = pcall(function() return Font.decode(fontBytes) end) \
+             return not ok, tostring(err)",
+        );
+        let vm = font_vm(1024 * 1024);
+        vm.vm.eval::<()>("font = Font.decode(fontBytes)").unwrap();
+        assert_eq!(vm.used(), 226_004);
+    }
+
+    // Inventory row 13: appended characters, runs and styles.
+    #[test]
+    fn text_append_stops_at_the_budget_and_clear_keeps_the_charge() {
+        let vm = font_vm(1024 * 1024);
+        vm.refused(
+            "local font = Font.decode(fontBytes) \
+             local text = Text.new() \
+             local s = string.rep('x', 10000) \
+             local ok, err = pcall(function() for i = 1, 100 do text:append(s, {font = font}) end end) \
+             return not ok, tostring(err)",
+        );
+        vm.vm.lua().gc_collect().unwrap();
+        let fonts = vm.used();
+        vm.vm
+            .eval::<()>(
+                "local font = Font.decode(fontBytes) \
+                 text = Text.new() \
+                 text:append(string.rep('x', 1000), {font = font}) \
+                 text:clear() \
+                 text:append(string.rep('x', 1000), {font = font})",
+            )
+            .unwrap();
+        let charged = vm.used() - fonts - 226_004;
+        assert_eq!(charged, 24 * 1000 + 64 + 256, "a clear keeps the high-water charge");
+    }
+
+    // Inventory row 13: a style id is a `u16`; the 65,537th distinct style
+    // used to be stored with a truncated id, drawing with another's paint.
+    #[test]
+    fn a_text_past_65536_styles_is_an_error() {
+        let vm = font_vm(64 * 1024 * 1024);
+        vm.vm
+            .eval::<()>("font = Font.decode(fontBytes) text = Text.new() n = 0")
+            .unwrap();
+        for _ in 0..4 {
+            vm.vm
+                .eval::<()>(
+                    "for i = 1, 16384 do \
+                       text:append('x', {font = font, foregroundColor = n}) n += 1 \
+                     end",
+                )
+                .unwrap();
+        }
+        // An existing style is still accepted at the cap.
+        vm.vm
+            .eval::<()>("text:append('y', {font = font, foregroundColor = 7})")
+            .unwrap();
+        let (failed, error): (bool, String) = vm
+            .vm
+            .eval(
+                "local ok, err = pcall(function() text:append('z', {font = font, foregroundColor = n}) end) \
+                 return not ok, tostring(err)",
+            )
+            .unwrap();
+        assert!(failed);
+        assert!(error.contains("Text may hold at most 65536 styles"), "{error}");
+    }
+
+    // Inventory row 24: a string data value's copy.
+    #[test]
+    fn a_data_value_string_is_charged() {
+        let vm = Vm::with_budget(64 * 1024);
+        vm.refused(
+            "local d = DataValue.string() \
+             local ok, err = pcall(function() d.value = string.rep('x', 100000) end) \
+             return not ok, tostring(err)",
+        );
+        vm.vm
+            .eval::<()>("d = DataValue.string() d.value = string.rep('x', 1000)")
+            .unwrap();
+        assert_eq!(vm.used(), 1000);
+        vm.vm.eval::<()>("d.value = 'ab'").unwrap();
+        assert_eq!(vm.used(), 2, "a shorter string refunds");
+    }
+}

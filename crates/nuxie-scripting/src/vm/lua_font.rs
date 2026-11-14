@@ -13,6 +13,8 @@ use nuxie_runtime::source::{
 };
 use nuxie_runtime::{RuntimeFontAssetOwners, ScriptFont};
 
+use super::host_memory_budget::HostMemoryCharge;
+
 #[derive(Clone, Default)]
 struct ScriptedFontAssetOwners(Option<Arc<RuntimeFontAssetOwners>>);
 
@@ -32,6 +34,9 @@ impl ScriptedFontAssetOwners {
 pub(super) struct ScriptedFont {
     font_bytes: Arc<[u8]>,
     font: ScriptFont,
+    /// What `Font.decode` charged for the face it decoded; nothing for a
+    /// font from the File or derived from another font.
+    charge: HostMemoryCharge,
 }
 
 impl ScriptedFont {
@@ -58,7 +63,11 @@ impl ScriptedFont {
         } else {
             font
         };
-        Some(Self { font_bytes, font })
+        Some(Self {
+            font_bytes,
+            font,
+            charge: HostMemoryCharge::default(),
+        })
     }
 
     pub(super) fn font_bytes(&self) -> Arc<[u8]> {
@@ -78,6 +87,7 @@ impl ScriptedFont {
         Self {
             font_bytes: Arc::from([]),
             font: ScriptFont::from_native_font(font),
+            charge: HostMemoryCharge::default(),
         }
     }
 }
@@ -133,14 +143,14 @@ impl UserData for ScriptedFont {
                 row.set("min", axis.min)?;
                 row.set("default", axis.def)?;
                 row.set("max", axis.max)?;
-                axes.raw_set(i + 1, row)?;
+                axes.raw_push(row)?;
             }
             Ok(axes)
         });
         fields.add_field_method_get("features", |lua, this| {
             let table = lua.create_table();
-            for (i, feature) in this.native()?.features().into_iter().enumerate() {
-                table.raw_set(i + 1, lua.create_string(feature.to_be_bytes()))?;
+            for feature in this.native()?.features() {
+                table.raw_push(lua.create_string(feature.to_be_bytes()))?;
             }
             Ok(table)
         });
@@ -185,9 +195,10 @@ impl UserData for ScriptedFont {
         methods.add_method("glyphPath", |lua, this, glyph: Value| {
             let glyph = super::lua_color::required_unsigned(lua, Some(&glyph), "glyph")?;
             let path = RawText::glyph_path(this.native()?.as_ref(), glyph as u16);
-            lua.create_userdata(super::lua_path::ScriptedPath::from_render_raw_path(
+            lua.create_userdata(super::lua_path::ScriptedPath::charged(
+                lua,
                 to_render_raw_path(&path),
-            ))
+            )?)
         });
     }
 }
@@ -197,8 +208,17 @@ pub(super) fn register(lua: &Lua) -> Result<()> {
     table.set(
         "decode",
         lua.create_function(|lua, buffer: Buffer| {
+            // The decoded face keeps the font's bytes; charged before they
+            // are copied out of the buffer.
+            let charge = HostMemoryCharge::for_lua(lua, buffer.len())?;
             HbFont::decode(&buffer.to_vec())
-                .map(|font| push_font(lua, font))
+                .map(|font| {
+                    let mut font = ScriptedFont::from_native(font);
+                    font.charge = charge;
+                    let userdata = lua.create_userdata(font)?;
+                    prepare_font(lua, &userdata)?;
+                    Ok(userdata)
+                })
                 .transpose()
         })?,
     )?;

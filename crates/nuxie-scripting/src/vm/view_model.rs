@@ -1752,6 +1752,9 @@ struct ScriptedPropertyBlob {
     name: String,
     watch: Rc<ScriptedBlobWatch>,
     cached_value: Rc<RefCell<Option<MainThreadRef>>>,
+    /// The blob a script last assigned and the charge for its bytes, kept
+    /// while the model may still hold it and handed to blobs read back.
+    assigned: RefCell<Option<(Arc<RuntimeBlobAsset>, Rc<HostMemoryCharge>)>>,
     _change_sink: RuntimeCellDirtSink,
 }
 
@@ -1808,9 +1811,34 @@ impl ScriptedPropertyBlob {
             name,
             watch,
             cached_value,
+            assigned: RefCell::new(None),
             _change_sink: change_sink,
         }
     }
+
+    /// The charge of the assigned blob if the model still holds it; drops it
+    /// once the model holds another.
+    fn charge_for(&self, asset: &Arc<RuntimeBlobAsset>) -> Rc<HostMemoryCharge> {
+        let mut assigned = self.assigned.borrow_mut();
+        let held = match assigned.as_ref() {
+            Some((held, charge)) if Arc::ptr_eq(held, asset) => Some(Rc::clone(charge)),
+            _ => None,
+        };
+        if held.is_none() {
+            *assigned = None;
+        }
+        held.unwrap_or_default()
+    }
+}
+
+/// A blob of a script's bytes, charged before they are copied.
+fn charged_blob(
+    lua: &Lua,
+    len: usize,
+    bytes: impl FnOnce() -> Vec<u8>,
+) -> crate::luau::Result<(Arc<RuntimeBlobAsset>, Rc<HostMemoryCharge>)> {
+    let charge = Rc::new(HostMemoryCharge::for_lua(lua, len)?);
+    Ok((Arc::new(RuntimeBlobAsset::new("", Arc::<[u8]>::from(bytes()))), charge))
 }
 
 impl UserData for ScriptedPropertyBlob {
@@ -1822,24 +1850,21 @@ impl UserData for ScriptedPropertyBlob {
             let Some(asset) = this.model.blob_asset(&this.name) else {
                 return Ok(Value::Nil);
             };
-            let value = lua.create_userdata(ScriptedBlob::from_asset(asset))?;
+            let charge = this.charge_for(&asset);
+            let value = lua.create_userdata(ScriptedBlob::charged(asset, charge))?;
             *this.cached_value.borrow_mut() = Some(MainThreadRef::new(lua, value.clone())?);
             Ok(Value::UserData(value))
         });
-        fields.add_field_method_set("value", |_, this, value: Value| {
-            let asset = match value {
+        fields.add_field_method_set("value", |lua, this, value: Value| {
+            // The model keeps the copy past the script's value, so the
+            // property keeps its charge.
+            let assigned = match value {
                 Value::Nil => None,
-                Value::String(value) => Some(Arc::new(RuntimeBlobAsset::new(
-                    "",
-                    Arc::<[u8]>::from(value.as_bytes()),
-                ))),
-                Value::Buffer(value) => Some(Arc::new(RuntimeBlobAsset::new(
-                    "",
-                    Arc::<[u8]>::from(value.to_vec()),
-                ))),
+                Value::String(value) => Some(charged_blob(lua, value.len(), || value.as_bytes())?),
+                Value::Buffer(value) => Some(charged_blob(lua, value.len(), || value.to_vec())?),
                 Value::UserData(value) => {
                     let blob = value.borrow::<ScriptedBlob>()?;
-                    Some(blob.asset())
+                    Some((blob.asset(), blob.charge()))
                 }
                 _ => {
                     return Err(crate::luau::Error::runtime(
@@ -1847,6 +1872,8 @@ impl UserData for ScriptedPropertyBlob {
                     ));
                 }
             };
+            let asset = assigned.as_ref().map(|(asset, _)| Arc::clone(asset));
+            *this.assigned.borrow_mut() = assigned;
             this.model
                 .defer_property_change_callbacks(|| this.model.set_blob_asset(&this.name, asset));
             Ok(())
@@ -5252,6 +5279,64 @@ mod tests {
             .expect("retained HarfBuzz font")
             .source_bytes();
         assert!(std::sync::Arc::ptr_eq(&retained_bytes, &host_bytes));
+    }
+
+    /// A bare state with a host memory budget of `limit` bytes.
+    fn budget_lua(limit: usize) -> Lua {
+        let lua = Lua::new();
+        crate::vm::host_memory_budget::HostMemoryBudget::install(&lua, limit).unwrap();
+        lua
+    }
+
+    fn budget_used(lua: &Lua) -> usize {
+        crate::vm::host_memory_budget::HostMemoryBudget::for_lua(lua)
+            .unwrap()
+            .used()
+    }
+
+    /// Runs `script` in a pcall and returns its error, which must be the
+    /// budget's.
+    fn refused_by_budget(lua: &Lua, script: &str) -> String {
+        let (ok, error): (bool, String) = lua
+            .load(format!(
+                "local ok, err = pcall(function() {script} end) return ok, tostring(err)"
+            ))
+            .eval()
+            .unwrap();
+        assert!(!ok, "expected a refusal");
+        assert!(error.contains("host memory budget"), "{error}");
+        error
+    }
+
+    // Inventory row 24: the Blob setter copied a script's bytes into the
+    // model with no charge.
+    #[test]
+    fn a_blob_assigned_to_a_property_is_charged() {
+        let (model, name) =
+            model_with_property_from("data_bind_blob_test.riv", ScriptViewModelProperty::Blob);
+        let lua = budget_lua(64 * 1024);
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
+        lua.globals().set("model", table).unwrap();
+        lua.globals().set("propertyName", name.clone()).unwrap();
+        refused_by_budget(&lua, "model[propertyName].value = string.rep('x', 100000)");
+        refused_by_budget(&lua, "model[propertyName].value = buffer.create(100000)");
+        assert_eq!(budget_used(&lua), 0);
+
+        lua.load("model[propertyName].value = buffer.create(1000)")
+            .exec()
+            .unwrap();
+        assert_eq!(budget_used(&lua), 1000);
+        lua.load("model[propertyName].value = 'abc'").exec().unwrap();
+        lua.gc_collect().unwrap();
+        assert_eq!(budget_used(&lua), 3, "the replaced copy refunds");
+        lua.load("kept = model[propertyName].value model[propertyName].value = nil")
+            .exec()
+            .unwrap();
+        lua.gc_collect().unwrap();
+        assert_eq!(budget_used(&lua), 3, "a blob read back keeps the copy");
+        lua.load("kept = nil").exec().unwrap();
+        lua.gc_collect().unwrap();
+        assert_eq!(budget_used(&lua), 0);
     }
 
     fn font_property_fixture() -> (nuxie_runtime::RuntimeFileHandle, ScriptViewModel, String) {

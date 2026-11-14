@@ -376,6 +376,7 @@ pub fn compute_flexbox_layout(
 
     debug_log!("FLEX:", dbg:style.flex_direction());
     let is_absolute = style.position() == Position::Absolute;
+    let is_column = style.flex_direction().is_column();
     // nuxie-css: whether the node's own style sets its height as a length.
     let height_is_authored_length = {
         let height = style.size().height;
@@ -400,8 +401,9 @@ pub fn compute_flexbox_layout(
     // style sets as a length is not one; a percentage of the stretched height still is.
     let known_height_is_stretch_only = inputs.known_height_is_stretch_only && !height_is_authored_length;
     // An absolutely positioned box's measured height was found in definite space, so a
-    // column still breaks its lines at it.
-    if is_absolute {
+    // column still breaks its lines at it. A row's measured height stays a used height: a
+    // picture stretched to it keeps its width (Chrome).
+    if is_absolute && is_column {
         known_dimensions_are_definite.height = true;
     }
 

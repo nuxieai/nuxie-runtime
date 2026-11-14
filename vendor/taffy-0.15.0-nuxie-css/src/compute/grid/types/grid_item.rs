@@ -97,11 +97,6 @@ pub(in super::super) struct GridItem {
     // Caches for intrinsic size computation. These caches are only valid for a single run of the track-sizing algorithm.
     /// Cache for the known_dimensions input to intrinsic sizing computation
     pub grid_area_size_cache: Option<Size<Option<f32>>>,
-    /// nuxie-css: whether every row the item spans has set lengths for its minimum and
-    /// maximum (`100px`, `minmax(100px, 200px)`). Only then is the
-    /// area's height one that percentage and `stretch` heights inside the item resolve
-    /// against while the item's width is measured (Chrome).
-    pub rows_are_set: bool,
     /// Cache for the known_dimensions passed to the child when computing its intrinsic contributions, stored along with
     /// the grid area size it was computed for. Must be cleared whenever `baseline_shim` changes.
     pub known_dimensions_cache: Option<KnownDimensionsCacheEntry>,
@@ -168,7 +163,6 @@ impl GridItem {
             crosses_intrinsic_row: false,           // Properly initialised later
             crosses_intrinsic_column: false,        // Properly initialised later
             grid_area_size_cache: None,
-            rows_are_set: false,
             min_content_contribution_cache: Size::NONE,
             max_content_contribution_cache: Size::NONE,
             known_dimensions_cache: None,
@@ -739,11 +733,9 @@ impl GridItem {
             grid_area_size,
             item_available_space,
         );
-        tree.measure_child_size_stretched(
+        tree.measure_child_size(
             self.node,
             known_dimensions,
-            // nuxie-css: see `GridItem::rows_are_set`.
-            axis == AbstractAxis::Inline && !self.rows_are_set,
             grid_area_size,
             item_available_space,
             SizingMode::InherentSize,
@@ -802,11 +794,9 @@ impl GridItem {
             grid_area_size,
             item_available_space,
         );
-        tree.measure_child_size_stretched(
+        tree.measure_child_size(
             self.node,
             known_dimensions,
-            // nuxie-css: see `GridItem::rows_are_set`.
-            axis == AbstractAxis::Inline && !self.rows_are_set,
             grid_area_size,
             item_available_space,
             SizingMode::InherentSize,

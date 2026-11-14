@@ -489,6 +489,17 @@ pub enum InPlaceFixture {
     /// keyed 3 on A and 4 on B, two more flight records on B, 13 and 14,
     /// and a second unit of t1 naming them: a flight inside another.
     Nested,
+    /// `Plain` with each Screen's card a text, an image or a video hosting
+    /// a layout participant, its record holding the card's size and key.
+    Keyed(KeyedKind),
+}
+
+/// What `InPlaceFixture::Keyed` keys in place of a box.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeyedKind {
+    Text,
+    Image,
+    Video,
 }
 
 /// A page of two CSS Screens, each with a box "card" (A's 120 by 80, B's
@@ -504,6 +515,17 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
         var(&mut b, n);
     }
     obj(&mut b, "Backboard", &[]);
+    if kind == Keyed(KeyedKind::Video) {
+        // A video names its asset, as a published file's does.
+        obj(
+            &mut b,
+            "VideoAsset",
+            &[
+                ("sourceKey", S("asset:card")),
+                ("contentType", S("video/mp4")),
+            ],
+        );
+    }
     for name in ["A", "B"] {
         obj(&mut b, "ViewModel", &[("name", S(name))]);
     }
@@ -588,15 +610,44 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
             ],
         ); // 1
         obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
-        boxed(
-            &mut b,
-            3,
-            "card",
-            card,
-            if keyed { key } else { 0 },
-            0xffcc3333,
-        ); // 3 to 7
-        boxed(&mut b, 8, "note", (60.0, 40.0), 0, 0xff3333cc); // 8 to 12
+        let note = if let Keyed(element_kind) = kind {
+            let type_name = match element_kind {
+                KeyedKind::Text => "Text",
+                KeyedKind::Image => "Image",
+                KeyedKind::Video => "Video",
+            };
+            let mut element = vec![("name", S("card")), ("parentId", U(0))];
+            if element_kind == KeyedKind::Video {
+                element.push(("assetId", U(0)));
+            }
+            obj(&mut b, type_name, &element); // 3
+            obj(&mut b, "LayoutParticipant", &[("parentId", U(3))]); // 4
+            obj(
+                &mut b,
+                "LayoutCssStyle",
+                &[
+                    ("parentId", U(3)),
+                    ("flexShrink", F(0.0)),
+                    ("widthKind", U(1)),
+                    ("width", F(card.0)),
+                    ("heightKind", U(1)),
+                    ("height", F(card.1)),
+                    ("flightKey", U(key)),
+                ],
+            ); // 5
+            6
+        } else {
+            boxed(
+                &mut b,
+                3,
+                "card",
+                card,
+                if keyed { key } else { 0 },
+                0xffcc3333,
+            ); // 3 to 7
+            8
+        };
+        boxed(&mut b, note, "note", (60.0, 40.0), 0, 0xff3333cc); // note to note + 4
         if screen == "A" && slot {
             obj(
                 &mut b,

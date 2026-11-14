@@ -54,3 +54,18 @@ fn a_component_placements_end_is_where_layout_put_it() {
     );
     assert_eq!((end.size.x, end.size.y), (80.0, 60.0));
 }
+
+/// A component placement's place is its offset in its parent, read back
+/// through the parent's world. Under a parent scaled to 0 there is no such
+/// offset, so its end falls back to its local translation and the lift,
+/// which can't be solved through a scale of 0, draws nothing until it can.
+#[test]
+fn a_placements_offset_under_a_parent_scaled_to_0_has_no_answer() {
+    use crate::source::math::{mat2d::Mat2D, vec2d::Vec2D};
+    let world = Mat2D::new(2.0, 0.0, 0.0, 2.0, 70.0, 60.0);
+    let parent = Mat2D::new(2.0, 0.0, 0.0, 2.0, 10.0, 20.0);
+    let offset = super::offset_in(parent, world).expect("an offset");
+    assert_eq!((offset.x, offset.y), (30.0, 20.0));
+    let flat = Mat2D::new(0.0, 0.0, 0.0, 0.0, 10.0, 20.0);
+    assert!(super::offset_in(flat, Mat2D::from_translation(Vec2D::new(30.0, 40.0))).is_none());
+}

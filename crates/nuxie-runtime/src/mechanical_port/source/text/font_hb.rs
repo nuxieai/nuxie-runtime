@@ -396,6 +396,10 @@ pub struct HbFont {
     /// charge for the bytes it decoded); dropped with the font. A variant
     /// `with_options` makes keeps its source's, as it keeps its bytes.
     host_owner: Option<crate::host_viewmodel::HostOwnerToken>,
+    /// What the host keeps alive with this variant alone (its charge for the
+    /// variant's own tables); not passed on to variants made from it, so a
+    /// chain of variants keeps one owner each, not the chain.
+    variant_owner: Option<crate::host_viewmodel::HostOwnerToken>,
 }
 
 /// What a font face's variants share: its shaper data, the shape plans built
@@ -543,9 +547,9 @@ impl HbFont {
         self.host_owner.as_ref()
     }
 
-    /// `with_options`, with `owner` kept by the variant in place of this
-    /// font's: the host charges the variant's own tables and keeps this
-    /// font's owner inside `owner`.
+    /// `with_options`, with `owner` kept by the variant alone (the host's
+    /// charge for the variant's own tables), beside the bytes' owner it
+    /// shares with this font.
     pub fn with_options_owned(
         &self,
         coords: &[Coord],
@@ -553,7 +557,8 @@ impl HbFont {
         owner: crate::host_viewmodel::HostOwnerToken,
     ) -> FontRef {
         let mut font = self.variant(coords, features);
-        font.host_owner = Some(owner);
+        font.host_owner = self.host_owner.clone();
+        font.variant_owner = Some(owner);
         Arc::new(font)
     }
 
@@ -811,6 +816,7 @@ impl HbFont {
             color_layer_cache: Mutex::new(HashMap::new()),
             glyph_path_cache: Mutex::new(HashMap::new()),
             host_owner: None,
+            variant_owner: None,
         }
     }
 
@@ -830,6 +836,7 @@ impl HbFont {
         font.host_pictures = self.host_pictures.clone();
         font.host_picture_scope = self.host_picture_scope;
         font.host_owner = self.host_owner.clone();
+        font.variant_owner = self.variant_owner.clone();
         Arc::new(font)
     }
 
@@ -2530,11 +2537,24 @@ mod tests {
         let variant = font.with_options(&[], &[Feature { tag: KERN_TAG, value: 0 }]);
         drop(font);
         assert_eq!(Arc::strong_count(&owner), 2, "the variant keeps the owner");
+        // An owned variant keeps the bytes' owner beside its own, and a
+        // variant of it keeps the bytes' owner only: one each, never a chain.
+        let own = Arc::new(());
         let hb = variant.as_any().downcast_ref::<HbFont>().unwrap();
-        let replaced = hb.with_options_owned(&[], &[], crate::host_viewmodel::HostOwnerToken::new(()));
+        let owned = hb.with_options_owned(
+            &[],
+            &[],
+            crate::host_viewmodel::HostOwnerToken::from_arc(Arc::clone(&own)),
+        );
         drop(variant);
-        assert_eq!(Arc::strong_count(&owner), 1, "an owned variant keeps only its own");
-        drop(replaced);
+        assert_eq!(Arc::strong_count(&owner), 2, "the owned variant keeps the bytes' owner");
+        let next = owned.with_options(&[], &[]);
+        assert_eq!(Arc::strong_count(&own), 2, "only the owned variant keeps its own");
+        drop(owned);
+        assert_eq!(Arc::strong_count(&own), 1);
+        assert_eq!(Arc::strong_count(&owner), 2, "its variant keeps the bytes' owner");
+        drop(next);
+        assert_eq!(Arc::strong_count(&owner), 1);
     }
 
     #[test]

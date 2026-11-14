@@ -37,10 +37,10 @@ use std::{cell::Cell, collections::HashSet};
 /// One end of a flight: where an element rests, without its own transform,
 /// in the page's drawing space; its resting size; and the opacity above it.
 #[derive(Clone, Copy, Debug)]
-pub(super) struct End {
-    pub(super) place: Mat2D,
-    pub(super) size: Vec2D,
-    pub(super) opacity: f32,
+pub(crate) struct End {
+    pub(crate) place: Mat2D,
+    pub(crate) size: Vec2D,
+    pub(crate) opacity: f32,
 }
 
 /// The element a flight key names on a Screen, read from the Screen's own
@@ -75,15 +75,28 @@ pub(super) fn flight_records(objects: &[CoreHandle]) -> Vec<(u32, CoreHandle)> {
         .collect()
 }
 
-/// The layout node a Layout-mode flight holds: a box's or a participant's
-/// own, or for a component placement its placed artboard's root.
+/// The layout node a Layout-mode flight holds: a box's own; for a text, an
+/// image or a video, the participant it hosts; for a component placement,
+/// its placed artboard's root.
 fn layout_node(element: &CoreHandle) -> CoreHandle {
+    use crate::source::layout::layout_participant::LayoutParticipant;
     element
         .with(|object| {
-            object
-                .as_nested_artboard()
-                .and_then(|nested| nested.artboard_instance_default())
-                .map(|instance| instance.core_handle())
+            if let Some(nested) = object.as_nested_artboard() {
+                return nested
+                    .artboard_instance_default()
+                    .map(|instance| instance.core_handle());
+            }
+            if object.as_layout_component().is_some() {
+                return None;
+            }
+            object.as_container_component().and_then(|container| {
+                container
+                    .children()
+                    .iter()
+                    .find(|child| child.is_type_of(LayoutParticipant::TYPE_KEY))
+                    .cloned()
+            })
         })
         .flatten()
         .unwrap_or_else(|| element.clone())
@@ -97,32 +110,73 @@ fn resting_size(element: &CoreHandle) -> Vec2D {
     })
 }
 
-/// The size `element` draws at now: a box's laid-out size, which layout
-/// interpolation moves toward its rest over time, else its rest.
+/// The size `element` draws at now, which layout interpolation moves toward
+/// its rest over time: a box's laid-out size, a participant's bounds.
 fn drawn_size(element: &CoreHandle) -> Vec2D {
-    layout_node(element)
+    use crate::source::layout::layout_participant::LayoutParticipant;
+    let node = layout_node(element);
+    node.with(|object| {
+        object
+            .as_layout_component()
+            .map(|layout| Vec2D::new(layout.layout_width(), layout.layout_height()))
+    })
+    .flatten()
+    .or_else(|| {
+        node.with_downcast::<LayoutParticipant, _>(|participant| {
+            let bounds = participant.layout_bounds();
+            Vec2D::new(bounds.width(), bounds.height())
+        })
+    })
+    .unwrap_or_else(|| resting_size(element))
+}
+
+/// `element`'s own transform, the part of its draw inside its place, and
+/// that transform for the copy stretched to `size`, the stretch innermost:
+/// as a frame's own transform is built (`hosted_frame::self_transform`), a
+/// box turning and scaling about its pivot taken from `size`, with its CSS
+/// translate unscaled. Any other element's own transform is its local
+/// matrix without its translation, which its place holds.
+fn own_transforms(element: &CoreHandle, size: Vec2D, stretch: Vec2D) -> Option<(Mat2D, Mat2D)> {
+    element
         .with(|object| {
-            object
+            if let Some(layout) = object
                 .as_layout_component()
-                .map(|layout| Vec2D::new(layout.layout_width(), layout.layout_height()))
+                .filter(|layout| layout.is_css_mode() && !layout.is_artboard())
+            {
+                let mut sized = layout.own_transform_sized(size);
+                sized.scale_by_values(stretch.x, stretch.y);
+                return Some((layout.build_own_transform(), sized));
+            }
+            let local = object.as_transform_component()?.transform();
+            let own = Mat2D::new(local[0], local[1], local[2], local[3], 0.0, 0.0);
+            let mut sized = own;
+            sized.scale_by_values(stretch.x, stretch.y);
+            Some((own, sized))
         })
         .flatten()
-        .unwrap_or_else(|| resting_size(element))
 }
 
 /// The CSS box whose own paints and clip a flight's corners and shadow
 /// replace: the element, or a placement's placed artboard's root.
 fn box_of(element: &CoreHandle) -> CoreHandle {
-    layout_node(element)
+    element
+        .with(|object| {
+            object
+                .as_nested_artboard()
+                .and_then(|nested| nested.artboard_instance_default())
+                .map(|instance| instance.core_handle())
+        })
+        .flatten()
+        .unwrap_or_else(|| element.clone())
 }
 
 /// One end: the element's place in its parent without its own transform, as
 /// a slot's pose is today, so its own turn, scale and offset stay inside its
 /// draw. A CSS box's place is its parent's under its layout position; any
-/// other element's is its parent's under the translation of its local
-/// matrix. Its opacity is its parent's child opacity times the fades the
+/// other element's is its parent's under its offset in it, which holds a
+/// participant's or a placement's layout position. Its opacity is its parent's child opacity times the fades the
 /// boxes above it hold out of it.
-pub(super) fn end(element: &CoreHandle) -> Result<End> {
+pub(crate) fn end(element: &CoreHandle) -> Result<End> {
     let (parent, translation) = layout_place(element)?;
     let (parent_page, _, child_opacity) = draw_pose(&parent)?;
     Ok(End {
@@ -133,8 +187,9 @@ pub(super) fn end(element: &CoreHandle) -> Result<End> {
 }
 
 /// `element`'s parent and its place in it without its own transform: a CSS
-/// box's layout position, or the translation of any other element's local
-/// matrix.
+/// box's layout position, or any other element's offset in its parent, read
+/// from the two world transforms. Layout moves a text's, an image's or a
+/// component placement's world, not its local matrix.
 fn layout_place(element: &CoreHandle) -> Result<(CoreHandle, Vec2D)> {
     let parent = element
         .with(|object| object.component_parent_handle())
@@ -150,17 +205,45 @@ fn layout_place(element: &CoreHandle) -> Result<(CoreHandle, Vec2D)> {
         .flatten();
     let translation = match css_box {
         Some(translation) => translation,
-        None => element
-            .with(|object| {
-                object.as_transform_component().map(|transform| {
-                    let local = transform.transform();
-                    Vec2D::new(local[4], local[5])
-                })
-            })
-            .flatten()
-            .ok_or_else(|| anyhow::anyhow!("a flying element has no transform"))?,
+        None => {
+            let world = world_of(element)
+                .ok_or_else(|| anyhow::anyhow!("a flying element has no transform"))?;
+            offset_in(world_of(&parent).unwrap_or_default(), world)
+                .ok_or_else(|| anyhow::anyhow!("a flying element's parent can't be inverted"))?
+        }
     };
     Ok((parent, translation))
+}
+
+/// A component's world; an artboard's is its own space.
+fn world_of(component: &CoreHandle) -> Option<Mat2D> {
+    component
+        .with(|object| {
+            if object.as_artboard().is_some() {
+                return Some(Mat2D::identity());
+            }
+            object
+                .as_world_transform_component()
+                .map(|transform| transform.world_transform())
+        })
+        .flatten()
+}
+
+/// Where `world`'s origin sits in `parent`'s space, in f64: `parent`'s
+/// linear part inverted over the difference of the translations.
+fn offset_in(parent: Mat2D, world: Mat2D) -> Option<Vec2D> {
+    let p = parent.values().map(f64::from);
+    let w = world.values().map(f64::from);
+    let det = p[0] * p[3] - p[1] * p[2];
+    if det == 0.0 || !det.is_finite() {
+        return None;
+    }
+    let (dx, dy) = (w[4] - p[4], w[5] - p[5]);
+    #[allow(clippy::cast_possible_truncation)]
+    Some(Vec2D::new(
+        ((p[3] * dx - p[2] * dy) / det) as f32,
+        ((p[0] * dy - p[1] * dx) / det) as f32,
+    ))
 }
 
 /// Where `element` is placed without its own transform, read at `when`:
@@ -306,10 +389,13 @@ impl InPlaceFlight {
     ///
     /// With U the upper Screen's page matrix, L the copy's Screen's, S the
     /// copy's place now and P the blended pose, the lift's transform is
-    /// U⁻¹ · P · S⁻¹ · L. In Scale mode P carries the stretch as its
-    /// innermost scale: the blended size over the size the copy draws at
-    /// now, so a copy resized mid-step still draws at the blend, while its
-    /// layout interpolates toward the new size too. Where
+    /// U⁻¹ · P · S⁻¹ · L. In Scale mode the copy's own transform O is drawn
+    /// as O', built as a stretched frame's is: the stretch, the blended size
+    /// over the size the copy draws at now, innermost, and a box's pivot
+    /// taken from the blended size; the lift is U⁻¹ · P · O' · O⁻¹ · S⁻¹ · L.
+    /// So a copy resized mid-step still draws at the blend, while its layout
+    /// interpolates toward the new size too, and a turned copy stretches
+    /// along its own axes. Where
     /// S, U or the copy's size can't be inverted, as inside a box scaled to
     /// 0, the copy draws nothing and keeps its last transform until it can
     /// be solved again, as a zoomed version does.
@@ -319,19 +405,22 @@ impl InPlaceFlight {
         active: Option<&HashSet<CoreHandle>>,
     ) -> Result<(Mat2D, f32)> {
         let (a, b) = self.ends(active)?;
-        let mut pose = frame.blend(a.place, b.place);
+        let pose = frame.blend(a.place, b.place);
         let own = end(&self.element)?;
-        if self.size_mode == SizeMode::Scale {
+        let inner = if self.size_mode == SizeMode::Scale {
             let size = frame_size(frame, a.size, b.size);
             let drawn = drawn_size(&self.element);
-            pose = pose * Mat2D::from_scale(size.x / drawn.x, size.y / drawn.y);
-        }
+            let stretch = Vec2D::new(size.x / drawn.x, size.y / drawn.y);
+            own_transforms(&self.element, size, stretch)
+        } else {
+            None
+        };
         let (upper, _, _) = draw_pose(&self.board)?;
         let (row, _, _) = draw_pose(&self.row)?;
         let t = frame.progress;
         let opacity = (a.opacity + (b.opacity - a.opacity) * t) * frame.fade();
         ensure!(opacity.is_finite(), "non-finite flight opacity");
-        let matrix = lift_matrix(upper, pose, own.place, row)
+        let matrix = lift_matrix(upper, pose, inner, own.place, row)
             .filter(|matrix| matrix.values().iter().all(|v| v.is_finite()));
         Ok(match matrix {
             Some(matrix) => {
@@ -560,7 +649,7 @@ impl InPlacePair {
             let (row, _, _) = draw_pose(&copy.row)?;
             let now = drawn(&copy.element, When::Live)?;
             let matrix = target
-                .and_then(|target| lift_matrix(upper, target, now, row))
+                .and_then(|target| lift_matrix(upper, target, None, now, row))
                 .filter(|matrix| matrix.values().iter().all(|v| v.is_finite()));
             match matrix {
                 Some(matrix) => {
@@ -663,10 +752,24 @@ pub(super) fn is_inside(inner: &CoreHandle, outer: &CoreHandle) -> bool {
 
 /// A lift's transform, `upper⁻¹ · pose · own⁻¹ · row`: from the copy's own
 /// Screen's drawing space to the upper Screen's, where `own` is the copy's
-/// place now. It cancels `own` by its inverse, so it is composed in f64
-/// (`wide.rs`). None when `upper` or `own` has no inverse.
-fn lift_matrix(upper: Mat2D, pose: Mat2D, own: Mat2D, row: Mat2D) -> Option<Mat2D> {
-    let lift =
-        Wide::of(upper).inverse()? * Wide::of(pose) * Wide::of(own).inverse()? * Wide::of(row);
-    Some(lift.narrow())
+/// place now. `inner`, the copy's own transform and the one it draws with
+/// instead, `(O, O')`, puts `O' · O⁻¹` after the pose, so the copy draws
+/// `pose · O'`. It cancels matrices by their inverses, so it is composed in
+/// f64 (`wide.rs`). None when one of them has no inverse.
+fn lift_matrix(
+    upper: Mat2D,
+    pose: Mat2D,
+    inner: Option<(Mat2D, Mat2D)>,
+    own: Mat2D,
+    row: Mat2D,
+) -> Option<Mat2D> {
+    let mut lift = Wide::of(upper).inverse()? * Wide::of(pose);
+    if let Some((own_transform, drawn)) = inner {
+        lift = lift * Wide::of(drawn) * Wide::of(own_transform).inverse()?;
+    }
+    Some((lift * Wide::of(own).inverse()? * Wide::of(row)).narrow())
 }
+
+#[cfg(test)]
+#[path = "in_place_tests.rs"]
+mod tests;

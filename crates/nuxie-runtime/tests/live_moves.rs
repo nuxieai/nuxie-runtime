@@ -9303,6 +9303,7 @@ mod paint_order {
             Shadows(fixture::ShadowCase::AlphaOff),
             PathOffsets,
             MixedModes,
+            MixedModesTurned,
             Padded,
             TextRefill { a: 100 },
             StyleSwitch,

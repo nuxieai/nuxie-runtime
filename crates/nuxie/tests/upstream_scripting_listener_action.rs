@@ -339,3 +339,16 @@ fn listener_action_script_receives_pointer_types_and_the_data() {
             .value()
     );
 }
+
+/// A scripted listener action, and the property listeners its writes raise,
+/// run with no Core receiver mutably lent (before: under the authored
+/// action's borrow).
+#[test]
+fn scripted_listener_actions_run_with_no_core_receiver_lent() {
+    let ((), reports) = nuxie_runtime::script_borrow_check::record_script_borrow_reports(|| {
+        scripted_listener_action();
+        listener_action_inputs();
+        listener_action_script_receives_pointer_types_and_the_data();
+    });
+    assert!(reports.is_empty(), "{}", reports.join("\n"));
+}

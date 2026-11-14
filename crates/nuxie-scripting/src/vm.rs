@@ -16,6 +16,7 @@ mod bytecode;
 mod command_server;
 mod embedded_chunk;
 mod host_dispatch;
+mod host_memory_budget;
 mod listener_invocation;
 mod logging_scripting_context;
 mod lua_audio_samples;
@@ -874,6 +875,7 @@ impl Drop for ModuleExecutionGuard {
 pub const DEFAULT_SCRIPT_VM_MEMORY_BYTES: usize = 64 * 1024 * 1024;
 /// Default interrupt safepoints available to each trusted callback.
 pub const DEFAULT_SCRIPT_INTERRUPTS_PER_CALLBACK: u32 = 50_000;
+pub use host_memory_budget::DEFAULT_SCRIPT_HOST_MEMORY_BYTES;
 
 /// Resource limits applied to one explicitly trusted imported script VM.
 ///
@@ -883,6 +885,7 @@ pub const DEFAULT_SCRIPT_INTERRUPTS_PER_CALLBACK: u32 = 50_000;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScriptExecutionLimits {
     max_memory_bytes: usize,
+    max_host_memory_bytes: usize,
     max_interrupts_per_callback: u32,
 }
 
@@ -890,12 +893,21 @@ impl ScriptExecutionLimits {
     pub const fn new() -> Self {
         Self {
             max_memory_bytes: DEFAULT_SCRIPT_VM_MEMORY_BYTES,
+            max_host_memory_bytes: DEFAULT_SCRIPT_HOST_MEMORY_BYTES,
             max_interrupts_per_callback: DEFAULT_SCRIPT_INTERRUPTS_PER_CALLBACK,
         }
     }
 
     pub const fn with_max_memory_bytes(mut self, maximum: usize) -> Self {
         self.max_memory_bytes = maximum;
+        self
+    }
+
+    /// The host memory the VM's bindings may hold for its scripts (path
+    /// commands, vertex data, text, decoded images, copied strings), which
+    /// the VM's own memory ceiling does not cover.
+    pub const fn with_max_host_memory_bytes(mut self, maximum: usize) -> Self {
+        self.max_host_memory_bytes = maximum;
         self
     }
 
@@ -906,6 +918,10 @@ impl ScriptExecutionLimits {
 
     pub const fn max_memory_bytes(self) -> usize {
         self.max_memory_bytes
+    }
+
+    pub const fn max_host_memory_bytes(self) -> usize {
+        self.max_host_memory_bytes
     }
 
     pub const fn max_interrupts_per_callback(self) -> u32 {
@@ -2184,6 +2200,10 @@ impl ScriptVm {
         lua_main_ref::install_main_lua(&lua);
         let view_model_frame_context = ScriptViewModelFrameContext::default();
         lua.set_app_data(view_model_frame_context.clone());
+        let host_memory_error =
+            host_memory_budget::HostMemoryBudget::install(&lua, DEFAULT_SCRIPT_HOST_MEMORY_BYTES)
+                .err()
+                .map(|error| format!("failed to configure the script VM host memory budget: {error}"));
         let blob_assets = lua_blob::ScriptedBlobAssets::install(&lua);
         let audio_assets = lua_audio::ScriptedAudioAssets::install(&lua);
         #[cfg(feature = "tools")]
@@ -2191,7 +2211,8 @@ impl ScriptVm {
         let initialization_error = lua
             .set_memory_limit(SCRIPT_VM_MEMORY_LIMIT_BYTES)
             .err()
-            .map(|error| format!("failed to configure the script VM memory ceiling: {error}"));
+            .map(|error| format!("failed to configure the script VM memory ceiling: {error}"))
+            .or(host_memory_error);
         let resource_limits = resource_limits::ResourceLimitTracker::default();
         let script_safepoints = Rc::new(Cell::new(0));
         let script_cycle_active = Rc::new(Cell::new(false));
@@ -2307,6 +2328,7 @@ impl ScriptVm {
         let mut vm = Self::new();
         vm.lua.set_memory_limit(limits.max_memory_bytes())?;
         lua_audio_processors::set_memory_limit(&vm.lua, limits.max_memory_bytes());
+        host_memory_budget::HostMemoryBudget::install(&vm.lua, limits.max_host_memory_bytes())?;
         let budget = ScriptExecutionBudget {
             remaining: Rc::new(Cell::new(limits.max_interrupts_per_callback())),
             maximum: limits.max_interrupts_per_callback(),

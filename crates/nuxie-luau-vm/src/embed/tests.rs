@@ -881,3 +881,132 @@ fn a_kept_error_object_belongs_to_the_latest_failure() -> TestResult {
     check(vm.take_error_object().is_none(), "the thread's string error cleared it")?;
     check(vm.accounting_drift() == 0, "no drift")
 }
+
+// ---- loans --------------------------------------------------------------
+
+/// A loan for the tests: borrowed, non-`'static` state a host function
+/// writes to.
+trait Probe {
+    fn hit(&mut self, tag: &str);
+    fn log(&mut self) -> &mut Vec<String>;
+}
+
+enum Probes {}
+
+impl crate::LoanFamily for Probes {
+    type Loan<'l> = dyn Probe + 'l;
+
+    fn shorten<'a, 'l: 'a>(loan: &'a mut (dyn Probe + 'l)) -> &'a mut (dyn Probe + 'a) {
+        loan
+    }
+}
+
+struct Log<'a> {
+    prefix: &'static str,
+    out: &'a mut Vec<String>,
+}
+
+impl Probe for Log<'_> {
+    fn hit(&mut self, tag: &str) {
+        self.out.push(format!("{}{tag}", self.prefix));
+    }
+
+    fn log(&mut self) -> &mut Vec<String> {
+        self.out
+    }
+}
+
+fn hit(ctx: &mut crate::HostCtx<'_, Probes>, tag: &str) -> Result<(), HostError> {
+    match ctx.loan() {
+        Some(loan) => {
+            loan.hit(tag);
+            Ok(())
+        }
+        None => Err(HostError::raw("no loan")),
+    }
+}
+
+#[test]
+fn a_loan_reaches_every_host_function_its_call_reaches() -> TestResult {
+    let mut vm: Vm<Probes> = Vm::lending(Limits::default())?;
+    let leaf = vm.create_host_function("leaf", |ctx| hit(ctx, "leaf").map(|()| 0))?;
+    let index = vm.create_host_function("index", |ctx| {
+        hit(ctx, "index")?;
+        ctx.push(1.0)?;
+        Ok(1)
+    })?;
+    let t = vm.create_table()?;
+    let mt = vm.create_table()?;
+    mt.set(&mut vm, "__index", &index)?;
+    t.set_metatable(&mut vm, Some(&mt))?;
+    let pcall: Function = vm.globals()?.get(&mut vm, "pcall")?;
+    let inner = leaf.clone();
+    let outer = vm.create_host_function("outer", move |ctx| {
+        hit(ctx, "outer")?;
+        // A call from the host function, then a protected one.
+        ctx.push(Value::Function(inner.clone()))?;
+        ctx.call_top(0, 0)?;
+        ctx.push(Value::Function(inner.clone()))?;
+        ctx.pcall_top(0, 0)?;
+        // A metamethod the host function runs.
+        ctx.push(Value::Table(t.clone()))?;
+        ctx.push_field(-1, b"x")?;
+        ctx.pop(2)?;
+        // The base library's pcall: the leaf runs from the frame loop.
+        ctx.push(Value::Function(pcall.clone()))?;
+        ctx.push(Value::Function(inner.clone()))?;
+        ctx.call_top(1, 0)?;
+        // A child loan reborrowed from this one, lent to a call of its own.
+        let (vm, loan) = ctx.vm_and_loan();
+        let Some(parent) = loan else {
+            return Err(HostError::raw("no loan"));
+        };
+        let mut child = Log {
+            prefix: "child:",
+            out: parent.log(),
+        };
+        inner.call_lent::<_, (), _>(vm, &mut child, ())?;
+        parent.hit("outer-after");
+        Ok(0)
+    })?;
+    let mut out = Vec::new();
+    let mut log = Log {
+        prefix: "",
+        out: &mut out,
+    };
+    outer.call_lent::<_, (), _>(&mut vm, &mut log, ())?;
+    let expected = [
+        "outer",
+        "leaf",
+        "leaf",
+        "index",
+        "leaf",
+        "child:leaf",
+        "outer-after",
+    ];
+    check(out == expected, "every host function saw the loan, in order")?;
+    // Without a loan the same function sees none.
+    check(leaf.call::<_, ()>(&mut vm, ()).is_err(), "no loan without call_lent")?;
+    check(vm.live_handles() > 0, "handles still held")
+}
+
+#[test]
+fn a_loan_ends_with_its_call() -> TestResult {
+    let mut vm: Vm<Probes> = Vm::lending(Limits::default())?;
+    let seen = Rc::new(Cell::new(0u32));
+    let counter = Rc::clone(&seen);
+    let probe = vm.create_host_function("probe", move |ctx| {
+        if ctx.loan().is_some() {
+            counter.set(counter.get().saturating_add(1));
+        }
+        Ok(0)
+    })?;
+    let mut out = Vec::new();
+    let mut log = Log {
+        prefix: "",
+        out: &mut out,
+    };
+    probe.call_lent::<_, (), _>(&mut vm, &mut log, ())?;
+    probe.call::<_, ()>(&mut vm, ())?;
+    check(seen.get() == 1, "only the lent call saw the loan")
+}

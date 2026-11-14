@@ -12,7 +12,8 @@
 
 use std::rc::Rc;
 
-use super::compat::{HostFn, Vm};
+use super::compat::{Compat, HostFn, Vm};
+use crate::hosted::LoanFamily;
 use super::HostCtx;
 use crate::call::{CallMode, Exit, Saved};
 use crate::error::{Error, LoadError, Throw};
@@ -58,7 +59,7 @@ impl HostValue {
     }
 }
 
-impl HostCtx<'_> {
+impl<L: LoanFamily> HostCtx<'_, L> {
     /// The number of arguments.
     pub fn arg_count(&self) -> usize {
         self.args.nargs
@@ -100,7 +101,8 @@ impl HostCtx<'_> {
     pub fn tostring_value(&mut self, n: usize) -> Result<Vec<u8>, HostError> {
         let v = self.vm.arg_or_nil(self.args, n);
         let (depth, top, saved) = (self.vm.frames_observed().len(), self.vm.exec.top, self.vm.saved_calls());
-        match self.vm.tostring_value(v) {
+        let loan = crate::hosted::reborrow::<Compat<L>>(&mut self.loan);
+        match self.vm.tostring_value(v, loan) {
             Ok(id) => Ok(self.vm.heap.str_bytes(id).to_vec()),
             Err(t) => {
                 self.vm.unwind(depth, top, saved);
@@ -194,11 +196,19 @@ impl Vm {
 
     /// A VM with the given limits and the libraries opened.
     pub fn with_limits(limits: Limits) -> Result<Vm, Error> {
+        Vm::lending(limits)
+    }
+}
+
+impl<L: LoanFamily> Vm<L> {
+    /// A VM with the given limits and the libraries opened, whose calls
+    /// can lend what `L` names ([`Function::call_lent`](super::Function::call_lent)).
+    pub fn lending(limits: Limits) -> Result<Vm<L>, Error> {
         let core = Core::with_limits_bare(limits).map_err(|t| Error::Lua {
             kind: t.kind,
             message: b"not enough memory".to_vec(),
         })?;
-        let mut vm = Vm::with_compat(core)?;
+        let mut vm = Vm::<L>::with_compat(core)?;
         let opened = vm.open_libs();
         vm.host_result(opened)?;
         Ok(vm)
@@ -213,9 +223,9 @@ impl Vm {
     pub fn register(
         &mut self,
         name: &str,
-        f: impl Fn(&mut HostCtx<'_>) -> Result<usize, HostError> + 'static,
+        f: impl Fn(&mut HostCtx<'_, L>) -> Result<usize, HostError> + 'static,
     ) -> Result<(), Error> {
-        let host: Rc<HostFn> = Rc::new(f);
+        let host: Rc<HostFn<L>> = Rc::new(f);
         let result = (|| {
             let id = self.new_host_native(name, host, None)?;
             let globals = self.exec.globals;
@@ -270,7 +280,7 @@ impl Vm {
         let f = self.load_main(chunk_name, bytecode)?;
         let result = (|| {
             self.push(Value::Function(f))?;
-            self.call_value(0, 0, MULTRET)
+            self.call_value(0, 0, MULTRET, None)
         })();
         let outcome = match result {
             Ok(()) => Ok(self.take_results(0)),
@@ -297,7 +307,7 @@ impl Vm {
             self.enter_resumed();
             self.push_call(0, 0, MULTRET, CallMode::Plain)?;
             self.mark_thread_base();
-            self.execute_from(0)
+            self.execute_from(0, None)
         })();
         self.finish_resume(result)
     }
@@ -317,7 +327,7 @@ impl Vm {
             self.enter_resumed();
             match self.complete_yield_from_host(args.len())? {
                 Some(exit) => Ok(exit),
-                None => self.execute_from(0),
+                None => self.execute_from(0, None),
             }
         })();
         self.finish_resume(result)

@@ -31,27 +31,28 @@ use crate::error::{Error, VmResult};
 use crate::heap::{Function, NativeClosure};
 use super::HostCtx;
 use crate::host::{CallStatus, HostError};
-use crate::hosted::{Host, HostEntry, HostedVm};
+use crate::hosted::{Host, HostEntry, HostedVm, LoanFamily, NoLoan};
 use crate::native::{HostFnId, NativeFn};
 use crate::roots::Root;
 use crate::value::{FnId, TableId, Value};
 use crate::vm::Core;
 
 /// A host closure registered through the public API.
-pub type HostFn = dyn Fn(&mut HostCtx<'_>) -> Result<usize, HostError>;
+pub type HostFn<L = NoLoan> = dyn Fn(&mut HostCtx<'_, L>) -> Result<usize, HostError>;
 
 /// A host function's continuation (C++ `lua_Continuation`): runs when a
 /// call it requested returns (or, for a protected call, fails), or when a
 /// yield it made is resumed.
-pub type HostContFn = dyn Fn(&mut HostCtx<'_>, CallStatus) -> Result<usize, HostError>;
+pub type HostContFn<L = NoLoan> = dyn Fn(&mut HostCtx<'_, L>, CallStatus) -> Result<usize, HostError>;
 
 /// The host's interrupt callback (C++ `lua_callbacks()->interrupt`, GC
 /// steps excluded): asked at every VM safepoint and pattern step; an error
 /// stops the script with that error (`Host::interrupt`).
 pub type InterruptFn = dyn FnMut() -> Result<(), HostError>;
 
-/// The VM the lane-6 API offers: the core hosted by [`Compat`].
-pub type Vm = HostedVm<Compat>;
+/// The VM the lane-6 API offers: the core hosted by [`Compat`], lending
+/// what `L` names to the calls made with a loan ([`NoLoan`] by default).
+pub type Vm<L = NoLoan> = HostedVm<Compat<L>>;
 
 /// The entry of a closure without a continuation.
 const CALL: u32 = 0;
@@ -60,9 +61,9 @@ const CALL_K: u32 = 1;
 /// The entry of the continuation of a `CALL_K` closure.
 const CONT: u32 = 2;
 
-struct Closure {
-    f: Rc<HostFn>,
-    k: Option<Rc<HostContFn>>,
+struct Closure<L: LoanFamily> {
+    f: Rc<HostFn<L>>,
+    k: Option<Rc<HostContFn<L>>>,
 }
 
 /// A userdata's host value.
@@ -100,9 +101,8 @@ struct PayloadSlot {
 }
 
 /// The lane-6 API's host state.
-#[derive(Default)]
-pub struct Compat {
-    closures: Vec<Option<Closure>>,
+pub struct Compat<L: LoanFamily = NoLoan> {
+    closures: Vec<Option<Closure<L>>>,
     free: Vec<u32>,
     payloads: Vec<PayloadSlot>,
     free_payloads: Vec<u32>,
@@ -125,7 +125,27 @@ pub struct Compat {
     pub(crate) error_object: Option<super::handle::Value>,
 }
 
-impl Host for Compat {
+impl<L: LoanFamily> Default for Compat<L> {
+    fn default() -> Self {
+        Compat {
+            closures: Vec::new(),
+            free: Vec::new(),
+            payloads: Vec::new(),
+            free_payloads: Vec::new(),
+            type_metas: HashMap::new(),
+            app_data: HashMap::new(),
+            direct_fields: Vec::new(),
+            interrupt: None,
+            release_queue: Rc::default(),
+            handle_roots: 0,
+            error_object: None,
+        }
+    }
+}
+
+impl<L: LoanFamily> Host for Compat<L> {
+    type Loans = L;
+
     fn interrupt(&mut self) -> Result<(), HostError> {
         match &mut self.interrupt {
             Some(f) => f(),
@@ -140,15 +160,15 @@ impl Host for Compat {
     }
 }
 
-impl Compat {
-    fn closure(&self, slot: u32) -> Result<&Closure, HostError> {
+impl<L: LoanFamily> Compat<L> {
+    fn closure(&self, slot: u32) -> Result<&Closure<L>, HostError> {
         self.closures
             .get(slot as usize)
             .and_then(Option::as_ref)
             .ok_or_else(|| HostError::raw("internal error: a released host closure ran"))
     }
 
-    fn insert(&mut self, closure: Closure) -> Option<u32> {
+    fn insert(&mut self, closure: Closure<L>) -> Option<u32> {
         if let Some(slot) = self.free.pop() {
             if let Some(entry) = self.closures.get_mut(slot as usize) {
                 *entry = Some(closure);
@@ -217,7 +237,7 @@ impl Compat {
     }
 }
 
-fn call(ctx: &mut HostCtx<'_>) -> Result<usize, HostError> {
+fn call<L: LoanFamily>(ctx: &mut HostCtx<'_, L>) -> Result<usize, HostError> {
     ctx.vm.drain_freed();
     let f = Rc::clone(&ctx.vm.host.closure(ctx.data)?.f);
     let result = f(ctx);
@@ -225,7 +245,7 @@ fn call(ctx: &mut HostCtx<'_>) -> Result<usize, HostError> {
     result
 }
 
-fn cont(ctx: &mut HostCtx<'_>, status: CallStatus) -> Result<usize, HostError> {
+fn cont<L: LoanFamily>(ctx: &mut HostCtx<'_, L>, status: CallStatus) -> Result<usize, HostError> {
     ctx.vm.drain_freed();
     let k = ctx
         .vm
@@ -239,9 +259,9 @@ fn cont(ctx: &mut HostCtx<'_>, status: CallStatus) -> Result<usize, HostError> {
     result
 }
 
-impl Vm {
+impl<L: LoanFamily> Vm<L> {
     /// `core` hosted by an empty closure store.
-    pub(crate) fn with_compat(core: Core) -> Result<Vm, Error> {
+    pub(crate) fn with_compat(core: Core) -> Result<Vm<L>, Error> {
         let mut vm = HostedVm::from_core(core, Compat::default());
         let cont_id = vm.compat_entry(CONT);
         let ids = (
@@ -391,8 +411,8 @@ impl Vm {
     pub(crate) fn new_host_native(
         &mut self,
         name: &str,
-        f: Rc<HostFn>,
-        k: Option<Rc<HostContFn>>,
+        f: Rc<HostFn<L>>,
+        k: Option<Rc<HostContFn<L>>>,
     ) -> VmResult<FnId> {
         self.drain_freed();
         let id = self.compat_entry(if k.is_some() { CALL_K } else { CALL });
@@ -417,10 +437,11 @@ impl Vm {
 #[cfg(test)]
 mod tests {
     use super::{Compat, Payload};
+    use crate::hosted::NoLoan;
 
     #[test]
     fn a_released_payload_key_finds_nothing_once_its_slot_is_reused() -> Result<(), &'static str> {
-        let mut compat = Compat::default();
+        let mut compat = Compat::<NoLoan>::default();
         let old = compat.insert_payload(Payload::new(1u32)).ok_or("insert")?;
         compat.release_payload(old);
         // A second release of the same key is a no-op: the slot is not

@@ -7,7 +7,7 @@
 use std::any::Any;
 
 use crate::error::{Error, ErrorKind, Throw};
-use crate::hosted::HostedVm;
+use crate::hosted::{Host, HostedVm, Lent};
 use crate::native::{Args, HostFnId};
 use crate::roots::Root;
 use crate::value::Value;
@@ -129,8 +129,12 @@ pub enum CallStatus {
 /// how many of its top values are results.
 ///
 /// The lane-6 API names it `HostCtx`, with its own host.
-pub struct HostedCtx<'a, H> {
+pub struct HostedCtx<'a, H: Host> {
     pub(crate) vm: &'a mut HostedVm<H>,
+    /// The loan the call that reached this function carries, if any
+    /// ([`HostedVm::call_lent`](crate::hosted::LoanFamily)); calls this
+    /// function makes reborrow it.
+    pub(crate) loan: Lent<'a, H>,
     pub(crate) args: Args,
     /// The continuation entry the running function's requested calls and
     /// yields resume in, when it has one
@@ -140,14 +144,14 @@ pub struct HostedCtx<'a, H> {
     pub(crate) data: u32,
 }
 
-impl<H> std::ops::Deref for HostedCtx<'_, H> {
+impl<H: Host> std::ops::Deref for HostedCtx<'_, H> {
     type Target = HostedVm<H>;
     fn deref(&self) -> &HostedVm<H> {
         self.vm
     }
 }
 
-impl<H> std::ops::DerefMut for HostedCtx<'_, H> {
+impl<H: Host> std::ops::DerefMut for HostedCtx<'_, H> {
     fn deref_mut(&mut self) -> &mut HostedVm<H> {
         self.vm
     }

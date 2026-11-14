@@ -63,6 +63,7 @@ impl Canvas {
             .bindings
             .ore_context()
             .ok_or_else(|| Error::runtime("GPU context not initialized"))?;
+        #[allow(unsafe_code)]
         let color_view = unsafe { ore.borrow_mut().wrapCanvasTextureInfo(info) }
             .ok_or_else(|| Error::runtime(format!("{caller} failed to wrap canvas texture")))?;
         let image = lua.create_userdata(ScriptedImage::from_render_canvas(Rc::clone(&canvas)))?;

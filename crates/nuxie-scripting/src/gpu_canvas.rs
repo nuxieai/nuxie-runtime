@@ -3605,6 +3605,7 @@ mod tests {
     use super::{Rc, RefCell, RendererBindings, ore};
     use crate::vm::{RoutedTestFactory, ScriptVm};
 
+    #[allow(unsafe_code)]
     fn compile_source(source: &str) -> Vec<u8> {
         use luaur_compiler::functions::luau_compile::luau_compile;
 

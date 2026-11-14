@@ -695,6 +695,7 @@ fn submit_initialization(job: InitJob) -> Result<(), String> {
 #[cfg(all(test, feature = "compiler"))]
 mod tests {
     use super::*;
+    #[allow(unsafe_code)]
     fn compile(source: &str) -> Arc<[u8]> {
         luaur_common::set_all_flags(true);
         let mut size = 0;

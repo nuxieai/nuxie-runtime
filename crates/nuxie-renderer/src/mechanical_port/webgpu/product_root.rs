@@ -582,8 +582,6 @@ impl WebGpuProductBackend {
 }
 
 impl ExactSourceBackend for WebGpuProductBackend {
-    type SourceHandles = crate::ore_source_handle::WebGpuIssued;
-
     fn ore_target_desc(&self) -> nuxie_ore_metal::context::TargetDesc {
         let target = unsafe { &*self.target.get() };
         match target.framebufferFormat() {

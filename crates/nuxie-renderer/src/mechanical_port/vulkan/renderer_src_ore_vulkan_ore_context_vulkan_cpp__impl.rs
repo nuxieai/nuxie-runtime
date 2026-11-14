@@ -1894,21 +1894,21 @@ impl ContextApi for ContextVulkan {
         &mut self,
         canvas: nuxie_ore_metal::context::CanvasTextureInfo,
     ) -> Option<AnyResourceHandle> {
-        crate::ore_source_handle::wrap_source_canvas::<crate::ore_source_handle::VulkanIssued, _>(self, &canvas)
+        crate::ore_source_handle::wrap_source_canvas(self, &canvas)
     }
 
     fn wrapCanvasSampleView(
         &mut self,
         canvas: nuxie_ore_metal::context::CanvasTextureInfo,
     ) -> Option<AnyResourceHandle> {
-        crate::ore_source_handle::wrap_source_texture::<crate::ore_source_handle::VulkanIssued, _>(self, &canvas)
+        crate::ore_source_handle::wrap_source_texture(self, &canvas)
     }
 
     fn wrapImageSampleView(
         &mut self,
         image: nuxie_ore_metal::context::CanvasTextureInfo,
     ) -> Option<AnyResourceHandle> {
-        crate::ore_source_handle::wrap_source_texture::<crate::ore_source_handle::VulkanIssued, _>(self, &image)
+        crate::ore_source_handle::wrap_source_texture(self, &image)
     }
     fn shaderTarget(&self) -> ShaderTarget {
         ShaderTarget::spirv

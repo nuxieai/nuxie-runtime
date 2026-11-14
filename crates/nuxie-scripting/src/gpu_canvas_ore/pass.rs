@@ -61,10 +61,10 @@ impl UserData for Pass {
             if pipeline.sample_count!=this.sample_count {return Err(Error::runtime(format!("pipeline sampleCount ({}) does not match render pass sampleCount ({}) — recreate the pipeline with matching sampleCount",pipeline.sample_count,this.sample_count)));}
             let context=context(lua)?;context.borrow().clearLastError();
             if let Some(pass) = this.pass() { pass.setPipeline(Some(&pipeline.resource)); }
-            if let Some(groups) = this.deferred_bind_groups.as_mut() {
-                if let Some(pass) = this.pass.as_deref_mut() {
-                    groups.flush(pass);
-                }
+            if let Some(groups) = this.deferred_bind_groups.as_mut()
+                && let Some(pass) = this.pass.as_deref_mut()
+            {
+                groups.flush(pass);
             }
             let error=context.borrow().lastError();if !error.is_empty(){return Err(Error::runtime(format!("setPipeline: {error}")));}
             this.draw_bindings.setPipeline(Some(&pipeline.resource));
@@ -270,10 +270,10 @@ impl UserData for Pass {
             },
         );
         methods.add_method_mut("finish", |_, this, ()| {
-            if this.validate()? {
-                if let Some(pass) = this.pass() {
-                    pass.finish();
-                }
+            if this.validate()?
+                && let Some(pass) = this.pass()
+            {
+                pass.finish();
             }
             this.finished = true;
             this.draw_bindings = DrawBindings::default();

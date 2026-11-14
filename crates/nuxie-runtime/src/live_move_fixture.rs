@@ -4895,6 +4895,61 @@ pub enum PaintCase {
     EmptiedCover {
         copies: bool,
     },
+    /// A pair whose units are each one element of a kind other than a box,
+    /// `ElementCase`.
+    Element(ElementKind, ElementCase),
+}
+
+/// What a unit is when it is one element, not a box: a text, an image, a
+/// video or a component placement. On a slot page the unit's root, which
+/// paints nothing, holds the element filling it; on an in-place page the
+/// element itself is the keyed element, its record where the compiler
+/// writes it: on the element, and for a text, an image or a video beside the
+/// layout participant it hosts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ElementKind {
+    /// Words that wrap to its width, 20 points on 24, painted
+    /// `paint_color("<unit> text")`.
+    Text,
+    /// A 100 by 30 picture, its origin at (0.25, 0.75), fitted to its box.
+    Image,
+    /// A 40 by 40 video.
+    Video,
+    /// A component placement of the artboard "<unit> inner", a CSS root that
+    /// paints `paint_color("<unit> inner")` and holds a box "<unit> inner
+    /// child", 30 by 20, 10 from its right and bottom.
+    Placement,
+}
+
+/// An `ElementKind` pair (docs/live-moves.md, Flying in place, A2b): unit
+/// "a", 80 by 60, at (36, 20) on A, and unit "b", 160 by 120, at (120, 40)
+/// on B, each one element. Their flight slots sit on B as a zoomed pair's
+/// do ("a go", "b go", "b back", "a back"), in size mode 1 unless a case
+/// says otherwise, with no zoom unless a case says so.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ElementCase {
+    /// Layout mode.
+    Layout,
+    /// Scale mode, b 160 by 60, so a's copy stretches unequally.
+    Scale,
+    /// "go" writes zoom 1 and "back" zoom 2.
+    Zoom,
+    /// Each home inside a paintless box over its whole Screen, at opacity
+    /// 0.4 on A and 0.8 on B.
+    Translucent,
+    /// Each home inside a box, "card a" at (20, 10) 300 by 200 and "card b"
+    /// at (60, 20) 320 by 240, whose scale is keyed 1, 0 at half way, 1.
+    ParentAtZero,
+    /// A box "C" after b's home on B: over b's resting box when `covers`, at
+    /// (200, 100, 60 by 60), and clear of it otherwise, at (300, 250, 60
+    /// by 40).
+    Covered { covers: bool },
+    /// A placement's placed root turned (0.3 on A, -0.2 on B) and scaled by
+    /// 1.25 about its center, flown in Scale mode with b 160 by 60.
+    TurnedRoot,
+    /// A placement's placed root scaled by 2 about its center, zoomed as
+    /// `Zoom`.
+    ZoomScaledRoot,
 }
 
 /// A zoomed pair: unit "a", 80 by 60 with corners of 4, at (36, 20) on A, and
@@ -5300,6 +5355,10 @@ struct PaintUnit {
     /// Its layout interpolates linearly over a second, as a Custom
     /// animation style.
     interpolated: bool,
+    /// It is this one element, `ElementKind`, and nothing else.
+    element: Option<ElementKind>,
+    /// A placement's placed root's own turn and scale, about its center.
+    root: Option<(f32, f32)>,
 }
 /// What a unit's own timeline keys, from 0 to this many points.
 #[derive(Clone, Copy)]
@@ -5342,8 +5401,187 @@ fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
         text: None,
         padding: 0.0,
         interpolated: false,
+        element: None,
+        root: None,
     }
 }
+impl PaintUnit {
+    fn element(mut self, kind: ElementKind) -> Self {
+        self.element = Some(kind);
+        self
+    }
+    fn root(mut self, turn: f32, scale: f32) -> Self {
+        self.root = Some((turn, scale));
+        self
+    }
+    /// The objects of its one element, from object `id`, under `parent`,
+    /// named `name`: the element, the layout participant a text, an image or
+    /// a video hosts, its CSS record `css` on the element, and what it
+    /// paints. `inner` is the artboard a placement places.
+    fn element_objects<'a>(
+        &self,
+        id: u64,
+        parent: u64,
+        name: &'a str,
+        css: &[(&'static str, V<'static>)],
+        inner: u64,
+    ) -> Vec<(&'static str, Vec<(&'static str, V<'a>)>)> {
+        use V::*;
+        let kind = self.element.expect("an element unit");
+        let mut objects = Vec::new();
+        let mut record = vec![("parentId", U(id))];
+        record.extend(css.iter().cloned());
+        let hosted = |element: &'static str, mut props: Vec<(&'static str, V<'a>)>| {
+            props.splice(0..0, [("name", S(name)), ("parentId", U(parent))]);
+            vec![
+                (element, props),
+                ("LayoutParticipant", vec![("parentId", U(id))]),
+                ("LayoutCssStyle", record.clone()),
+            ]
+        };
+        match kind {
+            ElementKind::Text => {
+                objects.extend(hosted("Text", Vec::new())); // id to id + 2
+                objects.extend([
+                    (
+                        "TextStylePaint",
+                        vec![
+                            ("parentId", U(id)),
+                            ("fontAssetId", U(0)),
+                            ("fontSize", F(20.0)),
+                            ("lineHeight", F(24.0)),
+                        ],
+                    ), // id + 3
+                    ("Fill", vec![("parentId", U(id + 3))]), // id + 4
+                    (
+                        "SolidColor",
+                        vec![
+                            ("parentId", U(id + 4)),
+                            (
+                                "colorValue",
+                                Color(paint_color(&format!("{} text", self.name))),
+                            ),
+                        ],
+                    ),
+                    (
+                        "TextValueRun",
+                        vec![
+                            ("parentId", U(id)),
+                            ("styleId", U(id + 3)),
+                            ("text", S(ELEMENT_WORDS)),
+                        ],
+                    ),
+                ]);
+            }
+            ElementKind::Image => objects.extend(hosted(
+                "Image",
+                vec![
+                    ("assetId", U(0)),
+                    ("originX", F(0.25)),
+                    ("originY", F(0.75)),
+                ],
+            )),
+            ElementKind::Video => objects.extend(hosted("Video", vec![("assetId", U(0))])),
+            ElementKind::Placement => objects.extend([
+                (
+                    "NestedArtboardLayout",
+                    vec![
+                        ("name", S(name)),
+                        ("parentId", U(parent)),
+                        ("artboardId", U(inner)),
+                    ],
+                ),
+                ("LayoutCssStyle", record),
+            ]),
+        }
+        objects
+    }
+}
+
+/// The artboard placement unit `name` places, "`name` inner": after every
+/// unit (Screens A and B are 0 and 1, then the units), in the units' order.
+fn inner_artboard(units: &[PaintUnit], name: &str) -> u64 {
+    let placements = units
+        .iter()
+        .take_while(|u| u.name != name)
+        .filter(|u| u.element == Some(ElementKind::Placement))
+        .count();
+    (2 + units.len() + placements) as u64
+}
+
+/// The words an `ElementKind::Text` unit shows.
+const ELEMENT_WORDS: &str = "Breathe in slowly and let the day settle";
+
+/// A placement unit's placed artboard, "`unit` inner": a CSS root of the
+/// unit's size, its own turn and scale about its center, that paints
+/// `paint_color("<unit> inner")` and holds a box "`unit` inner child", 30 by
+/// 20, 10 from its right and bottom.
+fn placed_root(b: &mut Vec<u8>, u: &PaintUnit) {
+    use V::*;
+    let name = format!("{} inner", u.name);
+    let mut props = vec![
+        ("name", S(&name)),
+        ("width", F(u.size.0)),
+        ("height", F(u.size.1)),
+        ("styleId", U(2)),
+        ("clip", B(false)),
+    ];
+    if let Some((turn, scale)) = u.root {
+        props.extend([
+            ("originX", F(0.5)),
+            ("originY", F(0.5)),
+            ("rotation", F(turn)),
+            ("scaleX", F(scale)),
+            ("scaleY", F(scale)),
+        ]);
+    }
+    obj(b, "Artboard", &props); // 0
+    obj(b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+    obj(b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+    obj(b, "Fill", &[("parentId", U(0))]); // 3
+    obj(
+        b,
+        "SolidColor",
+        &[("parentId", U(3)), ("colorValue", Color(paint_color(&name)))],
+    ); // 4
+    obj(
+        b,
+        "LayoutComponent",
+        &[("name", S("child")), ("parentId", U(0)), ("styleId", U(6))],
+    ); // 5
+    obj(b, "LayoutComponentStyle", &[("parentId", U(5))]); // 6
+    let mut record = vec![
+        ("parentId", U(5)),
+        ("position", U(2)),
+        ("insetRightKind", U(1)),
+        ("insetRight", F(10.0)),
+        ("insetBottomKind", U(1)),
+        ("insetBottom", F(10.0)),
+    ];
+    record.extend(css_size(30.0, 20.0));
+    obj(b, "LayoutCssStyle", &record); // 7
+    obj(b, "Fill", &[("parentId", U(5))]); // 8
+    obj(
+        b,
+        "SolidColor",
+        &[
+            ("parentId", U(8)),
+            ("colorValue", Color(paint_color(&format!("{name} child")))),
+        ],
+    ); // 9
+}
+
+/// A record that fills its parent.
+fn filling_css() -> Css {
+    vec![
+        ("flexShrink", V::F(0.0)),
+        ("widthKind", V::U(7)),
+        ("widthPercent", V::F(100.0)),
+        ("heightKind", V::U(7)),
+        ("heightPercent", V::F(100.0)),
+    ]
+}
+
 impl PaintUnit {
     fn interpolated(mut self) -> Self {
         self.interpolated = true;
@@ -5507,6 +5745,44 @@ fn unit_text(b: &mut Vec<u8>, id: u64, parent: u64, words: &str, color: u32) {
         ],
     ); // id + 4
 }
+/// An element unit's artboard: a CSS root of its size that paints nothing,
+/// holding its one element filling it. `inner` is the artboard a placement
+/// places.
+fn element_unit(b: &mut Vec<u8>, u: &PaintUnit, inner: u64) {
+    use V::*;
+    assert!(
+        u.turn == 0.0
+            && !u.modeled()
+            && u.opacity == 1.0
+            && u.own_scale.is_none()
+            && u.origin.is_none()
+            && u.corner == 0.0
+            && u.shadow.is_none()
+            && u.text.is_none()
+            && u.padding == 0.0
+            && !u.interpolated
+            && !u.holds_more(),
+        "an element unit is its element and nothing else"
+    );
+    obj(
+        b,
+        "Artboard",
+        &[
+            ("name", S(u.name)),
+            ("width", F(u.size.0)),
+            ("height", F(u.size.1)),
+            ("styleId", U(2)),
+            ("clip", B(false)),
+        ],
+    ); // 0
+    obj(b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+    obj(b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+    let name = format!("{} element", u.name);
+    for (kind, props) in u.element_objects(3, 0, &name, &filling_css(), inner) {
+        obj(b, kind, &props);
+    }
+}
+
 fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
     use V::*;
     let mut props = vec![
@@ -5971,6 +6247,11 @@ impl PaintArt<'_> {
         self.next += 1;
         self.next - 1
     }
+    /// The artboard a placement unit `name` places: after every unit, in
+    /// the units' order.
+    fn inner_artboard(&self, name: &str) -> u64 {
+        inner_artboard(self.units, name)
+    }
     fn unit(&self, name: &str) -> (u64, PaintUnit) {
         let at = self
             .units
@@ -6044,6 +6325,28 @@ impl PaintArt<'_> {
         use V::*;
         let id = self.next;
         let (_, u) = self.unit(unit);
+        if u.element.is_some() {
+            // The element itself, with the slot's name, record and own
+            // properties and `key` as its flight key.
+            assert!(
+                el.props.is_empty() && el.binds.is_empty() && el.origin.is_none(),
+                "an element unit's slot has only its record"
+            );
+            let mut css = el.css.clone();
+            if key != 0 {
+                css.push(("flightKey", U(key)));
+            }
+            let inner = self.inner_artboard(unit);
+            let objects = u.element_objects(id, parent, &el.name, &css, inner);
+            for (kind, props) in &objects {
+                if *kind == "LayoutCssStyle" {
+                    self.names.insert(format!("{}.css", el.name), self.next);
+                }
+                self.add(kind, props);
+            }
+            assert!(el.css_binds.is_empty(), "an element's record is not bound");
+            return;
+        }
         if u.cached {
             self.unexpressible = Some("a bitmap cache is an artboard's");
         }
@@ -6805,6 +7108,78 @@ fn zoom_pair(
     spec
 }
 
+/// `PaintCase::Element`'s page.
+fn element_spec(kind: ElementKind, case: ElementCase) -> PaintSpec {
+    use ElementCase::*;
+    use V::*;
+    assert!(
+        kind == ElementKind::Placement || !matches!(case, TurnedRoot | ZoomScaledRoot),
+        "only a placement has a placed root"
+    );
+    let b_size = if matches!(case, Scale | TurnedRoot) {
+        (160.0, 60.0)
+    } else {
+        (160.0, 120.0)
+    };
+    let mut a = unit("a", 80.0, 60.0).element(kind);
+    let mut b = unit("b", b_size.0, b_size.1).element(kind);
+    match case {
+        TurnedRoot => (a, b) = (a.root(0.3, 1.25), b.root(-0.2, 1.25)),
+        ZoomScaledRoot => (a, b) = (a.root(0.0, 2.0), b.root(0.0, 2.0)),
+        _ => {}
+    }
+    let home_a = || at_rest("a", 1, 36.0, 20.0, 80.0, 60.0);
+    let home_b = || at_rest("b", 2, 120.0, 40.0, b_size.0, b_size.1);
+    let mode = if matches!(case, Scale | TurnedRoot) { 0 } else { 1 };
+    let (on_a, on_b) = match case {
+        Translucent => {
+            let faded = |name: &str, opacity: f32, home: PaintEl| {
+                bx(name, css_at(0.0, 0.0, 400.0, 300.0))
+                    .paintless()
+                    .props(&[("opacity", F(opacity))])
+                    .kids(vec![home])
+            };
+            (
+                vec![faded("W a", 0.4, home_a())],
+                vec![faded("W b", 0.8, home_b())],
+            )
+        }
+        ParentAtZero => (
+            vec![
+                bx("card a", css_at(20.0, 10.0, 300.0, 200.0))
+                    .origin(0.5)
+                    .kids(vec![at_rest("a", 1, 16.0, 10.0, 80.0, 60.0)]),
+            ],
+            vec![
+                bx("card b", css_at(60.0, 20.0, 320.0, 240.0))
+                    .origin(0.5)
+                    .kids(vec![at_rest("b", 2, 60.0, 20.0, b_size.0, b_size.1)]),
+            ],
+        ),
+        Covered { covers } => {
+            let c = if covers {
+                css_at(200.0, 100.0, 60.0, 60.0)
+            } else {
+                css_at(300.0, 250.0, 60.0, 40.0)
+            };
+            (vec![home_a()], vec![home_b(), bx("C", c)])
+        }
+        _ => (vec![home_a()], vec![home_b()]),
+    };
+    let mut spec = zoom_pair(a, b, on_a, on_b, zoom_flights(mode));
+    if !matches!(case, Zoom | ZoomScaledRoot) {
+        spec.zoom = [0, 0];
+    }
+    if case == ParentAtZero {
+        let scale = |target: &str| {
+            let frames = [(0, 1.0), (30, 0.0), (60, 1.0)];
+            vec![track(target, 16, &frames), track(target, 17, &frames)]
+        };
+        spec = spec.a_tracks(scale("card a")).tracks(scale("card b"));
+    }
+    spec
+}
+
 fn zoom_spec(case: ZoomCase) -> PaintSpec {
     use V::*;
     use ZoomCase::*;
@@ -7109,7 +7484,33 @@ fn paint_file_shaped(spec: &PaintSpec, in_place: bool) -> Result<Vec<u8>, &'stat
         els.iter()
             .any(|el| matches!(el.kind, PaintKind::Video) || has_video(&el.kids))
     }
-    if has_video(&spec.a) || has_video(&spec.b) {
+    let elements = |kind: ElementKind| spec.units.iter().any(|u| u.element == Some(kind));
+    // An element pair names one asset, the file's first: a text's font, an
+    // image's picture or a video's. Nothing else on its page names one.
+    let kinds = [ElementKind::Text, ElementKind::Image, ElementKind::Video];
+    assert!(
+        kinds.iter().filter(|kind| elements(**kind)).count() <= 1
+            && (!kinds.iter().any(|kind| elements(*kind))
+                || (spec.subtitle.is_none()
+                    && spec.units.iter().all(|u| u.text.is_none())
+                    && !has_video(&spec.a)
+                    && !has_video(&spec.b))),
+        "an element pair's page has one asset"
+    );
+    if elements(ElementKind::Image) {
+        // A 100 by 30 picture: a PNG signature and header, all a recording
+        // factory decodes.
+        let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+        png.extend_from_slice(&100u32.to_be_bytes());
+        png.extend_from_slice(&30u32.to_be_bytes());
+        obj(
+            &mut b,
+            "ImageAsset",
+            &[("assetId", U(0)), ("width", F(100.0)), ("height", F(30.0))],
+        );
+        obj(&mut b, "FileAssetContents", &[("bytes", Bytes(&png))]);
+    }
+    if has_video(&spec.a) || has_video(&spec.b) || elements(ElementKind::Video) {
         obj(
             &mut b,
             "VideoAsset",
@@ -7121,7 +7522,10 @@ fn paint_file_shaped(spec: &PaintSpec, in_place: bool) -> Result<Vec<u8>, &'stat
             ],
         );
     }
-    if spec.subtitle.is_some() || spec.units.iter().any(|u| u.text.is_some()) {
+    if spec.subtitle.is_some()
+        || spec.units.iter().any(|u| u.text.is_some())
+        || elements(ElementKind::Text)
+    {
         obj(
             &mut b,
             "FontAsset",
@@ -7230,7 +7634,16 @@ fn paint_file_shaped(spec: &PaintSpec, in_place: bool) -> Result<Vec<u8>, &'stat
     paint_screen(&mut b, spec, false, in_place)?;
     paint_screen(&mut b, spec, true, in_place)?;
     for u in &spec.units {
-        paint_unit(&mut b, u);
+        if u.element.is_some() {
+            element_unit(&mut b, u, inner_artboard(&spec.units, u.name));
+        } else {
+            paint_unit(&mut b, u);
+        }
+    }
+    for u in &spec.units {
+        if u.element == Some(ElementKind::Placement) {
+            placed_root(&mut b, u);
+        }
     }
     obj(
         &mut b,
@@ -8333,6 +8746,7 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
         .tracks(vec![track("card", 15, &[(0, 0.3), (60, 0.0)])]),
         PaintCase::Reader { kind, flies } => reader_spec(kind, flies),
         PaintCase::Zoom(case) => zoom_spec(case),
+        PaintCase::Element(kind, case) => element_spec(kind, case),
         PaintCase::EmptiedCover { copies } => {
             let e = || rest("E", 1, css_at(100.0, 100.0, 100.0, 60.0));
             let w_on_a = css_at(180.0, 170.0, 200.0, 120.0);

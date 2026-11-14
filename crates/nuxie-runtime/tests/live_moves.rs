@@ -9272,6 +9272,35 @@ mod paint_order {
 
     /// The paint cases that fly in place, for the equivalence test. Every
     /// other case says why it has none (`css_paint_fixture_shaped`).
+    /// The element kinds admitted to fly in place, each with every case
+    /// the admission rule asks of it (docs/live-moves.md, Flying in place):
+    /// Layout and Scale mode, a zoom by both rules, under a translucent
+    /// ancestor, under a parent scaled to 0, and under a sibling that covers
+    /// it and one that does not; a placement also with its placed root turned
+    /// and scaled, and zoomed over a scaled root.
+    fn element_cases() -> Vec<PaintCase> {
+        use fixture::{ElementCase::*, ElementKind};
+        let mut cases = Vec::new();
+        for kind in [ElementKind::Text, ElementKind::Image] {
+            for case in [
+                Layout,
+                Scale,
+                Zoom,
+                Translucent,
+                ParentAtZero,
+                Covered { covers: true },
+                Covered { covers: false },
+            ] {
+                cases.push(PaintCase::Element(kind, case));
+            }
+            if kind == ElementKind::Placement {
+                cases.push(PaintCase::Element(kind, TurnedRoot));
+                cases.push(PaintCase::Element(kind, ZoomScaledRoot));
+            }
+        }
+        cases
+    }
+
     fn in_place_cases() -> Vec<PaintCase> {
         use PaintCase::*;
         let mut cases = vec![
@@ -9332,6 +9361,7 @@ mod paint_order {
         // artboard. Neither has an in-place page.
         cases.extend((1..=10).map(Resting));
         cases.extend("CDFGHKMNOPQRTUVWXY".chars().map(KeyedLayout));
+        cases.extend(element_cases());
         {
             use fixture::ZoomCase::*;
             cases.extend(
@@ -9423,6 +9453,15 @@ mod paint_order {
     /// outline has no area paints nothing; the slot path still sends one for
     /// a copy under a box scaled to 0, where a lift under that scale sends
     /// none.
+    /// Where an image draw lands, which records a matrix and no points: its
+    /// matrix applied to a 100 by 30 picture's corners, the one picture
+    /// these pages hold.
+    fn image_quad(matrix: &nuxie_render_api::Mat2D) -> Vec<Vec2D> {
+        let m = matrix.0;
+        [(0.0, 0.0), (100.0, 0.0), (100.0, 30.0), (0.0, 30.0)]
+            .map(|(x, y)| Vec2D::new(m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]))
+            .to_vec()
+    }
     fn shown(draws: &[nuxie_render_stream::FrameDraw]) -> Vec<Shown> {
         draws
             .iter()
@@ -9435,7 +9474,11 @@ mod paint_order {
             })
             .map(|draw| Shown {
                 rgb: draw.rgb(),
-                points: outline(&draw.points),
+                points: if draw.points.is_empty() {
+                    image_quad(&draw.matrix)
+                } else {
+                    outline(&draw.points)
+                },
                 opacity: draw.opacity(),
                 clip: draw.clips.iter().fold(None, |open: Option<Rect>, clip| {
                     let points: Vec<Vec2D> =
@@ -9456,7 +9499,11 @@ mod paint_order {
     /// `near_zero`, to 1e-3 and a part in 1e4 of the coordinate.
     fn same_draws(label: &str, slots: &[Shown], in_place: &[Shown], near_zero: bool) {
         let colors = |shown: &[Shown]| shown.iter().map(|s| s.rgb).collect::<Vec<_>>();
-        assert_eq!(colors(slots), colors(in_place), "{label}: draw order");
+        assert_eq!(
+            colors(slots),
+            colors(in_place),
+            "{label}: draw order\nslots: {slots:?}\nin place: {in_place:?}"
+        );
         // Only where a copy flies inside a box scaled near zero: in place it
         // inverts that box's matrix, where its flight slot inverts none, so
         // f32 loses digits as the scale nears 0 (7e-3 at a coordinate of 190
@@ -9535,7 +9582,11 @@ mod paint_order {
         let mut slots = PaintScene::shaped(case, PaintShape::SlotCopies);
         let mut in_place = PaintScene::shaped(case, PaintShape::InPlace);
         // The one case whose cards scale through zero.
-        let near_zero = matches!(case, PaintCase::Zoom(fixture::ZoomCase::CardsThroughZero));
+        let near_zero = matches!(
+            case,
+            PaintCase::Zoom(fixture::ZoomCase::CardsThroughZero)
+                | PaintCase::Element(_, fixture::ElementCase::ParentAtZero)
+        );
         // The third known difference (docs/live-moves.md, Flying in place):
         // b is static, so its absolutely placed child rests against the
         // Screen. Its slot flies in an absolute flight slot, which carries the
@@ -9550,26 +9601,65 @@ mod paint_order {
         // card draws nothing with area on both pages, the slot page's copies
         // inside it are left out of that frame's comparison, and nothing
         // else is.
-        let rgb = |name: &str| fixture::paint_color(name) & 0x00ff_ffff;
-        let inside = [("card a", ["a", "a child"]), ("card b", ["b", "b child"])]
-            .map(|(card, copies)| (rgb(card), copies.map(rgb)));
-        let has = |shown: &[Shown], color: u32| shown.iter().any(|d| d.rgb == Some(color));
+        let rgb = |name: &str| Some(fixture::paint_color(name) & 0x00ff_ffff);
+        // What each copy draws in: its own colors, or for an element its
+        // element's (an image's draw has none).
+        let copy_colors = |copy: &str| -> Vec<Option<u32>> {
+            match case {
+                PaintCase::Element(fixture::ElementKind::Text, _) => vec![rgb(&format!("{copy} text"))],
+                PaintCase::Element(fixture::ElementKind::Image | fixture::ElementKind::Video, _) => {
+                    vec![None]
+                }
+                PaintCase::Element(fixture::ElementKind::Placement, _) => vec![
+                    rgb(&format!("{copy} inner")),
+                    rgb(&format!("{copy} inner child")),
+                ],
+                _ => vec![rgb(copy), rgb(&format!("{copy} child"))],
+            }
+        };
+        let inside = [("card a", copy_colors("a")), ("card b", copy_colors("b"))]
+            .map(|(card, copies)| (rgb(card), copies));
+        let has = |shown: &[Shown], color: Option<u32>| shown.iter().any(|d| d.rgb == color);
         let both = |slots: &PaintScene, in_place: &PaintScene, label: &str| {
             let (mut slots, in_place) = (shown(&page_draws(slots)), shown(&page_draws(in_place)));
             if near_zero {
-                for (card, copies) in inside {
-                    if !has(&in_place, card) {
+                let images = |shown: &[Shown]| shown.iter().filter(|d| d.rgb.is_none()).count();
+                for (card, copies) in &inside {
+                    if !has(&in_place, *card) {
                         assert!(
-                            !has(&slots, card),
+                            !has(&slots, *card),
                             "{case:?} {label}: only a card at 0 is skipped"
                         );
-                        slots.retain(|d| !d.rgb.is_some_and(|color| copies.contains(&color)));
+                        slots.retain(|d| d.rgb.is_none() || !copies.contains(&d.rgb));
+                        // An image's draw has no color to tell whose it is,
+                        // and a flight's two copies draw the same image at
+                        // the same place: what is left out is an image draw
+                        // the slot page has beyond the in-place page's, one
+                        // for each image copy inside the card.
+                        let extra = images(&slots).saturating_sub(images(&in_place));
+                        let left_out = copies.iter().filter(|c| c.is_none()).count().min(extra);
+                        for _ in 0..left_out {
+                            let last = slots.iter().rposition(|d| d.rgb.is_none()).unwrap();
+                            slots.remove(last);
+                        }
                     }
                 }
             }
             same_draws(&format!("{case:?} {label}"), &slots, &in_place, near_zero);
         };
         both(&slots, &in_place, "at rest");
+        // A page whose keyed element draws nothing would compare equal
+        // whatever its readers do.
+        if let PaintCase::Element(..) = case {
+            let drawn = shown(&page_draws(&in_place));
+            assert!(
+                ["a", "b"]
+                    .into_iter()
+                    .flat_map(copy_colors)
+                    .any(|color| has(&drawn, color)),
+                "{case:?}: the keyed element draws"
+            );
+        }
         for (to, step) in [("B", "go"), ("A", "back")] {
             for s in [&mut slots, &mut in_place] {
                 s.begin(to, step);
@@ -13386,10 +13476,10 @@ fn in_place_a_flight_inside_another_flight_is_refused() {
     assert_eq!(page.draw(), before, "the same stream");
 }
 
-/// A flight key on a component placement, a text, an image or a video is
-/// refused at take-off by name, before anything is marked, and the page
-/// draws as before. No in-place page has one of them as the keyed element
-/// yet, so the equivalence test proves none of their readers; boxes fly.
+/// A flight key on a kind not yet admitted is refused at take-off by name,
+/// before anything is marked, and the page draws as before: no in-place
+/// page has it as the keyed element yet, so the equivalence test proves
+/// none of its readers.
 fn refuses_a_keyed(kind: fixture::KeyedKind, named: &str) {
     let page = InPlacePage::load(fixture::InPlaceFixture::Keyed(kind));
     let mut moves = LiveMoves::default();
@@ -13418,14 +13508,28 @@ fn in_place_a_flight_key_on_a_component_placement_is_refused() {
     refuses_a_keyed(fixture::KeyedKind::Placement, "a component placement");
 }
 
-#[test]
-fn in_place_a_flight_key_on_a_text_is_refused() {
-    refuses_a_keyed(fixture::KeyedKind::Text, "a text");
+/// A flight key on an admitted kind takes off in place: its layout node is
+/// held and both copies are lifted (the equivalence test proves how they
+/// draw).
+fn flies_keyed(kind: fixture::KeyedKind) {
+    let page = InPlacePage::load(fixture::InPlaceFixture::Keyed(kind));
+    let mut moves = LiveMoves::default();
+    moves.prepare(&page.root).unwrap();
+    let marks = nuxie_runtime::in_place_lift_marks();
+    moves.step_begin(&page.root, "B", Some("t1")).unwrap();
+    page.frame(&mut moves, 0.1);
+    assert!(!moves.flight_controls(&page.root).is_empty());
+    assert!(nuxie_runtime::in_place_lift_marks() > marks, "lifted");
 }
 
 #[test]
-fn in_place_a_flight_key_on_an_image_is_refused() {
-    refuses_a_keyed(fixture::KeyedKind::Image, "an image");
+fn in_place_a_flight_key_on_a_text_flies() {
+    flies_keyed(fixture::KeyedKind::Text);
+}
+
+#[test]
+fn in_place_a_flight_key_on_an_image_flies() {
+    flies_keyed(fixture::KeyedKind::Image);
 }
 
 #[test]

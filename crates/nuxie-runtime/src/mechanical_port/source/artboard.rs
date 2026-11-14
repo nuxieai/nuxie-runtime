@@ -1232,22 +1232,30 @@ impl Artboard {
     }
 
     pub fn has_self_transform(&self) -> bool {
-        // Nuxie: a CSS slot's frame also draws its x and y, and a flying unit
-        // its stretch (css_layout/hosted_frame.rs).
+        self.has_self_transform_stretched(self.flight_stretch)
+    }
+
+    /// Nuxie: a CSS slot's frame also draws its x and y, and a flying unit
+    /// its stretch (css_layout/hosted_frame.rs).
+    fn has_self_transform_stretched(&self, stretch: Vec2D) -> bool {
         crate::css_layout::hosted_frame::has_self_transform(
             self.css_slot_offset(),
             self.rotation(),
             Vec2D::new(self.scale_x(), self.scale_y()),
-            self.flight_stretch,
+            stretch,
         )
     }
 
     pub fn self_transform(&self) -> Mat2D {
+        self.self_transform_stretched(self.flight_stretch)
+    }
+
+    fn self_transform_stretched(&self, stretch: Vec2D) -> Mat2D {
         crate::css_layout::hosted_frame::self_transform(
             self.css_slot_offset(),
             self.rotation(),
             Vec2D::new(self.scale_x(), self.scale_y()),
-            self.flight_stretch,
+            stretch,
             self.origin_is_pivot_only().then(|| self.origin_offset()),
         )
     }
@@ -1255,12 +1263,20 @@ impl Artboard {
     /// The transform the draw applies before its content: the frame's origin,
     /// then its self transform.
     pub(crate) fn content_transform(&self) -> Mat2D {
+        self.content_transform_stretched(self.flight_stretch)
+    }
+
+    /// Nuxie: `content_transform` with `stretch` as the flying unit's
+    /// stretch. A component placement flying in place in Scale mode draws
+    /// its root with it, the stretch inside the root's own transform, as a
+    /// flying unit's root draws (live_move/in_place.rs).
+    pub(crate) fn content_transform_stretched(&self, stretch: Vec2D) -> Mat2D {
         let mut transform = Mat2D::default();
         if self.frame_origin {
             transform = Mat2D::from_translation(self.content_origin());
         }
-        if self.has_self_transform() && !self.skip_self_transform {
-            transform = transform * self.self_transform();
+        if self.has_self_transform_stretched(stretch) && !self.skip_self_transform {
+            transform = transform * self.self_transform_stretched(stretch);
         }
         transform
     }
@@ -5180,7 +5196,7 @@ impl Artboard {
         lift: &crate::css_layout::lift::Lift,
         visitor: Option<RuntimeDrawVisitor>,
     ) {
-        let (row, element, matrix, opacity, clip, entries) = {
+        let (row, element, matrix, opacity, clip, clip_space, entries) = {
             let state = lift.0.borrow();
             (
                 state.row.clone(),
@@ -5188,6 +5204,7 @@ impl Artboard {
                 state.matrix,
                 state.opacity,
                 state.clip,
+                state.clip_space,
                 state.entries.clone(),
             )
         };
@@ -5196,7 +5213,7 @@ impl Artboard {
         }
         renderer.save();
         renderer.transform(nuxie_render_api::Mat2D(*matrix.values()));
-        let clip_area = clip.and_then(|clip| crate::css_layout::lift::clip_bounds(&element, clip));
+        let clip_area = clip.and_then(|clip| crate::css_layout::lift::clip_bounds(&element, clip, clip_space));
         let plain = visitor.is_none();
         // The zoom's clip is part of what the copy draws, inside its picture,
         // as a flying unit's is: clipping where the picture composites would
@@ -5204,7 +5221,7 @@ impl Artboard {
         let draw_entries = |renderer: &mut Renderer| {
             renderer.save();
             if let Some(clip) = clip {
-                crate::css_layout::lift::apply_clip(renderer, &element, &row, clip);
+                crate::css_layout::lift::apply_clip(renderer, &element, &row, clip, clip_space);
             }
             crate::css_layout::lift::drawing_lift(&row, visitor.clone(), || {
                 Self::draw_lift_entries(&row, renderer, &entries);

@@ -1632,6 +1632,9 @@ impl Artboard {
             root: root.clone(),
             instance: None,
         };
+        // Attachment callbacks request picture refreshes under their own
+        // receiver; complete them after each callback returns.
+        let pictures = crate::source::layout::picture_layout_mode::Batch::open();
         root.with_downcast_mut::<Artboard, _>(|artboard| {
             artboard
                 .base
@@ -1661,6 +1664,7 @@ impl Artboard {
                 object.with_mut(|object| object.on_added_dirty(&mut context))
             }
             .unwrap_or(StatusCode::MissingObject);
+            pictures.complete();
             if !can_continue(code) {
                 return code;
             }
@@ -1676,6 +1680,7 @@ impl Artboard {
             .flatten()
         {
             crate::source::layout::picture_layout_mode::attached(object);
+            pictures.complete();
         }
 
         let is_instance = root
@@ -1752,6 +1757,7 @@ impl Artboard {
                     .with_mut(|object| object.on_added_clean(&mut context))
                     .unwrap_or(StatusCode::MissingObject)
             };
+            pictures.complete();
             if !can_continue(code) {
                 return code;
             }
@@ -8481,12 +8487,10 @@ impl RuntimeArtboardInstanceHandle {
     }
 
     pub fn with_artboard<R>(&self, f: impl FnOnce(&ArtboardInstance) -> R) -> R {
-        let _pictures = crate::source::layout::picture_layout_mode::BorrowScope::new();
         f(&self.0.borrow())
     }
 
     pub fn with_artboard_mut<R>(&self, f: impl FnOnce(&mut ArtboardInstance) -> R) -> R {
-        let _pictures = crate::source::layout::picture_layout_mode::BorrowScope::new();
         f(&mut self.0.borrow_mut())
     }
 }

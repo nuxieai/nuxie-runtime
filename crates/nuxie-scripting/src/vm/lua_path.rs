@@ -22,14 +22,26 @@ use nuxie_runtime::mechanical_port::source::{
 };
 
 use super::ProtectedScriptCall;
+use super::host_memory_budget::{HostMemoryCharge, bytes_of};
 use super::lua_artboards::ScriptedNode as LuaScriptedNode;
 use super::lua_mat2d::{ScriptedMat2D, number_arg};
+
+/// Host bytes a path of `verbs` verbs and `points` points is charged: its
+/// two `RawPath` vectors at up to twice their length (they grow by doubling;
+/// `RawPath` does not report its capacity) plus the render path the
+/// renderer builds from the same commands at draw.
+fn path_bytes(verbs: usize, points: usize) -> usize {
+    bytes_of::<PathVerb>(verbs)
+        .saturating_add(bytes_of::<Vec2D>(points))
+        .saturating_mul(3)
+}
 
 pub(super) struct ScriptedPath {
     pub(super) raw_path: RawPath,
     dirty: bool,
     render_path: Option<Box<dyn RenderPath>>,
     render_frame_id: u64,
+    charge: HostMemoryCharge,
 }
 
 impl ScriptedPath {
@@ -39,16 +51,55 @@ impl ScriptedPath {
             dirty: true,
             render_path: None,
             render_frame_id: 0,
+            charge: HostMemoryCharge::default(),
         }
     }
 
+    /// A path built by host code; it is charged when it is handed to a
+    /// script (`create_scripted_path`, [`Self::charged`]).
     pub(super) fn from_render_raw_path(raw_path: RenderRawPath) -> Self {
         Self {
             raw_path: from_render_raw_path(&raw_path),
             dirty: true,
             render_path: None,
             render_frame_id: 0,
+            charge: HostMemoryCharge::default(),
         }
+    }
+
+    /// A host-built path charged to the VM's budget at its current size.
+    pub(super) fn charged(lua: &Lua, raw_path: RenderRawPath) -> Result<Self> {
+        let mut path = Self::from_render_raw_path(raw_path);
+        path.charge_current(lua)?;
+        Ok(path)
+    }
+
+    fn verb_and_point_counts(&self) -> (usize, usize) {
+        (self.raw_path.verbs().len(), self.raw_path.points().len())
+    }
+
+    /// Charges the path for `verbs` more verbs and `points` more points,
+    /// before it grows by them.
+    fn reserve(&mut self, lua: &Lua, verbs: usize, points: usize) -> Result<()> {
+        let (current_verbs, current_points) = self.verb_and_point_counts();
+        self.charge.attach(lua)?;
+        self.charge.reserve_to(path_bytes(
+            current_verbs.saturating_add(verbs),
+            current_points.saturating_add(points),
+        ))
+    }
+
+    /// Whether `verbs` more verbs and `points` more points would fit.
+    fn fits(&self, verbs: usize, points: usize) -> bool {
+        let (current_verbs, current_points) = self.verb_and_point_counts();
+        self.charge.fits(path_bytes(
+            current_verbs.saturating_add(verbs),
+            current_points.saturating_add(points),
+        ))
+    }
+
+    fn charge_current(&mut self, lua: &Lua) -> Result<()> {
+        self.reserve(lua, 0, 0)
     }
 
     pub(super) fn mark_dirty(&mut self) {
@@ -74,22 +125,27 @@ impl ScriptedPath {
             let same_frame_rebuild =
                 self.render_path.is_some() && self.render_frame_id == render_frame_id;
             self.render_frame_id = render_frame_id;
-            if self.render_path.is_none() || same_frame_rebuild {
-                let mut path = factory.make_empty_render_path();
-                path.fill_rule(FillRule::Clockwise);
-                self.render_path = Some(path);
-            } else if let Some(path) = self.render_path.as_mut() {
-                path.rewind();
-            }
+            let path = match self.render_path.take() {
+                Some(mut path) if !same_frame_rebuild => {
+                    path.rewind();
+                    path
+                }
+                _ => {
+                    let mut path = factory.make_empty_render_path();
+                    path.fill_rule(FillRule::Clockwise);
+                    path
+                }
+            };
             self.render_path
-                .as_mut()
-                .expect("render path is initialized")
+                .insert(path)
                 .add_untrusted_raw_path(&to_render_raw_path(&self.raw_path));
         }
-        self.render_path
-            .as_ref()
-            .expect("render path is initialized")
-            .as_ref()
+        match &mut self.render_path {
+            Some(path) => &**path,
+            // First use while clean: a path is dirty from construction, so
+            // this is reached only if a host cleared `dirty` itself.
+            render_path => &**render_path.insert(factory.make_empty_render_path()),
+        }
     }
 
     fn command(&self, lua_index: i64) -> ScriptedPathCommand {
@@ -103,16 +159,22 @@ impl ScriptedPath {
             return ScriptedPathCommand::none();
         };
 
-        let point_index = self.raw_path.verbs()[..verb_index]
+        let point_index = self
+            .raw_path
+            .verbs()
             .iter()
+            .take(verb_index)
             .map(|verb| path_verb_to_point_count(*verb))
-            .sum::<usize>();
+            .fold(0_usize, usize::saturating_add);
         let point_count = path_verb_to_point_count(verb);
         let points = self
             .raw_path
             .points()
-            .get(point_index..point_index + point_count)
-            .map_or_else(Vec::new, <[Vec2D]>::to_vec);
+            .iter()
+            .skip(point_index)
+            .take(point_count)
+            .copied()
+            .collect();
 
         ScriptedPathCommand {
             command_type: match verb {
@@ -171,7 +233,8 @@ struct PathMetatablePatched;
 #[derive(Default)]
 struct PathCommandMetatablePatched;
 
-pub(super) fn create_scripted_path(lua: &Lua, path: ScriptedPath) -> Result<AnyUserData> {
+pub(super) fn create_scripted_path(lua: &Lua, mut path: ScriptedPath) -> Result<AnyUserData> {
+    path.charge_current(lua)?;
     let userdata = lua.create_userdata(path)?;
     super::host_dispatch::patch_metatable_once::<PathMetatablePatched>(lua, || {
         patch_path_metatable(lua, userdata.clone())
@@ -251,19 +314,24 @@ fn patch_path_command_metatable(lua: &Lua, userdata: AnyUserData) -> Result<()> 
 impl UserData for ScriptedPath {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_meta_method("__len", |_, this, ()| Ok(this.raw_path.verbs().len()));
-        methods.add_method_mut("moveTo", |_, this, point: LuaVector| {
+        // A drawing command adds one verb and its points, plus the move a
+        // `RawPath` injects before a curve that starts no contour.
+        methods.add_method_mut("moveTo", |lua, this, point: LuaVector| {
+            this.reserve(lua, 1, 1)?;
             this.raw_path.move_to(point.x(), point.y());
             this.mark_dirty();
             Ok(())
         });
-        methods.add_method_mut("lineTo", |_, this, point: LuaVector| {
+        methods.add_method_mut("lineTo", |lua, this, point: LuaVector| {
+            this.reserve(lua, 2, 2)?;
             this.raw_path.line_to(point.x(), point.y());
             this.mark_dirty();
             Ok(())
         });
         methods.add_method_mut(
             "quadTo",
-            |_, this, (control, point): (LuaVector, LuaVector)| {
+            |lua, this, (control, point): (LuaVector, LuaVector)| {
+                this.reserve(lua, 2, 3)?;
                 this.raw_path
                     .quad_to(control.x(), control.y(), point.x(), point.y());
                 this.mark_dirty();
@@ -272,24 +340,28 @@ impl UserData for ScriptedPath {
         );
         methods.add_method_mut(
             "cubicTo",
-            |_, this, (out, inn, point): (LuaVector, LuaVector, LuaVector)| {
+            |lua, this, (out, inn, point): (LuaVector, LuaVector, LuaVector)| {
+                this.reserve(lua, 2, 4)?;
                 this.raw_path
                     .cubic_to(out.x(), out.y(), inn.x(), inn.y(), point.x(), point.y());
                 this.mark_dirty();
                 Ok(())
             },
         );
-        methods.add_method_mut("close", |_, this, ()| {
+        methods.add_method_mut("close", |lua, this, ()| {
+            this.reserve(lua, 1, 0)?;
             this.raw_path.close();
             this.mark_dirty();
             Ok(())
         });
         methods.add_method_mut("reset", |_, this, ()| {
+            // `RawPath::reset` releases both vectors' capacity.
             this.raw_path.reset();
+            this.charge.set(0)?;
             this.mark_dirty();
             Ok(())
         });
-        methods.add_function("add", |_, (userdata, args): (AnyUserData, MultiValue)| {
+        methods.add_function("add", |lua, (userdata, args): (AnyUserData, MultiValue)| {
             let Some(Value::UserData(path)) = args.front() else {
                 return Err(Error::runtime("Path.add expects a Path"));
             };
@@ -303,9 +375,15 @@ impl UserData for ScriptedPath {
             };
             let mut this = userdata.borrow_mut::<ScriptedPath>()?;
             if userdata.to_pointer() == path.to_pointer() {
+                // Doubles the path (`add_self_path` copies it first; the
+                // copy is transient and no larger than the charge).
+                let (verbs, points) = this.verb_and_point_counts();
+                this.reserve(lua, verbs, points)?;
                 this.raw_path.add_self_path(transform.as_ref());
             } else {
                 let path = path.borrow::<ScriptedPath>()?;
+                let (verbs, points) = path.verb_and_point_counts();
+                this.reserve(lua, verbs, points)?;
                 this.raw_path.add_path(&path.raw_path, transform.as_ref());
             }
             this.mark_dirty();
@@ -319,14 +397,17 @@ impl UserData for ScriptedPath {
             let first = iter.borrow_mut().get().next();
             Ok(match first {
                 None => Value::Nil,
-                Some(measure) => {
-                    Value::UserData(lua.create_userdata(ScriptedContourMeasure { measure, iter })?)
-                }
+                Some(measure) => Value::UserData(lua.create_userdata(ScriptedContourMeasure {
+                    measure,
+                    iter,
+                    source_verbs: this.raw_path.verbs().len(),
+                })?),
             })
         });
         methods.add_method("measure", |lua, this, ()| {
             lua.create_userdata(ScriptedPathMeasure {
                 measure: PathMeasure::from_path_default(&this.raw_path),
+                source_verbs: this.raw_path.verbs().len(),
             })
         });
     }
@@ -335,6 +416,8 @@ impl UserData for ScriptedPath {
 struct ScriptedContourMeasure {
     measure: Rc<ContourMeasure>,
     iter: Rc<RefCell<RefCntContourMeasureIter>>,
+    /// Verbs of the path measured, which bound what `extract` appends.
+    source_verbs: usize,
 }
 
 impl ScriptedContourMeasure {
@@ -353,6 +436,7 @@ impl UserData for ScriptedContourMeasure {
                 Some(measure) => Value::UserData(lua.create_userdata(Self {
                     measure,
                     iter: Rc::clone(&this.iter),
+                    source_verbs: this.source_verbs,
                 })?),
                 None => Value::Nil,
             })
@@ -371,11 +455,11 @@ impl UserData for ScriptedContourMeasure {
             let result = this.measure().warp(Vec2D::new(point.x(), point.y()));
             Ok(LuaVector::new(result.x, result.y, 0.0))
         });
-        methods.add_method("extract", |_, this, args: MultiValue| {
+        methods.add_method("extract", |lua, this, args: MultiValue| {
             let start = number_arg(args.front(), "startDistance")?;
             let end = number_arg(args.get(1), "endDistance")?;
             let start_with_move = bool_arg_or(args.get(3), true)?;
-            extract_measure_segment(args.get(2), |destination| {
+            extract_measure_segment(lua, args.get(2), this.source_verbs, |destination| {
                 this.measure()
                     .get_segment(start, end, destination, start_with_move);
             })
@@ -385,6 +469,8 @@ impl UserData for ScriptedContourMeasure {
 
 struct ScriptedPathMeasure {
     measure: PathMeasure,
+    /// Verbs of the path measured, which bound what `extract` appends.
+    source_verbs: usize,
 }
 
 impl UserData for ScriptedPathMeasure {
@@ -409,11 +495,11 @@ impl UserData for ScriptedPathMeasure {
                 0.0,
             ))
         });
-        methods.add_method("extract", |_, this, args: MultiValue| {
+        methods.add_method("extract", |lua, this, args: MultiValue| {
             let start = number_arg(args.front(), "startDistance")?;
             let end = number_arg(args.get(1), "endDistance")?;
             let start_with_move = bool_arg_or(args.get(3), true)?;
-            extract_measure_segment(args.get(2), |destination| {
+            extract_measure_segment(lua, args.get(2), this.source_verbs, |destination| {
                 this.measure
                     .get_segment(start, end, Some(destination), start_with_move);
             })
@@ -421,8 +507,19 @@ impl UserData for ScriptedPathMeasure {
     }
 }
 
+/// Appends a measured segment to the destination path, charged before it
+/// grows.
+///
+/// What a segment appends is bounded by the path that was measured, of
+/// `source_verbs` verbs: each contour emits one piece per curve it covers
+/// plus a partial piece at each end, so at most `source_verbs + contours`
+/// pieces, and contours are at most `source_verbs + 1`. A piece is at most
+/// two verbs (a move, then a curve) and four points. The bound is checked
+/// before appending and the exact size charged after.
 fn extract_measure_segment(
+    lua: &Lua,
     destination: Option<&Value>,
+    source_verbs: usize,
     append: impl FnOnce(&mut RawPath),
 ) -> Result<()> {
     let Some(Value::UserData(destination)) = destination else {
@@ -431,7 +528,14 @@ fn extract_measure_segment(
         ));
     };
     let mut destination = destination.borrow_mut::<ScriptedPath>()?;
+    let pieces = source_verbs.saturating_mul(2).saturating_add(2);
+    destination.charge.attach(lua)?;
+    if !destination.fits(pieces.saturating_mul(2), pieces.saturating_mul(4)) {
+        let limit = super::host_memory_budget::HostMemoryBudget::for_lua(lua)?.limit();
+        return Err(super::host_memory_budget::budget_exceeded(limit));
+    }
     append(&mut destination.raw_path);
+    destination.charge_current(lua)?;
     destination.mark_dirty();
     Ok(())
 }

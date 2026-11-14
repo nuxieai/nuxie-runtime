@@ -1448,8 +1448,12 @@ fn determine_flex_base_size(
                     constants.is_wrap && !constants.is_row && !child.size_style.cross(dir).is_stretch();
                 // The cross size of a stretched item is definite if the container has a definite
                 // cross size (https://www.w3.org/TR/css-flexbox-1/#definite-sizes)
-                child_cross_size_is_definite =
-                    !constants.is_wrap && constants.has_definite_cross_size && cross_axis_parent_size.is_some();
+                // nuxie-css: a `stretch` keyword resolves against the container's definite
+                // cross size on any number of lines (Chrome: `aspect-ratio: 1; height:
+                // stretch` in a 100 tall wrapping row is 100 wide).
+                child_cross_size_is_definite = (!constants.is_wrap || child.size_style.cross(dir).is_stretch())
+                    && constants.has_definite_cross_size
+                    && cross_axis_parent_size.is_some();
             }
             ckd
         };

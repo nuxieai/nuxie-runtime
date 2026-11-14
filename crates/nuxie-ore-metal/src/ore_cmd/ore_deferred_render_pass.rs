@@ -143,6 +143,11 @@ impl RenderPassApi for InlineDeferredRenderPass {
     fn validate(&self) {
         self.state.recording.borrow().validate();
     }
+    /// The inline buffer holds what this pass captured until the pass state
+    /// drops after its replay, so it keeps `owner` as long.
+    fn keepWithRecording(&mut self, owner: Rc<dyn Any>) {
+        self.state.buffer.borrow_mut().keep(owner);
+    }
 }
 pub fn beginRecordedRenderPass(
     ctx: Rc<RefCell<dyn ContextApi>>,

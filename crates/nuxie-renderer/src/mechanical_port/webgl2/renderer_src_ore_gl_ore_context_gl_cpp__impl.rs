@@ -2477,6 +2477,33 @@ mod tests {
         assert!(token.isFinished());
     }
 
+    // Codex review (lane H3): the GL context records no frame, so its passes
+    // are inline passes whose own buffer holds what they capture until the
+    // pass is done. The inline pass dropped what it was asked to keep with
+    // that recording, so a GPU charge handed to it came back while the pass
+    // still held the memory.
+    #[test]
+    fn an_inline_pass_on_an_immediate_context_keeps_owners_until_it_drops() {
+        use nuxie_ore_metal::ore_cmd::ore_deferred_render_pass::beginRecordedRenderPass;
+        let (domain, _) = execution(1..=16);
+        let context: Rc<RefCell<dyn ContextApi>> = Rc::new(RefCell::new(*context(&domain)));
+        assert!(!context.borrow().isRecording());
+        let mut pass = beginRecordedRenderPass(context.clone(), &RenderPassDesc::default())
+            .expect("an inline pass on the immediate GL context");
+        assert!(
+            pass.asAny()
+                .is::<nuxie_ore_metal::ore_cmd::ore_deferred_render_pass::InlineDeferredRenderPass>()
+        );
+        let owner: Rc<dyn std::any::Any> = Rc::new(1024usize);
+        let kept = Rc::downgrade(&owner);
+        pass.keepWithRecording(owner);
+        assert!(kept.upgrade().is_some(), "the open inline pass keeps the owner");
+        pass.finish();
+        assert!(kept.upgrade().is_some(), "a finished pass keeps it until it drops");
+        drop(pass);
+        assert!(kept.upgrade().is_none(), "the dropped pass gives the owner back");
+    }
+
     #[test]
     fn public_ore_handle_retains_factory_backend_without_an_ownership_cycle() {
         use crate::exact_source_adapter::{ExactSourceBackend, ExactSourceFactoryCore};

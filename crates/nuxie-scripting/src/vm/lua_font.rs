@@ -235,8 +235,19 @@ pub(super) fn set_font_asset_owners(lua: &Lua, owners: Arc<RuntimeFontAssetOwner
 }
 
 pub(super) fn create_asset_font(lua: &Lua, font: ScriptFont) -> Result<Option<AnyUserData>> {
+    create_charged_asset_font(lua, font, Rc::default())
+}
+
+/// A font read back from a view-model property that keeps bytes `charge`
+/// paid for (the charge of the decoded font a script assigned to it).
+pub(super) fn create_charged_asset_font(
+    lua: &Lua,
+    font: ScriptFont,
+    charge: Rc<HostMemoryCharge>,
+) -> Result<Option<AnyUserData>> {
     ScriptedFont::from_asset(lua, font)
-        .map(|font| {
+        .map(|mut font| {
+            font.charge = charge;
             let userdata = lua.create_userdata(font)?;
             prepare_font(lua, &userdata)?;
             Ok(userdata)

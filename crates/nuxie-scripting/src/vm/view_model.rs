@@ -8,15 +8,17 @@ use crate::luau::{
     AnyUserData, Buffer, Function, Lua, MultiValue, Table, UserData, UserDataFields,
     UserDataMethods, Value,
 };
+use nuxie_runtime::source::text_engine::FontRef;
 use nuxie_runtime::view_model_cell::RuntimeCellDirtSink;
 use nuxie_runtime::{
-    RuntimeBlobAsset, RuntimeOwnedViewModelInstance, ScriptViewModel,
+    RuntimeBlobAsset, RuntimeOwnedViewModelInstance, ScriptFont, ScriptViewModel,
     ScriptViewModelChangeRegistration, ScriptViewModelProperty, ScriptedContextDataProjection,
     ScriptedContextSource, ScriptedDataContextSource,
 };
 
 use super::lua_blob::{ScriptedBlob, ScriptedBlobAssets};
-use super::lua_font::{ScriptedFont, create_asset_font};
+use super::host_memory_budget::HostMemoryCharge;
+use super::lua_font::{ScriptedFont, create_asset_font, create_charged_asset_font};
 use super::lua_image::{ScriptedImage, create_asset_image};
 use super::host_dispatch::patch_metatable_once;
 use super::lua_main_ref::MainThreadRef;
@@ -1974,6 +1976,10 @@ struct ScriptedPropertyFont {
     model: ScriptViewModel,
     name: String,
     cached_value: Rc<RefCell<Option<MainThreadRef>>>,
+    /// The face a script last assigned and the charge its decode paid, kept
+    /// while the model may still hold that face and handed to every wrapper
+    /// read back for it.
+    assigned: RefCell<Option<(FontRef, Rc<HostMemoryCharge>)>>,
     _change_sink: RuntimeCellDirtSink,
     watch: Rc<ScriptedPropertyWatch>,
 }
@@ -2102,9 +2108,26 @@ impl ScriptedPropertyFont {
             model,
             name,
             cached_value,
+            assigned: RefCell::new(None),
             _change_sink: change_sink,
             watch,
         }
+    }
+
+    /// The charge of the assigned face if the model still holds it; drops it
+    /// once the model holds another face.
+    fn charge_for(&self, font: &ScriptFont) -> Rc<HostMemoryCharge> {
+        let mut assigned = self.assigned.borrow_mut();
+        let held = match (assigned.as_ref(), font.native_font()) {
+            (Some((face, charge)), Some(native)) if Arc::ptr_eq(face, &native) => {
+                Some(Rc::clone(charge))
+            }
+            _ => None,
+        };
+        if held.is_none() {
+            *assigned = None;
+        }
+        held.unwrap_or_default()
     }
 }
 
@@ -2117,7 +2140,10 @@ impl UserData for ScriptedPropertyFont {
             let value = this
                 .model
                 .font(&this.name)
-                .map(|font| create_asset_font(lua, font))
+                .map(|font| {
+                    let charge = this.charge_for(&font);
+                    create_charged_asset_font(lua, font, charge)
+                })
                 .transpose()?
                 .flatten();
             let Some(value) = value else {
@@ -2127,11 +2153,20 @@ impl UserData for ScriptedPropertyFont {
             Ok(Value::UserData(value))
         });
         fields.add_field_method_set("value", |_, this, value: Value| {
-            let font = match value {
-                Value::Nil => None,
-                Value::UserData(font) => Some(font.borrow::<ScriptedFont>()?.font()),
+            let (font, charge) = match value {
+                Value::Nil => (None, None),
+                Value::UserData(font) => {
+                    let font = font.borrow::<ScriptedFont>()?;
+                    (Some(font.font()), Some(font.charge()))
+                }
                 _ => return Err(crate::luau::Error::runtime("expected Font userdata or nil")),
             };
+            // The model keeps the face past the script's font, so the
+            // property keeps the charge its decode paid.
+            *this.assigned.borrow_mut() = font
+                .as_ref()
+                .and_then(ScriptFont::native_font)
+                .zip(charge);
             this.model
                 .defer_property_change_callbacks(|| this.model.set_font(&this.name, font.as_ref()));
             Ok(())
@@ -5217,6 +5252,66 @@ mod tests {
             .expect("retained HarfBuzz font")
             .source_bytes();
         assert!(std::sync::Arc::ptr_eq(&retained_bytes, &host_bytes));
+    }
+
+    fn font_property_fixture() -> (nuxie_runtime::RuntimeFileHandle, ScriptViewModel, String) {
+        let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+            .join("tests/unit_tests/assets/data_bind_font_test.riv");
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+        let file = native_test_file(&bytes);
+        let (model, name) = nuxie_runtime::script_view_models(&file)
+            .into_iter()
+            .find_map(|(view_model_name, definition)| {
+                native_instance_names(&file, &view_model_name)
+                    .into_iter()
+                    .find_map(|instance_name| {
+                        let model = definition.named_instance(Some(&instance_name))?;
+                        let name = model.properties().iter().find_map(|(name, kind)| {
+                            (*kind == ScriptViewModelProperty::Font).then(|| name.clone())
+                        })?;
+                        Some((model, name))
+                    })
+            })
+            .expect("fixture has a font property");
+        (file, model, name)
+    }
+
+    // Lane E2b review round 4: the property kept the decoded face after the
+    // script's font was collected, and the charge went with the font.
+    #[test]
+    fn a_font_assigned_to_a_property_stays_charged() {
+        use crate::vm::host_memory_budget::HostMemoryBudget;
+        let (_file, model, name) = font_property_fixture();
+        let lua = Lua::new();
+        HostMemoryBudget::install(&lua, 1024 * 1024).unwrap();
+        crate::vm::lua_font::register(&lua).unwrap();
+        let bytes = include_bytes!("../../../../fixtures/fonts/ibm-plex-sans-arabic.ttf");
+        lua.globals()
+            .set("fontBytes", lua.create_buffer(bytes).unwrap())
+            .unwrap();
+        let table = create_scripted_view_model(&lua, model).expect("scripted model");
+        lua.globals().set("model", table).unwrap();
+        lua.globals().set("propertyName", name).unwrap();
+        let used = || HostMemoryBudget::for_lua(&lua).unwrap().used();
+        lua.load(
+            "fontProperty = model[propertyName]\n\
+             fontProperty.value = Font.decode(fontBytes)",
+        )
+        .exec()
+        .unwrap();
+        lua.gc_collect().unwrap();
+        assert_eq!(used(), 226_004, "the property keeps the decoded face");
+        lua.load("kept = fontProperty.value\nfontProperty.value = nil")
+            .exec()
+            .unwrap();
+        lua.gc_collect().unwrap();
+        assert_eq!(used(), 226_004, "the font read back keeps the face");
+        lua.load("kept = nil").exec().unwrap();
+        lua.gc_collect().unwrap();
+        assert_eq!(used(), 0);
     }
 
     fn positive_blob_lookup_surface() -> String {

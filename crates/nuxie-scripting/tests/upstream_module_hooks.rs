@@ -187,7 +187,7 @@ fn host_structured_error_retains_cause_and_is_visible_to_module_hook() {
     let Error::CallbackError { cause, .. } = error else {
         panic!("module execution must retain the structured host cause: {error}");
     };
-    assert!(matches!(cause.as_ref(), Error::CallbackDestructed));
+    assert_eq!(cause, nuxie_scripting::luau::CallbackCause::CallbackDestructed);
     let errors = hooks.errors.borrow();
     assert_eq!(errors.len(), 1);
     assert_eq!(errors[0].0, identity);

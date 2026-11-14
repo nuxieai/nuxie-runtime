@@ -54,7 +54,7 @@ mod value;
 #[cfg(all(test, feature = "compiler"))]
 mod tests;
 
-pub use error::{Error, ExternalError, ExternalResult, Result};
+pub use error::{CallbackCause, Error, ExternalError, ExternalResult, Result};
 pub use handles::{Buffer, Function, LuaString, Table, Thread, ThreadStatus};
 pub use multi::{MultiValue, Variadic};
 pub use state::{

@@ -130,12 +130,10 @@ impl ResourceLimitTracker {
     }
 
     pub(super) fn observe_vm_error(&self, error: &Error) {
-        match error {
-            Error::MemoryError(_) => {
-                self.record(ScriptResourceLimit::Memory);
-            }
-            Error::CallbackError { cause, .. } => self.observe_vm_error(cause),
-            _ => {}
+        // A callback error's cause is never a memory error
+        // (`CallbackCause`), so there is no chain to follow.
+        if let Error::MemoryError(_) = error {
+            self.record(ScriptResourceLimit::Memory);
         }
     }
 

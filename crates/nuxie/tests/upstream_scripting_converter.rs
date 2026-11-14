@@ -159,3 +159,16 @@ fn data_converter_with_bound_inputs_in_artboard_and_state_machine() {
 
     fixture.matches("scripted_data_converter_bound_input");
 }
+
+/// Scripted converters and the listeners their writes reach run with no Core
+/// receiver mutably lent (before: the bind's context value was borrowed
+/// across `apply`, `nuxie-runtime/src/script_borrow_check.rs` reported each
+/// call).
+#[test]
+fn scripted_converters_run_with_no_core_receiver_lent() {
+    let ((), reports) = nuxie_runtime::script_borrow_check::record_script_borrow_reports(|| {
+        scripted_string_converter();
+        data_converter_with_bound_inputs_in_artboard_and_state_machine();
+    });
+    assert!(reports.is_empty(), "{}", reports.join("\n"));
+}

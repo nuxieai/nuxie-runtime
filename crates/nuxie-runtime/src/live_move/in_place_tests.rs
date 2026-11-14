@@ -22,6 +22,11 @@ fn slot_page() -> SlotPage {
 
 /// `bytes`' page, played to its first frame, with A's placement `name`.
 fn page(bytes: &[u8], name: &str) -> SlotPage {
+    page_of::<NestedArtboardLayout>(bytes, name)
+}
+
+/// `bytes`' page, played to its first frame, with A's `T` named `name`.
+fn page_of<T: crate::source::core::CoreType>(bytes: &[u8], name: &str) -> SlotPage {
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let file = File::import(
         bytes,
@@ -39,9 +44,7 @@ fn page(bytes: &[u8], name: &str) -> SlotPage {
     machine.with_instance_mut(|m| m.bind_view_model_instance(model));
     machine.advance_and_apply(0.0);
     let screen = crate::live_move::screens(&root).unwrap()["A"].clone();
-    let placement = screen
-        .with_artboard(|b| b.find_handle::<NestedArtboardLayout>(name))
-        .unwrap();
+    let placement = screen.with_artboard(|b| b.find_handle::<T>(name)).unwrap();
     SlotPage {
         _factory: factory,
         _file: file,
@@ -164,4 +167,43 @@ fn a_placement_of_a_native_layout_artboard_is_refused() {
         .expect("refused")
         .to_string();
     assert!(error.contains("without its own CSS record"), "{error}");
+}
+
+/// A text's cover anchor rests only where a box's would (`Resting::compose`
+/// asks it of every level): while its own record's layout is keyed, or a
+/// keyed sibling in flow can push it, it has no resting place, and covering
+/// is the safe side. On both pages the card on A sits in a flex row beside a
+/// box "note"; on one it is a box, on the other a text.
+#[test]
+fn a_texts_cover_anchor_rests_only_where_a_boxs_would() {
+    use crate::css_layout::{LayoutCssStyle, record};
+    use crate::live_move_fixture::{InPlaceFixture, KeyedKind, in_place_fixture};
+    use crate::source::component::Component;
+    for (fixture, what) in [
+        (InPlaceFixture::Plain, "a box"),
+        (InPlaceFixture::Keyed(KeyedKind::Text), "a text"),
+    ] {
+        for keyed in ["card", "note"] {
+            let page = page_of::<Component>(&in_place_fixture(fixture), "card");
+            let board = page.screen.core_handle();
+            let anchor = || super::super::follow::resting_anchor_box(&board, &page.placement);
+            assert!(anchor().is_some(), "{what} rests");
+            let target = page
+                .screen
+                .with_artboard(|b| b.find_handle::<Component>(keyed))
+                .unwrap();
+            let children = target
+                .with(|o| o.as_container_component().map(|c| c.children().to_vec()))
+                .flatten()
+                .unwrap();
+            record::find_in(&children)
+                .unwrap()
+                .with_downcast_mut::<LayoutCssStyle, _>(LayoutCssStyle::mark_layout_keyed)
+                .unwrap();
+            assert!(
+                anchor().is_none(),
+                "{what} has no resting place while {keyed}'s layout is keyed"
+            );
+        }
+    }
 }

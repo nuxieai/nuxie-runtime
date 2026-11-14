@@ -96,6 +96,27 @@ fn dispatch_or_defer_notification(defer: bool, notification: impl FnOnce() + 'st
     }
 }
 
+/// Publishes a value's delegate notification where no Core borrow can be
+/// live: a host mutation or transaction publishes it at its commit, after
+/// the setter has returned; otherwise it runs once the outermost Core
+/// receiver is released (at once when none is lent out). Delegates may read
+/// or write the value that changed (a script listener reads
+/// `property.value`), so they never run under that value's slot borrow.
+pub(crate) fn dispatch_value_notification(notification: impl FnOnce() + 'static) {
+    let mut notification = Some(notification);
+    HOST_MUTATION_NOTIFICATIONS.with(|slot| {
+        if let Some(notifications) = slot.borrow_mut().as_mut()
+            && let Some(notification) = notification.take()
+        {
+            notifications.push(Box::new(notification));
+        }
+    });
+    // Never invoke a callback while holding the queue's RefCell borrow.
+    if let Some(notification) = notification {
+        crate::source::layout::picture_layout_mode::after_core_borrows(notification);
+    }
+}
+
 /// Tools observers follow the explicit host transaction's publication boundary.
 /// Callers capture the callback and its typed argument at the write, while the
 /// callback still receives the original native owner on commit. Detached values

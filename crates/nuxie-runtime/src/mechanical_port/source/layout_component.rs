@@ -6808,9 +6808,7 @@ impl LayoutComponent {
             }
             Self::interpolator_occurrence(owner)
                 .and_then(|interpolator| {
-                    interpolator
-                        .with_mut(|object| object.keyframe_interpolator_transform(factor))
-                        .flatten()
+                    crate::mechanical_port::source::animation::keyframe_interpolator::transform_occurrence(&interpolator, factor)
                 })
                 .unwrap_or(factor)
         };
@@ -7089,9 +7087,7 @@ impl LayoutComponent {
             layout
                 .interpolator()
                 .and_then(|interpolator| {
-                    interpolator
-                        .with_mut(|object| object.keyframe_interpolator_transform(factor))
-                        .flatten()
+                    crate::mechanical_port::source::animation::keyframe_interpolator::transform_occurrence(&interpolator, factor)
                 })
                 .unwrap_or(factor)
         };

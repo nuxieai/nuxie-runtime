@@ -280,6 +280,15 @@ impl DataConverter {
         {
             return ScriptedDataConverter::convert_handle(owner, input, reverse);
         }
+        // A range mapper's interpolator may be scripted: it runs between two
+        // borrows of the mapper.
+        if let Some(value) =
+            super::data_converter_range_mapper::DataConverterRangeMapper::convert_occurrence(
+                owner, input, reverse,
+            )
+        {
+            return value;
+        }
         if let Some(mut items) =
             owner.with_downcast::<DataConverterGroup, _>(|group| group.items().to_vec())
         {

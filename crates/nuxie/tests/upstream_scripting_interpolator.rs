@@ -280,3 +280,21 @@ fn scripted_range_mapper_runs_its_own_initialized_clone() {
         approx(x(&mapped), input * input / 100.0);
     }
 }
+
+/// Scripted interpolators run with no Core receiver mutably lent: not the
+/// interpolator itself, nor the layout, transition layer or converter that
+/// asks for the factor (before: each `transform` ran inside the
+/// interpolator's `with_mut`, a range mapper's inside the converter's, and a
+/// converter interpolator's advance inside the converter's).
+#[test]
+fn scripted_interpolators_run_with_no_core_receiver_lent() {
+    let ((), reports) = nuxie_runtime::script_borrow_check::record_script_borrow_reports(|| {
+        layouts_that_inherit_share_the_definers_scripted_interpolator();
+        each_artboard_runs_its_own_layout_interpolator_instance();
+        scripted_transition_runs_its_state_machine_instances_clone();
+        scripted_converter_interpolator_runs_per_bound_converter();
+        converter_interpolator_inits_with_bound_inputs_again_on_rebind();
+        scripted_range_mapper_runs_its_own_initialized_clone();
+    });
+    assert!(reports.is_empty(), "{}", reports.join("\n"));
+}

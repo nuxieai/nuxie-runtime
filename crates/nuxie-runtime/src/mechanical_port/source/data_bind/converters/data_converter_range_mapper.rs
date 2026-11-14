@@ -155,68 +155,61 @@ impl DataConverterRangeMapper {
         }
         result
     }
-    fn calculate_range(
-        &mut self,
-        input: &dyn DataValue,
-        min_input: f32,
-        max_input: f32,
-        min_output: f32,
-        max_output: f32,
-    ) -> &DataValueNumber {
-        let result = if let Some(number) = input.as_any().downcast_ref::<DataValueNumber>() {
-            if min_output == max_output {
-                min_output
-            } else {
-                let mut value = number.value();
-                if value < min_input && self.base.flags() & CLAMP_LOWER == CLAMP_LOWER {
-                    value = min_input
-                } else if value > max_input && self.base.flags() & CLAMP_UPPER == CLAMP_UPPER {
-                    value = max_input
-                }
-                if (value < min_input || value > max_input) && self.base.flags() & MODULO == MODULO
-                {
-                    value = (Self::positive_mod(value, max_input - min_input) + min_input).abs();
-                }
-                let mut percentage = (value - min_input) / (max_input - min_input);
-                if self.base.flags() & REVERSE == REVERSE {
-                    percentage = 1.0 - percentage;
-                }
-                if self.interpolator.is_some() && percentage > 0.0 && percentage < 1.0 {
-                    let interpolator = self.active_interpolator().expect("authored interpolator");
-                    percentage = interpolator
-                        .with_mut(|interpolator| {
-                            interpolator.keyframe_interpolator_transform(percentage)
-                        })
-                        .flatten()
-                        .unwrap_or(percentage);
-                } else if self.base.interpolation_type() == 0 {
-                    percentage = if percentage <= 0.0 { 0.0 } else { 1.0 };
-                }
-                percentage * max_output + (1.0 - percentage) * min_output
-            }
+    /// What one conversion reads from the mapper, so it can run with no
+    /// borrow of it: a scripted interpolator may reach this converter.
+    fn range(&self, reverse: bool) -> Range {
+        let (min_input, max_input, min_output, max_output) = if reverse {
+            (
+                self.base.min_output(),
+                self.base.max_output(),
+                self.base.min_input(),
+                self.base.max_input(),
+            )
         } else {
-            DataValueNumber::DEFAULT_VALUE
+            (
+                self.base.min_input(),
+                self.base.max_input(),
+                self.base.min_output(),
+                self.base.max_output(),
+            )
         };
-        self.output.set_value(result);
-        &self.output
+        Range {
+            min_input,
+            max_input,
+            min_output,
+            max_output,
+            flags: self.base.flags(),
+            interpolation_type: self.base.interpolation_type(),
+            interpolator: self
+                .interpolator
+                .is_some()
+                .then(|| self.active_interpolator().expect("authored interpolator")),
+        }
     }
     pub fn convert(&mut self, input: &dyn DataValue) -> &DataValueNumber {
-        self.calculate_range(
-            input,
-            self.base.min_input(),
-            self.base.max_input(),
-            self.base.min_output(),
-            self.base.max_output(),
-        )
+        self.output.set_value(self.range(false).map(input));
+        &self.output
     }
     pub fn reverse_convert(&mut self, input: &dyn DataValue) -> &DataValueNumber {
-        self.calculate_range(
-            input,
-            self.base.min_output(),
-            self.base.max_output(),
-            self.base.min_input(),
-            self.base.max_input(),
-        )
+        self.output.set_value(self.range(true).map(input));
+        &self.output
+    }
+    /// `convert` / `reverseConvert` through the handle: the interpolator
+    /// runs between two borrows of the mapper, not inside one. `None` when
+    /// `owner` is not a range mapper.
+    pub fn convert_occurrence(
+        owner: &CoreHandle,
+        input: &dyn DataValue,
+        reverse: bool,
+    ) -> Option<Box<dyn DataValue>> {
+        let range = owner.with_downcast::<Self, _>(|mapper| mapper.range(reverse))?;
+        let result = range.map(input);
+        owner.with_downcast_mut::<Self, _>(|mapper| {
+            mapper.output.set_value(result);
+            crate::mechanical_port::source::data_bind::data_values::data_value::clone_data_value(
+                &mapper.output,
+            )
+        })
     }
     pub fn interpolator_id(&self) -> u32 {
         self.base.interpolator_id()
@@ -330,5 +323,64 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
 impl Drop for DataConverterRangeMapper {
     fn drop(&mut self) {
         self.scripted_interpolator = None;
+    }
+}
+
+/// One range mapping's inputs (`DataConverterRangeMapper::calculateRange`).
+struct Range {
+    min_input: f32,
+    max_input: f32,
+    min_output: f32,
+    max_output: f32,
+    flags: u32,
+    interpolation_type: u32,
+    interpolator: Option<CoreHandle>,
+}
+
+impl Range {
+    fn map(&self, input: &dyn DataValue) -> f32 {
+        let Range {
+            min_input,
+            max_input,
+            min_output,
+            max_output,
+            flags,
+            ..
+        } = *self;
+        let Some(number) = input.as_any().downcast_ref::<DataValueNumber>() else {
+            return DataValueNumber::DEFAULT_VALUE;
+        };
+        if min_output == max_output {
+            return min_output;
+        }
+        let mut value = number.value();
+        if value < min_input && flags & CLAMP_LOWER == CLAMP_LOWER {
+            value = min_input
+        } else if value > max_input && flags & CLAMP_UPPER == CLAMP_UPPER {
+            value = max_input
+        }
+        if (value < min_input || value > max_input) && flags & MODULO == MODULO {
+            value = (DataConverterRangeMapper::positive_mod(value, max_input - min_input)
+                + min_input)
+                .abs();
+        }
+        let mut percentage = (value - min_input) / (max_input - min_input);
+        if flags & REVERSE == REVERSE {
+            percentage = 1.0 - percentage;
+        }
+        if let Some(interpolator) = self.interpolator.as_ref()
+            && percentage > 0.0
+            && percentage < 1.0
+        {
+            percentage =
+                crate::mechanical_port::source::animation::keyframe_interpolator::transform_occurrence(
+                    interpolator,
+                    percentage,
+                )
+                .unwrap_or(percentage);
+        } else if self.interpolation_type == 0 {
+            percentage = if percentage <= 0.0 { 0.0 } else { 1.0 };
+        }
+        percentage * max_output + (1.0 - percentage) * min_output
     }
 }

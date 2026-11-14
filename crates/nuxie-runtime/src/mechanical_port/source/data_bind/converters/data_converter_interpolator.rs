@@ -260,10 +260,8 @@ impl DataConverterInterpolator {
     fn transform_factor(interpolator: Option<&CoreHandle>, factor: f32) -> f32 {
         interpolator
             .and_then(|interpolator| {
-                interpolator
-                    .with_mut(|interpolator| interpolator.keyframe_interpolator_transform(factor))
+                crate::mechanical_port::source::animation::keyframe_interpolator::transform_occurrence(interpolator, factor)
             })
-            .flatten()
             .unwrap_or(factor)
     }
     pub fn may_advance(&self) -> bool {
@@ -276,11 +274,59 @@ impl DataConverterInterpolator {
     }
 
     fn advance_interpolator(&mut self, elapsed: f32) -> bool {
+        let Some(mut step) = self.begin_advance(elapsed) else {
+            return self.advancer_pending_result();
+        };
+        Self::advance_animation_data(
+            &mut self.advancer,
+            step.duration,
+            step.interpolator.as_ref(),
+            elapsed,
+        );
+        step.advancer_elapsed = self.advancer.current().elapsed_seconds;
+        self.finish_advance(&step)
+    }
+
+    /// The interpolator's advance through the handle. Its animation state is
+    /// moved out of the converter for the step, so a scripted interpolator
+    /// runs with no borrow of the converter (and, re-entering it, finds the
+    /// state at rest rather than a `RefCell` panic).
+    pub(crate) fn advance_interpolator_occurrence(owner: &CoreHandle, elapsed: f32) -> bool {
+        let Some(begun) = owner
+            .with_downcast_mut::<Self, _>(|converter| match converter.begin_advance(elapsed) {
+                Some(step) => Ok((step, std::mem::take(&mut converter.advancer))),
+                None => Err(converter.advancer_pending_result()),
+            })
+        else {
+            return false;
+        };
+        let (mut step, mut advancer) = match begun {
+            Ok(begun) => begun,
+            Err(result) => return result,
+        };
+        Self::advance_animation_data(
+            &mut advancer,
+            step.duration,
+            step.interpolator.as_ref(),
+            elapsed,
+        );
+        step.advancer_elapsed = advancer.current().elapsed_seconds;
+        owner
+            .with_downcast_mut::<Self, _>(|converter| {
+                converter.advancer = advancer;
+                converter.finish_advance(&step)
+            })
+            .unwrap_or(false)
+    }
+
+    /// The part of `advance_interpolator` before the animation data moves:
+    /// `None` when it returns without moving it.
+    fn begin_advance(&mut self, elapsed: f32) -> Option<AdvanceStep> {
         if self.advance_count < 2 && elapsed > 0.0 {
             self.advance_count += 1;
         }
         if !self.advancer.initialized {
-            return true;
+            return None;
         }
         let current_to_matches = self
             .advancer
@@ -290,78 +336,96 @@ impl DataConverterInterpolator {
             .unwrap()
             .compare(self.advancer.current_value.as_deref());
         if current_to_matches || elapsed == 0.0 {
-            return false;
+            return None;
         }
-        let previous = self.advancer.current().elapsed_seconds;
-        self.advance_animation_data(elapsed);
-        if previous < self.base.duration() {
+        Some(AdvanceStep {
+            previous: self.advancer.current().elapsed_seconds,
+            duration: self.base.duration(),
+            interpolator: self.active_interpolator(),
+            advancer_elapsed: 0.0,
+        })
+    }
+
+    /// What `advance_interpolator` returns when `begin_advance` stops it.
+    fn advancer_pending_result(&self) -> bool {
+        !self.advancer.initialized
+    }
+
+    fn finish_advance(&mut self, step: &AdvanceStep) -> bool {
+        if step.previous < step.duration {
             self.base.base.mark_converter_dirty();
         }
         // advance_animation_data may have ended the smoothing animation.
-        self.advancer.current().elapsed_seconds < self.base.duration()
+        step.advancer_elapsed < step.duration
     }
-    fn advance_animation_data(&mut self, elapsed: f32) {
-        let mut use_animation_b = self.advancer.is_smoothing;
-        if self.advancer.is_smoothing {
-            let mut f = (if self.base.duration() > 0.0 {
-                self.advancer.animation_a.elapsed_seconds / self.base.duration()
+
+    fn advance_animation_data(
+        advancer: &mut InterpolatorAdvancer,
+        duration: f32,
+        interpolator: Option<&CoreHandle>,
+        elapsed: f32,
+    ) {
+        let mut use_animation_b = advancer.is_smoothing;
+        if advancer.is_smoothing {
+            let mut f = (if duration > 0.0 {
+                advancer.animation_a.elapsed_seconds / duration
             } else {
                 1.0
             })
             .min(1.0);
-            f = Self::transform_factor(self.active_interpolator().as_ref(), f);
-            self.advancer
+            f = Self::transform_factor(interpolator, f);
+            advancer
                 .animation_a
-                .interpolate(f, self.advancer.animation_b.from.as_deref_mut().unwrap());
+                .interpolate(f, advancer.animation_b.from.as_deref_mut().unwrap());
             if f == 1.0 {
-                let mut a = core::mem::take(&mut self.advancer.animation_a);
-                a.copy(&self.advancer.animation_b);
-                self.advancer.animation_a = a;
-                self.advancer.is_smoothing = false;
+                let mut a = core::mem::take(&mut advancer.animation_a);
+                a.copy(&advancer.animation_b);
+                advancer.animation_a = a;
+                advancer.is_smoothing = false;
                 // B now lives in A, so keep advancing A rather than leaving
                 // it one frame behind and repeating this frame's value.
-                use_animation_b = self.advancer.is_smoothing;
+                use_animation_b = advancer.is_smoothing;
             } else {
-                self.advancer.animation_a.elapsed_seconds += elapsed;
+                advancer.animation_a.elapsed_seconds += elapsed;
             }
         }
         let current = if use_animation_b {
-            &mut self.advancer.animation_b
+            &mut advancer.animation_b
         } else {
-            &mut self.advancer.animation_a
+            &mut advancer.animation_a
         };
-        if current.elapsed_seconds >= self.base.duration() {
+        if current.elapsed_seconds >= duration {
             current
                 .to
                 .as_ref()
                 .unwrap()
-                .copy_value(self.advancer.current_value.as_deref_mut());
-            if self.advancer.is_smoothing {
-                self.advancer.is_smoothing = false;
-                let mut a = core::mem::take(&mut self.advancer.animation_a);
-                a.copy(&self.advancer.animation_b);
-                self.advancer.animation_a = a;
-                self.advancer.animation_a.elapsed_seconds = 0.0;
-                self.advancer.animation_b.elapsed_seconds = 0.0
+                .copy_value(advancer.current_value.as_deref_mut());
+            if advancer.is_smoothing {
+                advancer.is_smoothing = false;
+                let mut a = core::mem::take(&mut advancer.animation_a);
+                a.copy(&advancer.animation_b);
+                advancer.animation_a = a;
+                advancer.animation_a.elapsed_seconds = 0.0;
+                advancer.animation_b.elapsed_seconds = 0.0
             } else {
-                self.advancer.animation_a.elapsed_seconds = 0.0
+                advancer.animation_a.elapsed_seconds = 0.0
             }
             return;
         }
         current.elapsed_seconds += elapsed;
-        let mut f = (if self.base.duration() > 0.0 {
-            current.elapsed_seconds / self.base.duration()
+        let mut f = (if duration > 0.0 {
+            current.elapsed_seconds / duration
         } else {
             1.0
         })
         .min(1.0);
-        f = Self::transform_factor(self.active_interpolator().as_ref(), f);
+        f = Self::transform_factor(interpolator, f);
         let current = if use_animation_b {
-            &self.advancer.animation_b
+            &advancer.animation_b
         } else {
-            &self.advancer.animation_a
+            &advancer.animation_a
         };
-        current.interpolate(f, self.advancer.current_value.as_deref_mut().unwrap());
+        current.interpolate(f, advancer.current_value.as_deref_mut().unwrap());
     }
     pub fn convert<'a>(&'a mut self, input: &'a dyn DataValue) -> &'a dyn DataValue {
         if self.base.duration() == 0.0 && self.advancer.initialized {
@@ -476,14 +540,7 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
         |owner, elapsed| {
             let binds_advanced =
                 super::data_converter::DataConverter::advance_base_handle(owner, elapsed);
-            owner
-                .with_mut(|owner| {
-                    owner
-                        .as_data_converter_capability_mut()
-                        .is_some_and(|converter| converter.advance_after_binds(elapsed))
-                })
-                .unwrap_or(false)
-                || binds_advanced
+            Self::advance_interpolator_occurrence(owner, elapsed) || binds_advanced
         }
     }
     fn advance_after_binds(&mut self, elapsed: f32) -> bool {
@@ -503,4 +560,13 @@ impl Drop for DataConverterInterpolator {
         self.advancer.reset();
         self.scripted_interpolator = None;
     }
+}
+
+/// One interpolator advance step's reads, taken before the animation data
+/// moves and applied after it.
+struct AdvanceStep {
+    previous: f32,
+    duration: f32,
+    interpolator: Option<CoreHandle>,
+    advancer_elapsed: f32,
 }

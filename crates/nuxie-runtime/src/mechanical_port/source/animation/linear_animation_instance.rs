@@ -31,7 +31,7 @@ use crate::mechanical_port::source::{
         },
     },
     scene::{Scene, SceneBehavior},
-    scripted::scripted_interpolator::{ScriptedInterpolator, StatefulScriptedInterpolator},
+    scripted::scripted_interpolator::StatefulScriptedInterpolator,
 };
 use std::{
     cell::{Cell, RefCell, RefMut},
@@ -681,10 +681,8 @@ impl KeyFrameValueContext for LinearAnimationInstance {
         to: f32,
         factor: f32,
     ) -> Option<f32> {
-        self.stateful_interpolator(keyframe.clone(), shared.clone())?
-            .with_downcast_mut::<ScriptedInterpolator, _>(|interpolator| {
-                interpolator.transform_value(from, to, factor)
-            })
+        let interpolator = self.stateful_interpolator(keyframe.clone(), shared.clone())?;
+        crate::mechanical_port::source::animation::keyframe_interpolator::scripted_transform_value_occurrence(&interpolator, from, to, factor)
     }
 
     fn stateful_interpolator_transform(
@@ -693,10 +691,8 @@ impl KeyFrameValueContext for LinearAnimationInstance {
         shared: &CoreHandle,
         factor: f32,
     ) -> Option<f32> {
-        self.stateful_interpolator(keyframe.clone(), shared.clone())?
-            .with_downcast_mut::<ScriptedInterpolator, _>(|interpolator| {
-                interpolator.transform(factor)
-            })
+        let interpolator = self.stateful_interpolator(keyframe.clone(), shared.clone())?;
+        crate::mechanical_port::source::animation::keyframe_interpolator::scripted_transform_occurrence(&interpolator, factor)
     }
 }
 impl KeyedCallbackReporter for LinearAnimationInstance {

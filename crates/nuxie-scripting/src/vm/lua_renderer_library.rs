@@ -165,13 +165,17 @@ impl RendererBindings {
     pub(crate) fn gpu_features(&self, lua: &Lua) -> Result<crate::luau::Table> {
         let table = lua.create_table();
         if let Some(context) = self.ore_context() {
-            let context = context.borrow();
-            if !context.featuresKnown() {
+            // Copied out, so the context is not borrowed while the table is
+            // written.
+            let features = {
+                let context = context.borrow();
+                context.featuresKnown().then(|| context.features())
+            };
+            let Some(features) = features else {
                 return Err(crate::luau::Error::runtime(
                     "context.features is not available yet: this script is recording for a GPU device that has not been attached, so no capability can be reported without guessing at it. Read features from a method that runs after the first frame instead of at module scope",
                 ));
-            }
-            let features = context.features();
+            };
             macro_rules! field {
                 ($($name:ident),*) => { $(table.set(stringify!($name), features.$name)?;)* };
             }

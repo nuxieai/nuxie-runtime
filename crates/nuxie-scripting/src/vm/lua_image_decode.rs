@@ -3,7 +3,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::luau::{AnyUserData, Buffer, Lua, RegistryKey, Result, Value};
@@ -42,8 +42,12 @@ impl ScriptImageDecoder for RustScriptImageDecoder {
 }
 
 /// One request counted in flight, from submit until its task or its
-/// completion is dropped, on whichever thread that is.
-struct InFlight(Arc<AtomicUsize>);
+/// completion is dropped, on whichever thread that is. Dropping it also
+/// marks the request's buffers released.
+struct InFlight {
+    count: Arc<AtomicUsize>,
+    released: Arc<AtomicBool>,
+}
 
 impl InFlight {
     fn admit(count: &Arc<AtomicUsize>) -> Option<Self> {
@@ -52,7 +56,10 @@ impl InFlight {
                 (current < MAX_IMAGE_DECODES_IN_FLIGHT).then(|| current.saturating_add(1))
             })
             .ok()
-            .map(|_| Self(Arc::clone(count)))
+            .map(|_| Self {
+                count: Arc::clone(count),
+                released: Arc::new(AtomicBool::new(false)),
+            })
     }
 }
 
@@ -60,10 +67,11 @@ impl Drop for InFlight {
     fn drop(&mut self) {
         // Every token was counted when admitted, so this never goes below 0.
         let _ = self
-            .0
+            .count
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
                 Some(current.saturating_sub(1))
             });
+        self.released.store(true, Ordering::Release);
     }
 }
 
@@ -199,8 +207,16 @@ impl WorkCallbacks for ImageDecodeTask {
 struct PendingDecode {
     promise: RegistryKey,
     cancellation: WorkCancellationHandle,
-    /// The encoded copy and the decoded image, until the promise settles or
-    /// is cancelled; the settled image is then the VM's buffer.
+    /// The encoded copy and the decoded image, until the promise settles;
+    /// the settled image is then the VM's buffer. A cancelled request keeps
+    /// it until its task lets go of the buffers.
+    charge: HostMemoryCharge,
+    released: Arc<AtomicBool>,
+}
+
+/// A cancelled request whose task may still hold its buffers.
+struct CancelledDecode {
+    released: Arc<AtomicBool>,
     _charge: HostMemoryCharge,
 }
 
@@ -211,6 +227,8 @@ pub(super) struct ImageDecodeRegistry {
     pending: RefCell<HashMap<u64, PendingDecode>>,
     completions: Arc<Mutex<CompletionQueue>>,
     in_flight: Arc<AtomicUsize>,
+    /// At most `MAX_IMAGE_DECODES_IN_FLIGHT`: each holds an in-flight slot.
+    cancelled: RefCell<Vec<CancelledDecode>>,
 }
 
 impl ImageDecodeRegistry {
@@ -222,6 +240,7 @@ impl ImageDecodeRegistry {
             pending: RefCell::new(HashMap::new()),
             completions: Arc::new(Mutex::new(CompletionQueue::default())),
             in_flight: Arc::new(AtomicUsize::new(0)),
+            cancelled: RefCell::new(Vec::new()),
         }
     }
 
@@ -236,9 +255,25 @@ impl ImageDecodeRegistry {
     }
 
     fn cancel(&self, request_id: u64) {
-        if let Some(pending) = self.pending.borrow_mut().remove(&request_id) {
+        let removed = self.pending.borrow_mut().remove(&request_id);
+        if let Some(pending) = removed {
             pending.cancellation.cancel();
+            self.release_cancelled();
+            if !pending.released.load(Ordering::Acquire) {
+                // Within the in-flight cap the slots were reserved at start.
+                self.cancelled.borrow_mut().push(CancelledDecode {
+                    released: pending.released,
+                    _charge: pending.charge,
+                });
+            }
         }
+    }
+
+    /// Refunds cancelled requests whose tasks have let go of their buffers.
+    fn release_cancelled(&self) {
+        self.cancelled
+            .borrow_mut()
+            .retain(|cancelled| !cancelled.released.load(Ordering::Acquire));
     }
 
     fn cancel_all(&self) {
@@ -281,6 +316,7 @@ pub(super) fn start(lua: &Lua, encoded: Buffer) -> Result<AnyUserData> {
     }
 
     let registry = registry(lua)?;
+    registry.release_cancelled();
     let in_flight = InFlight::admit(&registry.in_flight).ok_or_else(|| {
         crate::luau::Error::runtime(format!(
             "decodeImage: at most {MAX_IMAGE_DECODES_IN_FLIGHT} images may be decoding at once"
@@ -295,6 +331,7 @@ pub(super) fn start(lua: &Lua, encoded: Buffer) -> Result<AnyUserData> {
         .and_then(|image| decoded_rgba_len(image.width, image.height))
         .unwrap_or(0);
     charge.grow(decoded_bytes)?;
+    let released = Arc::clone(&in_flight.released);
     let promise = lua_promise::new_pending(lua)?;
     let promise_ref = lua.create_registry_value(promise.clone())?;
     let request_id = registry.next_request_id();
@@ -311,7 +348,8 @@ pub(super) fn start(lua: &Lua, encoded: Buffer) -> Result<AnyUserData> {
         PendingDecode {
             promise: promise_ref,
             cancellation: task.cancellation_handle(),
-            _charge: charge,
+            charge,
+            released,
         },
     );
 
@@ -424,6 +462,7 @@ pub(super) fn poll_registry_completed(
             }
         }
     }
+    registry.release_cancelled();
     Ok(settled)
 }
 
@@ -519,6 +558,26 @@ mod tests {
         lua.load("context:decodeImage(buffer.create(40))").exec().unwrap();
         assert_eq!(budget.used(), 40);
         drain_work(&lua);
+        assert_eq!(budget.used(), 0);
+    }
+
+    // Codex review: a cancelled request was refunded while its task still
+    // held the encoded copy.
+    #[test]
+    fn a_cancelled_decode_is_charged_until_its_task_lets_go() {
+        let lua = lua_with_context();
+        let budget = super::super::host_memory_budget::HostMemoryBudget::for_lua(&lua).unwrap();
+        lua.load("context:decodeImage(buffer.create(40)):cancel()")
+            .exec()
+            .unwrap();
+        // The pool has not delivered the task's callbacks: it holds the copy.
+        assert_eq!(budget.used(), 40);
+        let registry = registry(&lua).unwrap();
+        poll_work_until(|| {
+            poll_completed(&lua).unwrap();
+            registry.in_flight.load(Ordering::Acquire) == 0
+        });
+        poll_completed(&lua).unwrap();
         assert_eq!(budget.used(), 0);
     }
 

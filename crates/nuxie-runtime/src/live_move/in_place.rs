@@ -31,7 +31,7 @@ use crate::{
         math::{mat2d::Mat2D, vec2d::Vec2D},
     },
 };
-use anyhow::{Context, Result, ensure};
+use anyhow::{Result, ensure};
 use std::{cell::Cell, collections::HashSet};
 
 /// One end of a flight: where an element rests, without its own transform,
@@ -136,14 +136,17 @@ fn layout_place(element: &CoreHandle) -> Result<(CoreHandle, Vec2D)> {
         .flatten();
     let translation = match css_box {
         Some(translation) => translation,
-        None => {
-            let (parent_page, _, _) = draw_pose(&parent)?;
-            let (page, _, _) = draw_pose(element)?;
-            let mut inverse = Mat2D::identity();
-            ensure!(parent_page.invert(&mut inverse), "singular flight parent");
-            let local = inverse * page;
-            Vec2D::new(local[4], local[5])
-        }
+        None => element
+            .with(|object| {
+                object
+                    .as_transform_component()
+                    .map(|transform| {
+                        let local = transform.transform();
+                        Vec2D::new(local[4], local[5])
+                    })
+            })
+            .flatten()
+            .ok_or_else(|| anyhow::anyhow!("a flying element has no transform"))?,
     };
     Ok((parent, translation))
 }
@@ -187,6 +190,8 @@ pub struct InPlaceFlight {
     /// Each end as last read, kept for a Screen asleep mid-step.
     from_end: Cell<Option<End>>,
     to_end: Cell<Option<End>>,
+    /// The lift's last transform, kept while it can't be solved.
+    last: Cell<Mat2D>,
 }
 
 impl InPlaceFlight {
@@ -234,6 +239,7 @@ impl InPlaceFlight {
             held,
             from_end: Cell::new(None),
             to_end: Cell::new(None),
+            last: Cell::new(Mat2D::identity()),
         })
     }
 
@@ -290,7 +296,11 @@ impl InPlaceFlight {
     /// With U the upper Screen's page matrix, L the copy's Screen's, S the
     /// copy's place now and P the blended pose, the lift's transform is
     /// U⁻¹ · P · S⁻¹ · L. In Scale mode P carries the stretch as its
-    /// innermost scale.
+    /// innermost scale: the blended size over the copy's laid-out size now,
+    /// so a copy its parent resizes mid-step still draws at the blend. Where
+    /// S, U or the copy's size can't be inverted, as inside a box scaled to
+    /// 0, the copy draws nothing and keeps its last transform until it can
+    /// be solved again, as a zoomed version does.
     pub(super) fn project(
         &self,
         frame: &FlightFrame,
@@ -298,22 +308,25 @@ impl InPlaceFlight {
     ) -> Result<(Mat2D, f32)> {
         let (a, b) = self.ends(active)?;
         let mut pose = frame.blend(a.place, b.place);
+        let own = end(&self.element)?;
         if self.size_mode == SizeMode::Scale {
             let size = frame_size(frame, a.size, b.size);
-            pose = pose
-                * Mat2D::from_scale(size.x / self.departure.x, size.y / self.departure.y);
+            pose = pose * Mat2D::from_scale(size.x / own.size.x, size.y / own.size.y);
         }
-        let own = end(&self.element)?.place;
         let (upper, _, _) = draw_pose(&self.board)?;
         let (row, _, _) = draw_pose(&self.row)?;
-        let matrix = lift_matrix(upper, pose, own, row).context("singular flight parent")?;
         let t = frame.progress;
         let opacity = (a.opacity + (b.opacity - a.opacity) * t) * frame.fade();
-        ensure!(
-            (0..6).all(|i| matrix[i].is_finite()) && opacity.is_finite(),
-            "non-finite flight pose"
-        );
-        Ok((matrix, opacity))
+        ensure!(opacity.is_finite(), "non-finite flight opacity");
+        let matrix = lift_matrix(upper, pose, own.place, row)
+            .filter(|matrix| matrix.values().iter().all(|v| v.is_finite()));
+        Ok(match matrix {
+            Some(matrix) => {
+                self.last.set(matrix);
+                (matrix, opacity)
+            }
+            None => (self.last.get(), 0.0),
+        })
     }
 
     /// The Pose barrier's write: only the lift's, which no layout reads.
@@ -523,7 +536,10 @@ impl InPlacePair {
         ];
         for version in 0..2 {
             let copy = versions[version];
-            if !active.contains(&copy.row) {
+            // The upper Screen draws the lift: while it is awake the lift
+            // follows, even with the copy's own Screen asleep, whose matrices
+            // stay as they were.
+            if !active.contains(&copy.board) {
                 continue;
             }
             let (_, scales, target) = zoom::hang(&ends[version], &zoom_box);

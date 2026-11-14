@@ -9303,6 +9303,7 @@ mod paint_order {
             Shadows(fixture::ShadowCase::AlphaOff),
             PathOffsets,
             MixedModes,
+            Padded,
             TextRefill { a: 100 },
             StyleSwitch,
             TurnedFrame,
@@ -9643,6 +9644,128 @@ mod paint_order {
                 s.advance(0.0);
             }
             both(&slots, &in_place, &format!("after {step} cancelled"));
+        }
+    }
+
+    /// What of `name`'s color the page draws: each draw's box and opacity.
+    fn color_draws(s: &PaintScene, name: &str) -> Vec<(Rect, f32)> {
+        let rgb = fixture::paint_color(name) & 0x00ff_ffff;
+        shown(&page_draws(s))
+            .iter()
+            .filter(|d| d.rgb == Some(rgb))
+            .map(|d| (drawn_rect(&d.points), d.opacity))
+            .collect()
+    }
+
+    /// A flight's size is a border box, what its ends measure. A version
+    /// that is a content box with 10 of padding a side takes off exactly
+    /// where it rests, flown in slots and in place: sized by its CSS size,
+    /// its padding would count twice and it would grow by 20 at take-off.
+    #[test]
+    fn a_padded_content_box_version_takes_off_where_it_rests() {
+        for shape in [PaintShape::SlotCopies, PaintShape::InPlace] {
+            let mut s = PaintScene::shaped(PaintCase::Padded, shape);
+            let rest = color_draws(&s, "a");
+            assert_eq!(rest.len(), 1, "{shape:?}: a draws once at rest");
+            s.begin("B", "go");
+            s.to(0.0);
+            let off = color_draws(&s, "a");
+            assert_eq!(off.len(), 1, "{shape:?}: a draws once at take-off");
+            assert!(
+                near_rect(rest[0].0, off[0].0),
+                "{shape:?}: a at rest {:?}, at take-off {:?}",
+                rest[0].0,
+                off[0].0
+            );
+            s.end("B", "go");
+        }
+    }
+
+    /// A Scale-mode copy stretches from its laid-out size now. MixedModes
+    /// flies a's copy in Scale mode, 80 wide to b's 160. Widening a's box
+    /// on A to 100 half way, the next frame draws the copy at the blend of
+    /// its ends as they are, 130, not that stretched again by 100 over 80.
+    #[test]
+    fn in_place_a_scale_mode_copy_resized_mid_step_draws_at_the_blend() {
+        let mut s = PaintScene::shaped(PaintCase::MixedModes, PaintShape::InPlace);
+        let width = |s: &PaintScene| {
+            let draws = color_draws(s, "a");
+            assert_eq!(draws.len(), 1, "a's copy draws once");
+            let (lo, hi) = draws[0].0;
+            hi.x - lo.x
+        };
+        s.begin("B", "go");
+        s.to(0.5);
+        close(width(&s), 120.0);
+        set(&record_of(&s.layout("A", "v")), 61022, 100.0);
+        s.to(0.5);
+        close(width(&s), 130.0);
+        s.end("B", "go");
+    }
+
+    /// A copy inside a box scaled to 0 mid-step draws nothing and the step
+    /// goes on: the other copy keeps flying, and once the box scales back
+    /// the copy is solved again. EndOpacities holds each Screen's version
+    /// (Ea on A, Eb on B) in a box "W"; B's is scaled to 0 half way, then
+    /// back to 1.
+    #[test]
+    fn in_place_a_copy_under_a_box_scaled_to_0_draws_nothing_until_it_can() {
+        let mut s = PaintScene::shaped(PaintCase::EndOpacities, PaintShape::InPlace);
+        let w = s.layout("B", "W");
+        let visible = |s: &PaintScene, name: &str| {
+            color_draws(s, name).iter().any(|(_, opacity)| *opacity > 0.0)
+        };
+        s.begin("B", "go");
+        s.to(0.4);
+        assert!(visible(&s, "Eb"), "Eb's copy flies");
+        set(&w, 16, 0.0);
+        set(&w, 17, 0.0);
+        s.to(0.5);
+        assert!(!visible(&s, "Eb"), "under a box at 0, Eb's copy draws nothing");
+        assert!(visible(&s, "Ea"), "Ea's copy flies on");
+        set(&w, 16, 1.0);
+        set(&w, 17, 1.0);
+        s.to(0.6);
+        assert!(visible(&s, "Eb"), "solved again once W scales back");
+        s.end("B", "go");
+    }
+
+    /// A lift draws its copy from the copy's own Screen's list, so while
+    /// that Screen sleeps the copy draws nothing, and the lift keeps
+    /// following while the upper Screen is awake. `Zoom(Plain)` goes to B; A
+    /// sleeps from half way to 0.75. Asleep, nothing of a's copy draws; awake
+    /// again, it draws as on a page whose A never slept.
+    #[test]
+    fn in_place_a_zoom_lift_follows_with_its_own_screen_asleep() {
+        let case = PaintCase::Zoom(fixture::ZoomCase::Plain);
+        let mut awake = PaintScene::shaped(case, PaintShape::InPlace);
+        let mut asleep = PaintScene::shaped(case, PaintShape::InPlace);
+        for s in [&mut awake, &mut asleep] {
+            s.begin("B", "go");
+            s.to(0.5);
+        }
+        let list = asleep
+            .root
+            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+            .unwrap();
+        set_row_collapsed(&list, 0, true).unwrap();
+        for p in [0.6, 0.75] {
+            for s in [&mut awake, &mut asleep] {
+                s.to(p);
+            }
+            assert!(!color_draws(&awake, "a").is_empty(), "a's copy draws at {p} with A awake");
+            assert_eq!(color_draws(&asleep, "a"), [], "nothing of a's copy at {p} with A asleep");
+        }
+        set_row_collapsed(&list, 0, false).unwrap();
+        for p in [0.8, 0.9] {
+            for s in [&mut awake, &mut asleep] {
+                s.to(p);
+            }
+            assert_eq!(
+                color_draws(&asleep, "a"),
+                color_draws(&awake, "a"),
+                "a's copy at {p}, A awake again"
+            );
         }
     }
 

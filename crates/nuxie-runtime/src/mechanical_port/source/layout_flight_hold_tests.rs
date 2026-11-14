@@ -697,13 +697,14 @@ fn in_place_hold_a_larger_flight_leaves_scroll_ranges_alone() {
     });
 }
 
-/// E is content-box. The flight size is its CSS width and height under its
-/// own box-sizing, as the slot path sizes a unit's root, so its border box
-/// is the flight size plus its padding, and padding keyed during the flight
-/// shows the next frame. Its inside equals a fresh load of E authored at
-/// the flight size with that padding; its neighbors stay put.
+/// E is content-box. The flight size is its border box, what a flight's
+/// ends measure, so held at its resting border box it does not move, and
+/// padding keyed during the flight narrows its content the next frame with
+/// its border box at the flight size. Its inside equals a fresh load of E
+/// authored at the matching content size with that padding; its neighbors
+/// stay put.
 #[test]
-fn in_place_hold_sizes_a_content_box_element_as_the_slot_path_does() {
+fn in_place_hold_sizes_a_content_box_element_by_its_border_box() {
     let make = |size: (f32, f32), top: f32| {
         upper_with(css(
             "E",
@@ -727,14 +728,18 @@ fn in_place_hold_sizes_a_content_box_element_as_the_slot_path_does() {
         ))
     };
     checked(|| {
-        let (from, to) = ((100.0, 80.0), (140.0, 100.0));
-        let scene = make(from, 10.0);
+        // E's CSS size at rest; the flight's sizes are border boxes.
+        let css_rest = (100.0, 80.0);
+        let (from, to) = ((120.0, 100.0), (160.0, 120.0));
+        let scene = make(css_rest, 10.0);
         scene.advance(2);
         let e_rest = scene.bounds("E");
-        assert_eq!(e_rest[2..], [120.0, 100.0], "a content box");
+        assert_eq!(e_rest[2..], [from.0, from.1], "a content box");
         let n2 = scene.bounds("N2");
         let e = scene.named("E");
         assert!(begin(&e, from));
+        scene.advance(1);
+        assert_eq!(scene.bounds("E"), e_rest, "held at its rest, E stays");
         for step in 0..=10 {
             let p = step as f32 / 10.0;
             // Padding keyed during the flight, from halfway.
@@ -751,17 +756,17 @@ fn in_place_hold_sizes_a_content_box_element_as_the_slot_path_does() {
             scene.advance(1);
             assert_eq!(
                 scene.bounds("E"),
-                [e_rest[0], e_rest[1], size.0 + 20.0, size.1 + 10.0 + top],
+                [e_rest[0], e_rest[1], size.0, size.1],
                 "E at p {p}"
             );
-            let oracle = make(size, top);
+            let oracle = make((size.0 - 20.0, size.1 - 10.0 - top), top);
             oracle.advance(2);
             for name in INSIDE {
                 assert_eq!(scene.bounds(name), oracle.bounds(name), "{name} at p {p}");
             }
             assert_eq!(scene.bounds("N2"), n2, "N2 at p {p}");
             // The rest follows the keyed padding, as at rest.
-            let at_rest = make(from, top);
+            let at_rest = make(css_rest, top);
             at_rest.advance(2);
             assert_eq!(
                 rect(resting_box(&e).unwrap()),
@@ -772,7 +777,7 @@ fn in_place_hold_sizes_a_content_box_element_as_the_slot_path_does() {
         end(&e);
         scene.advance(1);
         // At rest again with the keyed padding: a fresh load's boxes.
-        let fresh = make(from, 13.0);
+        let fresh = make(css_rest, 13.0);
         fresh.advance(2);
         assert_eq!(boxes(&scene, &UPPER_NAMES), boxes(&fresh, &UPPER_NAMES));
     });
@@ -1441,7 +1446,7 @@ enum ParentKind {
 }
 
 /// A child property: what sizes E (left out of the oracle, which authors
-/// E at the flight size), what else E carries (kept in the oracle), and
+/// E at the CSS size of the flight's border box), what else E carries (kept in the oracle), and
 /// E's children when not the usual inside.
 struct Case {
     name: &'static str,
@@ -1449,8 +1454,8 @@ struct Case {
     other: Vec<P>,
     content_box: bool,
     children: Option<fn() -> Vec<B>>,
-    /// E's own min and max width: a flight size is a CSS width, so they
-    /// clamp it, as they clamp a keyed width.
+    /// E's own min and max width: they clamp the flight size, as they
+    /// clamp a keyed width.
     width_limits: Option<(f32, f32)>,
     /// E's percentages resolve against its parent's area. In a grid that
     /// area is an `auto` track, which in the oracle follows the authored
@@ -1729,9 +1734,9 @@ fn table_row(kind: ParentKind, case: &Case) {
         let rest_all = boxes(&scene, &all);
         let nodes = node_count(&scene);
         let slot = scene.bounds("E");
-        // E's CSS size at rest under its box-sizing (padding 10 a side).
+        // E's border box at rest; a content box's padding is 10 a side.
         let inset = if case.content_box { 20.0 } else { 0.0 };
-        let own = (slot[2] - inset, slot[3] - inset);
+        let own = (slot[2], slot[3]);
         let e = scene.named("E");
         assert!(begin(&e, own), "{label}: begin");
         scene.advance(1);
@@ -1759,7 +1764,7 @@ fn table_row(kind: ParentKind, case: &Case) {
         ] {
             set_size(&e, size);
             scene.advance(1);
-            // A CSS width: E's own limits clamp it.
+            // E's own limits clamp it, as they clamp a keyed width.
             let size = case
                 .width_limits
                 .map_or(size, |(min, max)| (size.0.clamp(min, max), size.1));
@@ -1775,14 +1780,14 @@ fn table_row(kind: ParentKind, case: &Case) {
             );
             assert_near(
                 scene.bounds("E"),
-                [slot[0], slot[1], size.0 + inset, size.1 + inset],
+                [slot[0], slot[1], size.0, size.1],
                 &format!("{label}: E at {size:?}"),
             );
             assert_eq!(node_count(&scene), nodes, "{label}: nodes at {size:?}");
             if case.area_percentages && kind == ParentKind::Grid {
                 continue;
             }
-            let oracle = table_scene(kind, case, Some(size));
+            let oracle = table_scene(kind, case, Some((size.0 - inset, size.1 - inset)));
             oracle.advance(2);
             for name in &inside {
                 assert_near(

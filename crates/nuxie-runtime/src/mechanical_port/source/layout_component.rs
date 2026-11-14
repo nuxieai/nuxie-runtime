@@ -2749,22 +2749,37 @@ impl LayoutComponent {
         )
     }
 
+    /// Nuxie: what lies between this box's border box and its CSS width
+    /// and height under `box_sizing`, as last solved: its padding and border
+    /// for a content box, nothing for a border box.
+    fn css_size_edges(&self, box_sizing: taffy::BoxSizing) -> Vec2D {
+        if box_sizing != taffy::BoxSizing::ContentBox {
+            return Vec2D::new(0.0, 0.0);
+        }
+        let [top, right, bottom, left] = self.solved_border;
+        let padding = self.solved_padding;
+        Vec2D::new(
+            padding.left() + padding.right() + left + right,
+            padding.top() + padding.bottom() + top + bottom,
+        )
+    }
+    /// Nuxie: the CSS width and height that give this box `border_box`
+    /// under its own box-sizing, as last solved.
+    pub(crate) fn css_size_for_border_box(&self, border_box: Vec2D) -> Vec2D {
+        let edges = self.css_size_edges(self.layout_style().box_sizing);
+        Vec2D::new(
+            (border_box.x - edges.x).max(0.0),
+            (border_box.y - edges.y).max(0.0),
+        )
+    }
     fn css_scroll_thumb_dimension(
         &self,
         style: &Style,
         outer_size: f32,
         horizontal: bool,
     ) -> taffy::style::Dimension {
-        let edges = if style.box_sizing == taffy::BoxSizing::ContentBox {
-            let [top, right, bottom, left] = self.solved_border;
-            if horizontal {
-                self.solved_padding.left() + self.solved_padding.right() + left + right
-            } else {
-                self.solved_padding.top() + self.solved_padding.bottom() + top + bottom
-            }
-        } else {
-            0.0
-        };
+        let edges = self.css_size_edges(style.box_sizing);
+        let edges = if horizontal { edges.x } else { edges.y };
         taffy::style::Dimension::length((outer_size - edges).max(0.0))
     }
     fn apply_css_scroll_thumb_size(&self, style: &mut Style) {

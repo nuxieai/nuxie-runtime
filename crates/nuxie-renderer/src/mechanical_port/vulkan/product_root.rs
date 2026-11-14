@@ -974,6 +974,8 @@ fn load_vulkan_entry() -> Result<ash::Entry, RendererError> {
 }
 
 impl ExactSourceBackend for VulkanProductBackend {
+    type SourceHandles = crate::ore_source_handle::VulkanIssued;
+
     fn ore_target_desc(&self) -> nuxie_ore_metal::context::TargetDesc {
         let target = unsafe { &*self.target.get() };
         super::ore_context_vulkan_decl::targetDescFor(&target.base)

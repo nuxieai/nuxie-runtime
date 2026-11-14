@@ -476,6 +476,8 @@ pub(crate) fn install_bitmap_decoder(mut context: Pin<&mut RenderContext>) {
 }
 
 pub(crate) trait ExactSourceBackend: 'static {
+    /// The issuer of the source handles this backend's ORE context resolves.
+    type SourceHandles: crate::ore_source_handle::SourceIssuer;
     fn ore_target_desc(&self) -> nuxie_ore_metal::context::TargetDesc {
         Default::default()
     }
@@ -665,6 +667,7 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
         Ok(Box::new(image.with_execution_domain(
             self.resource_domain.clone(),
             self.execution_anchor(),
+            Self::texture_issuer(),
         )))
     }
 
@@ -705,7 +708,11 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
     ) -> Result<RiveRenderImageHandle, RendererError> {
         RiveRenderImageHandle::from_exact(make_rcp(|| unsafe { RiveRenderImage::new(texture) }))
             .map(|image| {
-                image.with_execution_domain(self.resource_domain.clone(), self.execution_anchor())
+                image.with_execution_domain(
+                    self.resource_domain.clone(),
+                    self.execution_anchor(),
+                    Self::texture_issuer(),
+                )
             })
             .ok_or_else(|| {
                 RendererError::InvalidImageUpload(
@@ -735,6 +742,11 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
 
     fn execution_anchor(&self) -> Rc<dyn Any> {
         Rc::clone(&self.backend) as Rc<dyn Any>
+    }
+
+    /// Issues the texture handles this backend's ORE context resolves.
+    fn texture_issuer() -> Option<crate::ore_source_handle::TextureIssuer> {
+        Some(crate::ore_source_handle::source_texture_handle::<B::SourceHandles> as _)
     }
 
     fn with_context<R>(&self, callback: impl FnOnce(&mut RenderContext) -> R) -> R {
@@ -830,7 +842,11 @@ impl<B: ExactSourceBackend> Factory for ExactSourceFactoryCore<B> {
             .backend
             .borrow_mut()
             .make_gpu_canvas_image_with_pipelines(pipelines, plan, anchor)?
-            .with_execution_domain(self.resource_domain.clone(), self.execution_anchor());
+            .with_execution_domain(
+                self.resource_domain.clone(),
+                self.execution_anchor(),
+                Self::texture_issuer(),
+            );
         Ok(Box::new(image))
     }
 
@@ -934,7 +950,11 @@ impl<B: ExactSourceBackend> Factory for ExactSourceFactoryCore<B> {
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
         self.with_context(|context| context.decodeImageHandle(data))
             .map(|image| {
-                image.with_execution_domain(self.resource_domain.clone(), self.execution_anchor())
+                image.with_execution_domain(
+                    self.resource_domain.clone(),
+                    self.execution_anchor(),
+                    Self::texture_issuer(),
+                )
             })
             .map(|image| Box::new(image) as Box<dyn RenderImage>)
             .ok_or(ImageDecodeError)
@@ -1009,6 +1029,7 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
             }),
             self.resource_domain.clone(),
             self.execution_anchor(),
+            Self::texture_issuer(),
         );
     }
 }
@@ -1055,10 +1076,11 @@ impl ExactSourceRenderCanvas {
         backing: Box<dyn RenderCanvasContract>,
         domain: RenderResourceDomain,
         guard: Rc<dyn Any>,
+        texture_issuer: Option<crate::ore_source_handle::TextureIssuer>,
     ) {
         assert!(self.is_backed());
         assert!(self.backing.is_none(), "canvas execution already installed");
-        self.image.attach_execution_domain(domain, guard);
+        self.image.attach_execution_domain(domain, guard, texture_issuer);
         self.backing = Some(backing);
     }
 }
@@ -1114,7 +1136,8 @@ impl<B: ExactSourceBackend> RenderCanvasContract for ExactSourceCanvasBacking<B>
     }
     fn ore_texture_info(&self) -> Option<nuxie_ore_metal::context::CanvasTextureInfo> {
         let mut info = self.render_image().ore_texture_info()?;
-        info.canvas = crate::ore_source_handle::source_canvas_handle(&self.source);
+        info.canvas =
+            crate::ore_source_handle::source_canvas_handle::<B::SourceHandles>(&self.source);
         Some(info)
     }
     fn width(&self) -> u32 {
@@ -1131,6 +1154,7 @@ impl<B: ExactSourceBackend> RenderCanvasContract for ExactSourceCanvasBacking<B>
             .with_execution_domain(
                 self.resource_domain.clone(),
                 Rc::clone(&self.backend) as Rc<dyn Any>,
+                ExactSourceFactoryCore::<B>::texture_issuer(),
             );
         Rc::new(image)
     }

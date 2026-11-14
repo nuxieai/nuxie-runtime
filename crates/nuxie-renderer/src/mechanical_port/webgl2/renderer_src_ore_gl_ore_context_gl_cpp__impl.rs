@@ -2094,21 +2094,21 @@ impl ContextApi for ContextGL {
         &mut self,
         canvas: nuxie_ore_metal::context::CanvasTextureInfo,
     ) -> Option<AnyResourceHandle> {
-        crate::ore_source_handle::wrap_source_canvas(self, &canvas)
+        crate::ore_source_handle::wrap_source_canvas::<crate::ore_source_handle::GlIssued, _>(self, &canvas)
     }
 
     fn wrapCanvasSampleView(
         &mut self,
         canvas: nuxie_ore_metal::context::CanvasTextureInfo,
     ) -> Option<AnyResourceHandle> {
-        crate::ore_source_handle::wrap_source_texture(self, &canvas)
+        crate::ore_source_handle::wrap_source_texture::<crate::ore_source_handle::GlIssued, _>(self, &canvas)
     }
 
     fn wrapImageSampleView(
         &mut self,
         image: nuxie_ore_metal::context::CanvasTextureInfo,
     ) -> Option<AnyResourceHandle> {
-        crate::ore_source_handle::wrap_source_texture(self, &image)
+        crate::ore_source_handle::wrap_source_texture::<crate::ore_source_handle::GlIssued, _>(self, &image)
     }
 
     fn shaderTarget(&self) -> ShaderTarget {
@@ -2363,17 +2363,20 @@ mod tests {
         let source = unsafe { (*(*canvas.get()).renderImage()).getTexture() };
         let source_name = unsafe { (*source).nativeHandle() } as usize as GLuint;
         assert_ne!(source_name, 0);
+        use crate::ore_source_handle::{
+            GlIssued, VulkanIssued, WebGpuIssued, source_canvas_handle, source_texture_handle,
+            wrap_source_canvas, wrap_source_texture,
+        };
+        let source_texture = || unsafe { (*(*canvas.get()).renderImage()).refTexture() };
         let info = nuxie_ore_metal::context::CanvasTextureInfo {
-            canvas: crate::ore_source_handle::source_canvas_handle(&canvas),
-            texture: crate::ore_source_handle::source_texture_handle(unsafe {
-                (*(*canvas.get()).renderImage()).refTexture()
-            }),
+            canvas: source_canvas_handle::<GlIssued>(&canvas),
+            texture: source_texture_handle::<GlIssued>(source_texture()),
             width: 3,
             height: 4,
             owner: Some(Rc::new(canvas.clone())),
         };
         let sampled = context
-            .wrapImageSampleView(info)
+            .wrapImageSampleView(info.clone())
             .expect("immediate sampling view");
         let sampled = sampled.downcast_ref::<TextureViewGL>().unwrap();
         assert_eq!(
@@ -2400,12 +2403,58 @@ mod tests {
         assert!(context.wrapCanvasTextureInfo(made_up).is_none());
         let swapped = nuxie_ore_metal::context::CanvasTextureInfo {
             canvas: None,
-            texture: crate::ore_source_handle::source_canvas_handle(&canvas),
+            texture: source_canvas_handle::<GlIssued>(&canvas),
             width: 3,
             height: 4,
             owner: None,
         };
         assert!(context.wrapImageSampleView(swapped).is_none());
+        // A handle names the backend that issued it. Vulkan's and WebGPU's
+        // contexts resolve only their own, so the GL handles wrap nothing
+        // there (Vulkan's raw wrap would read a GL texture as its own
+        // Texture2D), and the GL context refuses theirs.
+        assert!(wrap_source_texture::<VulkanIssued, _>(&mut *context, &info).is_none());
+        assert!(wrap_source_canvas::<VulkanIssued, _>(&mut *context, &info).is_none());
+        assert!(wrap_source_texture::<WebGpuIssued, _>(&mut *context, &info).is_none());
+        assert!(wrap_source_canvas::<WebGpuIssued, _>(&mut *context, &info).is_none());
+        let foreign = nuxie_ore_metal::context::CanvasTextureInfo {
+            canvas: source_canvas_handle::<VulkanIssued>(&canvas),
+            texture: source_texture_handle::<WebGpuIssued>(source_texture()),
+            width: 3,
+            height: 4,
+            owner: None,
+        };
+        assert!(foreign.canvas.is_some() && foreign.texture.is_some());
+        assert!(context.wrapImageSampleView(foreign.clone()).is_none());
+        assert!(context.wrapCanvasSampleView(foreign.clone()).is_none());
+        assert!(context.wrapCanvasTextureInfo(foreign).is_none());
+        // A second, real backend in the same process: Metal's context refuses
+        // the GL handles, and the GL context refuses Metal's.
+        #[cfg(all(
+            feature = "native-metal-experimental",
+            feature = "native-ore-metal-experimental",
+            target_os = "macos"
+        ))]
+        {
+            use nuxie_render_api::{Factory as _, RenderImage as _};
+            let mut metal = crate::native_metal::NativeMetalFactory::new(3, 4)
+                .expect("native Metal factory");
+            let ore = metal.ore().expect("the Metal renderer's ORE context");
+            let mut ore = ore.borrow_mut();
+            assert!(ore.wrapImageSampleView(info.clone()).is_none());
+            assert!(ore.wrapCanvasSampleView(info.clone()).is_none());
+            assert!(ore.wrapCanvasTextureInfo(info.clone()).is_none());
+            let metal_canvas = metal
+                .make_metal_render_canvas(3, 4)
+                .expect("Metal source canvas");
+            let metal_info = metal_canvas
+                .render_image()
+                .ore_texture_info()
+                .expect("Metal image projection");
+            assert!(ore.wrapImageSampleView(metal_info.clone()).is_some());
+            assert!(context.wrapImageSampleView(metal_info.clone()).is_none());
+            assert!(context.wrapCanvasTextureInfo(metal_info).is_none());
+        }
         drop(color_view);
         // sampled's handle drops before the context and implementation owners.
     }
@@ -2441,6 +2490,8 @@ mod tests {
             destroyed: Rc<Cell<bool>>,
         }
         impl ExactSourceBackend for Backend {
+            type SourceHandles = crate::ore_source_handle::GlIssued;
+
             fn context_mut(&mut self) -> Pin<&mut RenderContext> {
                 self.context.as_mut().unwrap().as_mut()
             }
@@ -2572,6 +2623,8 @@ mod tests {
 
         struct Backend(Pin<Box<RenderContext>>);
         impl ExactSourceBackend for Backend {
+            type SourceHandles = crate::ore_source_handle::GlIssued;
+
             fn context_mut(&mut self) -> Pin<&mut RenderContext> {
                 self.0.as_mut()
             }

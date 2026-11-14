@@ -259,6 +259,9 @@ struct AttachedImageExecutionDomain {
     resource_domain: RenderResourceDomain,
     // Retains the actual backend execution owner until after source teardown.
     _domain_guard: Rc<dyn Any>,
+    // Issues the handle this domain's ORE context resolves for the source
+    // texture; `None` where the domain hands ORE its own bridges instead.
+    texture_issuer: Option<crate::ore_source_handle::TextureIssuer>,
 }
 
 pub struct RiveRenderImageHandle {
@@ -295,8 +298,9 @@ impl RiveRenderImageHandle {
         self,
         resource_domain: RenderResourceDomain,
         domain_guard: Rc<dyn Any>,
+        texture_issuer: Option<crate::ore_source_handle::TextureIssuer>,
     ) -> Self {
-        self.attach_execution_domain(resource_domain, domain_guard);
+        self.attach_execution_domain(resource_domain, domain_guard, texture_issuer);
         self
     }
 
@@ -307,12 +311,14 @@ impl RiveRenderImageHandle {
         &self,
         resource_domain: RenderResourceDomain,
         domain_guard: Rc<dyn Any>,
+        texture_issuer: Option<crate::ore_source_handle::TextureIssuer>,
     ) {
         assert!(
             self.execution_domain
                 .set(AttachedImageExecutionDomain {
                     resource_domain,
                     _domain_guard: domain_guard,
+                    texture_issuer,
                 })
                 .is_ok(),
             "image execution domain already attached"
@@ -423,10 +429,13 @@ impl nuxie_render_api::RenderImage for RiveRenderImageHandle {
                 return Some(info);
             }
         }
+        // Only the backend whose domain this image joined issues its handle:
+        // an image outside every execution domain samples in no context.
+        let issue = self.execution_domain.get()?.texture_issuer?;
         let retained: Rc<dyn nuxie_render_api::RenderImage> = Rc::new(self.clone());
         Some(nuxie_ore_metal::context::CanvasTextureInfo {
             canvas: None,
-            texture: Some(crate::ore_source_handle::source_texture_handle(texture)?),
+            texture: Some(issue(texture)?),
             width: self.source().width().max(0) as u32,
             height: self.source().height().max(0) as u32,
             owner: Some(Rc::new(retained)),
@@ -465,7 +474,7 @@ mod tests {
         let anchor: Rc<dyn Any> = Rc::new(());
         let handle = RiveRenderImageHandle::from_exact(image)
             .expect("source image")
-            .with_execution_domain(RenderResourceDomain::new(), Rc::clone(&anchor));
+            .with_execution_domain(RenderResourceDomain::new(), Rc::clone(&anchor), None);
 
         assert_eq!(
             handle
@@ -489,7 +498,7 @@ mod tests {
 
         let attached = RiveRenderImageHandle::from_exact(image)
             .expect("source image")
-            .with_execution_domain(RenderResourceDomain::new(), Rc::clone(&matching_anchor));
+            .with_execution_domain(RenderResourceDomain::new(), Rc::clone(&matching_anchor), None);
         assert!(attached
             .source_texture_for_execution_anchor(&foreign_anchor)
             .is_none());

@@ -197,6 +197,8 @@ impl WebGl2ProductBackend {
 }
 
 impl ExactSourceBackend for WebGl2ProductBackend {
+    type SourceHandles = crate::ore_source_handle::GlIssued;
+
     fn context_mut(&mut self) -> Pin<&mut RenderContext> {
         self.context_pin()
     }

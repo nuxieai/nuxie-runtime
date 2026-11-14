@@ -19,6 +19,10 @@ mod tests {
     }
 }
 impl GlyphLookup {
+    /// Heap bytes the lookup table occupies.
+    pub fn heap_bytes(&self) -> usize {
+        crate::mechanical_port::source::text_engine::vec_bytes(&self.glyph_indices)
+    }
     pub fn compute(&mut self, text: &[u32], shape: &[Paragraph]) {
         let count = text.len();
         self.glyph_indices.resize(count + 1, 0);

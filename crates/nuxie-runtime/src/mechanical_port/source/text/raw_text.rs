@@ -146,6 +146,109 @@ impl RawText {
     pub fn empty(&self) -> bool {
         self.styled.empty()
     }
+    /// Heap bytes the text holds: its content, its styles and their glyph
+    /// outlines, and the layout `update` built (shaped paragraphs, lines,
+    /// the copies ordered lines keep, draw commands, the glyph lookup).
+    /// Decoded color-glyph images and the fonts are not counted: fonts are
+    /// shared, and render images are backend objects of unreported size.
+    pub fn heap_bytes(&self) -> usize {
+        use crate::mechanical_port::source::text_engine::vec_bytes;
+        let paragraphs = self
+            .shape
+            .iter()
+            .fold(vec_bytes(&self.shape), |bytes, paragraph| {
+                bytes.saturating_add(paragraph.heap_bytes())
+            });
+        let lines = self
+            .lines
+            .iter()
+            .fold(vec_bytes(&self.lines), |bytes, lines| {
+                bytes.saturating_add(vec_bytes(lines))
+            });
+        let styles = self
+            .styles
+            .iter()
+            .fold(vec_bytes(&self.styles), |bytes, style| {
+                bytes.saturating_add(style.path.heap_bytes())
+            });
+        let ordered = self
+            .ordered_lines
+            .iter()
+            .fold(vec_bytes(&self.ordered_lines), |bytes, line| {
+                bytes.saturating_add(line.heap_bytes())
+            });
+        let commands =
+            self.draw_commands
+                .iter()
+                .fold(
+                    vec_bytes(&self.draw_commands),
+                    |bytes, command| match command {
+                        DrawCommand::Style(_) => bytes,
+                        DrawCommand::Color { cluster_text, .. } => {
+                            bytes.saturating_add(std::mem::size_of_val::<[u32]>(cluster_text))
+                        }
+                    },
+                );
+        [
+            self.styled.heap_bytes(),
+            paragraphs,
+            lines,
+            styles,
+            vec_bytes(&self.render_styles),
+            ordered,
+            vec_bytes(&self.line_directions),
+            vec_bytes(&self.line_glyph_counts),
+            self.ellipsis_run.heap_bytes(),
+            self.clip_render_path
+                .as_ref()
+                .map_or(0, ShapePaintPath::heap_bytes),
+            commands,
+            self.glyph_lookup.heap_bytes(),
+        ]
+        .into_iter()
+        .fold(0, usize::saturating_add)
+    }
+    /// The most [`Self::heap_bytes`] can be right after appending
+    /// `text_bytes` bytes of UTF-8 (before the next layout): the content
+    /// grows and at most one style is added; the layout is not touched.
+    pub fn heap_bytes_after_append(&self, text_bytes: usize) -> usize {
+        use crate::mechanical_port::source::text_engine::{grown_bytes, vec_bytes};
+        self.heap_bytes()
+            .saturating_sub(self.styled.heap_bytes())
+            .saturating_sub(vec_bytes(&self.styles))
+            .saturating_add(self.styled.heap_bytes_after_append(text_bytes))
+            .saturating_add(grown_bytes(&self.styles, 1))
+    }
+    /// Lays the text out now if it changed, as any layout read would, and
+    /// builds the glyph lookup, so that what the layout holds can be
+    /// measured ([`Self::heap_bytes`]) before anything reads it. Returns
+    /// whether anything was built.
+    pub fn lay_out(&mut self) -> bool {
+        let built = self.dirty || self.lookup_dirty;
+        let _ = self.layout_view();
+        built
+    }
+    /// Lets go of everything the layout built, keeping the content and
+    /// styles; the next layout read builds it again.
+    pub fn release_layout(&mut self) {
+        self.shape = Vec::new();
+        self.lines = Vec::new();
+        for style in &mut self.styles {
+            style.path = ShapePaintPath::default();
+            style.is_empty = true;
+        }
+        self.render_styles = Vec::new();
+        self.ordered_lines = Vec::new();
+        self.line_directions = Vec::new();
+        self.line_glyph_counts = Vec::new();
+        self.ellipsis_run = GlyphRun::default();
+        self.clip_render_path = None;
+        self.draw_commands = Vec::new();
+        self.emoji_image_cache.borrow_mut().clear();
+        self.glyph_lookup = GlyphLookup::default();
+        self.dirty = true;
+        self.lookup_dirty = true;
+    }
     pub fn append(
         &mut self,
         text: impl AsRef<[u8]>,

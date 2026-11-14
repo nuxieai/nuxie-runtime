@@ -83,6 +83,24 @@ pub fn pack_text_vertical_trim(top: TextTrimTop, bottom: TextTrimBottom) -> u32 
 }
 
 pub type Unichar = u32;
+
+/// Heap bytes a vector's buffer occupies (its capacity).
+pub(crate) fn vec_bytes<T>(values: &Vec<T>) -> usize {
+    std::mem::size_of::<T>().saturating_mul(values.capacity())
+}
+
+/// The most heap bytes a vector's buffer can occupy after `additional`
+/// more pushes, one at a time: growth doubles, so its capacity stays under
+/// twice what it needs (and at least the 4 `Vec` starts with).
+pub(crate) fn grown_bytes<T>(values: &Vec<T>, additional: usize) -> usize {
+    let required = values.len().saturating_add(additional);
+    let capacity = if required <= values.capacity() {
+        values.capacity()
+    } else {
+        required.saturating_mul(2).max(4)
+    };
+    std::mem::size_of::<T>().saturating_mul(capacity)
+}
 pub type GlyphId = u16;
 
 #[repr(u8)]
@@ -189,6 +207,12 @@ pub struct Paragraph {
 }
 
 impl Paragraph {
+    /// Heap bytes the paragraph's shaped runs occupy.
+    pub fn heap_bytes(&self) -> usize {
+        self.runs.iter().fold(vec_bytes(&self.runs), |bytes, run| {
+            bytes.saturating_add(run.heap_bytes())
+        })
+    }
     pub fn base_direction(&self) -> TextDirection {
         if self.level & 1 != 0 {
             TextDirection::Rtl
@@ -824,6 +848,31 @@ impl GlyphRun {
         }
     }
 
+    /// Heap bytes the run's per-glyph tables occupy (their capacity), and
+    /// the cluster text it retains for host-picture fonts. The font is
+    /// shared and not counted.
+    pub fn heap_bytes(&self) -> usize {
+        let clusters = self.cluster_texts.iter().fold(0usize, |bytes, text| {
+            bytes.saturating_add(std::mem::size_of_val::<[Unichar]>(text))
+        });
+        [
+            vec_bytes(&self.glyphs),
+            vec_bytes(&self.text_indices),
+            vec_bytes(&self.cluster_texts),
+            clusters,
+            vec_bytes(&self.cluster_leaders),
+            vec_bytes(&self.cluster_leader_flags),
+            vec_bytes(&self.advances),
+            vec_bytes(&self.xpos),
+            vec_bytes(&self.offsets),
+            vec_bytes(&self.breaks),
+            vec_bytes(&self.joiners),
+            vec_bytes(&self.css_tabs),
+        ]
+        .into_iter()
+        .fold(0, usize::saturating_add)
+    }
+
     pub fn cluster_text(&self, glyph_index: usize) -> &[Unichar] {
         self.cluster_texts
             .get(glyph_index)
@@ -905,6 +954,12 @@ struct OrderedRun {
 }
 
 impl OrderedLine {
+    /// Heap bytes the line's copied runs occupy.
+    pub fn heap_bytes(&self) -> usize {
+        self.runs.iter().fold(vec_bytes(&self.runs), |bytes, run| {
+            bytes.saturating_add(run.run.heap_bytes())
+        })
+    }
     pub fn new(
         paragraph: &Paragraph,
         line: &GlyphLine,

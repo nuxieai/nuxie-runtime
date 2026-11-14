@@ -44,6 +44,14 @@ impl ShapePaintPath {
     pub fn raw_path(&self) -> &RawPath {
         &self.raw_path
     }
+    /// Heap bytes the path holds: its commands (their capacity) and the
+    /// render path the factory builds from them at draw, counted as one copy
+    /// of the commands whether it is built yet or not (so it is known before
+    /// the draw; the backend does not report its own size).
+    pub fn heap_bytes(&self) -> usize {
+        RawPath::bytes_for(self.raw_path.verbs().len(), self.raw_path.points().len())
+            .saturating_add(self.raw_path.heap_bytes())
+    }
     pub fn mutable_raw_path(&mut self) -> &mut RawPath {
         &mut self.raw_path
     }

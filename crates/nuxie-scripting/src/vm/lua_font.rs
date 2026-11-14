@@ -186,7 +186,22 @@ impl UserData for ScriptedFont {
                         value: (value as i64) as u32,
                     })
                     .collect();
-                push_font(lua, this.native()?.with_options(&coords, &features))
+                let source = this.native()?;
+                let variant = match source.as_any().downcast_ref::<HbFont>() {
+                    // The variant's own axis and feature tables are charged
+                    // before it is made, and kept with it; it keeps the
+                    // source's owner too, as it keeps the source's bytes.
+                    Some(hb) => {
+                        let charge = HostMemoryCharge::for_lua(
+                            lua,
+                            hb.variant_bytes_bound(coords.len(), features.len()),
+                        )?;
+                        let owner = HostOwnerToken::new((hb.host_owner().cloned(), charge));
+                        hb.with_options_owned(&coords, &features, owner)
+                    }
+                    None => source.with_options(&coords, &features),
+                };
+                push_font(lua, variant)
             },
         );
         methods.add_method("glyphPath", |lua, this, glyph: Value| {

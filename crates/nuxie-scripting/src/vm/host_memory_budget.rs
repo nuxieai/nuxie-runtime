@@ -519,7 +519,8 @@ mod binding_tests {
                 .unwrap()
                 .held_bytes()
         };
-        assert_eq!(vm.used(), 226_004 + text_bytes());
+        // The derived font is charged its own option tables (lane H2).
+        assert!(vm.used() > 226_004 + text_bytes(), "{}", vm.used());
         vm.vm.eval::<()>("derived = nil").unwrap();
         vm.vm.lua().gc_collect().unwrap();
         assert_eq!(vm.used(), 226_004 + text_bytes(), "the text keeps the face");
@@ -701,6 +702,37 @@ mod binding_tests {
         vm.vm.eval::<()>("kept = nil").unwrap();
         vm.vm.lua().gc_collect().unwrap();
         assert_eq!(vm.used(), 0);
+    }
+
+    // Lane H2: a font `withOptions` derived kept copies of its axis and
+    // feature tables uncharged, so derived fonts kept in a table held any
+    // number of bytes.
+    #[test]
+    fn a_derived_font_is_charged_for_its_option_tables() {
+        let vm = font_vm(1024 * 1024);
+        vm.vm
+            .eval::<()>(
+                "font = Font.decode(fontBytes) \
+                 features = {} \
+                 for i = 1, 1000 do features[string.format('%04d', i)] = 1 end",
+            )
+            .unwrap();
+        vm.vm.lua().gc_collect().unwrap();
+        let decoded = vm.used();
+        vm.vm
+            .eval::<()>("derived = font:withOptions(nil, features)")
+            .unwrap();
+        let one = vm.used() - decoded;
+        assert!(one > 1000 * 8, "a derived font is charged its tables: {one}");
+        vm.refused(
+            "held = {} \
+             local ok, err = pcall(function() \
+               for i = 1, 1000 do held[i] = font:withOptions(nil, features) end end) \
+             return not ok, tostring(err)",
+        );
+        vm.vm.eval::<()>("held = nil derived = nil").unwrap();
+        vm.vm.lua().gc_collect().unwrap();
+        assert_eq!(vm.used(), decoded, "a collected variant gives its charge back");
     }
 
     // Codex review (lane G3): a stop's `__index` added stops after the

@@ -442,6 +442,23 @@ impl FileProbe {
     }
 }
 
+/// The control bytes a hash table keeps past its buckets (one SIMD group).
+const TABLE_GROUP_BYTES: usize = 16;
+
+/// The buckets the standard hash table allocates to hold `capacity` entries
+/// (at most 7/8 full, a power of two; 4 or 8 when small).
+fn table_buckets(capacity: usize) -> usize {
+    match capacity {
+        0..4 => 4,
+        4..8 => 8,
+        _ => capacity
+            .saturating_mul(8)
+            .div_ceil(7)
+            .checked_next_power_of_two()
+            .unwrap_or(usize::MAX),
+    }
+}
+
 impl HbFont {
     pub fn source_bytes(&self) -> Arc<[u8]> {
         match &self.bytes {
@@ -524,6 +541,76 @@ impl HbFont {
     /// What the host that made this font keeps alive with it.
     pub fn host_owner(&self) -> Option<&crate::host_viewmodel::HostOwnerToken> {
         self.host_owner.as_ref()
+    }
+
+    /// `with_options`, with `owner` kept by the variant in place of this
+    /// font's: the host charges the variant's own tables and keeps this
+    /// font's owner inside `owner`.
+    pub fn with_options_owned(
+        &self,
+        coords: &[Coord],
+        features: &[Feature],
+        owner: crate::host_viewmodel::HostOwnerToken,
+    ) -> FontRef {
+        let mut font = self.variant(coords, features);
+        font.host_owner = Some(owner);
+        Arc::new(font)
+    }
+
+    /// An upper bound on the heap bytes a variant made by `with_options`
+    /// with `coords` axis values and `features` feature values holds of its
+    /// own, known before it is made: the font object, its axis and feature
+    /// tables (copies of this font's, grown by the new entries), and its
+    /// shaping features. The bytes, the face and the shaping instance's
+    /// per-axis coordinates (bounded by the face's axis count) are not
+    /// counted; caches the variant fills as it is used are not counted.
+    ///
+    /// A hash table of `n` entries holds at most `table_buckets(n)` buckets
+    /// of one control byte and one entry each, plus one group of control
+    /// bytes; a clone keeps its source's buckets, and growth at most doubles
+    /// them, which `2 × n` covers.
+    pub fn variant_bytes_bound(&self, coords: usize, features: usize) -> usize {
+        fn table_bytes<K, V>(entries: usize) -> usize {
+            table_buckets(entries.saturating_mul(2))
+                .saturating_mul(std::mem::size_of::<(K, V)>().saturating_add(1))
+                .saturating_add(TABLE_GROUP_BYTES)
+        }
+        let axes = self.axis_values.len().saturating_add(coords);
+        let feature_entries = self.feature_values.len().saturating_add(features);
+        std::mem::size_of::<Self>()
+            .saturating_add(table_bytes::<u32, f32>(axes))
+            .saturating_add(table_bytes::<u32, u32>(feature_entries))
+            // One shaping feature per feature value, plus the legacy-kern
+            // suppression: collected with room for one more (and at least
+            // four), so the push never grows it.
+            .saturating_add(
+                feature_entries
+                    .saturating_add(1)
+                    .max(4)
+                    .saturating_mul(std::mem::size_of::<ShapingFeature>()),
+            )
+    }
+
+    /// The heap bytes this font's option tables and shaping features hold,
+    /// from their capacities; for checking [`Self::variant_bytes_bound`].
+    #[cfg(test)]
+    fn option_bytes(&self) -> usize {
+        fn table_bytes<K, V>(capacity: usize) -> usize {
+            if capacity == 0 {
+                return 0;
+            }
+            table_buckets(capacity)
+                .saturating_mul(std::mem::size_of::<(K, V)>().saturating_add(1))
+                .saturating_add(TABLE_GROUP_BYTES)
+        }
+        std::mem::size_of::<Self>()
+            .saturating_add(table_bytes::<u32, f32>(self.axis_values.capacity()))
+            .saturating_add(table_bytes::<u32, u32>(self.feature_values.capacity()))
+            .saturating_add(
+                self.features
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<ShapingFeature>()),
+            )
     }
 
     pub fn decode_face(bytes: &[u8], face_index: u32) -> Option<FontRef> {
@@ -2443,8 +2530,33 @@ mod tests {
         let variant = font.with_options(&[], &[Feature { tag: KERN_TAG, value: 0 }]);
         drop(font);
         assert_eq!(Arc::strong_count(&owner), 2, "the variant keeps the owner");
+        let hb = variant.as_any().downcast_ref::<HbFont>().unwrap();
+        let replaced = hb.with_options_owned(&[], &[], crate::host_viewmodel::HostOwnerToken::new(()));
         drop(variant);
-        assert_eq!(Arc::strong_count(&owner), 1, "the last variant let it go");
+        assert_eq!(Arc::strong_count(&owner), 1, "an owned variant keeps only its own");
+        drop(replaced);
+    }
+
+    #[test]
+    fn a_variants_own_bytes_stay_within_the_bound() {
+        let font = HbFont::decode(&decode_hex(include_str!("testdata/legacy_kern_he.hex")))
+            .expect("fixture font decodes");
+        let mut current = font;
+        for round in 0..6_u32 {
+            let count = 1_usize << (2 * round);
+            let features: Vec<_> = (0..count as u32)
+                .map(|tag| Feature { tag: tag.wrapping_mul(2_654_435_761), value: 1 })
+                .collect();
+            let coords: Vec<_> = (0..count as u32)
+                .map(|axis| Coord { axis: axis.wrapping_add(round << 24), value: 1.0 })
+                .collect();
+            let hb = current.as_any().downcast_ref::<HbFont>().unwrap();
+            let bound = hb.variant_bytes_bound(coords.len(), features.len());
+            let next = hb.with_options(&coords, &features);
+            let held = next.as_any().downcast_ref::<HbFont>().unwrap().option_bytes();
+            assert!(held <= bound, "round {round}: holds {held} > bound {bound}");
+            current = next;
+        }
     }
 
     #[test]

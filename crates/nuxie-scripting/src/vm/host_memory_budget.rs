@@ -198,6 +198,17 @@ impl HostMemoryCharge {
         self.reserve_to(total)
     }
 
+    /// Moves `bytes` of this charge into a new charge on the same budget,
+    /// leaving what the budget has used unchanged; `None` if this charge
+    /// holds less.
+    pub(crate) fn split_off(&mut self, bytes: usize) -> Option<Self> {
+        self.bytes = self.bytes.checked_sub(bytes)?;
+        Some(Self {
+            budget: self.budget.clone(),
+            bytes,
+        })
+    }
+
     /// Sets the charge to exactly `bytes`, refunding a decrease, for a
     /// container that released its capacity.
     pub(crate) fn set(&mut self, bytes: usize) -> Result<()> {

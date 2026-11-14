@@ -2952,7 +2952,11 @@ fn determine_hypothetical_cross_size(
         };
 
         // nuxie-css: see the use below. A height that is a percentage or a keyword keeps
-        // the flexed height, as does an item whose width is a percentage of the column's.
+        // the flexed height. A width, minimum or maximum that is a percentage of the
+        // column's width does not: while the column's width is unknown the percentage
+        // behaves as automatic, so the item gives the width of its own height like any
+        // other (Chrome: a 40 by 40 picture with `max-width: 50%` and `flex-basis: 100px`
+        // leaves the column 40 wide and is then 20 wide).
         let own_height = child.size.height.or_else(|| {
             (child.size_style.height.is_stretch()
                 && constants.has_definite_main_size
@@ -2965,7 +2969,6 @@ fn determine_hypothetical_cross_size(
         let flexed_height_awaits_width = !constants.is_row
             && constants.node_inner_size.width.is_none()
             && child_cross.is_none()
-            && !child.cross_size_is_cyclic_percentage
             && (own_height.is_some() || child.size_style.height.is_auto())
             && own_height != Some(child.target_size.height);
         child.flexed_height_awaits_width = flexed_height_awaits_width;

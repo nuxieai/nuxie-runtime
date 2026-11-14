@@ -9611,8 +9611,13 @@ mod paint_order {
         // element's (an image's draw has none).
         let copy_colors = |copy: &str| -> Vec<Option<u32>> {
             match case {
-                PaintCase::Element(fixture::ElementKind::Text, _) => vec![rgb(&format!("{copy} text"))],
-                PaintCase::Element(fixture::ElementKind::Image | fixture::ElementKind::Video, _) => {
+                PaintCase::Element(fixture::ElementKind::Text, _) => {
+                    vec![rgb(&format!("{copy} text"))]
+                }
+                PaintCase::Element(
+                    fixture::ElementKind::Image | fixture::ElementKind::Video,
+                    _,
+                ) => {
                     vec![None]
                 }
                 PaintCase::Element(fixture::ElementKind::Placement, _) => vec![

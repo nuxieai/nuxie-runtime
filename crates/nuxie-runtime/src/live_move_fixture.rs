@@ -5550,7 +5550,10 @@ fn placed_root(b: &mut Vec<u8>, u: &PaintUnit) {
     obj(
         b,
         "SolidColor",
-        &[("parentId", U(3)), ("colorValue", Color(paint_color(&name)))],
+        &[
+            ("parentId", U(3)),
+            ("colorValue", Color(paint_color(&name))),
+        ],
     ); // 4
     obj(
         b,
@@ -7138,7 +7141,11 @@ fn element_spec(kind: ElementKind, case: ElementCase) -> PaintSpec {
     }
     let home_a = || at_rest("a", 1, 36.0, 20.0, 80.0, 60.0);
     let home_b = || at_rest("b", 2, 120.0, 40.0, b_size.0, b_size.1);
-    let mode = if matches!(case, Scale | TurnedRoot) { 0 } else { 1 };
+    let mode = if matches!(case, Scale | TurnedRoot) {
+        0
+    } else {
+        1
+    };
     let (on_a, on_b) = match case {
         Translucent => {
             let faded = |name: &str, opacity: f32, home: PaintEl| {

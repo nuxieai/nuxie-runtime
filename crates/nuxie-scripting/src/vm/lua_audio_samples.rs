@@ -392,13 +392,35 @@ impl HostStream {
             HEADER_BYTES.saturating_add(self.samples.len().saturating_mul(4)),
             0,
         );
-        while self.descriptor.ring.read_record(&mut self.record)? != 0 {}
+        self.discard_queued_records()?;
         self.queued = false;
         self.ended = false;
         self.position = landed as f64;
         self.discontinuity = true;
         self.fill(CHUNKS_PER_PUMP)?;
         Ok(true)
+    }
+    /// Empties the ring of the records queued before a seek.
+    ///
+    /// Each record takes at least its four-byte length word, so the ring holds
+    /// at most `capacity / 4` of them and that many reads empty it, even if a
+    /// processor keeps sending. A record larger than a chunk (a script can
+    /// `send` one into the stream's ring) cannot be read into the record
+    /// buffer and stays queued: that is an error, where the read loop used to
+    /// spin on it forever.
+    fn discard_queued_records(&mut self) -> std::result::Result<(), String> {
+        let ring = &self.descriptor.ring;
+        for _ in 0..ring.capacity() / 4 {
+            match ring.read_record(&mut self.record)? {
+                0 => return Ok(()),
+                // `size + 1`; the record was left queued if it did not fit.
+                reported if reported.saturating_sub(1) > self.record.len() => {
+                    return Err("audio stream ring holds a record larger than its chunk".into());
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
     fn set_loop(&mut self, value: bool) -> std::result::Result<(), String> {
         self.looping = value;
@@ -1018,6 +1040,40 @@ mod tests {
         assert_eq!(reader.read_into_bytes(&mut bytes).unwrap(), 1);
         assert_eq!(f32::from_le_bytes(bytes), 0.75);
         shutdown(&lua);
+    }
+    #[test]
+    fn seek_with_an_oversized_record_in_the_ring_is_a_script_error() {
+        // A script can send a record larger than a chunk into the stream's
+        // ring; seeking used to spin forever on it. The VM is not `Send`, so
+        // the whole case runs on its own thread and the test waits for it.
+        let (done, result) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let lua = lua();
+            let value = controller(&lua, 2, 4);
+            lua.globals().set("controller", value).unwrap();
+            let error: String = lua
+                .load(
+                    r#"
+                    local ring = controller.descriptor.ring
+                    for _ = 1, 8 do pcall(function() ring:receive() end) end
+                    assert(ring:send(string.rep("x", 30)))
+                    local ok, error = pcall(function() return controller:seekFrame(0) end)
+                    assert(not ok)
+                    return tostring(error)
+                "#,
+                )
+                .eval()
+                .unwrap();
+            shutdown(&lua);
+            done.send(error).unwrap();
+        });
+        let error = result
+            .recv_timeout(Duration::from_secs(20))
+            .expect("seekFrame did not return");
+        assert!(
+            error.contains("audio stream ring holds a record larger than its chunk"),
+            "{error}"
+        );
     }
     #[test]
     fn upstream_audio_samples_seek_invalidates_unread_prefetch() {

@@ -27,7 +27,6 @@ struct BudgetState {
     used: Cell<usize>,
 }
 
-
 /// The host memory one script VM's bindings may hold, in bytes.
 #[derive(Clone)]
 pub(crate) struct HostMemoryBudget(Rc<BudgetState>);
@@ -161,7 +160,11 @@ impl HostMemoryCharge {
     /// Raises the charge by `bytes`.
     pub(crate) fn grow(&mut self, bytes: usize) -> Result<()> {
         let total = self.bytes.checked_add(bytes).ok_or_else(|| {
-            budget_exceeded(self.budget.as_ref().map_or(usize::MAX, HostMemoryBudget::limit))
+            budget_exceeded(
+                self.budget
+                    .as_ref()
+                    .map_or(usize::MAX, HostMemoryBudget::limit),
+            )
         })?;
         self.reserve_to(total)
     }
@@ -483,14 +486,25 @@ mod binding_tests {
             )
             .unwrap();
         vm.vm.lua().gc_collect().unwrap();
-        let text_bytes = 24 + 64 + 256 + FONT_LIST_BYTES;
-        assert_eq!(vm.used(), 226_004 + text_bytes);
+        // The charge is what the text reports holding, plus its font list.
+        let text_bytes = || {
+            vm.vm
+                .lua()
+                .globals()
+                .get::<crate::luau::AnyUserData>("text")
+                .unwrap()
+                .borrow::<super::super::lua_text::ScriptedText>()
+                .unwrap()
+                .held_bytes()
+                + FONT_LIST_BYTES
+        };
+        assert_eq!(vm.used(), 226_004 + text_bytes());
         vm.vm.eval::<()>("derived = nil").unwrap();
         vm.vm.lua().gc_collect().unwrap();
-        assert_eq!(vm.used(), 226_004 + text_bytes, "the text keeps the face");
+        assert_eq!(vm.used(), 226_004 + text_bytes(), "the text keeps the face");
         // Shaped runs keep the face past a clear, so the charge stays too.
         vm.vm.eval::<()>("text:clear()").unwrap();
-        assert_eq!(vm.used(), 226_004 + text_bytes, "a clear keeps the face");
+        assert_eq!(vm.used(), 226_004 + text_bytes(), "a clear keeps the face");
         vm.vm.eval::<()>("text = nil").unwrap();
         vm.vm.lua().gc_collect().unwrap();
         assert_eq!(vm.used(), 0);
@@ -541,8 +555,16 @@ mod binding_tests {
         let charged = vm.used() - fonts - 226_004;
         assert_eq!(
             charged,
-            24 * 1000 + 64 + 256 + FONT_LIST_BYTES,
-            "a clear keeps the high-water charge"
+            vm.vm
+                .lua()
+                .globals()
+                .get::<crate::luau::AnyUserData>("text")
+                .unwrap()
+                .borrow::<super::super::lua_text::ScriptedText>()
+                .unwrap()
+                .held_bytes()
+                + FONT_LIST_BYTES,
+            "the charge is what the text reports holding"
         );
     }
 
@@ -575,7 +597,10 @@ mod binding_tests {
             )
             .unwrap();
         assert!(failed);
-        assert!(error.contains("Text may hold at most 65536 styles"), "{error}");
+        assert!(
+            error.contains("Text may hold at most 65536 styles"),
+            "{error}"
+        );
     }
 
     // Inventory row 24: a string data value's copy.

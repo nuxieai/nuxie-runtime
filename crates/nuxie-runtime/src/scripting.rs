@@ -1208,8 +1208,9 @@ impl ScriptViewModel {
         Some(sink)
     }
 
-    /// Retain the C++ `ScriptedProperty` delegate edge. Host-side mutations
-    /// can invoke the listener immediately; mutations made through the Lua
+    /// Retain the C++ `ScriptedProperty` delegate edge. A host-side mutation
+    /// invokes the listener immediately when no Core receiver is lent, else
+    /// when the outermost one is released; mutations made through the Lua
     /// userdata are deferred until that userdata borrow has been released.
     #[doc(hidden)]
     pub fn property_listener_sink(
@@ -1219,9 +1220,14 @@ impl ScriptViewModel {
     ) -> Option<RuntimeCellDirtSink> {
         let sink = self.property_dirt_sink(name)?;
         let suppressed = Rc::clone(&self.change_callbacks.suppressed);
+        let callback: Rc<dyn Fn()> = Rc::new(callback);
         sink.set_before_notify(Some(Rc::new(move |_| {
             if suppressed.get() == 0 {
-                callback();
+                // A listener is a script: it runs once no Core receiver on
+                // the thread is lent (at once when none is), never inside the
+                // write that raised it, whose owner may still be borrowed.
+                let callback = Rc::clone(&callback);
+                crate::source::layout::picture_layout_mode::after_core_borrows(move || callback());
                 false
             } else {
                 true

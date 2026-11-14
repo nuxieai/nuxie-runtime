@@ -197,3 +197,14 @@ fn data_bind_blobs_internal_external_complete_action_flow() {
 
     compare_silver("data_bind_blob_test", &silver.borrow().bytes());
 }
+
+/// Property listeners raised by a state's listener actions run with no Core
+/// receiver mutably lent (before: under the action's borrow).
+#[test]
+fn state_listener_actions_notify_scripts_with_no_core_receiver_lent() {
+    let ((), reports) = nuxie_runtime::script_borrow_check::record_script_borrow_reports(|| {
+        image_computed_width_height_tracks_layout_resize_complete_port();
+        data_bind_blobs_internal_external_complete_action_flow();
+    });
+    assert!(reports.is_empty(), "{}", reports.join("\n"));
+}

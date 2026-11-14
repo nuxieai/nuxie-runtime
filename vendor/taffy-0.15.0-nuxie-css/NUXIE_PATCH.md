@@ -1522,3 +1522,21 @@ pushed the boxes out of the row.
 `compute_flexbox_layout` now keeps the override for columns only.
 
 Of the 29,914 layouts, 39 more match and none that matched differ.
+
+## A column that shrinks to fit has its width before its items' heights
+
+A flex column with no width, measured in a definite space, is as wide as
+its content needs (fit-content). The fork measured the heights of its
+stretched items at the width the column was offered, not at the width
+the column ends up with. An item that is itself a container around a
+picture was then far too tall. Chrome: in an `align-items: flex-start`
+column 200 wide, a column in a column around a 60 by 120 picture is 60
+wide and 120 tall. The fork made the outer one 400 tall (the picture
+measured 200 wide).
+
+`compute_flexbox_layout` now finds such a column's fit-content width
+first, the way it already did for `width: fit-content`, whenever the
+request is for more than the width.
+
+Of the 29,914 layouts, 24 more match and none that matched differ.
+Twelve new Chrome probes of the shape are guard rows.

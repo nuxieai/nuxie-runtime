@@ -1,6 +1,7 @@
 //! Approved Lua-facing projection of the translated ViewModel owners.
 //! Values remain in their CoreArena; this module never makes a legacy graph.
 use super::*;
+use crate::host_viewmodel::CopyShape;
 use crate::mechanical_port::source::{
     assets::{blob_asset::BlobAsset, font_asset::FontAsset, image_asset::ImageAsset},
     core::CoreHandle,
@@ -106,6 +107,12 @@ impl NativeScriptViewModel {
         let Some(model) = self.model.as_ref() else {
             return BTreeMap::new();
         };
+        properties_of(model)
+    }
+}
+
+/// The properties a script sees on an instance of `model`.
+fn properties_of(model: &CoreHandle) -> BTreeMap<String, ScriptViewModelProperty> {
         let properties = model
             .with(|model| {
                 model
@@ -135,8 +142,9 @@ impl NativeScriptViewModel {
             };
             Some((name, kind))
         }).collect()
-    }
+}
 
+impl NativeScriptViewModel {
     pub fn property(&self, name: &str) -> Option<CoreHandle> {
         self.instance
             .as_ref()?
@@ -211,6 +219,43 @@ impl NativeScriptViewModel {
                 .or_else(|| file.create_view_model_instance(self.model.clone()?))
         })?;
         ScriptViewModel::from_native(instance, file)
+    }
+
+    /// What copying the authored instance `name` (`named_instance(Some(name))`)
+    /// would make, measured on the authored instances before anything is
+    /// copied. An authored instance names its nested instances and list
+    /// items by index, which the copy resolves (`File::copy_view_model_instance`);
+    /// this resolves them the same way. Counts as many instances as the copy
+    /// visits, shared sources once per reference, stopping past
+    /// `max_instances`.
+    pub fn named_copy_shape(&self, name: &str, max_instances: usize) -> CopyShape {
+        let Some(model_name) = self
+            .model
+            .as_ref()
+            .and_then(|model| {
+                model.with(|model| {
+                    model
+                        .as_view_model()
+                        .map(|model| model.base.name().to_owned())
+                })
+            })
+            .flatten()
+        else {
+            return CopyShape::NoTemplate;
+        };
+        let Some(file) = self.file.upgrade() else {
+            return CopyShape::NoTemplate;
+        };
+        file.with_file(|file| {
+            let Some(source) = file.view_model_named(&model_name).and_then(|model| {
+                model
+                    .with(|model| model.as_view_model()?.instance_named(name))
+                    .flatten()
+            }) else {
+                return CopyShape::NoTemplate;
+            };
+            copy_shape_of(file, source, max_instances)
+        })
     }
 
     fn mutate<T: 'static>(&self, name: &str, mutation: impl FnOnce(&mut T) -> bool) -> bool {
@@ -761,6 +806,12 @@ impl ScriptViewModel {
             .is_some()
     }
 
+    /// What `named_instance(Some(name))` would copy, measured before the
+    /// copy is made.
+    pub fn named_copy_shape(&self, name: &str, max_instances: usize) -> CopyShape {
+        self.native().named_copy_shape(name, max_instances)
+    }
+
     /// The owner [`Self::set_host_owner`] gave the instance.
     pub fn host_owner(&self) -> Option<crate::host_viewmodel::HostOwnerToken> {
         self.native()
@@ -823,4 +874,90 @@ impl ScriptViewModel {
             })
             .collect()
     }
+}
+
+fn copy_shape_of(file: &File, source: CoreHandle, max_instances: usize) -> CopyShape {
+    use crate::host_viewmodel::ViewModelCopyShape;
+    use crate::mechanical_port::source::viewmodel::viewmodel::ViewModel;
+    let mut shape = ViewModelCopyShape::default();
+    let mut pending = vec![source];
+    while let Some(instance) = pending.pop() {
+        if shape.instances >= max_instances {
+            return CopyShape::Unbounded;
+        }
+        shape.instances = shape.instances.saturating_add(1);
+        let Some((model_id, values)) = instance
+            .with(|instance| {
+                let instance = instance.as_view_model_instance()?;
+                Some((
+                    instance.base.view_model_id() as usize,
+                    instance.property_values().to_vec(),
+                ))
+            })
+            .flatten()
+        else {
+            continue;
+        };
+        let Some(model) = file.view_model_handle(model_id) else {
+            continue;
+        };
+        // The properties a script sees on the copy, as `properties()` lists them.
+        for name in properties_of(&model).into_keys() {
+            shape.properties = shape.properties.saturating_add(1);
+            shape.name_bytes = shape.name_bytes.saturating_add(name.len());
+        }
+        for value in values {
+            if let Some(len) = value.with_downcast::<ViewModelInstanceString, _>(|value| {
+                value.base.property_value().len()
+            }) {
+                shape.string_bytes = shape.string_bytes.saturating_add(len);
+                continue;
+            }
+            let nested = value
+                .with(|value| {
+                    let index = value.as_view_model_instance_view_model()?.base.property_value();
+                    let property = value.as_view_model_instance_value()?.base.view_model_property_id();
+                    Some((property as usize, index as usize))
+                })
+                .flatten();
+            if let Some((property_id, index)) = nested {
+                let source = model
+                    .with_downcast::<ViewModel, _>(|model| model.property_at(property_id))
+                    .flatten()
+                    .and_then(|property| {
+                        property.with_downcast::<ViewModelPropertyViewModel, _>(|property| {
+                            property.base.view_model_reference_id() as usize
+                        })
+                    })
+                    .and_then(|reference| file.view_model_handle(reference))
+                    .and_then(|model| {
+                        model
+                            .with_downcast::<ViewModel, _>(|model| model.instance_at(index))
+                            .flatten()
+                    });
+                pending.extend(source);
+                continue;
+            }
+            let items = value
+                .with_downcast::<ViewModelInstanceList, _>(|list| list.list_items().to_vec())
+                .unwrap_or_default();
+            for item in items {
+                shape.list_items = shape.list_items.saturating_add(1);
+                let source = item
+                    .with_downcast::<ViewModelInstanceListItem, _>(|item| {
+                        (
+                            item.base.view_model_id() as usize,
+                            item.base.view_model_instance_id() as usize,
+                        )
+                    })
+                    .and_then(|(model_id, instance_id)| {
+                        file.view_model_handle(model_id)?
+                            .with_downcast::<ViewModel, _>(|model| model.instance_at(instance_id))
+                            .flatten()
+                    });
+                pending.extend(source);
+            }
+        }
+    }
+    CopyShape::Shape(shape)
 }

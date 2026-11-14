@@ -18,6 +18,24 @@ pub(super) struct Pass {
     pub pipeline_set: bool,
     pub draw_call_count: u32,
     pub label: String,
+    pub held: HeldCharges,
+}
+
+/// The charges of what a pass holds bound: one entry per slot, replaced on
+/// rebind, as the pass's own bindings are. Kept until the pass is collected,
+/// since a finished pass's recording still holds what it bound.
+#[derive(Default)]
+pub(super) struct HeldCharges {
+    groups: [Option<Rc<[GpuCharge]>>; kMaxBindGroups as usize],
+    vertex_buffers: [Option<GpuCharge>; kMaxVertexBufferSlots as usize],
+    index_buffer: Option<GpuCharge>,
+}
+impl HeldCharges {
+    fn hold_group(&mut self, group: u32, bind_group: &BindGroup) {
+        if let Some(held) = self.groups.get_mut(group as usize) {
+            *held = Some(Rc::clone(&bind_group.charges));
+        }
+    }
 }
 impl Pass {
     fn validate(&self) -> Result<bool> {
@@ -88,6 +106,9 @@ impl UserData for Pass {
                 if let Some(pass) = this.pass() {
                     pass.setVertexBuffer(slot, Some(&buffer.resource), 0);
                 }
+                if let Some(held) = this.held.vertex_buffers.get_mut(slot as usize) {
+                    *held = Some(Rc::clone(&buffer.charge));
+                }
                 Ok(())
             },
         );
@@ -111,6 +132,7 @@ impl UserData for Pass {
                         0,
                     );
                 }
+                this.held.index_buffer = Some(Rc::clone(&buffer.charge));
                 Ok(())
             },
         );
@@ -132,6 +154,7 @@ impl UserData for Pass {
             if !this.pipeline_set {
                 this.deferred_bind_groups.get_or_insert_with(DeferredBindGroups::default).defer(group, Some(&bg.resource), Some(&values), values.len() as u32);
                 this.draw_bindings.setBindGroup(group, Some(&bg.resource));
+                this.held.hold_group(group, &bg);
                 return Ok(());
             }
             if let Some(context) = context.as_ref() { context.borrow().clearLastError(); }
@@ -141,6 +164,7 @@ impl UserData for Pass {
                 if !error.is_empty() { return Err(Error::runtime(format!("setBindGroup: {error}"))); }
             }
             this.draw_bindings.setBindGroup(group, Some(&bg.resource));
+            this.held.hold_group(group, &bg);
             Ok(())
         });
         methods.add_method_mut(

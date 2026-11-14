@@ -74,6 +74,7 @@ fn pass_closed_by_enclosing_pass_expires_for_script() {
             pipeline_set: false,
             draw_call_count: 0,
             label: String::new(),
+            held: Default::default(),
         })
         .unwrap();
     vm.lua().globals().set("rp", rp.clone()).unwrap();
@@ -185,6 +186,7 @@ fn bind_groups_wait_for_first_pipeline() {
             pipeline_set: false,
             draw_call_count: 0,
             label: String::new(),
+            held: Default::default(),
         })
         .unwrap();
     vm.lua().globals().set("rp", rp.clone()).unwrap();
@@ -616,6 +618,7 @@ fn a_bind_group_made_from_a_video_picture_follows_its_frames() {
             pipeline_set: false,
             draw_call_count: 0,
             label: String::new(),
+            held: Default::default(),
         })
         .unwrap();
     vm.lua().globals().set("rp", rp).unwrap();
@@ -721,34 +724,7 @@ fn gpu_buffers_and_textures_are_charged_while_anything_holds_them() {
         .exec()
         .unwrap();
     assert_eq!(host_bytes_used(&vm) - base, 1000 + 21_844);
-    // One uniform buffer at @group(0) @binding(0) in the vertex stage (the
-    // binding-map wire format of `split_stage_fragment_bindings_...`).
-    let map = [
-        3, 2, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0,
-    ];
-    let module = context(vm.lua())
-        .unwrap()
-        .borrow_mut()
-        .makeShaderModule(&ShaderModuleDesc {
-            code: Some(b"uniform test module"),
-            codeSize: 19,
-            bindingMapBytes: Some(&map),
-            bindingMapSize: map.len() as u32,
-            ..ShaderModuleDesc::default()
-        })
-        .unwrap();
-    let ubo_shader = vm
-        .lua()
-        .create_userdata(Shader {
-            entries: vec![ShaderEntry {
-                stage: 0,
-                logical: "vertex".into(),
-                physical: "vertex".into(),
-                module,
-            }],
-        })
-        .unwrap();
-    vm.lua().globals().set("uboShader", ubo_shader).unwrap();
+    install_ubo_shader(&vm);
     vm.lua()
         .load(
             "v = t:view() t = nil \
@@ -877,4 +853,97 @@ fn gpu_descriptor_metamethods_reach_the_draw_renderer() {
     ] {
         assert!(drawn.raw_get::<bool>(name).unwrap_or(false), "{name} did not draw");
     }
+}
+
+/// Sets `uboShader`: one uniform buffer at @group(0) @binding(0) in the
+/// vertex stage (the binding-map wire format of
+/// `split_stage_fragment_bindings_reach_explicit_and_auto_layouts`).
+fn install_ubo_shader(vm: &ScriptVm) {
+    let map = [
+        3, 2, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0,
+    ];
+    let module = context(vm.lua())
+        .unwrap()
+        .borrow_mut()
+        .makeShaderModule(&ShaderModuleDesc {
+            code: Some(b"uniform test module"),
+            codeSize: 19,
+            bindingMapBytes: Some(&map),
+            bindingMapSize: map.len() as u32,
+            ..ShaderModuleDesc::default()
+        })
+        .unwrap();
+    let ubo_shader = vm
+        .lua()
+        .create_userdata(Shader {
+            entries: vec![ShaderEntry {
+                stage: 0,
+                logical: "vertex".into(),
+                physical: "vertex".into(),
+                module,
+            }],
+        })
+        .unwrap();
+    vm.lua().globals().set("uboShader", ubo_shader).unwrap();
+}
+
+// Codex review: a pass keeps what it binds after the script lets go of the
+// buffers and the group, so it keeps their charges too.
+#[test]
+fn a_pass_keeps_the_charges_of_what_it_binds() {
+    use nuxie_ore_metal::ore_cmd::{
+        ore_command_buffer::OreCommandBuffer, ore_render_pass_recording::RenderPassRecording,
+    };
+    let vm = recording_vm();
+    install_ubo_shader(&vm);
+    let base = host_bytes_used(&vm);
+    let ore = context(vm.lua()).unwrap();
+    let recording = RenderPassRecording::new(
+        Some(ore.borrow().contextBase()),
+        Rc::new(RefCell::new(OreCommandBuffer::default())),
+        &RenderPassDesc {
+            colorCount: 0,
+            ..RenderPassDesc::default()
+        },
+    );
+    let rp = vm
+        .lua()
+        .create_userdata(pass::Pass {
+            pass: Some(Box::new(recording)),
+            deferred_bind_groups: None,
+            draw_bindings: Default::default(),
+            finished: false,
+            sample_count: 1,
+            pipeline_set: false,
+            draw_call_count: 0,
+            label: String::new(),
+            held: Default::default(),
+        })
+        .unwrap();
+    vm.lua().globals().set("rp", rp).unwrap();
+    vm.lua()
+        .load(
+            "local b = GPUBuffer.new {size = 1000, usage = 'uniform'} \
+             local layout = GPUBindGroupLayout.new {shader = uboShader} \
+             rp:setBindGroup(0, GPUBindGroup.new {layout = layout, ubos = {{slot = 0, buffer = b}}}) \
+             rp:setVertexBuffer(0, GPUBuffer.new {size = 500, usage = 'vertex'}) \
+             rp:setIndexBuffer(GPUBuffer.new {size = 300, usage = 'index'})",
+        )
+        .exec()
+        .unwrap();
+    vm.lua().gc_collect().unwrap();
+    assert_eq!(host_bytes_used(&vm) - base, 1800);
+    vm.lua()
+        .load("rp:setVertexBuffer(0, GPUBuffer.new {size = 10, usage = 'vertex'}) rp:finish()")
+        .exec()
+        .unwrap();
+    vm.lua().gc_collect().unwrap();
+    assert_eq!(
+        host_bytes_used(&vm) - base,
+        1310,
+        "a rebound slot lets go of the old buffer; a finished pass keeps the rest"
+    );
+    vm.lua().load("rp = nil").exec().unwrap();
+    vm.lua().gc_collect().unwrap();
+    assert_eq!(host_bytes_used(&vm), base);
 }

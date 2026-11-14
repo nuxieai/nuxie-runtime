@@ -364,7 +364,7 @@ impl GridItem {
     /// its height: a ratio item with an automatic height that is stretched in neither axis
     /// (Chrome: `aspect-ratio: 2; align-self: start; justify-self: start` around a 300-wide
     /// child is 300 by 150). Stock sized it from its content in both axes.
-    fn ratio_follows_content_width(&self) -> bool {
+    pub(in crate::compute::grid) fn ratio_follows_content_width(&self) -> bool {
         let stretched_in_block = matches!(self.align_self.keyword, AlignItemsKeyword::Normal | AlignItemsKeyword::Stretch)
             && !self.margin.top.is_auto()
             && !self.margin.bottom.is_auto();

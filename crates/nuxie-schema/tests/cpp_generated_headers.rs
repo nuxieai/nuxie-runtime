@@ -253,7 +253,8 @@ fn nuxie_definitions_stay_out_of_the_cpp_registry() {
             ("TextStyleCssText", 61005),
             ("LiveSlot", 62000),
             ("LiveStep", 62001),
-            ("LiveStepUnit", 62002)
+            ("LiveStepUnit", 62002),
+            ("LiveFlight", 62003)
         ]
     );
 

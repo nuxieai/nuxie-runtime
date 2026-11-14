@@ -158,7 +158,7 @@ A second shape of file flies each matched element where it was authored, on its 
 
 A file is one shape. At import, a file that holds any `LiveFlight` record is an in-place file, and one that holds both `LiveFlight` and `LiveSlot` records is refused. In an in-place file each step unit flies two copies: a unit that sets `transfers` is refused, and its two flight keys must differ. A flight key shared by two elements of one Screen, or by two flight records of one Screen, is refused. Flight records outside a Screen are dropped with a diagnostic, as flight slots are. A file without flight records reads no in-place state: no hold begins and no bookkeeping is kept for it (`a_file_without_flight_records_reads_no_in_place_state`).
 
-A reader that predates these records skips the unknown type and property, as it skips any, and draws the Screens as authored; it refuses every in-place step for want of flight slots.
+A reader that predates these records skips them only when the file's property table lists their keys; otherwise it marks the file malformed (`mechanical_port/source/file.rs`, `read_runtime_object`). Before general release this is a hard cutover: the phones take this runtime before any file carries the records.
 
 ### The layout hold
 

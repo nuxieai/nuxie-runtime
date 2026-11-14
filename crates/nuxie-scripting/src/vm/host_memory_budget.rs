@@ -440,6 +440,26 @@ mod binding_tests {
         assert_eq!(vm.used(), 226_004);
     }
 
+    // Codex review: the charge went when the decoded font was collected, while
+    // a derived font or a Text shaped with it still kept the face alive.
+    #[test]
+    fn a_font_stays_charged_while_anything_keeps_its_face() {
+        let vm = font_vm(1024 * 1024);
+        vm.vm
+            .eval::<()>(
+                "local font = Font.decode(fontBytes)                  derived = font:withOptions({}, {})                  text = Text.new()                  text:append('x', {font = font})",
+            )
+            .unwrap();
+        vm.vm.lua().gc_collect().unwrap();
+        let text_bytes = 24 + 64 + 256;
+        assert_eq!(vm.used(), 226_004 + text_bytes);
+        vm.vm.eval::<()>("derived = nil").unwrap();
+        vm.vm.lua().gc_collect().unwrap();
+        assert_eq!(vm.used(), 226_004 + text_bytes, "the text keeps the face");
+        vm.vm.eval::<()>("text:clear()").unwrap();
+        assert_eq!(vm.used(), text_bytes, "a clear lets go of the face");
+    }
+
     // Inventory row 13: appended characters, runs and styles.
     #[test]
     fn text_append_stops_at_the_budget_and_clear_keeps_the_charge() {

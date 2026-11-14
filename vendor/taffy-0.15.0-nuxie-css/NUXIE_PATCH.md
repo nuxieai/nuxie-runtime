@@ -1304,3 +1304,24 @@ Of the 29,914 layouts, 21 more match and none that matched differ. Of
 5,376 Chrome 152 layouts measured for this change (start, center, end and
 baseline alignment, auto margins, keyword widths, fixed and automatic
 tracks), 2,856 differed and all match now.
+
+## A measured grid's width follows its rows
+
+A grid that is only measured for its size (a flex item, a shrink-to-fit
+box) returned its width from the first column pass, before the rows are
+sized and the columns rerun. An item whose width follows its row's height
+through a ratio therefore added nothing to the measured width, and then
+overflowed the grid when it was laid out. Chrome: a `height: 100px` grid
+in a flex row, around one `aspect-ratio: 4` item, is 400 wide (stock: 0
+wide, with the item 400 wide inside it).
+
+`compute_grid_layout` now skips both early returns of a size-only run when
+the grid's width is not known, the grid has no ratio of its own and an
+item has one (`columns_follow_rows`), so the size it reports is the one
+after the column rerun.
+
+Of the 29,914 layouts, 20 more match and none that matched differ. Of 360
+Chrome 152 layouts measured for this change, 120 differed and 52 differ
+now. A grid with its own `aspect-ratio` is left as it was: there Chrome
+takes the larger of the ratio's width and the items' minimum, and letting
+the rerun run fixed 44 layouts but broke 3, and 29 of the probes.

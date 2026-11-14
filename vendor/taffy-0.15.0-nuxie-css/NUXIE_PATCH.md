@@ -1788,3 +1788,34 @@ opinion. It draws such a picture 0 wide inside a flex row in 33 of the
 The tables are named for what they hold. An earlier name called the
 first one a Chrome quirk, which claimed more than was shown.
 
+## A grid measured for its width always sizes its rows and redoes its columns
+
+When only a grid's width is asked for (a `fit-content` grid, a grid as
+a flex or grid item), the fork used to finish after the first column
+pass unless one of the grid's own items had a ratio or was a picture
+with a percentage height. That list missed every case where the
+dependence sits deeper: an item that is a flex row holding a ratio box
+with a percentage or `stretch` height, for one. The grid was then
+measured narrower than the columns its layout ends up with, and its
+items overflowed it.
+
+The list is gone. A grid measured for its width now runs the same
+passes as a grid being laid out: columns, rows, then columns again
+where an item's contribution changed. A grid with its own ratio keeps
+its earlier rule. This is what Chrome's grid does when it computes a
+grid's intrinsic width with an item whose width depends on its height.
+
+Chrome 152: `display: grid; width: fit-content` around a flex row
+holding an `aspect-ratio: 1; height: 50%` box and a 20 tall box is 10
+wide (the fork said 0). With `min-height: 150px` around a padded flex
+row holding an `aspect-ratio: 2; height: stretch` box it is 280 wide
+(the fork said 20).
+
+Of the 32,600 Chrome rows 19 more match and none that matched stops
+matching. One row (`k1306`) joins `TAFFY_FORK_CHROME_PICTURE_STRETCH_ROWS`:
+it is a picture with a `stretch` height in a `fit-content` grid, the
+case that table records. Two rows already in that table (`k2004`,
+`k5042`) now get the frames Chrome gives them with `height: 100%`.
+Layout work over the row set: computed layouts 495,680 before, 497,066
+after; requests 729,996 before, 737,116 after.
+

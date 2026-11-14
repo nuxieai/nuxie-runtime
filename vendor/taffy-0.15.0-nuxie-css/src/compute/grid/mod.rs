@@ -465,18 +465,20 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     // If only the container's width has been requested then we can skip sizing the rows entirely (which avoids
     // measuring the height of every item), as column sizing is not re-run when only computing the container's size.
     // Note: the short-circuit above has already handled the case where the container's width is known.
-    // nuxie-css: a grid measured for its width still sizes its rows and reruns its columns
-    // when an item's width can follow its row's height through a ratio, so the measured
-    // width is the width the laid out grid needs (Chrome: a `height: 100px` grid in a flex
-    // row, around one `aspect-ratio: 4` item, is 400 wide; stock measured it 0 wide and the
-    // item then overflowed it).
+    // nuxie-css: a grid measured for its width still sizes its rows and reruns its columns,
+    // so the measured width is the width the laid out grid needs. An item's width can
+    // follow its row's height through a ratio, a percentage or `stretch` height, or
+    // anything inside it that does (Chrome: a `height: 100px` grid in a flex row, around
+    // one `aspect-ratio: 4` item, is 400 wide; a `width: fit-content` grid around a flex
+    // row holding an `aspect-ratio: 1; height: 50%` box and a 20 tall box is 10 wide).
+    // Stock measured the first 0 wide and the item then overflowed it.
     // A grid with its own ratio has the width that ratio gives. Only its smallest width
     // (a min-content measurement) follows the rows, and only with a single row (Chrome:
     // `height: 100px; aspect-ratio: 2` around that item is 400 wide in a flex row; with two
     // automatic rows it stays 200 wide).
-    // A picture whose height or `max-height` is a percentage follows its row the same way
-    // (Chrome: a grid in an `align-items: flex-start` column, around a 120 by 60 picture
-    // with `max-height: 50%`, is 60 wide; the picture is 60 by 30).
+    // `picture_follows_rows`: a picture whose height or `max-height` is a percentage, for
+    // the column rerun below (Chrome: a grid in an `align-items: flex-start` column, around
+    // a 120 by 60 picture with `max-height: 50%`, is 60 wide; the picture is 60 by 30).
     let picture_follows_rows = outer_node_size.width.is_none()
         && items.iter().any(|item| {
             item.is_compressible_replaced
@@ -484,7 +486,6 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
                     || item.max_size.height.into_raw().uses_percentage())
         });
     let columns_follow_rows = outer_node_size.width.is_none()
-        && (picture_follows_rows || items.iter().any(|item| item.aspect_ratio.is_some()))
         && (tree.get_grid_container_style(node).aspect_ratio().is_none()
             || (available_grid_space.width == AvailableSpace::MinContent
                 && rows.iter().filter(|track| track.kind == GridTrackKind::Track).count() == 1));

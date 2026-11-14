@@ -1691,3 +1691,27 @@ column's items Chrome gives the fork's frames. Decided by Levi on
 Of the 32,600 Chrome rows, 6 more match. 58 are confirmed rows of this
 kind: 32 of them matched Chrome before through the old condition and
 differ now on purpose, and 26 differed before as well.
+
+## A row with a height resolves a stretch-height picture; no flag for who asked
+
+`LayoutInput::pictures_follow_stretch_height` and
+`AlgoConstants::height_is_set_length` are removed. A picture with a
+`stretch` keyword height in a row that has a height now counts at the
+width that height gives, whoever is measuring the row and however the
+row got its height.
+
+The flag said "a row or a grid is asking for this row's width", and a
+column asking left the picture at its natural width. Forcing the flag
+on across the 32,600 Chrome rows changed eight. Three started matching
+Chrome (rows inside a grid item or a `fit-content` row, where the flag
+was lost on the way down). Five stopped matching, and each is a row
+inside a flex column's item: the Chrome measurement quirk described
+under "Where the fork does not follow Chrome" above. Checked in Chrome
+152: with `min-height: 0` on the column's items (or `flex-shrink: 0`
+on the row), Chrome gives the fork's frames for all five. So the flag
+only copied the quirk, and the fork does the consistent thing instead.
+Decided by Levi on 2026-11-15.
+
+The five rows moved from `TAFFY_FORK_REPLACED_ROWS` to
+`TAFFY_FORK_CHROME_MEASURE_QUIRK_ROWS`; the three joined the guard
+rows. One less field in the measure cache key.

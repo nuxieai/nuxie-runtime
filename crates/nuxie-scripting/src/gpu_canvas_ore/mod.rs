@@ -88,6 +88,16 @@ pub(crate) fn charge_gpu_bytes(lua: &Lua, bytes: u64) -> Result<GpuCharge> {
     HostMemoryCharge::for_lua(lua, bytes).map(Rc::new)
 }
 
+/// Hands `charge` to the context's frame recording, which keeps it for as
+/// long as it holds what it has captured so far: on the deferred recorder,
+/// the resource handles and the blob copies of data and uploads, until the
+/// frame is reset. A script can then not refund a charge by dropping its
+/// handles while the frame still holds the memory. Contexts that keep
+/// nothing drop the clone at once.
+pub(crate) fn keep_with_recording(ctx: &dyn ContextApi, charge: &GpuCharge) {
+    ctx.keepWithRecording(Rc::clone(charge) as Rc<dyn std::any::Any>);
+}
+
 /// Bytes a canvas's backing takes: one RGBA8 colour texture.
 pub(crate) fn canvas_bytes(width: u32, height: u32) -> u64 {
     u64::from(width)

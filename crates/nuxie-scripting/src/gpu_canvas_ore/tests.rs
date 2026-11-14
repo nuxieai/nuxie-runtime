@@ -74,7 +74,6 @@ fn pass_closed_by_enclosing_pass_expires_for_script() {
             pipeline_set: false,
             draw_call_count: 0,
             label: String::new(),
-            held: Default::default(),
         })
         .unwrap();
     vm.lua().globals().set("rp", rp.clone()).unwrap();
@@ -107,8 +106,18 @@ type TestFactory =
     nuxie_render_api::PersistentFactory<RoutedTestFactory<nuxie_render_api::RecordingFactory>>;
 
 fn recording_vm_and_factory(recorder: DeferredOreContext) -> (ScriptVm, TestFactory) {
+    recording_vm_on(Rc::new(RefCell::new(recorder)))
+}
+
+/// A VM on a recorder the test can reset between frames.
+fn recording_vm_and_recorder() -> (ScriptVm, Rc<RefCell<DeferredOreContext>>) {
+    let recorder = Rc::new(RefCell::new(DeferredOreContext::fromReal(None)));
+    (recording_vm_on(Rc::clone(&recorder)).0, recorder)
+}
+
+fn recording_vm_on(recorder: Rc<RefCell<DeferredOreContext>>) -> (ScriptVm, TestFactory) {
     let vm = ScriptVm::new();
-    let ore: OreContextHandle = Rc::new(RefCell::new(recorder));
+    let ore: OreContextHandle = recorder;
     let module = ore
         .borrow_mut()
         .makeShaderModule(&ShaderModuleDesc {
@@ -186,7 +195,6 @@ fn bind_groups_wait_for_first_pipeline() {
             pipeline_set: false,
             draw_call_count: 0,
             label: String::new(),
-            held: Default::default(),
         })
         .unwrap();
     vm.lua().globals().set("rp", rp.clone()).unwrap();
@@ -618,7 +626,6 @@ fn a_bind_group_made_from_a_video_picture_follows_its_frames() {
             pipeline_set: false,
             draw_call_count: 0,
             label: String::new(),
-            held: Default::default(),
         })
         .unwrap();
     vm.lua().globals().set("rp", rp).unwrap();
@@ -711,7 +718,7 @@ fn host_bytes_used(vm: &ScriptVm) -> usize {
 // charged to any budget; a view or bind group keeps the allocation alive.
 #[test]
 fn gpu_buffers_and_textures_are_charged_while_anything_holds_them() {
-    let vm = recording_vm();
+    let (vm, recorder) = recording_vm_and_recorder();
     let base = host_bytes_used(&vm);
     vm.lua()
         .load("b = GPUBuffer.new {size = 1000, usage = 'uniform'}")
@@ -742,6 +749,12 @@ fn gpu_buffers_and_textures_are_charged_while_anything_holds_them() {
     );
     vm.lua().load("v = nil g = nil").exec().unwrap();
     vm.lua().gc_collect().unwrap();
+    assert_eq!(
+        host_bytes_used(&vm) - base,
+        1000 + 21_844,
+        "the frame's recording keeps both until it is reset"
+    );
+    recorder.borrow_mut().resetFrame();
     assert_eq!(host_bytes_used(&vm), base);
 }
 
@@ -896,7 +909,7 @@ fn a_pass_keeps_the_charges_of_what_it_binds() {
     use nuxie_ore_metal::ore_cmd::{
         ore_command_buffer::OreCommandBuffer, ore_render_pass_recording::RenderPassRecording,
     };
-    let vm = recording_vm();
+    let (vm, recorder) = recording_vm_and_recorder();
     install_ubo_shader(&vm);
     let base = host_bytes_used(&vm);
     let ore = context(vm.lua()).unwrap();
@@ -919,7 +932,6 @@ fn a_pass_keeps_the_charges_of_what_it_binds() {
             pipeline_set: false,
             draw_call_count: 0,
             label: String::new(),
-            held: Default::default(),
         })
         .unwrap();
     vm.lua().globals().set("rp", rp).unwrap();
@@ -951,6 +963,12 @@ fn a_pass_keeps_the_charges_of_what_it_binds() {
     );
     vm.lua().load("rp = nil").exec().unwrap();
     vm.lua().gc_collect().unwrap();
+    assert_eq!(
+        host_bytes_used(&vm) - base,
+        1830,
+        "the frame's recording made the buffers and keeps them"
+    );
+    recorder.borrow_mut().resetFrame();
     assert_eq!(host_bytes_used(&vm), base);
 
     // Codex review: a pass keeps its attachments' charges.
@@ -965,5 +983,53 @@ fn a_pass_keeps_the_charges_of_what_it_binds() {
     assert_eq!(host_bytes_used(&vm) - base, 16 * 16 * 4);
     vm.lua().load("attached:finish() attached = nil").exec().unwrap();
     vm.lua().gc_collect().unwrap();
+    assert_eq!(
+        host_bytes_used(&vm) - base,
+        16 * 16 * 4,
+        "the recording keeps the attachment until the frame is reset"
+    );
+    recorder.borrow_mut().resetFrame();
     assert_eq!(host_bytes_used(&vm), base);
+}
+
+// Lane G2 section 4: the deferred recording keeps each resource it captured
+// and each copy of uploaded bytes until the frame is reset. A script that
+// created, bound and dropped resources in a loop got every charge back while
+// the frame still held the memory, so the loop never met the budget.
+#[test]
+fn a_frame_that_loops_create_bind_drop_is_refused_at_the_budget() {
+    let (vm, recorder) = recording_vm_and_recorder();
+    crate::vm::host_memory_budget::HostMemoryBudget::install(vm.lua(), 64 * 1024).unwrap();
+    vm.lua()
+        .load(
+            "view = GPUTexture.new {width = 4, height = 4, renderTarget = true}:view()",
+        )
+        .exec()
+        .unwrap();
+    let base = host_bytes_used(&vm);
+    let refused = |script: &str| {
+        for round in 0..200 {
+            let result = vm.lua().load(script).exec();
+            vm.lua().gc_collect().unwrap();
+            if let Err(error) = result {
+                assert!(error.to_string().contains("host memory budget"), "{error}");
+                return round;
+            }
+        }
+        panic!("200 rounds of `{script}` in one frame were never refused");
+    };
+    let loops = [
+        "local pass = canvas:beginRenderPass {color = {{view = view, storeOp = 'store'}}}          pass:setVertexBuffer(0, GPUBuffer.new {size = 1024, usage = 'vertex'})          pass:finish()",
+        "GPUBuffer.new {size = 1024, usage = 'vertex', data = buffer.create(1024)}",
+        "if not b then b = GPUBuffer.new {size = 1024, usage = 'vertex'} end          b:write(buffer.create(1024), 0, 0, 1024)",
+        "if not t then t = GPUTexture.new {width = 16, height = 16} end          t:upload {data = buffer.create(1024), width = 16, height = 16}",
+    ];
+    for script in loops {
+        let rounds = refused(script);
+        assert!(rounds <= 64, "`{script}` was refused only after {rounds} rounds");
+        vm.lua().load("b = nil t = nil").exec().unwrap();
+        vm.lua().gc_collect().unwrap();
+        recorder.borrow_mut().resetFrame();
+        assert_eq!(host_bytes_used(&vm), base, "reset gives back `{script}`");
+    }
 }

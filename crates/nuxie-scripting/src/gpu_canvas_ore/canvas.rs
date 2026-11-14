@@ -71,6 +71,8 @@ impl Canvas {
         #[allow(unsafe_code)]
         let color_view = unsafe { ore.borrow_mut().wrapCanvasTextureInfo(info) }
             .ok_or_else(|| Error::runtime(format!("{caller} failed to wrap canvas texture")))?;
+        // The recorder registers the canvas with its frame when it wraps it.
+        keep_with_recording(&*ore.borrow(), &charge);
         let image = lua.create_userdata(ScriptedImage::from_render_canvas(
             Rc::clone(&canvas),
             Some(Rc::clone(&charge)),
@@ -352,18 +354,6 @@ pub(super) fn begin_pass(
             "beginRenderPass: descriptor must include at least one color attachment or a depthStencil attachment",
         ));
     }
-    // The recording keeps its attachments; so does the pass, their charges.
-    let mut held = super::pass::HeldCharges::default();
-    let attachments = colors
-        .iter()
-        .flat_map(|(view, resolve, ..)| [view.as_ref(), resolve.as_ref()])
-        .chain([depth.as_ref()])
-        .flatten();
-    for view in attachments {
-        if let Some(charge) = &view.charge {
-            held.hold(charge);
-        }
-    }
     if dropped {
         return lua.create_userdata(Pass {
             pass: None,
@@ -374,7 +364,6 @@ pub(super) fn begin_pass(
             pipeline_set: false,
             draw_call_count: 0,
             label: String::new(),
-            held: Default::default(),
         });
     }
     depth_desc.view = depth.as_ref().map(|view| &view.resource);
@@ -408,7 +397,7 @@ pub(super) fn begin_pass(
             return Err(Error::runtime(format!("beginRenderPass: {error}")));
         }
     }
-    lua.create_userdata(Pass {
+    let mut pass = Pass {
         pass,
         deferred_bind_groups: None,
         draw_bindings: Default::default(),
@@ -417,6 +406,15 @@ pub(super) fn begin_pass(
         pipeline_set: false,
         draw_call_count: 0,
         label: label.unwrap_or_default(),
-        held,
-    })
+    };
+    // The recording keeps its attachments, and so their charges.
+    let attachments = colors
+        .iter()
+        .flat_map(|(view, resolve, ..)| [view.as_ref(), resolve.as_ref()])
+        .chain([depth.as_ref()])
+        .flatten();
+    for charge in attachments.filter_map(|view| view.charge.as_ref()) {
+        pass.hold(charge);
+    }
+    lua.create_userdata(pass)
 }

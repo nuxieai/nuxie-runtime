@@ -124,3 +124,14 @@ fn bind_view_model_from_set_value_external_change_and_scripting() {
         },
     );
 }
+
+/// A script's property listener runs with no Core receiver mutably lent
+/// (before: it ran inside the write that raised it, under the listener
+/// action's borrow).
+#[test]
+fn property_listeners_run_with_no_core_receiver_lent() {
+    let ((), reports) = nuxie_runtime::script_borrow_check::record_script_borrow_reports(
+        bind_view_model_from_set_value_external_change_and_scripting,
+    );
+    assert!(reports.is_empty(), "{}", reports.join("\n"));
+}

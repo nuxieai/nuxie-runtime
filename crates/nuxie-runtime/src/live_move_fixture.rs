@@ -489,9 +489,10 @@ pub enum InPlaceFixture {
     /// keyed 3 on A and 4 on B, two more flight records on B, 13 and 14,
     /// and a second unit of t1 naming them: a flight inside another.
     Nested,
-    /// `Plain` with each Screen's card a component placement of "unit x",
-    /// or a text, an image or a video hosting a layout participant; its
-    /// record holds the card's size and key.
+    /// `Plain` with each Screen's card a component placement of "unit x"
+    /// (a CSS artboard, its origin at its center, the placement turned by
+    /// 0.3), or a text, an image or a video hosting a layout participant;
+    /// its record holds the card's size and key.
     Keyed(KeyedKind),
 }
 
@@ -625,7 +626,10 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
             let mut element = vec![("name", S("card")), ("parentId", U(0))];
             match element_kind {
                 KeyedKind::Video => element.push(("assetId", U(0))),
-                KeyedKind::Placement => element.push(("artboardId", U(2))),
+                // Turned, so its root's pivot shows.
+                KeyedKind::Placement => {
+                    element.extend([("artboardId", U(2)), ("rotation", F(0.3))]);
+                }
                 _ => {}
             }
             obj(&mut b, type_name, &element); // 3
@@ -714,15 +718,22 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
         }
     }
     if slot || kind == Keyed(KeyedKind::Placement) {
-        obj(
-            &mut b,
-            "Artboard",
-            &[
-                ("name", S("unit x")),
-                ("width", F(40.0)),
-                ("height", F(40.0)),
-            ],
-        );
+        // A keyed placement places a CSS artboard, its origin at its center,
+        // as only a CSS root flies in place.
+        let css = kind == Keyed(KeyedKind::Placement);
+        let mut unit = vec![
+            ("name", S("unit x")),
+            ("width", F(40.0)),
+            ("height", F(40.0)),
+        ];
+        if css {
+            unit.extend([("originX", F(0.5)), ("originY", F(0.5)), ("styleId", U(2))]);
+        }
+        obj(&mut b, "Artboard", &unit); // 0
+        if css {
+            obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+            obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+        }
     }
     obj(
         &mut b,
@@ -4954,6 +4965,13 @@ pub enum ElementCase {
     /// A placement's placed root scaled by 2 about its center, zoomed as
     /// `Zoom`.
     ZoomScaledRoot,
+    /// A placement's placed root a native layout artboard with its origin
+    /// at its center, so its frame starts half its size before its
+    /// placement's origin, in Scale mode with b 160 by 60. Not an
+    /// equivalence case: its in-place page draws a's root at (0, 0), its
+    /// slot page at (36, 20), before any step, so such a placement is
+    /// refused at take-off.
+    NativeRoot,
 }
 
 /// A zoomed pair: unit "a", 80 by 60 with corners of 4, at (36, 20) on A, and
@@ -5363,6 +5381,10 @@ struct PaintUnit {
     element: Option<ElementKind>,
     /// A placement's placed root's own turn and scale, about its center.
     root: Option<(f32, f32)>,
+    /// A placement's placed root is a native layout artboard, not a CSS
+    /// one, with its origin at its center: its frame starts half its size
+    /// before its placement's origin.
+    native_root: bool,
 }
 /// What a unit's own timeline keys, from 0 to this many points.
 #[derive(Clone, Copy)]
@@ -5407,6 +5429,7 @@ fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
         interpolated: false,
         element: None,
         root: None,
+        native_root: false,
     }
 }
 impl PaintUnit {
@@ -5416,6 +5439,10 @@ impl PaintUnit {
     }
     fn root(mut self, turn: f32, scale: f32) -> Self {
         self.root = Some((turn, scale));
+        self
+    }
+    fn native_root(mut self) -> Self {
+        self.native_root = true;
         self
     }
     /// The objects of its one element, from object `id`, under `parent`,
@@ -5527,6 +5554,32 @@ const ELEMENT_WORDS: &str = "Breathe in slowly and let the day settle";
 fn placed_root(b: &mut Vec<u8>, u: &PaintUnit) {
     use V::*;
     let name = format!("{} inner", u.name);
+    if u.native_root {
+        obj(
+            b,
+            "Artboard",
+            &[
+                ("name", S(&name)),
+                ("width", F(u.size.0)),
+                ("height", F(u.size.1)),
+                ("originX", F(0.5)),
+                ("originY", F(0.5)),
+                ("styleId", U(1)),
+                ("clip", B(false)),
+            ],
+        ); // 0
+        obj(b, "LayoutComponentStyle", &[("parentId", U(0))]); // 1
+        obj(b, "Fill", &[("parentId", U(0))]); // 2
+        obj(
+            b,
+            "SolidColor",
+            &[
+                ("parentId", U(2)),
+                ("colorValue", Color(paint_color(&name))),
+            ],
+        ); // 3
+        return;
+    }
     let mut props = vec![
         ("name", S(&name)),
         ("width", F(u.size.0)),
@@ -7124,10 +7177,10 @@ fn element_spec(kind: ElementKind, case: ElementCase) -> PaintSpec {
     use ElementCase::*;
     use V::*;
     assert!(
-        kind == ElementKind::Placement || !matches!(case, TurnedRoot | ZoomScaledRoot),
+        kind == ElementKind::Placement || !matches!(case, TurnedRoot | ZoomScaledRoot | NativeRoot),
         "only a placement has a placed root"
     );
-    let b_size = if matches!(case, Scale | TurnedRoot) {
+    let b_size = if matches!(case, Scale | TurnedRoot | NativeRoot) {
         (160.0, 60.0)
     } else {
         (160.0, 120.0)
@@ -7137,11 +7190,12 @@ fn element_spec(kind: ElementKind, case: ElementCase) -> PaintSpec {
     match case {
         TurnedRoot => (a, b) = (a.root(0.3, 1.25), b.root(-0.2, 1.25)),
         ZoomScaledRoot => (a, b) = (a.root(0.0, 2.0), b.root(0.0, 2.0)),
+        NativeRoot => (a, b) = (a.native_root(), b.native_root()),
         _ => {}
     }
     let home_a = || at_rest("a", 1, 36.0, 20.0, 80.0, 60.0);
     let home_b = || at_rest("b", 2, 120.0, 40.0, b_size.0, b_size.1);
-    let mode = if matches!(case, Scale | TurnedRoot) {
+    let mode = if matches!(case, Scale | TurnedRoot | NativeRoot) {
         0
     } else {
         1

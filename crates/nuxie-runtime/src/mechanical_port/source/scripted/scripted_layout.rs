@@ -63,22 +63,65 @@ impl ScriptedLayout {
     }
 
     fn call_scripted_resize(&mut self, size: Vec2) {
-        if !self.base.base.scripted.resizes() {
-            return;
-        }
-        let Some(instance) = self.base.base.scripted.runtime_instance() else {
-            return;
-        };
-        let mut host = ScriptUpdateRequestHost::default();
-        let Some(vm) = self.base.base.scripted.scripting_vm() else {
-            return;
-        };
-        if let Err(error) = vm.call_layout_resize(&mut **instance.borrow_mut(), size, &mut host) {
-            eprintln!("resize failed: {error}");
-        }
-        if host.take_requested() {
+        if let Some(call) = self.resize_call(size)
+            && call.run()
+        {
             self.base.base.mark_needs_update();
         }
+    }
+
+    /// What a resize call needs, read out so the script can run with no
+    /// borrow of this layout open.
+    fn resize_call(&self, size: Vec2) -> Option<ResizeCall> {
+        let scripted = &self.base.base.scripted;
+        if !scripted.resizes() {
+            return None;
+        }
+        Some(ResizeCall {
+            instance: scripted.runtime_instance()?,
+            vm: scripted.scripting_vm()?,
+            size,
+        })
+    }
+
+    /// Runs `call` with no borrow of `owner` open, then applies its update
+    /// request under a new one.
+    fn run_resize_occurrence(owner: &CoreHandle, call: Option<ResizeCall>) {
+        if call.is_some_and(ResizeCall::run) {
+            owner.with_downcast_mut::<Self, _>(|layout| layout.base.base.mark_needs_update());
+        }
+    }
+
+    /// Pinned controlSize at handle level: the script's resize runs with no
+    /// borrow of the layout open, since user code may reach it. False when
+    /// `owner` is not a ScriptedLayout.
+    pub(crate) fn control_size_occurrence(owner: &CoreHandle, size: Vec2) -> bool {
+        let Some(call) = owner.with_downcast_mut::<Self, _>(|layout| {
+            layout.size = size;
+            layout.size_known = true;
+            layout.resize_call(size)
+        }) else {
+            return false;
+        };
+        Self::run_resize_occurrence(owner, call);
+        true
+    }
+
+    /// Pinned displayScaleChanged at handle level, as
+    /// [`Self::control_size_occurrence`]. False when `owner` is not a
+    /// ScriptedLayout.
+    pub(crate) fn display_scale_changed_occurrence(owner: &CoreHandle) -> bool {
+        let Some(call) = owner.with_downcast::<Self, _>(|layout| {
+            if layout.size_known {
+                layout.resize_call(layout.size)
+            } else {
+                None
+            }
+        }) else {
+            return false;
+        };
+        Self::run_resize_occurrence(owner, call);
+        true
     }
 
     pub fn measure_layout(
@@ -194,5 +237,26 @@ impl ScriptedLayout {
 
     pub fn script_protocol(&self) -> ScriptProtocol {
         ScriptProtocol::Layout
+    }
+}
+
+/// One call of a layout script's resize, taken out of its layout.
+struct ResizeCall {
+    instance: crate::scripting::RuntimeScriptInstanceHandle,
+    vm: crate::mechanical_port::source::lua::scripting_vm::RuntimeScriptingVmHandle,
+    size: Vec2,
+}
+
+impl ResizeCall {
+    /// Calls the script; true when it asked for an update.
+    fn run(self) -> bool {
+        let mut host = ScriptUpdateRequestHost::default();
+        if let Err(error) =
+            self.vm
+                .call_layout_resize(&mut **self.instance.borrow_mut(), self.size, &mut host)
+        {
+            eprintln!("resize failed: {error}");
+        }
+        host.take_requested()
     }
 }

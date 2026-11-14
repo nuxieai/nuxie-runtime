@@ -39,6 +39,9 @@ impl ScriptBackend {
         let objects: Vec<_> = self.scripted_objects.borrow().iter().cloned().collect();
         for object in objects {
             if self.scripted_objects.borrow().contains(&object) {
+                if crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout::display_scale_changed_occurrence(&object) {
+                    continue;
+                }
                 object.with_mut(|object| {
                     if let Some(layout) = object.as_scripted_layout_mut() {
                         layout.display_scale_changed();

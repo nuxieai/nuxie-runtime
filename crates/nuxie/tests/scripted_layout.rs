@@ -262,3 +262,13 @@ fn layout_grid_script_reacts_to_rows_and_columns_like_the_upstream_silver_scenar
         );
     }
 }
+
+/// A layout script's resize runs with no Core receiver mutably lent
+/// (before: under the layout's own borrow in control_size_handle).
+#[test]
+fn layout_scripts_resize_with_no_core_receiver_lent() {
+    let ((), reports) = nuxie_runtime::script_borrow_check::record_script_borrow_reports(|| {
+        layout_grid_script_reacts_to_rows_and_columns_like_the_upstream_silver_scenario();
+    });
+    assert!(reports.is_empty(), "{}", reports.join("\n"));
+}

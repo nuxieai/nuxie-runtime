@@ -75,6 +75,53 @@ fn relaying_a_structured_error_keeps_one_layer() -> Result<()> {
     Ok(())
 }
 
+/// E1 section 3: a script that re-enters its own VM through a host entry in
+/// a loop. The nested entry used to reset the cycle's safepoints, so the
+/// loop never reached the cap.
+#[test]
+fn reentering_the_vm_in_a_loop_reaches_the_safepoint_cap() -> Result<()> {
+    let vm = Rc::new(ScriptVm::new());
+    ScriptVm::install_rive_globals(&vm)?;
+    assert!(!script_running(&vm.lua), "no script runs at the host's top level");
+    let entries = Rc::new(Cell::new(0usize));
+    let reenter = {
+        let vm = Rc::downgrade(&vm);
+        let entries = Rc::clone(&entries);
+        vm.upgrade()
+            .unwrap()
+            .lua
+            .create_function(move |_, ()| {
+                let count = entries.get() + 1;
+                entries.set(count);
+                if count > 2 * SCRIPT_SAFEPOINTS_PER_CYCLE {
+                    return Err(Error::runtime("re-entry never reached the safepoint cap"));
+                }
+                let vm = vm.upgrade().ok_or_else(|| Error::runtime("no VM"))?;
+                vm.call_global::<()>("inner", ())
+            })?
+    };
+    vm.lua.globals().set("reenter", reenter)?;
+    vm.lua
+        .load(
+            "function inner() end \
+             function outer() while true do reenter() end end \
+             function short() for i = 1, 1000 do end end",
+        )
+        .exec()?;
+    let error = vm.call_global::<()>("outer", ()).unwrap_err().to_string();
+    assert!(
+        error.contains(&format!("{SCRIPT_SAFEPOINTS_PER_CYCLE} script safepoints")),
+        "{error} after {} entries",
+        entries.get()
+    );
+    assert!(entries.get() < SCRIPT_SAFEPOINTS_PER_CYCLE);
+
+    // The nested entries' guards restored the depth on their way out, also
+    // on the error path: the next outermost entry starts a fresh cycle.
+    vm.call_global::<()>("short", ())?;
+    Ok(())
+}
+
 fn registration(name: &'static str, source: &str) -> (Vec<u8>, &'static str) {
     (crate::luau::compile(source.as_bytes()).unwrap(), name)
 }

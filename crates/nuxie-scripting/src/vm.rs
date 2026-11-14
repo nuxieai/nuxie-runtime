@@ -276,6 +276,15 @@ fn require_registered_module(
     Ok(1)
 }
 
+/// Whether a script of this VM is running up the stack, so a host entry is
+/// nested in a host callback. Read from the VM's call stack: no state to
+/// keep in step, nothing to restore when the nested entry fails. A VM that
+/// cannot be reached counts as running (no reset).
+fn script_running(lua: &Lua) -> bool {
+    lua.with_vm(|vm| Ok(vm.inspect_stack(0).is_some()))
+        .unwrap_or(true)
+}
+
 const SCRIPT_VM_MEMORY_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 const SCRIPT_SAFEPOINTS_PER_CYCLE: usize = 100_000;
 
@@ -1331,9 +1340,18 @@ impl LuaScriptInstance {
         tracked_script_error(error, &self.resource_limits)
     }
 
+    /// Start a host entry's budget. Only the outermost entry resets it: a
+    /// nested entry (a script re-entering this VM through a host call)
+    /// continues the running one's budget and keeps a tripped limit.
     fn reset_execution_budget(&self) {
+        let mut nested = false;
         if let Some(table) = &self.table {
-            lua_audio_processors::poll(&table.lua());
+            let lua = table.lua();
+            nested = script_running(&lua);
+            lua_audio_processors::poll(&lua);
+        }
+        if nested {
+            return;
         }
         if self
             .script_cycle_active
@@ -2282,9 +2300,19 @@ impl ScriptVm {
         Ok(vm)
     }
 
+    /// Start a host entry's budget. Only the outermost entry resets it: a
+    /// nested entry (a script re-entering this VM through a host call, such
+    /// as `art:advance()` reaching a scripted drawable of this VM) continues
+    /// the running one's budget and keeps a tripped limit.
     fn reset_execution_budget(&self) {
-        self.module_execution_timing.budget_exceeded.set(false);
+        let nested = script_running(&self.lua);
+        if !nested {
+            self.module_execution_timing.budget_exceeded.set(false);
+        }
         lua_audio_processors::poll(&self.lua);
+        if nested {
+            return;
+        }
         // File/Artboard facade callbacks do not all have an explicit flow
         // operation around them. Treat each such callback as its own bounded
         // cycle so the cumulative main-VM ceiling cannot poison an otherwise

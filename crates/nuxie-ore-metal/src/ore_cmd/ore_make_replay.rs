@@ -561,8 +561,8 @@ pub fn replayOreLifecycle(
             }
             if p.mode == WrapCanvasViewMode::imageView as u32 {
                 let image = imageAt(p.canvasId);
-                let wrapped = if let Some(image) = image.filter(|i| i.texture.is_some()) {
-                    ctx.wrapImageSampleView(image)
+                let wrapped = if let Some(image) = image.filter(|i| !i.texture.is_null()) {
+                    unsafe { ctx.wrapRiveTexture(image.texture, image.width, image.height) }
                 } else {
                     return skipUnresolvedMake(table, p.id, p.generation, "wrapImageView", None);
                 };
@@ -583,10 +583,12 @@ pub fn replayOreLifecycle(
                 );
                 return true;
             };
-            let wrapped = if p.mode == WrapCanvasViewMode::sampleView as u32 {
-                ctx.wrapCanvasSampleView(canvas)
-            } else {
-                ctx.wrapCanvasTextureInfo(canvas)
+            let wrapped = unsafe {
+                if p.mode == WrapCanvasViewMode::sampleView as u32 {
+                    ctx.wrapCanvasSampleView(canvas)
+                } else {
+                    ctx.wrapCanvasTextureInfo(canvas)
+                }
             };
             setMade(
                 table,

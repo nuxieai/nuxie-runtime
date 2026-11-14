@@ -695,12 +695,15 @@ impl ContextApi for DeferredOreContext {
         let texture = unsafe { real.borrow_mut().wrapCanvasTexture(canvas) };
         texture
     }
-    fn wrapCanvasTextureInfo(&mut self, info: CanvasTextureInfo) -> Option<AnyResourceHandle> {
+    unsafe fn wrapCanvasTextureInfo(
+        &mut self,
+        info: CanvasTextureInfo,
+    ) -> Option<AnyResourceHandle> {
         let Some(provider) = &mut self.canvasIdProvider else {
             let real = self
                 .real()
                 .expect("sessionless recorder needs real context");
-            return real.borrow_mut().wrapCanvasTextureInfo(info);
+            return unsafe { real.borrow_mut().wrapCanvasTextureInfo(info) };
         };
         let canvas =
             nuxie_render_api::canvas_texture_owner(&info).expect("recording canvas host owner");
@@ -720,7 +723,8 @@ impl ContextApi for DeferredOreContext {
             let real = self
                 .real()
                 .expect("sessionless recorder needs real context");
-            return real.borrow_mut().wrapCanvasSampleView(info);
+            // The retained canvas owner keeps the projected host fields alive.
+            return unsafe { real.borrow_mut().wrapCanvasSampleView(info) };
         };
         // Register the canvas this frame even when no content range opened it.
         let canvas =
@@ -779,33 +783,15 @@ impl ContextApi for DeferredOreContext {
         width: u32,
         height: u32,
     ) -> Option<AnyResourceHandle> {
-        tripwireImmediateTextureWrap();
+        eprintln!(
+            "rive deferred: TRIPWIRE wrapRiveTexture hit immediately during recording (a script GPU op is not deferred)"
+        );
+        debug_assert!(false, "wrapRiveTexture must be deferred while recording");
         let real = self.real()?;
         let texture = unsafe { real.borrow_mut().wrapRiveTexture(texture, width, height) };
         texture
     }
-    fn wrapCanvasSampleView(&mut self, canvas: CanvasTextureInfo) -> Option<AnyResourceHandle> {
-        tripwireImmediateTextureWrap();
-        let real = self.real()?;
-        let view = real.borrow_mut().wrapCanvasSampleView(canvas);
-        view
-    }
-    fn wrapImageSampleView(&mut self, image: CanvasTextureInfo) -> Option<AnyResourceHandle> {
-        tripwireImmediateTextureWrap();
-        let real = self.real()?;
-        let view = real.borrow_mut().wrapImageSampleView(image);
-        view
-    }
     fn shaderTarget(&self) -> ShaderTarget {
         self.caps.shaderTarget
     }
-}
-
-/// A texture wrap that reaches the driver while this context records means a
-/// script GPU op was not deferred.
-fn tripwireImmediateTextureWrap() {
-    eprintln!(
-        "rive deferred: TRIPWIRE wrapRiveTexture hit immediately during recording (a script GPU op is not deferred)"
-    );
-    debug_assert!(false, "wrapRiveTexture must be deferred while recording");
 }

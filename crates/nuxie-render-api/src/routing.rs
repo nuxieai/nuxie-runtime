@@ -20,8 +20,8 @@ pub fn canvas_texture_info(
         value
             .ore_texture_info()
             .unwrap_or(nuxie_ore_metal::context::CanvasTextureInfo {
-                canvas: None,
-                texture: None,
+                canvas: std::ptr::null_mut(),
+                texture: std::ptr::null_mut(),
                 width: value.width(),
                 height: value.height(),
                 owner: None,
@@ -116,8 +116,8 @@ mod tests {
         }
         fn ore_texture_info(&self) -> Option<nuxie_ore_metal::context::CanvasTextureInfo> {
             Some(nuxie_ore_metal::context::CanvasTextureInfo {
-                canvas: None,
-                texture: None,
+                canvas: std::ptr::null_mut(),
+                texture: std::ptr::null_mut(),
                 width: self.width(),
                 height: self.height(),
                 owner: Some(Rc::new(ProjectionDrop(self.0.clone()))),

@@ -370,7 +370,13 @@ pub fn compute_flexbox_layout(
     // nuxie-css: an explicit fit-content width consumes a finite available
     // width even when its own flex basis is content-sized. Intrinsic queries
     // must remain intrinsic, and an auto container keeps its existing sizing.
-    let fit_content_width = explicit_fit_content_width
+    // nuxie-css: a column that shrinks to fit has its width before its items are laid out
+    // (its inline size comes first), so the heights of its stretched items are found at
+    // that width and not at the width it was offered (Chrome: a column in a column in an
+    // `align-items: flex-start` column 200 wide, around a 60 by 120 picture, is 120 tall;
+    // measured at the offered width it was 400 tall).
+    let column_width_comes_first = style.flex_direction().is_column() && inputs.axis != RequestedAxis::Horizontal;
+    let fit_content_width = (explicit_fit_content_width || column_width_comes_first)
         && styled_based_known_dimensions.width.is_none()
         && matches!(inputs.available_space.width, AvailableSpace::Definite(_));
 

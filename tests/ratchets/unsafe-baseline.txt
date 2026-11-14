@@ -2,7 +2,7 @@
 # under the crate folder. Checked by tools/ratchets/unsafe-count.sh (make ratchet-unsafe).
 # Counts may only go down; regenerate with tools/ratchets/unsafe-count.sh --update.
 crates/nuxie-luau-vm 0
-crates/nuxie-scripting 49
+crates/nuxie-scripting 47
 vendor/luaur-ast-0.1.8 1017
 vendor/luaur-bytecode-0.1.8 232
 vendor/luaur-common-0.1.8 174

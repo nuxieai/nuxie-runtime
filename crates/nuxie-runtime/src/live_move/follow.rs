@@ -917,15 +917,12 @@ pub(super) fn lift_cover(
         .iter()
         .position(|item| draws_for(item, anchor, board))?;
     let mut rest = Resting::new(board);
-    // A text's, an image's or a video's anchor is its own box, not its
-    // nearest box's (in_place.rs, `Flying`).
-    let anchor_box = match super::in_place::Flying::read(anchor).and_then(|f| f.hosted_rest()) {
-        Some((parent, rest_box)) => rest.world(&parent).map(|world| {
-            transformed_box(
-                world * Mat2D::from_translation(Vec2D::new(rest_box.left(), rest_box.top())),
-                Vec2D::new(rest_box.width(), rest_box.height()),
-            )
-        }),
+    // An anchor that is not a box rests in its own box, not its nearest
+    // box's (in_place.rs, `Flying`).
+    let anchor_box = match super::in_place::Flying::read(anchor).and_then(|f| f.rest_anchor()) {
+        Some((level, inside, size)) => rest
+            .world(&level)
+            .map(|world| transformed_box(world * inside, size)),
         None => rest.drawable_box(&RuntimeDrawableOccurrence::Authored(anchor.clone())),
     };
     list[..at]

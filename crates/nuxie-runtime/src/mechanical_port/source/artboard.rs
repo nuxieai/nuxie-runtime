@@ -1232,30 +1232,22 @@ impl Artboard {
     }
 
     pub fn has_self_transform(&self) -> bool {
-        self.has_self_transform_stretched(self.flight_stretch)
-    }
-
-    /// Nuxie: a CSS slot's frame also draws its x and y, and a flying unit
-    /// its stretch (css_layout/hosted_frame.rs).
-    fn has_self_transform_stretched(&self, stretch: Vec2D) -> bool {
+        // Nuxie: a CSS slot's frame also draws its x and y, and a flying unit
+        // its stretch (css_layout/hosted_frame.rs).
         crate::css_layout::hosted_frame::has_self_transform(
             self.css_slot_offset(),
             self.rotation(),
             Vec2D::new(self.scale_x(), self.scale_y()),
-            stretch,
+            self.flight_stretch,
         )
     }
 
     pub fn self_transform(&self) -> Mat2D {
-        self.self_transform_stretched(self.flight_stretch)
-    }
-
-    fn self_transform_stretched(&self, stretch: Vec2D) -> Mat2D {
         crate::css_layout::hosted_frame::self_transform(
             self.css_slot_offset(),
             self.rotation(),
             Vec2D::new(self.scale_x(), self.scale_y()),
-            stretch,
+            self.flight_stretch,
             self.origin_is_pivot_only().then(|| self.origin_offset()),
         )
     }
@@ -1263,20 +1255,12 @@ impl Artboard {
     /// The transform the draw applies before its content: the frame's origin,
     /// then its self transform.
     pub(crate) fn content_transform(&self) -> Mat2D {
-        self.content_transform_stretched(self.flight_stretch)
-    }
-
-    /// Nuxie: `content_transform` with `stretch` as the flying unit's
-    /// stretch. A component placement flying in place in Scale mode draws
-    /// its root with it, the stretch inside the root's own transform, as a
-    /// flying unit's root draws (live_move/in_place.rs).
-    pub(crate) fn content_transform_stretched(&self, stretch: Vec2D) -> Mat2D {
         let mut transform = Mat2D::default();
         if self.frame_origin {
             transform = Mat2D::from_translation(self.content_origin());
         }
-        if self.has_self_transform_stretched(stretch) && !self.skip_self_transform {
-            transform = transform * self.self_transform_stretched(stretch);
+        if self.has_self_transform() && !self.skip_self_transform {
+            transform = transform * self.self_transform();
         }
         transform
     }

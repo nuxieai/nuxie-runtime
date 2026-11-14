@@ -1393,3 +1393,23 @@ Chrome 152 layouts of keyword-width and automatic-width ratio boxes in
 grids, flex containers and blocks, 115 differed and 20 differ now (ratio
 boxes with a content-sized width in a column flex container, whose height
 should follow that width).
+
+## A column's ratio item takes its height from its content width
+
+A ratio box in a column flex container whose width comes from its content
+(not stretched, or a `min-content`, `max-content` or `fit-content` width)
+has the height its ratio gives that width. Chrome: in an `align-items:
+flex-start` column, `aspect-ratio: 2; min-width: 0` around a 120 by 20 box
+is 120 by 60. Around a 30 by 20 box it is 40 by 20: the ratio gives a
+height of 15, the content height of 20 is the automatic minimum, and the
+width follows that height.
+
+The fork measured the flex base size from the content's height alone (20,
+and a width of 40 through the ratio). `determine_flex_base_size` now
+measures the item's content width first and transfers it through the
+ratio, for a non-replaced item with no definite cross size and no flex
+basis of its own.
+
+Of the 29,914 layouts, 10 more match and none that matched differ. Of the
+693 layouts of the section above, 20 differed and 2 differ now (a
+`display: flex; width: fit-content` item around a narrow box).

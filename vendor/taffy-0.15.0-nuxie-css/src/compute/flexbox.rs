@@ -1699,6 +1699,34 @@ fn determine_flex_base_size(
                 }
             }
 
+            // nuxie-css: a ratio box in a column whose width comes from its content has the
+            // height its ratio gives that width (Chrome: `aspect-ratio: 2; min-width: 0`
+            // around a 120 by 20 box in an `align-items: flex-start` column is 120 by 60,
+            // and 40 by 20 around a 30 by 20 box, whose content height is the automatic
+            // minimum).
+            if dir.is_column()
+                && !is_replaced
+                && !child_cross_size_is_definite
+                && keyword_main_available_space.is_none()
+                && probe_known_dimensions.width.is_none()
+                && probe_known_dimensions.height.is_none()
+            {
+                if let Some(ratio) = child.ratio {
+                    let width = tree
+                        .measure_child_size(
+                            child.node,
+                            Size::NONE,
+                            child_parent_size,
+                            Size { width: cross_axis_available_space, height: AvailableSpace::MaxContent },
+                            SizingMode::ContentSize,
+                            AbsoluteAxis::Horizontal,
+                            Line::FALSE,
+                        )
+                        .maybe_clamp(child_min_cross, child_max_cross);
+                    break 'flex_basis ratio.height(width);
+                }
+            }
+
             // E. Otherwise, size the item into the available space using its used flex basis
             //    in place of its main size, treating a value of content as max-content.
             //    If a cross size is needed to determine the main size (e.g. when the

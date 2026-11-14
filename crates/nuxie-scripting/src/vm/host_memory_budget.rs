@@ -578,4 +578,20 @@ mod binding_tests {
         vm.vm.eval::<()>("d.value = 'ab'").unwrap();
         assert_eq!(vm.used(), 2, "a shorter string refunds");
     }
+
+    // Codex review: a string cut at its first NUL kept the whole copy's
+    // allocation (charged by capacity, or uncharged as a CoreString).
+    #[test]
+    fn a_data_value_string_cut_at_nul_keeps_only_its_bytes() {
+        let vm = Vm::with_budget(64 * 1024);
+        vm.vm
+            .eval::<()>(
+                "d = DataValue.string() \
+                 d.value = '\\0' .. string.rep('x', 100000) \
+                 assert(d.value == '') \
+                 d.value = string.char(255, 0) .. string.rep('x', 100000)",
+            )
+            .unwrap();
+        assert_eq!(vm.used(), 1);
+    }
 }

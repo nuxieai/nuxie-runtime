@@ -125,12 +125,11 @@ fn checked_integer(lua: &Lua, value: Value) -> Result<i32> {
 pub(super) fn checked_string(lua: &Lua, value: Value) -> Result<Vec<u8>> {
     let value: LuaString = lua.unpack(value)?;
     let mut bytes = value.as_bytes();
-    bytes.truncate(
-        bytes
-            .iter()
-            .position(|byte| *byte == 0)
-            .unwrap_or(bytes.len()),
-    );
+    if let Some(nul) = bytes.iter().position(|byte| *byte == 0) {
+        // The value is kept, and charged by its capacity: drop the rest.
+        bytes.truncate(nul);
+        bytes.shrink_to_fit();
+    }
     Ok(bytes)
 }
 

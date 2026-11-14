@@ -47,10 +47,13 @@ impl ShapePaintPath {
     /// Heap bytes the path holds: its commands (their capacity) and the
     /// render path the factory builds from them at draw, counted as one copy
     /// of the commands whether it is built yet or not (so it is known before
-    /// the draw; the backend does not report its own size).
+    /// the draw; the backend does not report its own size). That copy is
+    /// counted at the commands' capacity, not their length: a rewind keeps
+    /// both the capacity and the backend path built from the longer
+    /// commands, which is only let go when the render path is.
     pub fn heap_bytes(&self) -> usize {
-        RawPath::bytes_for(self.raw_path.verbs().len(), self.raw_path.points().len())
-            .saturating_add(self.raw_path.heap_bytes())
+        let (verbs, points) = self.raw_path.capacity();
+        RawPath::bytes_for(verbs, points).saturating_add(self.raw_path.heap_bytes())
     }
     pub fn mutable_raw_path(&mut self) -> &mut RawPath {
         &mut self.raw_path
@@ -326,5 +329,23 @@ mod deferred_factory_tests {
             &*calls.borrow(),
             &["make_empty", "add_raw_path", "rewind", "add_raw_path"]
         );
+    }
+}
+
+#[cfg(test)]
+mod size_tests {
+    use super::*;
+
+    // Codex review: a rewind kept the backend path built from the longer
+    // commands, while its charge followed the new, shorter length.
+    #[test]
+    fn a_rewind_keeps_the_render_copy_counted() {
+        let mut path = ShapePaintPath::new(false);
+        for i in 0..1000 {
+            path.mutable_raw_path().line_to(i as f32, 0.0);
+        }
+        let drawn = path.heap_bytes();
+        path.rewind();
+        assert_eq!(path.heap_bytes(), drawn);
     }
 }

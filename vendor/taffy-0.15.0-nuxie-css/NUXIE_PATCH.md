@@ -1647,3 +1647,47 @@ are gone.
 
 Of the 29,914 layouts, 6 more match and none that matched differ. The 13
 Chrome probes left from the two changes above all match.
+
+## A row with a set height counts a stretch-height picture at its stretched width
+
+A picture with a `stretch` keyword height and an alignment other than
+stretch counted at its stretched width only once its row had a width,
+or while a parent row or grid was asking for the row's width. Chrome
+counts it that way whenever the row's own style sets its height as a
+length: a 100 tall `align-items: flex-start` row with
+`width: fit-content` in a block, around a 60 by 120 picture with
+`height: stretch`, is 50 wide. The fork made it 60 wide.
+
+`AlgoConstants::height_is_set_length` (new) says the row's style sets
+its height as a length. With it, and a height that is not stretch-only,
+`determine_flex_base_size` and `measure_item_content_main_size` take
+the keyword for such a picture on a single line. A row whose height is
+itself the `stretch` keyword keeps the natural width (Chrome).
+
+### Where the fork does not follow Chrome
+
+The old condition existed to copy one Chrome result: a 100 tall row
+that is an item of a column, around a 40 by 40 picture with
+`height: stretch`, is measured 40 wide in Chrome, and the picture in it
+is then 100 wide. Blink's `flex_layout_algorithm.cc` shows where that
+comes from. For a column item's automatic minimum height, Chrome
+measures the item's content height with the item's height unknown. A
+`stretch` keyword height inside the item stays unresolved in that
+measurement, and the result carries into the layout after it. Chrome
+skips the measurement when the item has `flex-shrink: 0` or a
+`min-height`, or when the item is alone or on a wrapping line in a
+column whose content fits. Then the keyword resolves. So in Chrome a
+300 tall column holding a 100 tall block around a 60 by 120 picture
+with `height: stretch` shows the picture 50 by 100, and adding a
+second small item to the column makes it 60 by 120.
+
+The fork resolves the keyword in every one of these cases. The rows
+that record the difference are in
+`TAFFY_FORK_CHROME_MEASURE_QUIRK_ROWS` with Chrome's frames and the
+fork's. Each was checked in Chrome 152: with `min-height: 0` on the
+column's items Chrome gives the fork's frames. Decided by Levi on
+2026-11-15.
+
+Of the 32,600 Chrome rows, 6 more match. 58 are confirmed rows of this
+kind: 32 of them matched Chrome before through the old condition and
+differ now on purpose, and 26 differed before as well.

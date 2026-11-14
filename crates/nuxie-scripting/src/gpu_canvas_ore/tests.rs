@@ -74,6 +74,7 @@ fn pass_closed_by_enclosing_pass_expires_for_script() {
             pipeline_set: false,
             draw_call_count: 0,
             label: String::new(),
+            held: Default::default(),
         })
         .unwrap();
     vm.lua().globals().set("rp", rp.clone()).unwrap();
@@ -195,6 +196,7 @@ fn bind_groups_wait_for_first_pipeline() {
             pipeline_set: false,
             draw_call_count: 0,
             label: String::new(),
+            held: Default::default(),
         })
         .unwrap();
     vm.lua().globals().set("rp", rp.clone()).unwrap();
@@ -626,6 +628,7 @@ fn a_bind_group_made_from_a_video_picture_follows_its_frames() {
             pipeline_set: false,
             draw_call_count: 0,
             label: String::new(),
+            held: Default::default(),
         })
         .unwrap();
     vm.lua().globals().set("rp", rp).unwrap();
@@ -932,6 +935,7 @@ fn a_pass_keeps_the_charges_of_what_it_binds() {
             pipeline_set: false,
             draw_call_count: 0,
             label: String::new(),
+            held: Default::default(),
         })
         .unwrap();
     vm.lua().globals().set("rp", rp).unwrap();
@@ -1032,4 +1036,43 @@ fn a_frame_that_loops_create_bind_drop_is_refused_at_the_budget() {
         recorder.borrow_mut().resetFrame();
         assert_eq!(host_bytes_used(&vm), base, "reset gives back `{script}`");
     }
+}
+
+// Codex review (lane H3, round 2): a bind group set before any pipeline waits
+// in the pass's deferred groups, which the pass keeps for as long as the
+// script holds it, past the frame its recording belonged to. With the charges
+// only in the recording, a retained pass kept the group's buffer uncharged
+// after the frame was reset, and a script could repeat that every frame.
+#[test]
+fn a_retained_pass_keeps_the_charges_of_what_it_still_holds_after_reset() {
+    let (vm, recorder) = recording_vm_and_recorder();
+    install_ubo_shader(&vm);
+    vm.lua()
+        .load("view = GPUTexture.new {width = 4, height = 4, renderTarget = true}:view()")
+        .exec()
+        .unwrap();
+    let base = host_bytes_used(&vm);
+    vm.lua()
+        .load(
+            "rp = canvas:beginRenderPass {color = {{view = view, storeOp = 'store'}}} \
+             local b = GPUBuffer.new {size = 1000, usage = 'uniform'} \
+             local layout = GPUBindGroupLayout.new {shader = uboShader} \
+             rp:setBindGroup(0, GPUBindGroup.new {layout = layout, ubos = {{slot = 0, buffer = b}}}) \
+             rp:finish()",
+        )
+        .exec()
+        .unwrap();
+    vm.lua().gc_collect().unwrap();
+    let held = host_bytes_used(&vm) - base;
+    assert!(held >= 1000, "the pass holds the group's buffer: {held}");
+    recorder.borrow_mut().resetFrame();
+    vm.lua().gc_collect().unwrap();
+    assert_eq!(
+        host_bytes_used(&vm) - base,
+        held,
+        "the retained pass still keeps the deferred group after the reset"
+    );
+    vm.lua().load("rp = nil").exec().unwrap();
+    vm.lua().gc_collect().unwrap();
+    assert_eq!(host_bytes_used(&vm), base);
 }

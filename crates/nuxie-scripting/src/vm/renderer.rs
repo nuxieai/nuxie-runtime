@@ -68,8 +68,7 @@ impl UserData for ScriptedGradient {}
 fn gradient_stops(mut loan: crate::luau::Loan<'_>, stops: Table) -> Result<(Vec<ColorInt>, Vec<f32>)> {
     let mut colors = Vec::with_capacity(stops.raw_len());
     let mut positions = Vec::with_capacity(stops.raw_len());
-    let mut index = 1_i64;
-    loop {
+    for index in 1_i64.. {
         let Value::Table(stop) = stops.raw_get::<Value>(index)? else {
             break;
         };
@@ -80,7 +79,6 @@ fn gradient_stops(mut loan: crate::luau::Loan<'_>, stops: Table) -> Result<(Vec<
             Some(&color),
             "gradient stop color",
         )?);
-        index += 1;
     }
     Ok((colors, positions))
 }

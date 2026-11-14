@@ -132,6 +132,10 @@ pub trait RenderPassApi {
     );
     fn finish(&mut self);
     fn validate(&self);
+    /// Keeps `owner` alive for as long as the stream this pass records into
+    /// holds what the pass captured. A pass that holds nothing past its own
+    /// lifetime drops `owner` here.
+    fn keepWithRecording(&mut self, _owner: std::rc::Rc<dyn Any>) {}
 }
 
 // class Buffer;

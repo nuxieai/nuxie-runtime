@@ -12,6 +12,7 @@ use crate::cmd::{
 };
 use crate::gpu_resource::AnyResourceHandle;
 use std::{
+    any::Any,
     cell::RefCell,
     collections::HashMap,
     ops::{Deref, DerefMut},
@@ -35,6 +36,10 @@ pub struct OreCommandBuffer {
     recordingThread: RecordingThread,
     pendingDestroys: DestroyQueue,
     keepAlive: Vec<AnyResourceHandle>,
+    /// Opaque owners kept beside what the recording captured, keyed by
+    /// address so each is kept once, dropped by `reset`. The recorder never
+    /// looks inside them.
+    owners: HashMap<usize, Rc<dyn Any>>,
     resourceIds: HashMap<usize, ResourceHandle>,
     pub realHandleProvider: Option<Box<dyn FnMut(&AnyResourceHandle) -> ResourceHandle>>,
 }
@@ -183,7 +188,21 @@ impl OreCommandBuffer {
         self.recordingThread.check();
         self.bytes.clear_bytes();
         self.keepAlive.clear();
+        self.owners.clear();
         self.resourceIds.clear();
+    }
+    /// Keeps `owner` alive until the next `reset`, beside the handles and
+    /// blob copies this recording holds until then. A caller whose memory
+    /// lives in the recording hands its owner here so the owner is dropped
+    /// with the copy, not before. Keeping the same owner again is a no-op.
+    pub fn keep(&mut self, owner: Rc<dyn Any>) {
+        self.recordingThread.check();
+        // The address identifies the owner while the map holds it.
+        let key = Rc::as_ptr(&owner).cast::<()>() as usize;
+        self.owners.entry(key).or_insert(owner);
+    }
+    pub fn keptOwners(&self) -> usize {
+        self.owners.len()
     }
     pub fn keepAlive(&self) -> &[AnyResourceHandle] {
         &self.keepAlive

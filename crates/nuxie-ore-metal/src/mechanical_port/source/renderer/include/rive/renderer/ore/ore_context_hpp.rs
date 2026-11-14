@@ -386,6 +386,11 @@ pub trait ContextApi {
     fn pendingFrame(&self) -> crate::ore_cmd::ore_command_buffer::SharedOreCommandBuffer {
         self.contextBase().pendingFrame()
     }
+    /// Keeps `owner` alive for as long as this context's frame recording
+    /// holds what it captured so far (resource handles, blob copies of
+    /// buffer data and texture uploads), that is until the recording is
+    /// reset. Contexts that hold nothing past the call drop `owner` here.
+    fn keepWithRecording(&self, _owner: Rc<dyn std::any::Any>) {}
     fn recordWrapCanvasImage(&mut self, _canvas: CanvasTextureInfo) -> Option<AnyResourceHandle> {
         None
     }

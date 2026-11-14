@@ -672,14 +672,29 @@ pub(crate) fn layout_oof_box<Tree: LayoutContainingBlock>(
     let final_size = match (known_dimensions.width, known_dimensions.height) {
         (Some(width), Some(height)) => Size { width, height },
         _ => {
-            let measured_size = tree.measure_child_size_both(
-                candidate.node,
-                known_dimensions,
-                area_size.map(Some),
-                available_space,
-                SizingMode::ContentSize,
-                Line::FALSE,
-            );
+            // nuxie-css: a box with a height and a width from its content is measured as a
+            // row or a grid asking for a row's width is: a `height: stretch` picture in it
+            // counts at the width of that height (Chrome: an absolute 60 tall flex row
+            // around a 60 by 120 picture with `height: stretch` and a 30 wide box is 60
+            // wide).
+            let measured_size = tree
+                .compute_child_layout(
+                    candidate.node,
+                    LayoutInput {
+                        known_dimensions,
+                        known_dimensions_are_definite: Size { width: true, height: true },
+                        known_height_is_stretch_only: false,
+                        pictures_follow_stretch_height: known_dimensions.height.is_some()
+                            && known_dimensions.width.is_none(),
+                        parent_size: area_size.map(Some),
+                        available_space,
+                        sizing_mode: SizingMode::ContentSize,
+                        axis: RequestedAxis::Both,
+                        run_mode: RunMode::ComputeSize,
+                        vertical_margins_are_collapsible: Line::FALSE,
+                    },
+                )
+                .size;
             let mut size = known_dimensions.unwrap_or(measured_size);
             // nuxie-css: with a ratio and neither dimension known, the inline size comes first
             // (shrink-to-fit) and the ratio gives the block size from it.

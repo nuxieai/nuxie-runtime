@@ -1491,3 +1491,19 @@ is 10 wide; the fork made it 30 wide).
 Of the 29,914 layouts, 118 more match and one that matched differs: a
 `width: max-content` ratio grid around a wrapping row whose item grows
 through the same ratio item (Chrome 440 wide, 400 here).
+
+## An absolute box with a height counts stretched pictures at that height
+
+An absolutely positioned box with a height and no width is as wide as its
+content. A row or a grid asking a flex row for its width measures a
+`height: stretch` picture at the width the row's height gives it
+(`LayoutInput::pictures_follow_stretch_height`); the absolute box's own
+measurement did not. Chrome: an absolute 60 tall flex row around a 60 by
+120 picture with `height: stretch` and a 30 wide box is 60 wide (the
+picture is 30 wide). The fork made it 90 wide.
+
+`compute::oof` now sets the flag when the box's height is known and its
+width is not.
+
+Of the 29,914 layouts, 6 more match and none that matched differ. A
+wrapping absolute row still counts such a picture at its natural width.

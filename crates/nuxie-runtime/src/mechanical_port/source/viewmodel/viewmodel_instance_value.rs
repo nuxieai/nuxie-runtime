@@ -1,5 +1,6 @@
 use std::{
     cell::RefCell,
+    collections::VecDeque,
     rc::{Rc, Weak},
 };
 
@@ -31,6 +32,63 @@ pub type ViewModelInstanceValueDelegateHandle = Rc<RefCell<dyn ViewModelInstance
 type ViewModelInstanceValueDelegateWeakHandle = Weak<RefCell<dyn ViewModelInstanceValueDelegate>>;
 /// One entry of an in-flight traversal; `remove_delegate` empties it.
 type SharedDelegateSlot = Rc<RefCell<Option<ViewModelInstanceValueDelegateWeakHandle>>>;
+
+thread_local! {
+    /// The notifications raised while a value's delegates run, innermost
+    /// delivery last; `None` outside any delivery.
+    static DELIVERING: RefCell<Option<VecDeque<Box<dyn FnOnce()>>>> =
+        const { RefCell::new(None) };
+}
+
+/// One delivery's queue of the notifications its delegates raise. They run
+/// while the delivering value is still suppressed, so a delegate cycle
+/// (A's delegate writes B, B's writes A) stops at the value that started
+/// it, as it did when delegates ran inline.
+struct Delivering {
+    outer: Option<VecDeque<Box<dyn FnOnce()>>>,
+}
+
+impl Delivering {
+    fn begin() -> Self {
+        let outer = DELIVERING.with(|queue| queue.replace(Some(VecDeque::new())));
+        Self { outer }
+    }
+
+    /// Queues `delivery` on the delivery in progress, or hands it back
+    /// when there is none.
+    fn push(delivery: Box<dyn FnOnce()>) -> Option<Box<dyn FnOnce()>> {
+        DELIVERING.with(|queue| match queue.borrow_mut().as_mut() {
+            Some(queue) => {
+                queue.push_back(delivery);
+                None
+            }
+            None => Some(delivery),
+        })
+    }
+
+    fn next(&self) -> Option<Box<dyn FnOnce()>> {
+        DELIVERING.with(|queue| queue.borrow_mut().as_mut().and_then(VecDeque::pop_front))
+    }
+}
+
+impl Drop for Delivering {
+    fn drop(&mut self) {
+        let outer = self.outer.take();
+        DELIVERING.with(|queue| queue.replace(outer));
+    }
+}
+
+/// Runs `owner`'s delegates with its delegation suppressed, then every
+/// notification they raised, before the suppression ends.
+fn deliver_delegates(owner: CoreHandle, delegates: Vec<SharedDelegateSlot>) {
+    // A delegate writing this value does not notify it again.
+    let _suppress = SuppressDelegation::new(owner);
+    let delivering = Delivering::begin();
+    notify_delegates(delegates);
+    while let Some(next) = delivering.next() {
+        next();
+    }
+}
 
 fn notify_delegates(delegates: Vec<SharedDelegateSlot>) {
     for delegate in delegates {
@@ -621,11 +679,12 @@ impl ViewModelInstanceValue {
     }
 
     fn dispatch_delegates(owner: CoreHandle, delegates: Vec<SharedDelegateSlot>) {
-        crate::view_model_cell::dispatch_value_notification(move || {
-            // A delegate writing this value does not notify it again.
-            let _suppress = SuppressDelegation::new(owner);
-            notify_delegates(delegates);
-        });
+        let delivery: Box<dyn FnOnce()> = Box::new(move || deliver_delegates(owner, delegates));
+        // Raised while another value's delegates run: delivered before that
+        // value's suppression ends. Otherwise after the Core borrow.
+        if let Some(delivery) = Delivering::push(delivery) {
+            crate::view_model_cell::dispatch_value_notification(delivery);
+        }
     }
 
     pub fn dependents(&self) -> Vec<ValueDependentHandle> {

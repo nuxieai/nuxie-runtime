@@ -9281,7 +9281,12 @@ mod paint_order {
     fn element_cases() -> Vec<PaintCase> {
         use fixture::{ElementCase::*, ElementKind};
         let mut cases = Vec::new();
-        for kind in [ElementKind::Text, ElementKind::Image, ElementKind::Video] {
+        for kind in [
+            ElementKind::Text,
+            ElementKind::Image,
+            ElementKind::Video,
+            ElementKind::Placement,
+        ] {
             for case in [
                 Layout,
                 Scale,
@@ -13476,11 +13481,11 @@ fn in_place_a_flight_inside_another_flight_is_refused() {
     assert_eq!(page.draw(), before, "the same stream");
 }
 
-/// A flight key on a kind not yet admitted is refused at take-off by name,
-/// before anything is marked, and the page draws as before: no in-place
-/// page has it as the keyed element yet, so the equivalence test proves
-/// none of its readers.
-fn refuses_a_keyed(kind: fixture::KeyedKind, named: &str) {
+/// A flight key on an element with no layout box, here a shape, is refused
+/// at take-off by name, before anything is marked, and the page draws as
+/// before: no in-place page has it as the keyed element, so the
+/// equivalence test proves none of its readers.
+fn refuses_a_keyed(kind: fixture::KeyedKind) {
     let page = InPlacePage::load(fixture::InPlaceFixture::Keyed(kind));
     let mut moves = LiveMoves::default();
     moves.prepare(&page.root).unwrap();
@@ -13493,7 +13498,7 @@ fn refuses_a_keyed(kind: fixture::KeyedKind, named: &str) {
     assert!(
         error
             .to_string()
-            .contains(&format!("a flight key on {named} does not fly in place")),
+            .contains("a flight key on an element that is not a box"),
         "{error}"
     );
     page.frame(&mut moves, 0.1);
@@ -13504,8 +13509,13 @@ fn refuses_a_keyed(kind: fixture::KeyedKind, named: &str) {
 }
 
 #[test]
-fn in_place_a_flight_key_on_a_component_placement_is_refused() {
-    refuses_a_keyed(fixture::KeyedKind::Placement, "a component placement");
+fn in_place_a_flight_key_on_a_component_placement_flies() {
+    flies_keyed(fixture::KeyedKind::Placement);
+}
+
+#[test]
+fn in_place_a_flight_key_on_a_shape_is_refused() {
+    refuses_a_keyed(fixture::KeyedKind::Shape);
 }
 
 /// A flight key on an admitted kind takes off in place: its layout node is

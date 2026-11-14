@@ -85,11 +85,13 @@ pub(super) fn flight_records(objects: &[CoreHandle]) -> Vec<(u32, CoreHandle)> {
 /// in its parent, at its offset there. Its place is its parent as drawn,
 /// then that offset. Its own transform O takes the box into its place: a
 /// CSS box's own transform; a component placement's own matrix without its
-/// translation, then its placed root's content transform, which the root's
-/// draw applies; nothing for a text, an image or a video, whose drawing
-/// inside its box (its wrapping, fit and origin) is its content. The box
-/// matrix is place · O, and C takes the box to the element's own drawing
-/// space, where its world draws: a box's is identity.
+/// translation, then its placed root's frame origin; nothing for a text, an
+/// image or a video. What draws inside the box is its content: a text's
+/// wrapping, an image's fit and origin, a placed root's own turn and scale,
+/// as a flight slot carries a unit holding the element. The box matrix is
+/// place · O, and C takes the box to the element's own drawing space, where
+/// its world draws: a box's is identity. Only a box paints a box of its
+/// own, so only a box draws a flight's corners and shadow.
 #[derive(Clone)]
 pub(super) struct Flying {
     element: CoreHandle,
@@ -102,7 +104,7 @@ enum Shape {
     Css,
     /// A text, an image or a video: the layout participant it hosts.
     Hosted(CoreHandle),
-    /// A component placement: its placed artboard's root.
+    /// A component placement: its placed artboard's root, its layout node.
     Placement(CoreHandle),
 }
 
@@ -136,34 +138,29 @@ impl Flying {
     }
 
     /// What a flight key may name in place, decided here, by what the
-    /// element is, at take-off, before anything is marked: a kind flies in
-    /// place only once an in-place page with it as the keyed element runs
-    /// through the equivalence test. A key on a kind not yet admitted, or on
-    /// an element with no layout box, is refused by name.
+    /// element is, at take-off, before anything is marked: a box, a text, an
+    /// image, a video or a component placement, each admitted once an
+    /// in-place page with it as the keyed element ran through the
+    /// equivalence test. A key on anything else is refused by name.
     pub(super) fn of(element: &CoreHandle) -> Result<Self> {
         use crate::source::generated::{shapes::image_base::ImageBase, text::text_base::TextBase};
-        // A video is an image too, so it is asked first.
-        let is_box = element
-            .with(|o| o.as_layout_component().is_some_and(|l| l.is_css_mode() && !l.is_artboard()))
-            .unwrap_or(false);
-        let (kind, admitted) = if is_box {
-            ("a box", true)
-        } else if element.with(|object| object.as_nested_artboard().is_some()) == Some(true) {
-            ("a component placement", ADMITS_PLACEMENTS)
-        } else if element.is_type_of(crate::video::Video::TYPE_KEY) {
-            ("a video", ADMITS_VIDEOS)
-        } else if element.is_type_of(ImageBase::TYPE_KEY) {
-            ("an image", ADMITS_IMAGES)
-        } else if element.is_type_of(TextBase::TYPE_KEY) {
-            ("a text", true)
-        } else {
-            ("an element that is not a box", false)
-        };
+        // A video is an image too.
+        let admitted = element
+            .with(|object| {
+                object.as_nested_artboard().is_some()
+                    || object
+                        .as_layout_component()
+                        .is_some_and(|layout| layout.is_css_mode() && !layout.is_artboard())
+            })
+            .unwrap_or(false)
+            || element.is_type_of(ImageBase::TYPE_KEY)
+            || element.is_type_of(TextBase::TYPE_KEY);
         ensure!(
             admitted,
-            "a flight key on {kind} does not fly in place yet"
+            "a flight key on an element that is not a box, a text, an image, a video or a \
+             component placement does not fly in place"
         );
-        Self::read(element).ok_or_else(|| anyhow::anyhow!("a flight key on {kind} names no layout box"))
+        Self::read(element).ok_or_else(|| anyhow::anyhow!("a flight key names no layout box"))
     }
 
     /// The node that holds the box's place in layout.
@@ -273,31 +270,25 @@ impl Flying {
     /// `stretch` to `size`, the stretch innermost, as a frame's own
     /// transform is built (`hosted_frame::self_transform`): a box turning
     /// and scaling about its pivot taken from `size`, its CSS translate
-    /// unscaled; a placed root's own transform built with the stretch, as a
-    /// flying unit's root draws in a flight slot
-    /// (`Artboard::content_transform_stretched`).
+    /// unscaled; any other element's box stretched from its top left, its
+    /// content inside it, as a flying unit holding it stretches.
     fn own_transforms(&self, size: Vec2D, stretch: Vec2D) -> Option<(Mat2D, Mat2D)> {
-        match &self.shape {
-            Shape::Css => self
-                .element
-                .with(|object| {
-                    let layout = object.as_layout_component()?;
-                    let mut sized = layout.own_transform_sized(size);
-                    sized.scale_by_values(stretch.x, stretch.y);
-                    Some((layout.build_own_transform(), sized))
-                })
-                .flatten(),
-            Shape::Hosted(_) => Some((Mat2D::identity(), Mat2D::from_scale(stretch.x, stretch.y))),
-            Shape::Placement(root) => {
-                let linear = self.placement_linear()?;
-                root.with_downcast::<Artboard, _>(|root| {
-                    (
-                        linear * root.content_transform(),
-                        linear * root.content_transform_stretched(stretch),
-                    )
-                })
+        let own = match &self.shape {
+            Shape::Css => {
+                return self
+                    .element
+                    .with(|object| {
+                        let layout = object.as_layout_component()?;
+                        let mut sized = layout.own_transform_sized(size);
+                        sized.scale_by_values(stretch.x, stretch.y);
+                        Some((layout.build_own_transform(), sized))
+                    })
+                    .flatten();
             }
-        }
+            Shape::Hosted(_) => Mat2D::identity(),
+            Shape::Placement(root) => self.placement_linear()? * frame_origin(root)?,
+        };
+        Some((own, own * Mat2D::from_scale(stretch.x, stretch.y)))
     }
 
     /// The box matrix at `when`: the box, from (0, 0) to its size, in the
@@ -307,22 +298,21 @@ impl Flying {
             Shape::Css => drawn(&self.element, when),
             Shape::Hosted(_) => self.place(when),
             Shape::Placement(root) => {
-                let content = root
-                    .with_downcast::<Artboard, _>(Artboard::content_transform)
-                    .ok_or_else(|| anyhow::anyhow!("a placed root retired"))?;
-                Ok(drawn(&self.element, when)? * content)
+                let origin =
+                    frame_origin(root).ok_or_else(|| anyhow::anyhow!("a placed root retired"))?;
+                Ok(drawn(&self.element, when)? * origin)
             }
         }
     }
 
     /// C: from the box to the element's own drawing space, the space its
-    /// world draws in. Identity for a box; a placed root's content
-    /// transform; for a text, an image or a video, its world taken back
-    /// from its place. None when its world can't be inverted.
+    /// world draws in. Identity for a box; a placed root's frame origin; for
+    /// a text, an image or a video, its world taken back from its place.
+    /// None when its world can't be inverted.
     pub(super) fn content_from_box(&self) -> Option<Mat2D> {
         match &self.shape {
             Shape::Css => Some(Mat2D::identity()),
-            Shape::Placement(root) => root.with_downcast::<Artboard, _>(Artboard::content_transform),
+            Shape::Placement(root) => frame_origin(root),
             Shape::Hosted(_) => {
                 let parent = self.parent().ok()?;
                 let place = Wide::of(world_of(&parent)?)
@@ -332,71 +322,79 @@ impl Flying {
         }
     }
 
-    /// The corners its box draws with: a box's or a placed root's own.
+    /// The corners its box draws with: a box's own; none for anything else,
+    /// which paints no box.
     fn corners(&self) -> Radii {
         let geometry = match &self.shape {
             Shape::Css => self
                 .element
                 .with(|object| object.as_layout_component()?.css_box_geometry())
                 .flatten(),
-            Shape::Placement(root) => root
-                .with_downcast::<Artboard, _>(|root| root.base.base.css_box_geometry())
-                .flatten(),
-            Shape::Hosted(_) => None,
+            Shape::Hosted(_) | Shape::Placement(_) => None,
         };
         geometry.map_or_else(Radii::default, |geometry| geometry.radii)
     }
 
     /// Writes the corners and shadow its box draws in place of its own;
-    /// None for its own. A box's or a placed root's, as on a unit's root; a
-    /// text, an image or a video paints no box. A change rebuilds the box's
-    /// paths.
+    /// None for its own. Only a box paints one: a change rebuilds its paths.
     fn set_paint(&self, corners: Option<[f32; 4]>, shadow: Option<FlightShadow>) {
-        match &self.shape {
-            Shape::Css => {
-                let changed = self
-                    .element
-                    .with_mut(|object| {
-                        let layout = object.as_layout_component_mut()?;
-                        let corners = layout.set_flight_corners(corners);
-                        let shadow = layout.set_flight_shadow(shadow);
-                        Some(corners || shadow)
-                    })
-                    .flatten()
-                    .unwrap_or(false);
-                if changed {
-                    crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
-                        self.element.clone(),
-                    )
-                    .add_dirt(ComponentDirt::PATH, false);
-                }
-            }
-            Shape::Placement(root) => {
-                root.with_downcast_mut::<Artboard, _>(|root| {
-                    root.set_flight_corners(corners);
-                    root.set_flight_shadow(shadow);
-                });
-            }
-            Shape::Hosted(_) => {}
+        if !matches!(self.shape, Shape::Css) {
+            return;
+        }
+        let changed = self
+            .element
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut()?;
+                let corners = layout.set_flight_corners(corners);
+                let shadow = layout.set_flight_shadow(shadow);
+                Some(corners || shadow)
+            })
+            .flatten()
+            .unwrap_or(false);
+        if changed {
+            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+                self.element.clone(),
+            )
+            .add_dirt(ComponentDirt::PATH, false);
         }
     }
 
-    /// For a text, an image or a video, its parent and where its box rests
-    /// in it: the cover anchor's box is that, not its nearest box's.
-    pub(super) fn hosted_rest(&self) -> Option<(CoreHandle, crate::source::layout_component::Layout)> {
-        let Shape::Hosted(participant) = &self.shape else {
-            return None;
-        };
-        Some((self.parent().ok()?, flight_hold::resting_box(participant)?))
+    /// Where the box rests, for its cover: the level whose resting world it
+    /// sits under, its matrix there, and its resting size. A text's, an
+    /// image's or a video's sits in its parent at its participant's resting
+    /// box; a placement's is its own resting world, at its root's frame
+    /// origin. None for a box, which the cover reads as any box.
+    pub(super) fn rest_anchor(&self) -> Option<(CoreHandle, Mat2D, Vec2D)> {
+        match &self.shape {
+            Shape::Css => None,
+            Shape::Hosted(participant) => {
+                let rest = flight_hold::resting_box(participant)?;
+                Some((
+                    self.parent().ok()?,
+                    Mat2D::from_translation(Vec2D::new(rest.left(), rest.top())),
+                    Vec2D::new(rest.width(), rest.height()),
+                ))
+            }
+            Shape::Placement(root) => Some((
+                self.element.clone(),
+                frame_origin(root)?,
+                self.resting_size(),
+            )),
+        }
     }
 }
 
-/// Whether a component placement, an image or a video flies in place yet:
-/// each is admitted once the equivalence test covers it as the keyed
-/// element.
-const ADMITS_PLACEMENTS: bool = false;
-const ADMITS_IMAGES: bool = true;
-const ADMITS_VIDEOS: bool = true;
+/// A placed root's frame origin: where its draw puts its content's origin,
+/// before its own transform.
+fn frame_origin(root: &CoreHandle) -> Option<Mat2D> {
+    root.with_downcast::<Artboard, _>(|root| {
+        if root.frame_origin() {
+            Mat2D::from_translation(root.content_origin())
+        } else {
+            Mat2D::identity()
+        }
+    })
+}
 
 /// A component's world; an artboard's is its own space.
 fn world_of(component: &CoreHandle) -> Option<Mat2D> {

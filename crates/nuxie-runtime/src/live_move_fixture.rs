@@ -502,6 +502,8 @@ pub enum KeyedKind {
     Text,
     Image,
     Video,
+    /// A shape: no layout box, so a key on it is refused.
+    Shape,
 }
 
 /// A page of two CSS Screens, each with a box "card" (A's 120 by 80, B's
@@ -618,6 +620,7 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
                 KeyedKind::Text => "Text",
                 KeyedKind::Image => "Image",
                 KeyedKind::Video => "Video",
+                KeyedKind::Shape => "Shape",
             };
             let mut element = vec![("name", S("card")), ("parentId", U(0))];
             match element_kind {
@@ -626,8 +629,9 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
                 _ => {}
             }
             obj(&mut b, type_name, &element); // 3
-            // A placement lays its unit out itself; the others host one.
-            let participant = element_kind != KeyedKind::Placement;
+            // A placement lays its unit out itself and a shape is not laid
+            // out; the others host a participant.
+            let participant = !matches!(element_kind, KeyedKind::Placement | KeyedKind::Shape);
             if participant {
                 obj(&mut b, "LayoutParticipant", &[("parentId", U(3))]); // 4
             }

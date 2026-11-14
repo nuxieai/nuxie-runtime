@@ -3280,9 +3280,17 @@ fn same_pixels(slots: &Drawn, in_place: &Drawn, what: &str) {
     let around = off.iter().fold((usize::MAX, usize::MAX, 0, 0), |(x0, y0, x1, y1), &(x, y)| {
         (x0.min(x), y0.min(y), x1.max(x), y1.max(y))
     });
+    let listed = off
+        .iter()
+        .map(|&(x, y)| {
+            let i = (y * slots.width + x) * 4;
+            format!("({x}, {y}) {:?} {:?}", &slots.pixels[i..i + 3], &in_place.pixels[i..i + 3])
+        })
+        .collect::<Vec<_>>()
+        .join("; ");
     assert!(
         worst.1 <= 1,
-        "{what}: {} pixels differ, within {around:?}; at ({x}, {y}) by {}: slots {:?}, in place {:?}; pictures (canvases, composites) slots {:?}, in place {:?}",
+        "{what}: {} pixels differ, within {around:?}; at ({x}, {y}) by {}: slots {:?}, in place {:?}; pictures (canvases, composites) slots {:?}, in place {:?}; each (slots, in place): {listed}",
         off.len(),
         worst.1,
         &slots.pixels[pixel * 4..pixel * 4 + 4],

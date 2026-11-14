@@ -5191,14 +5191,21 @@ impl Artboard {
         }
         renderer.save();
         renderer.transform(nuxie_render_api::Mat2D(*matrix.values()));
-        let clip_area = clip.and_then(|clip| {
-            crate::css_layout::lift::apply_clip(renderer, &element, &row, clip)
-        });
+        let clip_area =
+            clip.and_then(|clip| crate::css_layout::lift::clip_bounds(&element, clip));
         let plain = visitor.is_none();
+        // The zoom's clip is part of what the copy draws, inside its picture,
+        // as a flying unit's is: clipping where the picture composites would
+        // smooth its rounded edge twice.
         let draw_entries = |renderer: &mut Renderer| {
+            renderer.save();
+            if let Some(clip) = clip {
+                crate::css_layout::lift::apply_clip(renderer, &element, &row, clip);
+            }
             crate::css_layout::lift::drawing_lift(&row, visitor.clone(), || {
                 Self::draw_lift_entries(&row, renderer, &entries);
             });
+            renderer.restore();
         };
         if opacity >= 1.0 {
             draw_entries(renderer);

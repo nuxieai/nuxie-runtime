@@ -7,8 +7,9 @@
 //! list, the lift entry, which `paint_order::place` puts where a flight slot
 //! would go. The lift entry draws the copy's own entries of its own Screen's
 //! list and nothing else, so none of its ancestors' clips opens, under the
-//! flight's transform and opacity: save, the transform, the zoom's clip when
-//! there is one, the opacity as one picture or a scope, the entries, restore.
+//! flight's transform and opacity: save, the transform, the opacity as one
+//! picture or a scope, inside it the zoom's clip when there is one and the
+//! entries, restore.
 //!
 //! Which entries draw for each lifted copy is worked out where its Screen's
 //! draw order is sorted (`Artboard::sort_draw_order`), so it is never older
@@ -291,31 +292,47 @@ pub(crate) fn drawing_lift(
     body();
 }
 
-/// Clips the renderer to a zoom's box, `clip`, in `element`'s own content
-/// space, mapped into `row`'s drawing space by the element's world, so it
-/// turns and stretches with the copy. Answers that box's bounds in `row`'s
-/// space, which bound the lift's picture.
-pub(crate) fn apply_clip(
-    renderer: &mut Renderer,
-    element: &CoreHandle,
-    row: &CoreHandle,
-    clip: FlightClip,
-) -> Option<crate::source::math::aabb::Aabb> {
-    use crate::source::{
-        math::raw_path::RawPath, shapes::paint::shape_paint_path::ShapePaintPath,
-    };
-    let world = element
+/// The world of `element`, the space its zoom clip is in.
+fn element_world(element: &CoreHandle) -> Option<Mat2D> {
+    element
         .with(|object| {
             object
                 .as_world_transform_component()
                 .map(|transform| transform.world_transform())
         })
-        .flatten()?;
-    let factory = row.with_downcast::<Artboard, _>(Artboard::factory).flatten()?;
+        .flatten()
+}
+
+/// The bounds in `row`'s drawing space of a zoom's box, `clip`, in
+/// `element`'s own content space: what bounds the lift's picture.
+pub(crate) fn clip_bounds(
+    element: &CoreHandle,
+    clip: FlightClip,
+) -> Option<crate::source::math::aabb::Aabb> {
+    Some(element_world(element)?.map_bounding_box(clip.area()))
+}
+
+/// Clips the renderer to a zoom's box, `clip`, in `element`'s own content
+/// space, mapped into `row`'s drawing space by the element's world, so it
+/// turns and stretches with the copy.
+pub(crate) fn apply_clip(
+    renderer: &mut Renderer,
+    element: &CoreHandle,
+    row: &CoreHandle,
+    clip: FlightClip,
+) {
+    use crate::source::{
+        math::raw_path::RawPath, shapes::paint::shape_paint_path::ShapePaintPath,
+    };
+    let (Some(world), Some(factory)) = (
+        element_world(element),
+        row.with_downcast::<Artboard, _>(Artboard::factory).flatten(),
+    ) else {
+        return;
+    };
     let mut raw = RawPath::default();
     super::paint::add_rounded_rect(&mut raw, clip.area(), clip.radii);
     let mut path = ShapePaintPath::new(false);
     path.add_path(&raw, Some(&world));
     renderer.clip_path(path.render_path(&factory));
-    Some(world.map_bounding_box(clip.area()))
 }

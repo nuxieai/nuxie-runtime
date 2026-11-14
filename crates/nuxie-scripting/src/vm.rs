@@ -1089,16 +1089,29 @@ mod lifecycle_tests {
 
 /// Upstream rive_lua_pcall cleanup occurs after every protected return.
 trait ProtectedScriptCall {
-    fn protected_call<R: FromLuaMulti>(&self, args: impl IntoLuaMulti) -> Result<R>;
+    fn protected_call<R: FromLuaMulti>(&self, args: impl IntoLuaMulti) -> Result<R> {
+        self.protected_call_with(None, args)
+    }
+
+    /// `protected_call` lending `loan` to the call.
+    fn protected_call_with<R: FromLuaMulti>(
+        &self,
+        loan: crate::luau::Loan<'_>,
+        args: impl IntoLuaMulti,
+    ) -> Result<R>;
 }
 
 impl ProtectedScriptCall for Function {
-    fn protected_call<R: FromLuaMulti>(&self, args: impl IntoLuaMulti) -> Result<R> {
+    fn protected_call_with<R: FromLuaMulti>(
+        &self,
+        loan: crate::luau::Loan<'_>,
+        args: impl IntoLuaMulti,
+    ) -> Result<R> {
         let lua = self.lua();
         #[cfg(feature = "tools")]
         let _write_source = luau_write_scope(&lua);
         let scope = crate::gpu_canvas::enter_script_call_gpu_scope(&lua);
-        let result = self.call(args);
+        let result = self.call_with(loan, args);
         exit_script_call_gpu_scope(&lua, &scope);
         result
     }

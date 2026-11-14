@@ -1,12 +1,13 @@
 // Translated from:
 // /Users/levi/dev/oss/rive-runtime/src/lua/renderer/lua_renderer.cpp
 use std::cell::{Cell, RefCell};
-use std::marker::PhantomData;
-use std::mem;
-use std::ptr::NonNull;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::luau::{AnyUserData, Error, Result, Table, UserData, UserDataMethods, Value};
+use crate::luau::{
+    AnyUserData, Error, Loan, Result, ScriptLoan, Table, UserData, UserDataMethods, Value,
+    reborrow_loan,
+};
 use nuxie_render_api::{Factory as RenderFactory, RenderCanvasFrame, Renderer};
 
 use super::lua_image::{ScriptedImage, ScriptedImageSampler};
@@ -54,7 +55,7 @@ impl RendererBindings {
         // An e949 artboard instance may use a different factory facade. Its
         // borrowed renderer is independent of the VM's retained allocation
         // factory, which remains installed for script-created resources.
-        let (scripted_renderer, _renderer_scope) =
+        let (scripted_renderer, mut scope) =
             ScriptedRenderer::create_call_scoped_userdata(&lua, renderer, self.clone())?;
         let field: Value = table.get_field("draw")?;
         let result = match field {
@@ -62,8 +63,9 @@ impl RendererBindings {
                 let _property_owner = owner.map(|owner| {
                     super::view_model::ScriptViewModelFrameContext::for_lua(&lua).enter_owner(owner)
                 });
-                super::ProtectedScriptCall::protected_call::<()>(
+                super::ProtectedScriptCall::protected_call_with::<()>(
                     &function,
+                    Some(&mut scope),
                     (table.clone(), scripted_renderer.clone()),
                 )
             }
@@ -75,149 +77,59 @@ impl RendererBindings {
 
         let balanced = {
             let scripted_renderer = scripted_renderer.borrow::<ScriptedRenderer>()?;
-            scripted_renderer.end()
+            scripted_renderer.end(Some(&mut scope))
         };
         result.map(|_| balanced)
     }
 }
 
-struct ActiveRenderer {
+/// A renderer scope: the renderer one script call may draw into, lent to
+/// that call ([`ScriptLoan`]). The script reaches it through the
+/// `Renderer` userdata whose target names this scope's token; the loan
+/// answers only to that token, and only while the call it was lent to
+/// runs.
+pub(super) struct RendererScope<'a> {
     token: u64,
-    renderer: NonNull<dyn Renderer>,
-    borrowed: bool,
+    renderer: &'a mut dyn Renderer,
 }
 
-thread_local! {
-    static ACTIVE_RENDERERS: RefCell<Vec<ActiveRenderer>> = const { RefCell::new(Vec::new()) };
-    static NEXT_RENDERER_TOKEN: Cell<u64> = const { Cell::new(1) };
-    /// A broken scope invariant seen by a `Drop` below, which must not panic
-    /// (a panic while unwinding aborts). The next renderer access reports it.
-    static BROKEN_RENDERER_SCOPE: Cell<Option<&'static str>> = const { Cell::new(None) };
-    /// Set when a scope could not remove its renderer from the stack; no
-    /// renderer on this thread is reachable after that.
-    static RENDERER_STACK_POISONED: Cell<bool> = const { Cell::new(false) };
-}
+/// Renderer scope tokens: unique for the process, so a userdata kept from
+/// one scope never names another.
+static NEXT_RENDERER_TOKEN: AtomicU64 = AtomicU64::new(1);
 
-fn record_broken_renderer_scope(message: &'static str) {
-    let _ = BROKEN_RENDERER_SCOPE.try_with(|broken| broken.set(Some(message)));
-}
-
-pub(super) struct ScopedRendererAccess<'a> {
-    token: u64,
-    _exclusive_borrow: PhantomData<&'a mut dyn Renderer>,
-}
-
-impl<'a> ScopedRendererAccess<'a> {
-    fn new(renderer: &'a mut dyn Renderer) -> Self {
-        let token = NEXT_RENDERER_TOKEN.with(|next| {
-            let token = next.get();
-            next.set(token.wrapping_add(1).max(1));
-            token
-        });
-        let ptr: NonNull<dyn Renderer + '_> = NonNull::from(renderer);
-        // SAFETY: the erased pointer is stored only in the thread-local active
-        // call stack. This guard carries the exclusive borrow and removes the
-        // pointer before that borrow can end; Lua userdata retains only `token`.
-        let renderer =
-            unsafe { mem::transmute::<NonNull<dyn Renderer + '_>, NonNull<dyn Renderer>>(ptr) };
-        ACTIVE_RENDERERS.with(|active| {
-            active.borrow_mut().push(ActiveRenderer {
-                token,
-                renderer,
-                borrowed: false,
-            });
-        });
+impl<'a> RendererScope<'a> {
+    pub(super) fn new(renderer: &'a mut dyn Renderer) -> Self {
         Self {
-            token,
-            _exclusive_borrow: PhantomData,
+            token: NEXT_RENDERER_TOKEN.fetch_add(1, Ordering::Relaxed),
+            renderer,
         }
     }
 }
 
-impl Drop for ScopedRendererAccess<'_> {
-    fn drop(&mut self) {
-        // This scope's frame leaves the stack whatever the order, since its
-        // borrow ends here; frames above it stay for their own scopes.
-        let _ = ACTIVE_RENDERERS.try_with(|active| {
-            let Ok(mut active) = active.try_borrow_mut() else {
-                let _ = RENDERER_STACK_POISONED.try_with(|poisoned| poisoned.set(true));
-                record_broken_renderer_scope("scoped renderer stack was busy when a scope ended");
-                return;
-            };
-            match active.iter().rposition(|frame| frame.token == self.token) {
-                Some(index) => {
-                    if index.saturating_add(1) != active.len() {
-                        record_broken_renderer_scope("scoped renderer stack order");
-                    }
-                    active.remove(index);
-                }
-                None => record_broken_renderer_scope("scoped renderer stack underflow"),
-            }
-        });
-    }
-}
-
-struct ActiveRendererBorrow {
-    token: u64,
-    renderer: NonNull<dyn Renderer>,
-}
-
-impl Drop for ActiveRendererBorrow {
-    fn drop(&mut self) {
-        let _ = ACTIVE_RENDERERS.try_with(|active| {
-            let Ok(mut active) = active.try_borrow_mut() else {
-                record_broken_renderer_scope("scoped renderer stack was busy when a borrow ended");
-                return;
-            };
-            match active
-                .iter_mut()
-                .rev()
-                .find(|frame| frame.token == self.token)
-            {
-                Some(frame) => frame.borrowed = false,
-                None => record_broken_renderer_scope("active renderer borrow outlived its scope"),
-            }
-        });
-    }
-}
-
-fn with_active_renderer<R>(
-    token: u64,
-    callback: impl FnOnce(&mut dyn Renderer) -> Result<R>,
-) -> Result<R> {
-    if RENDERER_STACK_POISONED.with(Cell::get) {
-        return Err(Error::runtime(
-            "scoped renderer stack was busy when a scope ended",
-        ));
-    }
-    if let Some(message) = BROKEN_RENDERER_SCOPE.with(Cell::take) {
-        return Err(Error::runtime(message));
-    }
-    let mut renderer = ACTIVE_RENDERERS.with(|active| {
-        let mut active = active.borrow_mut();
-        let frame = active
-            .iter_mut()
-            .rev()
-            .find(|frame| frame.token == token)
-            .ok_or_else(|| Error::lua_l_runtime("Renderer is no longer valid."))?;
-        if frame.borrowed {
-            return Err(Error::runtime(
-                "Renderer is already mutably borrowed by this callback",
-            ));
+impl ScriptLoan for RendererScope<'_> {
+    fn renderer(&mut self, token: u64) -> Option<&mut dyn Renderer> {
+        if token == self.token {
+            Some(&mut *self.renderer)
+        } else {
+            None
         }
-        frame.borrowed = true;
-        Ok::<_, Error>(ActiveRendererBorrow {
-            token,
-            renderer: frame.renderer,
-        })
-    })?;
-    // Drawing a scripted artboard can synchronously install a child renderer
-    // scope reborrowed from this callback. Keep only this token borrowed, not
-    // the registry that the nested draw must extend.
-    // SAFETY: ScopedRendererAccess owns the exclusive borrow while this token
-    // is registered. Its per-token borrowed flag excludes reentrant use of
-    // that reference; a child scope receives a shorter reborrow from the callback.
-    callback(unsafe { renderer.renderer.as_mut() })
+    }
+}
+
+/// Marks a userdata's renderer as held by a host call until dropped.
+struct InUse<'a>(&'a Cell<bool>);
+
+impl<'a> InUse<'a> {
+    fn enter(flag: &'a Cell<bool>) -> Self {
+        flag.set(true);
+        Self(flag)
+    }
+}
+
+impl Drop for InUse<'_> {
+    fn drop(&mut self) {
+        self.0.set(false);
+    }
 }
 
 #[derive(Clone)]
@@ -230,21 +142,36 @@ pub(super) struct ScriptedRenderer {
     target: RefCell<Option<RendererTarget>>,
     pub(super) bindings: RendererBindings,
     save_count: Cell<usize>,
+    /// Set while a host call holds this userdata's renderer: Lua run under
+    /// that call (other than through a scope reborrowed from it) cannot
+    /// reach the same renderer.
+    in_use: Cell<bool>,
+}
+
+fn already_borrowed() -> Error {
+    Error::runtime("Renderer is already mutably borrowed by this callback")
+}
+
+fn no_longer_valid() -> Error {
+    Error::lua_l_runtime("Renderer is no longer valid.")
 }
 
 impl ScriptedRenderer {
+    /// A `Renderer` userdata for a new scope over `renderer`, and that
+    /// scope, to be lent to the call the userdata is passed to.
     pub(super) fn create_call_scoped_userdata<'a>(
         lua: &crate::luau::Lua,
         renderer: &'a mut dyn Renderer,
         bindings: RendererBindings,
-    ) -> Result<(AnyUserData, ScopedRendererAccess<'a>)> {
-        let access = ScopedRendererAccess::new(renderer);
+    ) -> Result<(AnyUserData, RendererScope<'a>)> {
+        let scope = RendererScope::new(renderer);
         let userdata = lua.create_userdata(Self {
-            target: RefCell::new(Some(RendererTarget::CallScoped(access.token))),
+            target: RefCell::new(Some(RendererTarget::CallScoped(scope.token))),
             bindings,
             save_count: Cell::new(0),
+            in_use: Cell::new(false),
         })?;
-        Ok((userdata, access))
+        Ok((userdata, scope))
     }
 
     pub(super) fn create_canvas_userdata(
@@ -256,14 +183,18 @@ impl ScriptedRenderer {
             target: RefCell::new(Some(RendererTarget::CanvasFrame(frame))),
             bindings,
             save_count: Cell::new(0),
+            in_use: Cell::new(false),
         })
     }
 
-    pub(super) fn end(&self) -> bool {
+    /// Restores what the script saved and detaches the userdata from its
+    /// target; whether the saves were balanced. `loan` is the scope's,
+    /// for a call-scoped target.
+    pub(super) fn end(&self, mut loan: Loan<'_>) -> bool {
         let balanced = self.save_count.get() == 0;
         while self.save_count.get() > 0 {
             if self
-                .with_renderer_mut(|renderer| {
+                .with_renderer_mut(reborrow_loan(&mut loan), |renderer| {
                     renderer.restore();
                     Ok(())
                 })
@@ -271,94 +202,123 @@ impl ScriptedRenderer {
             {
                 break;
             }
-            self.save_count.set(self.save_count.get() - 1);
+            self.save_count.set(self.save_count.get().saturating_sub(1));
         }
-        self.target.borrow_mut().take();
+        if let Ok(mut target) = self.target.try_borrow_mut() {
+            *target = None;
+        }
         balanced
     }
 
+    /// Runs `callback` with the renderer this userdata targets: the
+    /// canvas frame's, or, for a call-scoped target, the one `loan` lends
+    /// to its scope.
     pub(super) fn with_renderer_mut<R>(
         &self,
+        loan: Loan<'_>,
         callback: impl FnOnce(&mut dyn Renderer) -> Result<R>,
     ) -> Result<R> {
-        let target = self.target.borrow().clone();
-        match target
-            .as_ref()
-            .ok_or_else(|| Error::lua_l_runtime("Renderer is no longer valid."))?
-        {
-            RendererTarget::CallScoped(token) => with_active_renderer(*token, callback),
+        let target = self
+            .target
+            .try_borrow()
+            .map_err(|_| already_borrowed())?
+            .clone();
+        match target.ok_or_else(no_longer_valid)? {
+            RendererTarget::CallScoped(token) => {
+                if self.in_use.get() {
+                    return Err(already_borrowed());
+                }
+                let renderer = loan
+                    .and_then(|loan| loan.renderer(token))
+                    .ok_or_else(no_longer_valid)?;
+                let _in_use = InUse::enter(&self.in_use);
+                callback(renderer)
+            }
             RendererTarget::CanvasFrame(frame) => {
-                let mut frame = frame.try_borrow_mut().map_err(|_| {
-                    Error::runtime("Renderer is already mutably borrowed by this callback")
-                })?;
+                let mut frame = frame.try_borrow_mut().map_err(|_| already_borrowed())?;
                 callback(frame.renderer())
             }
         }
     }
 
+    /// Runs `callback` with a new scope over `renderer` (reborrowed from
+    /// the renderer this userdata's host call holds), this userdata
+    /// targeting it meanwhile: Lua run with that scope lent draws through
+    /// the same userdata into `renderer`.
     pub(super) fn with_reborrowed_renderer<R>(
         &self,
         renderer: &mut dyn Renderer,
-        callback: impl FnOnce() -> Result<R>,
+        callback: impl FnOnce(&mut RendererScope<'_>) -> Result<R>,
     ) -> Result<R> {
-        let access = ScopedRendererAccess::new(renderer);
-        struct RestoreTarget<'a> {
-            target: &'a RefCell<Option<RendererTarget>>,
-            previous: Option<RendererTarget>,
-        }
-        impl Drop for RestoreTarget<'_> {
-            fn drop(&mut self) {
-                *self.target.borrow_mut() = self.previous.take();
-            }
-        }
+        let mut scope = RendererScope::new(renderer);
+        let mut target = self.target.try_borrow_mut().map_err(|_| already_borrowed())?;
+        let previous = target.replace(RendererTarget::CallScoped(scope.token));
+        drop(target);
         let _restore = RestoreTarget {
-            target: &self.target,
-            previous: self
-                .target
-                .replace(Some(RendererTarget::CallScoped(access.token))),
+            renderer: self,
+            previous,
+            in_use: self.in_use.replace(false),
         };
-        callback()
+        callback(&mut scope)
     }
 
     pub(super) fn save_count(&self) -> usize {
         self.save_count.get()
     }
 
-    pub(super) fn restore_to(&self, count: usize) -> Result<()> {
+    pub(super) fn restore_to(&self, mut loan: Loan<'_>, count: usize) -> Result<()> {
         while self.save_count.get() > count {
-            self.restore()?;
+            self.restore(reborrow_loan(&mut loan))?;
         }
         Ok(())
     }
 
-    fn save(&self) -> Result<()> {
-        self.with_renderer_mut(|renderer| {
+    fn save(&self, loan: Loan<'_>) -> Result<()> {
+        self.with_renderer_mut(loan, |renderer| {
             renderer.save();
             Ok(())
         })?;
-        self.save_count.set(self.save_count.get() + 1);
+        self.save_count.set(self.save_count.get().saturating_add(1));
         Ok(())
     }
 
-    fn restore(&self) -> Result<()> {
+    fn restore(&self, loan: Loan<'_>) -> Result<()> {
         if self.save_count.get() == 0 {
             return Err(Error::runtime("Renderer save/restore stack was unbalanced"));
         }
-        self.with_renderer_mut(|renderer| {
+        self.with_renderer_mut(loan, |renderer| {
             renderer.restore();
             Ok(())
         })?;
-        self.save_count.set(self.save_count.get() - 1);
+        self.save_count.set(self.save_count.get().saturating_sub(1));
         Ok(())
+    }
+}
+
+/// Puts back the target and in-use mark a reborrowed scope replaced, on
+/// return and on unwinding.
+struct RestoreTarget<'a> {
+    renderer: &'a ScriptedRenderer,
+    previous: Option<RendererTarget>,
+    in_use: bool,
+}
+
+impl Drop for RestoreTarget<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut target) = self.renderer.target.try_borrow_mut() {
+            *target = self.previous.take();
+        }
+        self.renderer.in_use.set(self.in_use);
     }
 }
 
 impl UserData for ScriptedRenderer {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method(
+        methods.add_method_lent(
             "drawImageMeshInstanced",
             |_,
              this,
+             loan,
              (image, sampler, vertices, uvs, indices, instances): (
                 AnyUserData,
                 AnyUserData,
@@ -394,7 +354,7 @@ impl UserData for ScriptedRenderer {
                 let uvs = uvs.borrow::<ScriptedVertexBuffer>()?;
                 let indices = indices.borrow::<ScriptedTriangleBuffer>()?;
                 with_scripted_image(&image, |image| {
-                    this.with_renderer_mut(|renderer| {
+                    this.with_renderer_mut(loan, |renderer| {
                         // Validation above must succeed before staged writes reach
                         // the renderer, once for all writes since its last draw.
                         instances.commit();
@@ -417,61 +377,62 @@ impl UserData for ScriptedRenderer {
                 })?
             },
         );
-        methods.add_method("save", |_, this, ()| this.save());
-        methods.add_method("modulateOpacity", |_, this, opacity: f32| {
-            this.with_renderer_mut(|renderer| {
+        methods.add_method_lent("save", |_, this, loan, ()| this.save(loan));
+        methods.add_method_lent("modulateOpacity", |_, this, loan, opacity: f32| {
+            this.with_renderer_mut(loan, |renderer| {
                 renderer.modulate_opacity(opacity);
                 Ok(())
             })
         });
-        methods.add_method("modulateColor", |_, this, color: u32| {
-            this.with_renderer_mut(|renderer| {
+        methods.add_method_lent("modulateColor", |_, this, loan, color: u32| {
+            this.with_renderer_mut(loan, |renderer| {
                 renderer.modulate_color(color, false);
                 Ok(())
             })
         });
-        methods.add_method("setColorModulation", |_, this, color: u32| {
-            this.with_renderer_mut(|renderer| {
+        methods.add_method_lent("setColorModulation", |_, this, loan, color: u32| {
+            this.with_renderer_mut(loan, |renderer| {
                 renderer.modulate_color(color, true);
                 Ok(())
             })
         });
-        methods.add_method("restore", |_, this, ()| this.restore());
-        methods.add_method("transform", |_, this, matrix: AnyUserData| {
+        methods.add_method_lent("restore", |_, this, loan, ()| this.restore(loan));
+        methods.add_method_lent("transform", |_, this, loan, matrix: AnyUserData| {
             let matrix = matrix.borrow::<ScriptedMat2D>()?;
-            this.with_renderer_mut(|renderer| {
+            this.with_renderer_mut(loan, |renderer| {
                 renderer.transform(matrix.0);
                 Ok(())
             })
         });
-        methods.add_method("clipPath", |_, this, path: AnyUserData| {
+        methods.add_method_lent("clipPath", |_, this, loan, path: AnyUserData| {
             let mut path = path.borrow_mut::<ScriptedPath>()?;
             this.bindings.with_factory(|factory| {
                 let render_path = path.render_path(factory);
-                this.with_renderer_mut(|renderer| {
+                this.with_renderer_mut(loan, |renderer| {
                     renderer.clip_path(render_path);
                     Ok(())
                 })
             })
         });
-        methods.add_method(
+        methods.add_method_lent(
             "drawPath",
-            |_, this, (path, paint): (AnyUserData, AnyUserData)| {
+            |_, this, loan, (path, paint): (AnyUserData, AnyUserData)| {
                 let mut path = path.borrow_mut::<ScriptedPath>()?;
                 let paint = paint.borrow::<ScriptedPaint>()?;
                 this.bindings.with_factory(|factory| {
                     let render_path = path.render_path(factory);
-                    this.with_renderer_mut(|renderer| {
+                    this.with_renderer_mut(loan, |renderer| {
                         renderer.draw_path(render_path, paint.render_paint.borrow().as_ref());
                         Ok(())
                     })
                 })
             },
         );
-        methods.add_method(
+        methods.add_method_lent(
             "drawImage",
             |_,
              this,
+             loan,
              (image, sampler, blend_mode, opacity): (
                 AnyUserData,
                 AnyUserData,
@@ -481,7 +442,7 @@ impl UserData for ScriptedRenderer {
                 let sampler = sampler.borrow::<ScriptedImageSampler>()?;
                 let blend_mode = parse_blend_mode_name(&blend_mode)?;
                 with_scripted_image(&image, |image| {
-                    this.with_renderer_mut(|renderer| {
+                    this.with_renderer_mut(loan, |renderer| {
                         renderer.draw_image(
                             Some(image),
                             sampler.0,
@@ -493,10 +454,11 @@ impl UserData for ScriptedRenderer {
                 })?
             },
         );
-        methods.add_method(
+        methods.add_method_lent(
             "drawImageMesh",
             |_,
              this,
+             loan,
              (image, sampler, vertices, uvs, indices, blend_mode, opacity): (
                 AnyUserData,
                 AnyUserData,
@@ -535,7 +497,7 @@ impl UserData for ScriptedRenderer {
                 let uvs = uvs.borrow::<ScriptedVertexBuffer>()?;
                 let indices = indices.borrow::<ScriptedTriangleBuffer>()?;
                 with_scripted_image(&image, |image| {
-                    this.with_renderer_mut(|renderer| {
+                    this.with_renderer_mut(loan, |renderer| {
                         renderer.draw_image_mesh(
                             Some(image),
                             sampler.0,
@@ -697,7 +659,7 @@ return instances
         }
         fn render(&mut self, recorder: &mut InstanceRecorder) {
             let lua = self.vm.lua();
-            let (renderer, _scope) = ScriptedRenderer::create_call_scoped_userdata(
+            let (renderer, mut scope) = ScriptedRenderer::create_call_scoped_userdata(
                 lua,
                 recorder,
                 self.vm.renderer_bindings.clone(),
@@ -710,9 +672,14 @@ return instances
             lua.globals()
                 .get::<crate::luau::Function>("render")
                 .unwrap()
-                .call::<()>((renderer.clone(), image))
+                .call_lent::<()>(&mut scope, (renderer.clone(), image))
                 .unwrap();
-            assert!(renderer.borrow::<ScriptedRenderer>().unwrap().end());
+            assert!(
+                renderer
+                    .borrow::<ScriptedRenderer>()
+                    .unwrap()
+                    .end(Some(&mut scope))
+            );
         }
     }
 
@@ -745,38 +712,51 @@ return instances
     }
 
     #[test]
-    fn renderer_scopes_ended_out_of_order_report_an_error_instead_of_panicking() {
-        // Before, the first drop below panicked in `Drop` (`assert_eq!` on
-        // the stack order), which aborts the process during unwinding.
+    fn a_renderer_userdata_reaches_only_its_own_scope_while_that_scope_is_lent() {
+        // Replaces the stack-order test of the thread-local registry: scopes
+        // are borrows now, so they cannot end out of order. Each userdata
+        // reaches its renderer only through the loan of its own scope.
         let vm = ScriptVm::new();
         let lua = vm.lua();
         let mut first = InstanceRecorder::default();
         let mut second = InstanceRecorder::default();
-        let (outer, outer_scope) = ScriptedRenderer::create_call_scoped_userdata(
+        let (outer, mut outer_scope) = ScriptedRenderer::create_call_scoped_userdata(
             lua,
             &mut first,
             vm.renderer_bindings.clone(),
         )
         .unwrap();
-        let (inner, inner_scope) = ScriptedRenderer::create_call_scoped_userdata(
+        let (inner, mut inner_scope) = ScriptedRenderer::create_call_scoped_userdata(
             lua,
             &mut second,
             vm.renderer_bindings.clone(),
         )
         .unwrap();
-        drop(outer_scope);
         let inner_renderer = inner.borrow::<ScriptedRenderer>().unwrap();
-        let error = inner_renderer.with_renderer_mut(|_| Ok(())).unwrap_err();
-        assert!(error.to_string().contains("scoped renderer stack order"), "{error}");
-        // Reported once; the inner scope is intact and the outer one is gone.
-        assert!(inner_renderer.with_renderer_mut(|_| Ok(())).is_ok());
         let outer_renderer = outer.borrow::<ScriptedRenderer>().unwrap();
-        let error = outer_renderer.with_renderer_mut(|_| Ok(())).unwrap_err();
+        assert!(
+            inner_renderer
+                .with_renderer_mut(Some(&mut inner_scope), |_| Ok(()))
+                .is_ok()
+        );
+        let error = outer_renderer
+            .with_renderer_mut(Some(&mut inner_scope), |_| Ok(()))
+            .unwrap_err();
         assert!(error.to_string().contains("no longer valid"), "{error}");
-        drop(inner_renderer);
-        drop(inner_scope);
-        let inner_renderer = inner.borrow::<ScriptedRenderer>().unwrap();
-        assert!(inner_renderer.with_renderer_mut(|_| Ok(())).is_err());
+        assert!(
+            outer_renderer
+                .with_renderer_mut(Some(&mut outer_scope), |_| Ok(()))
+                .is_ok()
+        );
+        // Without a loan (a call that did not carry the scope) neither does.
+        let error = inner_renderer.with_renderer_mut(None, |_| Ok(())).unwrap_err();
+        assert!(error.to_string().contains("no longer valid"), "{error}");
+        assert!(inner_renderer.end(Some(&mut inner_scope)));
+        assert!(
+            inner_renderer
+                .with_renderer_mut(Some(&mut inner_scope), |_| Ok(()))
+                .is_err()
+        );
     }
 
     #[test]
@@ -928,28 +908,42 @@ return instances
     fn nested_renderer_scope_reborrows_without_unlocking_its_parent() {
         let factory = RecordingFactory::new();
         let mut renderer = factory.make_renderer();
-        let outer = ScopedRendererAccess::new(&mut renderer);
-        let mut nested_token = 0;
-        with_active_renderer(outer.token, |renderer| {
-            renderer.save();
-            {
-                let nested = ScopedRendererAccess::new(renderer);
-                nested_token = nested.token;
-                with_active_renderer(nested.token, |renderer| {
-                    renderer.save();
-                    assert!(with_active_renderer(outer.token, |_| Ok(())).is_err());
-                    renderer.restore();
-                    Ok(())
-                })?;
-            }
-            renderer.restore();
-            Ok(())
-        })
+        let vm = ScriptVm::new();
+        let lua = vm.lua();
+        let (outer, mut outer_scope) = ScriptedRenderer::create_call_scoped_userdata(
+            lua,
+            &mut renderer,
+            vm.renderer_bindings.clone(),
+        )
         .unwrap();
-        assert!(with_active_renderer(nested_token, |_| Ok(())).is_err());
-        let outer_token = outer.token;
+        let outer = outer.borrow::<ScriptedRenderer>().unwrap();
+        let mut nested_token = 0;
+        outer
+            .with_renderer_mut(Some(&mut outer_scope), |renderer| {
+                renderer.save();
+                {
+                    let mut nested = RendererScope::new(renderer);
+                    nested_token = nested.token;
+                    let renderer = nested.renderer(nested_token).unwrap();
+                    renderer.save();
+                    // The parent's userdata is held by this host call.
+                    let error = outer.with_renderer_mut(None, |_| Ok(())).unwrap_err();
+                    assert!(error.to_string().contains("already mutably borrowed"), "{error}");
+                    renderer.restore();
+                }
+                renderer.restore();
+                Ok(())
+            })
+            .unwrap();
+        assert!(outer_scope.renderer(nested_token).is_none());
+        assert!(outer.end(Some(&mut outer_scope)));
+        assert!(
+            outer
+                .with_renderer_mut(Some(&mut outer_scope), |_| Ok(()))
+                .is_err()
+        );
         drop(outer);
-        assert!(with_active_renderer(outer_token, |_| Ok(())).is_err());
+        drop(outer_scope);
         assert_eq!(
             factory.stream(),
             "rive-golden-stream-v1\nsave\nsave\nrestore\nrestore\n"
@@ -1009,6 +1003,55 @@ return instances
             .unwrap();
         assert!(!valid);
         assert!(error.contains("Renderer is no longer valid"), "{error}");
+    }
+
+    #[test]
+    fn a_draw_reaches_its_renderer_through_the_guarded_protected_calls_and_print() {
+        // `pcall`, `xpcall` and `coroutine.resume` are host guards that call
+        // the originals from Rust, and `print` runs `tostring` from Rust:
+        // each passes on the draw call's loan.
+        let vm = ScriptVm::new();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        vm.install_render_factory(&mut factory).unwrap();
+        vm.install_rive_globals().unwrap();
+        let table: Table = vm
+            .eval(
+                r#"
+                return {
+                    draw = function(self, renderer)
+                        assert(pcall(function() renderer:save() end))
+                        assert(xpcall(function() renderer:save() end, function(e) return e end))
+                        assert(pcall(function() error("boom") end) == false)
+                        assert(xpcall(function() error("boom") end, function()
+                            renderer:restore()
+                            return "handled"
+                        end) == false)
+                        assert(coroutine.resume(coroutine.create(function()
+                            renderer:restore()
+                        end)))
+                        print(setmetatable({}, {__tostring = function()
+                            renderer:save()
+                            renderer:restore()
+                            return "drawn"
+                        end}))
+                    end,
+                }
+                "#,
+            )
+            .unwrap();
+        let mut instance = vm.script_instance_from_table(table);
+        let mut renderer = factory.borrow().make_renderer();
+        instance
+            .call_draw(&mut factory, &mut renderer, &mut NoopScriptHost)
+            .unwrap();
+        assert!(
+            factory
+                .borrow()
+                .stream()
+                .contains("save\nsave\nrestore\nrestore\nsave\nrestore\n"),
+            "{}",
+            factory.borrow().stream()
+        );
     }
 
     #[test]

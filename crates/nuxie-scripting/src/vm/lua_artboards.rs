@@ -233,20 +233,20 @@ impl UserData for ScriptedArtboard {
         methods.add_method("propertyKey", |_, this, name: crate::luau::LuaString| {
             Ok(this.owner.artboard.property_key(&name.as_bytes()))
         });
-        methods.add_method(
+        methods.add_method_lent(
             "drawModulated",
-            |_, this, (renderer, key): (AnyUserData, u32)| {
+            |_, this, mut loan, (renderer, key): (AnyUserData, u32)| {
                 let scripted_renderer = renderer.borrow::<ScriptedRenderer>()?;
                 #[cfg(feature = "tools")]
                 {
-                    scripted_renderer.with_renderer_mut(|_| Ok(()))?;
+                    scripted_renderer.with_renderer_mut(crate::luau::reborrow_loan(&mut loan), |_| Ok(()))?;
                     this.owner
                         .artboard
                         .retained_handle()
                         .settle_if_images_revealed();
                 }
                 scripted_renderer.bindings.with_factory(|factory| {
-                    scripted_renderer.with_renderer_mut(|renderer| {
+                    scripted_renderer.with_renderer_mut(loan, |renderer| {
                         this.owner
                             .artboard
                             .retained_handle()
@@ -256,11 +256,11 @@ impl UserData for ScriptedArtboard {
                 })
             },
         );
-        methods.add_method("draw", |lua, this, (renderer, visitor, context): (AnyUserData, Option<crate::luau::Function>, Value)| {
+        methods.add_method_lent("draw", |lua, this, mut loan, (renderer, visitor, context): (AnyUserData, Option<crate::luau::Function>, Value)| {
             let scripted_renderer = renderer.borrow::<ScriptedRenderer>()?;
             #[cfg(feature = "tools")]
             {
-                scripted_renderer.with_renderer_mut(|_| Ok(()))?;
+                scripted_renderer.with_renderer_mut(crate::luau::reborrow_loan(&mut loan), |_| Ok(()))?;
                 this.owner.artboard.retained_handle().settle_if_images_revealed();
             }
             if let Some(visitor) = visitor {
@@ -279,11 +279,11 @@ impl UserData for ScriptedArtboard {
                         let previous = current.replace(Some(drawable.clone()));
                         let result = (|| {
                             let scripted_renderer = renderer_userdata.borrow::<ScriptedRenderer>()?;
-                            scripted_renderer.with_reborrowed_renderer(renderer, || {
+                            scripted_renderer.with_reborrowed_renderer(renderer, |scope| {
                                 let saves = scripted_renderer.save_count();
-                                let result = visitor.call::<()>((context.clone(), visited.clone(), renderer_userdata.clone()));
+                                let result = visitor.call_lent::<()>(scope, (context.clone(), visited.clone(), renderer_userdata.clone()));
                                 if result.is_err() {
-                                    scripted_renderer.restore_to(saves)?;
+                                    scripted_renderer.restore_to(Some(scope), saves)?;
                                 }
                                 result
                             })
@@ -295,7 +295,7 @@ impl UserData for ScriptedArtboard {
                     })
                 };
                 let result = scripted_renderer.bindings.with_factory(|factory| {
-                    scripted_renderer.with_renderer_mut(|renderer| {
+                    scripted_renderer.with_renderer_mut(crate::luau::reborrow_loan(&mut loan), |renderer| {
                         this.owner.artboard.retained_handle().draw_with_visitor(factory, renderer, draw_visitor)
                             .map_err(|error| Error::runtime(error.to_string()))
                     })
@@ -307,7 +307,7 @@ impl UserData for ScriptedArtboard {
                 return result;
             }
             scripted_renderer.bindings.with_factory(|factory| {
-                scripted_renderer.with_renderer_mut(|renderer| {
+                scripted_renderer.with_renderer_mut(loan, |renderer| {
                     this.owner
                         .artboard
                         .retained_handle()
@@ -363,11 +363,11 @@ impl UserData for VisitedDrawable {
                 })
                 .and_then(|property| CoreRegistry::get_string_handle(&property, 246)))
         });
-        methods.add_method("draw", |_, this, renderer: AnyUserData| {
+        methods.add_method_lent("draw", |_, this, loan, renderer: AnyUserData| {
             let drawable = this.drawable()?;
             renderer
                 .borrow::<ScriptedRenderer>()?
-                .with_renderer_mut(|renderer| {
+                .with_renderer_mut(loan, |renderer| {
                     Drawable::draw_handle(&drawable, renderer);
                     Ok(())
                 })
@@ -591,10 +591,10 @@ pub unsafe fn upstream_test_scripted_artboard_render(
         }
         factory.borrow_mut().frame_size(width as u32, height as u32);
         let mut renderer = factory.borrow().make_renderer();
-        let (scripted_renderer, _scope) =
+        let (scripted_renderer, mut scope) =
             ScriptedRenderer::create_call_scoped_userdata(&lua, &mut renderer, bindings.clone())?;
-        render.call::<()>((userdata.clone(), scripted_renderer.clone()))?;
-        if !scripted_renderer.borrow::<ScriptedRenderer>()?.end() {
+        render.call_lent::<()>(&mut scope, (userdata.clone(), scripted_renderer.clone()))?;
+        if !scripted_renderer.borrow::<ScriptedRenderer>()?.end(Some(&mut scope)) {
             return Err(Error::runtime("unbalanced scripted renderer"));
         }
     }
@@ -719,13 +719,13 @@ end
                 )
                 .unwrap(),
             )?;
-            let (userdata, _scope) =
+            let (userdata, mut scope) =
                 ScriptedRenderer::create_call_scoped_userdata(&lua, renderer, bindings.clone())?;
             let result = lua
                 .globals()
                 .get::<crate::luau::Function>(name)?
-                .call::<()>((artboard, userdata.clone()));
-            userdata.borrow::<ScriptedRenderer>()?.end();
+                .call_lent::<()>(&mut scope, (artboard, userdata.clone()));
+            userdata.borrow::<ScriptedRenderer>()?.end(Some(&mut scope));
             result
         };
         let mut renderer = factory.borrow().make_renderer();
@@ -983,7 +983,7 @@ end
             }
             factory.borrow_mut().frame_size(width as u32, height as u32);
             let mut renderer = factory.borrow().make_renderer();
-            let (scripted_renderer, _scope) = ScriptedRenderer::create_call_scoped_userdata(
+            let (scripted_renderer, mut scope) = ScriptedRenderer::create_call_scoped_userdata(
                 &lua,
                 &mut renderer,
                 bindings.clone(),
@@ -992,13 +992,13 @@ end
             lua.globals()
                 .get::<crate::luau::Function>("render")
                 .unwrap()
-                .call::<()>((userdata.clone(), scripted_renderer.clone()))
+                .call_lent::<()>(&mut scope, (userdata.clone(), scripted_renderer.clone()))
                 .expect("pinned renderer userdata and Vertical model");
             assert!(
                 scripted_renderer
                     .borrow::<ScriptedRenderer>()
                     .unwrap()
-                    .end()
+                    .end(Some(&mut scope))
             );
         }
         let expected = fixture_bytes("../silvers/scripted_artboard_render.sriv");

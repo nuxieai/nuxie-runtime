@@ -237,15 +237,15 @@ impl UserData for ScriptedText {
             t.layout.borrow_mut().clear();
             Ok(())
         });
-        methods.add_method(
+        methods.add_method_lent(
             "draw",
-            |_, t, (renderer, paint): (AnyUserData, Option<AnyUserData>)| {
+            |_, t, loan, (renderer, paint): (AnyUserData, Option<AnyUserData>)| {
                 let paint = paint
                     .map(|p| p.borrow::<ScriptedPaint>().map(|p| p.render_paint.clone()))
                     .transpose()?;
                 renderer
                     .borrow::<ScriptedRenderer>()?
-                    .with_renderer_mut(|renderer| {
+                    .with_renderer_mut(loan, |renderer| {
                         t.layout.borrow_mut().render(renderer, paint);
                         Ok(())
                     })

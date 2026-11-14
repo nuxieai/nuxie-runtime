@@ -208,10 +208,12 @@ pub(super) fn install_protected_call_guards(
     let original: Function = lua.globals().get("pcall")?;
     lua.set_named_registry_value(ORIGINAL_PCALL, original)?;
     let pcall_tracker = tracker.clone();
-    let guarded = lua.create_function(move |lua, args: MultiValue| {
+    // Each guard passes on the loan its call carries (a draw call's
+    // renderer), so the protected body reaches what the caller could.
+    let guarded = lua.create_function_lent(move |lua, loan, args: MultiValue| {
         pcall_tracker.reject_if_tripped()?;
         let original: Function = lua.named_registry_value(ORIGINAL_PCALL)?;
-        let results: MultiValue = original.call(args)?;
+        let results: MultiValue = original.call_with(loan, args)?;
         pcall_tracker.record_protected_memory_result(&results)?;
         pcall_tracker.reject_if_tripped()?;
         Ok(results)
@@ -221,23 +223,23 @@ pub(super) fn install_protected_call_guards(
     let original: Function = lua.globals().get("xpcall")?;
     lua.set_named_registry_value(ORIGINAL_XPCALL, original)?;
     let xpcall_tracker = tracker.clone();
-    let guarded = lua.create_function(move |lua, mut args: MultiValue| {
+    let guarded = lua.create_function_lent(move |lua, loan, mut args: MultiValue| {
         xpcall_tracker.reject_if_tripped()?;
         let original: Function = lua.named_registry_value(ORIGINAL_XPCALL)?;
         let results: MultiValue = lua.scope(|scope| {
             if let Some(Value::Function(handler)) = args.get(1).cloned() {
                 let handler_tracker = xpcall_tracker.clone();
-                let guarded_handler = scope.create_function(move |_, error: Value| {
+                let guarded_handler = scope.create_function_lent(move |_, loan, error: Value| {
                     handler_tracker.record_protected_memory_error(&error)?;
                     handler_tracker.reject_if_tripped()?;
-                    handler.call::<MultiValue>(error)
+                    handler.call_with::<MultiValue>(loan, error)
                 })?;
                 let handler_slot = args
                     .get_mut(1)
                     .ok_or_else(|| Error::runtime("xpcall handler argument disappeared"))?;
                 *handler_slot = Value::Function(guarded_handler);
             }
-            original.call(args)
+            original.call_with(loan, args)
         })?;
         xpcall_tracker.record_protected_memory_result(&results)?;
         xpcall_tracker.reject_if_tripped()?;
@@ -248,10 +250,10 @@ pub(super) fn install_protected_call_guards(
     let coroutine: Table = lua.globals().get("coroutine")?;
     let original: Function = coroutine.get("resume")?;
     lua.set_named_registry_value(ORIGINAL_RESUME, original)?;
-    let guarded = lua.create_function(move |lua, args: MultiValue| {
+    let guarded = lua.create_function_lent(move |lua, loan, args: MultiValue| {
         tracker.reject_if_tripped()?;
         let original: Function = lua.named_registry_value(ORIGINAL_RESUME)?;
-        let results: MultiValue = original.call(args)?;
+        let results: MultiValue = original.call_with(loan, args)?;
         tracker.record_protected_memory_result(&results)?;
         tracker.reject_if_tripped()?;
         Ok(results)

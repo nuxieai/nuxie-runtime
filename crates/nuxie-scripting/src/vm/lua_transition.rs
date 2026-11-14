@@ -93,7 +93,7 @@ impl UserData for TransitionChild {
         });
     }
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_meta_method("__namecall", |lua, this, args: MultiValue| {
+        methods.add_meta_method_lent("__namecall", |lua, this, loan, args: MultiValue| {
             // Seam rows R21 to R23: the running namecall method.
             let name = lua
                 .namecall_method()
@@ -108,7 +108,7 @@ impl UserData for TransitionChild {
                 lua.unpack(args.into_iter().next().unwrap_or(Value::Nil))?;
             let renderer = renderer.borrow::<ScriptedRenderer>()?;
             // Validate the renderer even when this child has expired.
-            renderer.with_renderer_mut(|renderer| {
+            renderer.with_renderer_mut(loan, |renderer| {
                 let child = this.0.borrow().clone();
                 if let Some(child) = child {
                     child.draw(renderer);
@@ -147,7 +147,7 @@ pub(super) fn call_draw(
     owner: Option<super::view_model::ScriptedPropertyListenerOwner>,
 ) -> Result<()> {
     let lua = table.lua();
-    let (scripted_renderer, _renderer_scope) =
+    let (scripted_renderer, mut renderer_scope) =
         ScriptedRenderer::create_call_scoped_userdata(&lua, renderer, bindings.clone())?;
     let result = (|| {
         let Value::Function(function) = table.get::<Value>("draw")? else {
@@ -158,8 +158,13 @@ pub(super) fn call_draw(
         let _property_owner = owner.map(|owner| {
             super::view_model::ScriptViewModelFrameContext::for_lua(&lua).enter_owner(owner)
         });
-        function.protected_call::<()>((table.clone(), scripted_renderer.clone(), from, to))
+        function.protected_call_with::<()>(
+            Some(&mut renderer_scope),
+            (table.clone(), scripted_renderer.clone(), from, to),
+        )
     })();
-    scripted_renderer.borrow::<ScriptedRenderer>()?.end();
+    scripted_renderer
+        .borrow::<ScriptedRenderer>()?
+        .end(Some(&mut renderer_scope));
     result
 }

@@ -21,8 +21,8 @@ pub(super) struct BindGroup {
     /// the video's frame moves on.
     remake: Option<BindGroupInputs>,
     /// The charges of the buffers and views the group holds, which it keeps
-    /// alive past their own userdata.
-    _charges: Vec<GpuCharge>,
+    /// alive past their own userdata (and a pass it is bound to keeps them).
+    pub charges: Rc<[GpuCharge]>,
 }
 struct BindGroupInputs {
     layout: AnyResourceHandle,
@@ -236,7 +236,7 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         lua.create_userdata(BindGroup {
             resource,
             remake,
-            _charges: charges,
+            charges: charges.into(),
         })
     })?;
     constructor(lua, "GPUPipeline", |lua, loan, table| {

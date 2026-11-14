@@ -242,7 +242,10 @@ fn untrack_scripted_property(
     let index = property.track_index.get();
     // A dying Rc cannot upgrade its own weak reference. Compare its stable
     // identity instead, matching the upstream pointer check in both paths.
-    if index >= list.len() || !std::ptr::eq(list[index].as_ptr(), property) {
+    if !list
+        .get(index)
+        .is_some_and(|entry| std::ptr::eq(entry.as_ptr(), property))
+    {
         return;
     }
     list.swap_remove(index);
@@ -611,36 +614,74 @@ fn dispose_property_userdata(property: &AnyUserData) {
     }
 }
 
-fn property_watch_cleanup(property: &AnyUserData) -> Box<dyn Fn()> {
-    macro_rules! cleanup {
-        ($kind:ty, $unregister:ident) => {
-            if let Ok(property) = property.borrow::<$kind>() {
-                let weak = Rc::downgrade(&property.watch);
-                return Box::new(move || {
-                    if let Some(watch) = weak.upgrade() {
-                        watch.listeners.borrow_mut().clear();
-                        watch._change_registration.borrow_mut().take();
-                        *watch.sink.borrow_mut() = RuntimeCellDirtSink::default();
-                        $unregister(&watch);
-                    }
-                });
+/// A property wrapper's watch: the three watch types share this shape.
+trait PropertyWatchKind: 'static {
+    fn state(&self) -> &Rc<ScriptedPropertyState>;
+    /// Drop the listeners, the change registration and the sink, and leave
+    /// the frame context's retained list.
+    fn release(watch: &Rc<Self>);
+}
+
+macro_rules! property_watch_kind {
+    ($watch:ty, $unregister:ident) => {
+        impl PropertyWatchKind for $watch {
+            fn state(&self) -> &Rc<ScriptedPropertyState> {
+                &self.state
             }
-        };
-    }
-    cleanup!(ScriptedPropertyNumber, unregister_property_watch);
-    #[cfg(feature = "scriptnet")]
-    cleanup!(ScriptedPropertyArtboard, unregister_property_watch);
-    cleanup!(ScriptedPropertyColor, unregister_property_watch);
-    cleanup!(ScriptedPropertyString, unregister_property_watch);
-    cleanup!(ScriptedPropertyBoolean, unregister_property_watch);
-    cleanup!(ScriptedPropertyEnum, unregister_property_watch);
-    cleanup!(ScriptedPropertyImage, unregister_property_watch);
-    cleanup!(ScriptedPropertyFont, unregister_property_watch);
-    cleanup!(ScriptedPropertyList, unregister_property_watch);
-    cleanup!(ScriptedPropertyViewModel, unregister_property_watch);
-    cleanup!(ScriptedPropertyBlob, unregister_blob_watch);
-    cleanup!(ScriptedPropertyTrigger, unregister_trigger_watch);
-    unreachable!("scripted property userdata")
+            fn release(watch: &Rc<Self>) {
+                watch.listeners.borrow_mut().clear();
+                watch._change_registration.borrow_mut().take();
+                *watch.sink.borrow_mut() = RuntimeCellDirtSink::default();
+                $unregister(watch);
+            }
+        }
+    };
+}
+property_watch_kind!(ScriptedPropertyWatch, unregister_property_watch);
+property_watch_kind!(ScriptedBlobWatch, unregister_blob_watch);
+property_watch_kind!(ScriptedTriggerWatch, unregister_trigger_watch);
+
+/// A property wrapper type and the watch it owns.
+trait WatchedProperty {
+    type Watch: PropertyWatchKind;
+    fn watch(&self) -> &Rc<Self::Watch>;
+}
+
+macro_rules! watched_property {
+    ($watch:ty: $($kind:ty),* $(,)?) => {
+        $(impl WatchedProperty for $kind {
+            type Watch = $watch;
+            fn watch(&self) -> &Rc<$watch> {
+                &self.watch
+            }
+        })*
+    };
+}
+watched_property!(ScriptedPropertyWatch:
+    ScriptedPropertyNumber,
+    ScriptedPropertyColor,
+    ScriptedPropertyString,
+    ScriptedPropertyBoolean,
+    ScriptedPropertyEnum,
+    ScriptedPropertyImage,
+    ScriptedPropertyFont,
+    ScriptedPropertyList,
+    ScriptedPropertyViewModel,
+);
+#[cfg(feature = "scriptnet")]
+watched_property!(ScriptedPropertyWatch: ScriptedPropertyArtboard);
+watched_property!(ScriptedBlobWatch: ScriptedPropertyBlob);
+watched_property!(ScriptedTriggerWatch: ScriptedPropertyTrigger);
+
+/// Release `watch` when the property is disposed; nothing once the watch is
+/// gone. Holds the watch weakly.
+fn property_watch_cleanup<W: PropertyWatchKind>(watch: &Rc<W>) -> Box<dyn Fn()> {
+    let weak = Rc::downgrade(watch);
+    Box::new(move || {
+        if let Some(watch) = weak.upgrade() {
+            W::release(&watch);
+        }
+    })
 }
 
 // Numeric Lua keys lose address bits above f64's exact integer range. Keep the
@@ -666,10 +707,11 @@ fn register_scripted_property(lua: &Lua, state: &Rc<ScriptedPropertyState>) {
     }
 }
 
-fn patch_property_userdata(
+fn patch_property_userdata<W: PropertyWatchKind>(
     lua: &Lua,
     model: ScriptViewModel,
     property: AnyUserData,
+    watch: &Rc<W>,
     writable_value: bool,
     mutating_methods: &[&str],
 ) -> crate::luau::Result<AnyUserData> {
@@ -678,7 +720,7 @@ fn patch_property_userdata(
         mutating.set(*method, true)?;
     }
     let patcher: Function = lua.named_registry_value(PROPERTY_METATABLE_PATCHER)?;
-    let state = scripted_property_state(&property).expect("scripted property userdata");
+    let state = Rc::clone(watch.state());
     *state.owning_model.borrow_mut() = Some(model);
     register_scripted_property(lua, &state);
     const WEAK_PROPERTIES: &str = "rive_weak_scripted_properties";
@@ -698,7 +740,7 @@ fn patch_property_userdata(
     let weak_lua = super::lua_main_ref::main_lua(lua)
         .ok_or_else(|| crate::luau::Error::runtime("missing main scripting state"))?
         .weak();
-    let cleanup_watch = property_watch_cleanup(&property);
+    let cleanup_watch = property_watch_cleanup(watch);
     let expected_state = Rc::downgrade(&state);
     *state.cleanup.borrow_mut() = Some(Box::new(move || {
         cleanup_watch();
@@ -733,15 +775,16 @@ fn patch_property_userdata(
     patcher.call((property, writable_value, mutating, flush, attributed_call))
 }
 
-fn create_property_userdata<T: UserData + 'static>(
+fn create_property_userdata<T: UserData + WatchedProperty + 'static>(
     lua: &Lua,
     model: ScriptViewModel,
     property: T,
     writable_value: bool,
     mutating_methods: &[&str],
 ) -> crate::luau::Result<AnyUserData> {
+    let watch = Rc::clone(property.watch());
     let property = lua.create_userdata(property)?;
-    patch_property_userdata(lua, model, property, writable_value, mutating_methods)
+    patch_property_userdata(lua, model, property, &watch, writable_value, mutating_methods)
 }
 
 fn create_scripted_view_model_retained(
@@ -925,16 +968,12 @@ fn create_scripted_view_model_retained(
                     return Ok(Value::Nil);
                 }
                 let args = args.into_vec();
-                let name = if args.len() == 2 {
-                    match &args[1] {
-                        Value::String(_) | Value::Integer(_) | Value::Number(_) => {
-                            let value: crate::luau::LuaString = lua.unpack(args[1].clone())?;
-                            Some(value.to_string_lossy())
-                        }
-                        _ => None,
+                let name = match args.as_slice() {
+                    [_, name @ (Value::String(_) | Value::Integer(_) | Value::Number(_))] => {
+                        let value: crate::luau::LuaString = lua.unpack(name.clone())?;
+                        Some(value.to_string_lossy())
                     }
-                } else {
-                    None
+                    _ => None,
                 };
                 let model = model
                     .named_instance(name.as_deref())
@@ -1031,9 +1070,6 @@ fn create_named_scripted_property(
         .current_owner
         .borrow()
         .clone();
-    if kind == ScriptViewModelProperty::List {
-        return create_scripted_property_list(lua, model, name, listener_owner).map(Some);
-    }
     let property = match &kind {
         #[cfg(not(feature = "scriptnet"))]
         ScriptViewModelProperty::Artboard => return Ok(None),
@@ -1108,7 +1144,9 @@ fn create_named_scripted_property(
             true,
             &[],
         )?,
-        ScriptViewModelProperty::List => unreachable!("lists are installed before wrapping"),
+        ScriptViewModelProperty::List => {
+            create_scripted_property_list(lua, model, name, listener_owner)?
+        }
         ScriptViewModelProperty::ViewModel => create_property_userdata(
             lua,
             model.clone(),
@@ -1116,9 +1154,11 @@ fn create_named_scripted_property(
             true,
             &[],
         )?,
-        ScriptViewModelProperty::SymbolListIndex => unreachable!(
-            "symbol-list indices are exposed as scalar values before property wrapping"
-        ),
+        ScriptViewModelProperty::SymbolListIndex => {
+            return Err(crate::luau::Error::runtime(
+                "symbol-list indices are exposed as scalar values before property wrapping",
+            ));
+        }
     };
     Ok(Some(property))
 }
@@ -1610,7 +1650,7 @@ fn create_scripted_enum_values(
                     .unwrap_or(Value::Nil)),
                 Value::Number(index) if index.fract() == 0.0 => {
                     let index = if index >= 1.0 && index <= usize::MAX as f64 {
-                        Some(index as usize - 1)
+                        (index as usize).checked_sub(1)
                     } else {
                         None
                     };
@@ -2119,7 +2159,9 @@ fn create_scripted_property_list(
     listener_owner: Option<ScriptedPropertyListenerOwner>,
 ) -> crate::luau::Result<AnyUserData> {
     let flush_model = model.clone();
-    let property = lua.create_userdata(ScriptedPropertyList::new(model, name, listener_owner))?;
+    let list = ScriptedPropertyList::new(model, name, listener_owner);
+    let watch = Rc::clone(&list.watch);
+    let property = lua.create_userdata(list)?;
 
     // The old binding crate synthesizes an `__index` dispatcher for registered
     // fields and methods, overwriting a UserData-provided `__index` metamethod.
@@ -2147,9 +2189,13 @@ fn create_scripted_property_list(
                         if index < 1.0 || index > usize::MAX as f64 {
                             return Ok(Value::Nil);
                         }
+                        // At least 1, so one less is a position.
+                        let Some(index) = (index as usize).checked_sub(1) else {
+                            return Ok(Value::Nil);
+                        };
                         property
                             .borrow_mut::<ScriptedPropertyList>()?
-                            .item_value(lua, index as usize - 1)
+                            .item_value(lua, index)
                     }
                     Value::Number(_) => Err(crate::luau::Error::runtime("integer expected")),
                     key => fallback
@@ -2165,7 +2211,14 @@ fn create_scripted_property_list(
         }
         Ok(())
     })?;
-    patch_property_userdata(lua, flush_model, property, false, LIST_MUTATING_METHODS)
+    patch_property_userdata(
+        lua,
+        flush_model,
+        property,
+        &watch,
+        false,
+        LIST_MUTATING_METHODS,
+    )
 }
 
 impl UserData for ScriptedPropertyList {
@@ -2592,13 +2645,13 @@ impl UserData for ScriptedContext {
                 .map(ScriptedContextSource::global_view_model_names)
                 .unwrap_or_default();
             let table = lua.create_table();
-            for (index, name) in names.into_iter().enumerate() {
+            for (index, name) in (1_usize..).zip(names) {
                 let bytes = name
                     .as_bytes()
                     .split(|byte| *byte == 0)
                     .next()
                     .unwrap_or_default();
-                table.raw_set(index + 1, lua.create_string(bytes))?;
+                table.raw_set(index, lua.create_string(bytes))?;
             }
             Ok(table)
         });
@@ -2955,18 +3008,15 @@ pub(super) fn install_data_global(
         definition.set(
             "new",
             lua.create_function(move |lua, args: MultiValue| {
-                let name = if args.len() == 1 {
-                    match args.front() {
-                        Some(Value::Nil) => None,
-                        Some(value @ (Value::String(_) | Value::Integer(_) | Value::Number(_))) => {
-                            let value: crate::luau::LuaString = lua.unpack(value.clone())?;
-                            Some(value.to_string_lossy())
-                        }
-                        Some(_) => return Ok(Value::Nil),
-                        None => unreachable!("one argument disappeared"),
+                let args = args.into_vec();
+                let name = match args.as_slice() {
+                    [value @ (Value::String(_) | Value::Integer(_) | Value::Number(_))] => {
+                        let value: crate::luau::LuaString = lua.unpack(value.clone())?;
+                        Some(value.to_string_lossy())
                     }
-                } else {
-                    None
+                    [Value::Nil] => None,
+                    [_] => return Ok(Value::Nil),
+                    _ => None,
                 };
                 let instance = model
                     .named_instance(name.as_deref())

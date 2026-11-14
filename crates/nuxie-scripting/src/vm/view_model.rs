@@ -576,14 +576,16 @@ mod instance_bytes {
 
     /// What `model` and the instances nested in it (view-model properties
     /// and list items) hold, estimated from their shape; strings and assets
-    /// they hold are charged where they are set.
+    /// they hold are charged where they are set. A graph past `MAX_VISITED`
+    /// instances is `usize::MAX`, which no budget admits, rather than the
+    /// part of it that was walked.
     pub(super) fn of(model: &ScriptViewModel) -> usize {
         let mut bytes = 0_usize;
         let mut pending = vec![model.clone()];
         let mut visited = 0_usize;
         while let Some(model) = pending.pop() {
             if visited >= MAX_VISITED {
-                break;
+                return usize::MAX;
             }
             visited = visited.saturating_add(1);
             bytes = bytes.saturating_add(INSTANCE);
@@ -597,8 +599,10 @@ mod instance_bytes {
                     }
                     ScriptViewModelProperty::List => {
                         let len = model.list_len(name).unwrap_or(0);
-                        let room = MAX_VISITED.saturating_sub(visited.saturating_add(pending.len()));
-                        for index in 0..len.min(room) {
+                        if visited.saturating_add(pending.len()).saturating_add(len) > MAX_VISITED {
+                            return usize::MAX;
+                        }
+                        for index in 0..len {
                             bytes = bytes.saturating_add(LIST_ITEM);
                             pending.extend(model.list_item(name, index));
                         }
@@ -5604,6 +5608,24 @@ mod tests {
 
     // Inventory row 24: list `push`/`insert` grew the list (and kept the
     // pushed instances alive) with no charge.
+    // Codex review (lane G3): a graph past the walk's bound was estimated as
+    // the part of it that was walked.
+    #[test]
+    fn an_instance_graph_past_the_walk_bound_is_not_admitted() {
+        let (model, list) = model_with_property(ScriptViewModelProperty::List);
+        let (child, _) = model_with_property(ScriptViewModelProperty::String);
+        let lua = budget_lua(usize::MAX / 2);
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
+        let child_table = create_scripted_view_model(&lua, child).expect("scripted child");
+        lua.globals().set("model", table).unwrap();
+        lua.globals().set("child", child_table).unwrap();
+        lua.globals().set("listName", list).unwrap();
+        lua.load("local list = model:getList(listName) for i = 1, 4096 do list:push(child) end")
+            .exec()
+            .unwrap();
+        assert_eq!(super::instance_bytes::of(&model), usize::MAX);
+    }
+
     #[test]
     fn list_growth_is_charged_before_it_happens() {
         let (model, list) = model_with_property(ScriptViewModelProperty::List);

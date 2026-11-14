@@ -31,7 +31,9 @@ struct Probe {
     plain_calls: u32,
 }
 
-impl Host for Probe {}
+impl Host for Probe {
+    type Loans = crate::hosted::NoLoan;
+}
 
 fn hosted(limits: Limits) -> Result<HostedVm<Probe>, String> {
     let core = Core::with_limits_bare(limits).map_err(|_| "no memory for the core")?;
@@ -170,7 +172,7 @@ fn reenter(ctx: &mut HostedCtx<'_, Probe>) -> Result<usize, HostError> {
     host.deepest = host.deepest.max(host.depth);
     let me = host.me.ok_or_else(|| HostError::new("no function"))?;
     let f = ctx.vm.core.roots.get(me).map_err(HostError::from)?;
-    let result = ctx.vm.call_function(f, &[], 0);
+    let result = ctx.vm.call_function(f, &[], 0, None);
     ctx.vm.host.depth = ctx.vm.host.depth.saturating_sub(1);
     match result {
         Ok(_) => Ok(0),
@@ -190,7 +192,7 @@ fn reentry_from_a_host_function_is_bounded_and_unwinds() -> TestResult {
         .map_err(|e| e.to_string())?;
     let f = host_native(&mut vm, id, 0).map_err(|_| "native")?;
     vm.host.me = Some(vm.core.roots.insert(Value::Function(f)).map_err(|e| e.to_string())?);
-    let result = vm.call_function(Value::Function(f), &[], 0);
+    let result = vm.call_function(Value::Function(f), &[], 0, None);
     check(result.is_err(), "the recursion ends in an error")?;
     check(vm.host.deepest == 8, "each nesting up to the limit ran")?;
     check(vm.host.depth == 0, "every level returned")?;
@@ -219,12 +221,12 @@ fn a_plain_host_function_runs_with_its_data_and_its_host() -> TestResult {
     let f = vm.host_function("probe", id, 40).map_err(|e| e.to_string())?;
     let f = vm.core.roots.get(f).map_err(|e| e.to_string())?;
     let args = [Value::Number(1.0), Value::Number(2.0)];
-    let result = vm.call_function(f, &args, 1).map_err(|_| "the call failed")?;
+    let result = vm.call_function(f, &args, 1, None).map_err(|_| "the call failed")?;
     check(matches!(result, Value::Number(n) if n == 42.0), "data plus argument count")?;
     let failing = vm.host_function("probe", id, 0).map_err(|e| e.to_string())?;
     let failing = vm.core.roots.get(failing).map_err(|e| e.to_string())?;
     check(
-        vm.call_function(failing, &[], 1).is_err(),
+        vm.call_function(failing, &[], 1, None).is_err(),
         "a host error is a Lua error",
     )?;
     check(vm.host.plain_calls == 2, "both calls reached the host")

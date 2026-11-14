@@ -30,9 +30,49 @@ use crate::thread::ThreadId;
 use crate::value::{FnId, StrId, Value};
 use crate::vm::{Core, MIN_STACK};
 
+/// What a host lends to the Lua calls it makes: borrowed host data that
+/// lives only as long as one call from Rust (a renderer for a draw call).
+/// The driver carries the loan down that call, through every Lua and
+/// host frame it runs, to each host function it reaches
+/// ([`HostedCtx::loan`], [`PlainCtx::loan`]); nothing stores it. The VM
+/// never looks inside it.
+pub trait LoanFamily: 'static {
+    /// The loan, borrowed for `'l` (typically `dyn Trait + 'l`).
+    type Loan<'l>: ?Sized + 'l;
+
+    /// The loan with its lifetime shortened to the borrow. For
+    /// `dyn Trait + 'l` the body is `loan`: the compiler does the
+    /// coercion for a trait object, but not for a generic associated type.
+    fn shorten<'a, 'l: 'a>(loan: &'a mut Self::Loan<'l>) -> &'a mut Self::Loan<'a>;
+}
+
+/// The loan family of a host that lends nothing.
+#[derive(Debug)]
+pub enum NoLoan {}
+
+impl LoanFamily for NoLoan {
+    type Loan<'l> = NoLoan;
+
+    fn shorten<'a, 'l: 'a>(loan: &'a mut NoLoan) -> &'a mut NoLoan {
+        loan
+    }
+}
+
+/// The loan a call carries, if it carries one.
+pub type Lent<'a, H> = Option<&'a mut <<H as Host>::Loans as LoanFamily>::Loan<'a>>;
+
+/// `loan`, reborrowed for a nested call.
+#[inline]
+pub(crate) fn reborrow<'b, H: Host>(loan: &'b mut Lent<'_, H>) -> Lent<'b, H> {
+    loan.as_deref_mut().map(<H::Loans as LoanFamily>::shorten)
+}
+
 /// The host side of a [`HostedVm`]: what the frame loop asks the host
 /// while it runs (through [`Dispatch`]).
 pub trait Host: 'static {
+    /// What the host lends to a call ([`NoLoan`] for none).
+    type Loans: LoanFamily;
+
     /// C++ `lua_callbacks()->interrupt` (GC steps excluded): asked at
     /// `CALL`, `CALLFB`, `RETURN`, `JUMPBACK`, `JUMPX`, `FORNLOOP`,
     /// `FORGLOOP` and every string pattern step while the core's
@@ -69,9 +109,10 @@ pub(crate) trait Dispatch {
 
 /// The driver's [`Dispatch`]: the host and its function table, split from
 /// the core by field.
-struct Hosted<'a, H> {
+struct Hosted<'a, H: Host> {
     host: &'a mut H,
     fns: &'a [HostEntry<H>],
+    loan: Lent<'a, H>,
 }
 
 impl<H: Host> Dispatch for Hosted<'_, H> {
@@ -96,6 +137,7 @@ impl<H: Host> Dispatch for Hosted<'_, H> {
             core,
             host: self.host,
             fns: self.fns,
+            loan: reborrow::<H>(&mut self.loan),
             args,
             data,
         });
@@ -122,19 +164,26 @@ pub type HostPlainPtr<H> = fn(&mut PlainCtx<'_, H>) -> Result<usize, HostError>;
 
 /// A plain host function's view of its call: the core (it derefs to
 /// [`Core`]), the host's state, its arguments and its data.
-pub struct PlainCtx<'a, H> {
+pub struct PlainCtx<'a, H: Host> {
     core: &'a mut Core,
     host: &'a mut H,
     fns: &'a [HostEntry<H>],
+    loan: Lent<'a, H>,
     args: Args,
     data: u32,
 }
 
-impl<H> PlainCtx<'_, H> {
+impl<H: Host> PlainCtx<'_, H> {
     /// The host's state.
     #[inline]
     pub fn host(&mut self) -> &mut H {
         self.host
+    }
+
+    /// The loan the call that reached this function carries.
+    #[inline]
+    pub fn loan(&mut self) -> Option<&mut <H::Loans as LoanFamily>::Loan<'_>> {
+        reborrow::<H>(&mut self.loan)
     }
 
     /// The function's frame: its arguments, then what it pushes.
@@ -181,7 +230,7 @@ impl<H> PlainCtx<'_, H> {
 
 }
 
-impl<H> std::ops::Deref for PlainCtx<'_, H> {
+impl<H: Host> std::ops::Deref for PlainCtx<'_, H> {
     type Target = Core;
     #[inline]
     fn deref(&self) -> &Core {
@@ -189,7 +238,7 @@ impl<H> std::ops::Deref for PlainCtx<'_, H> {
     }
 }
 
-impl<H> std::ops::DerefMut for PlainCtx<'_, H> {
+impl<H: Host> std::ops::DerefMut for PlainCtx<'_, H> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Core {
         self.core
@@ -202,7 +251,7 @@ impl<H> std::ops::DerefMut for PlainCtx<'_, H> {
 pub type HostContPtr<H> = fn(&mut HostedCtx<'_, H>, CallStatus) -> Result<usize, HostError>;
 
 /// One entry of a host function table.
-pub enum HostEntry<H> {
+pub enum HostEntry<H: Host> {
     /// A full function. `k` is the continuation entry its requested calls
     /// and yields resume in, if it has one.
     Full {
@@ -216,13 +265,13 @@ pub enum HostEntry<H> {
 }
 
 /// The VM core with a host.
-pub struct HostedVm<H> {
+pub struct HostedVm<H: Host> {
     pub(crate) core: Core,
     pub(crate) host: H,
     fns: Vec<HostEntry<H>>,
 }
 
-impl<H> std::ops::Deref for HostedVm<H> {
+impl<H: Host> std::ops::Deref for HostedVm<H> {
     type Target = Core;
     #[inline]
     fn deref(&self) -> &Core {
@@ -230,7 +279,7 @@ impl<H> std::ops::Deref for HostedVm<H> {
     }
 }
 
-impl<H> std::ops::DerefMut for HostedVm<H> {
+impl<H: Host> std::ops::DerefMut for HostedVm<H> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Core {
         &mut self.core
@@ -309,6 +358,25 @@ impl<H: Host> HostedVm<H> {
         &mut self,
         op: impl FnOnce(&mut HostedCtx<'_, H>) -> Result<R, HostError>,
     ) -> Result<R, Error> {
+        self.enter_with(None, op)
+    }
+
+    /// [`HostedVm::enter`] with `loan` lent to every call `op` makes: host
+    /// functions those calls reach see it ([`HostedCtx::loan`]).
+    pub fn enter_lent<R>(
+        &mut self,
+        loan: &mut <H::Loans as LoanFamily>::Loan<'_>,
+        op: impl FnOnce(&mut HostedCtx<'_, H>) -> Result<R, HostError>,
+    ) -> Result<R, Error> {
+        self.enter_with(Some(<H::Loans as LoanFamily>::shorten(loan)), op)
+    }
+
+    pub(crate) fn enter_with<R>(
+        &mut self,
+        loan: Lent<'_, H>,
+        op: impl FnOnce(&mut HostedCtx<'_, H>) -> Result<R, HostError>,
+    ) -> Result<R, Error> {
+        let mut loan = loan;
         self.check_entry()?;
         let top = self.core.exec.top;
         let base = self.core.scratch();
@@ -320,6 +388,7 @@ impl<H: Host> HostedVm<H> {
         let pending = self.core.host_errors.len();
         let result = op(&mut HostedCtx {
             vm: self,
+            loan: reborrow::<H>(&mut loan),
             args: Args { base, nargs: 0 },
             cont: None,
             data: 0,
@@ -411,13 +480,14 @@ impl<H: Host> HostedVm<H> {
     /// Errors are caught by `pcall`/`xpcall` frames at or above that frame;
     /// an error no frame catches is returned with the frames left in place
     /// for the caller to unwind.
-    pub(crate) fn execute(&mut self) -> VmResult<Exit> {
+    pub(crate) fn execute(&mut self, loan: Lent<'_, H>) -> VmResult<Exit> {
         let depth = self.core.frames_observed().len();
-        self.execute_from(depth.saturating_sub(1))
+        self.execute_from(depth.saturating_sub(1), loan)
     }
 
     /// `execute` catching errors in the frames from `floor` up.
-    pub(crate) fn execute_from(&mut self, floor: usize) -> VmResult<Exit> {
+    pub(crate) fn execute_from(&mut self, floor: usize, loan: Lent<'_, H>) -> VmResult<Exit> {
+        let mut loan = loan;
         let entry = self.core.current;
         let mut host_call = None;
         loop {
@@ -426,10 +496,11 @@ impl<H: Host> HostedVm<H> {
                 None => self.core.run_frames(&mut Hosted {
                     host: &mut self.host,
                     fns: &self.fns,
+                    loan: reborrow::<H>(&mut loan),
                 }),
             };
             let throw = match next {
-                Ok(Exit::Host(call)) => match self.run_host_call(call) {
+                Ok(Exit::Host(call)) => match self.run_host_call(call, reborrow::<H>(&mut loan)) {
                     Ok(Flow::Exit(Exit::Host(call))) => {
                         host_call = Some(call);
                         continue;
@@ -441,26 +512,27 @@ impl<H: Host> HostedVm<H> {
                 Ok(exit) => return Ok(exit),
                 Err(throw) => throw,
             };
-            self.catch(throw, entry, floor)?;
+            self.catch(throw, entry, floor, reborrow::<H>(&mut loan))?;
         }
     }
 
     /// Runs the host entry the core left its loop for, then finishes the
     /// native frame.
-    fn run_host_call(&mut self, call: HostCall) -> VmResult<Flow> {
+    fn run_host_call(&mut self, call: HostCall, loan: Lent<'_, H>) -> VmResult<Flow> {
         let args = match call {
             HostCall::Call { args, .. } | HostCall::Cont { args, .. } => args,
         };
         let pending = self.core.host_errors.len();
         self.core.host_depth = self.core.host_depth.saturating_add(1);
-        let result = self.invoke_host(call);
+        let result = self.invoke_host(call, loan);
         self.core.host_depth = self.core.host_depth.saturating_sub(1);
         let result = result.map_err(|e| self.core.raise_host_error(e));
         self.core.host_errors.truncate(pending);
         self.core.finish_native(args, result)
     }
 
-    fn invoke_host(&mut self, call: HostCall) -> Result<usize, HostError> {
+    fn invoke_host(&mut self, call: HostCall, loan: Lent<'_, H>) -> Result<usize, HostError> {
+        let mut loan = loan;
         match call {
             HostCall::Call { id, data, args } => {
                 let Some(&HostEntry::Full { f, k }) = self.fns.get(id.index()) else {
@@ -468,6 +540,7 @@ impl<H: Host> HostedVm<H> {
                 };
                 let mut ctx = HostedCtx {
                     vm: self,
+                    loan: reborrow::<H>(&mut loan),
                     args,
                     cont: k,
                     data,
@@ -485,6 +558,7 @@ impl<H: Host> HostedVm<H> {
                 };
                 let mut ctx = HostedCtx {
                     vm: self,
+                    loan: reborrow::<H>(&mut loan),
                     args,
                     cont: Some(k),
                     data,
@@ -496,12 +570,18 @@ impl<H: Host> HostedVm<H> {
 
     /// Delivers an error to the nearest catching frame (`Core::find_catcher`),
     /// running an `xpcall` handler first.
-    fn catch(&mut self, throw: Throw, entry: ThreadId, floor: usize) -> VmResult<()> {
+    fn catch(
+        &mut self,
+        throw: Throw,
+        entry: ThreadId,
+        floor: usize,
+        loan: Lent<'_, H>,
+    ) -> VmResult<()> {
         let Some(mut catcher) = self.core.find_catcher(throw, entry, floor)? else {
             return Ok(());
         };
         if let Some(slot) = catcher.catch.handler {
-            catcher.throw = self.run_error_handler(slot, catcher.throw);
+            catcher.throw = self.run_error_handler(slot, catcher.throw, loan);
         }
         self.core.finish_catch(catcher);
         Ok(())
@@ -510,7 +590,7 @@ impl<H: Host> HostedVm<H> {
     /// C++ `luaD_pcall`'s error-function call: runs the handler at `slot`
     /// on the stack as it was when the error was raised, with the error's
     /// C-call count, and maps its failure as C++ does.
-    fn run_error_handler(&mut self, slot: usize, throw: Throw) -> Throw {
+    fn run_error_handler(&mut self, slot: usize, throw: Throw, loan: Lent<'_, H>) -> Throw {
         let at = self.core.scratch();
         let result = (|| {
             self.core
@@ -519,7 +599,7 @@ impl<H: Host> HostedVm<H> {
             self.core.set(at, handler);
             self.core.set(at.saturating_add(1), throw.value);
             self.core.exec.top = at.saturating_add(2);
-            self.call_value(at, 1, 1)
+            self.call_value(at, 1, 1, loan)
         })();
         match result {
             Ok(()) => Throw {
@@ -537,22 +617,34 @@ impl<H: Host> HostedVm<H> {
     /// `func ..`: exactly `nresults` of them, or all of them with `top`
     /// after the last when `nresults` is `MULTRET`. Each nesting holds one
     /// `execute` on the Rust stack, bounded by `Limits::max_reentry`.
-    pub(crate) fn call_value(&mut self, func: usize, nargs: usize, nresults: i32) -> VmResult<()> {
+    pub(crate) fn call_value(
+        &mut self,
+        func: usize,
+        nargs: usize,
+        nresults: i32,
+        loan: Lent<'_, H>,
+    ) -> VmResult<()> {
         if self.core.reentry >= self.core.limits.max_reentry {
             return Err(self.core.runtime_error("C stack overflow"));
         }
         self.core.reentry = self.core.reentry.saturating_add(1);
         let saved_pc = self.core.exec.pc;
-        let result = self.call_value_inner(func, nargs, nresults);
+        let result = self.call_value_inner(func, nargs, nresults, loan);
         self.core.reentry = self.core.reentry.saturating_sub(1);
         self.core.exec.pc = saved_pc;
         result
     }
 
-    fn call_value_inner(&mut self, func: usize, nargs: usize, nresults: i32) -> VmResult<()> {
+    fn call_value_inner(
+        &mut self,
+        func: usize,
+        nargs: usize,
+        nresults: i32,
+        loan: Lent<'_, H>,
+    ) -> VmResult<()> {
         self.core.push_call(func, nargs, nresults, CallMode::Counted)?;
         self.core.mark_boundary();
-        match self.execute()? {
+        match self.execute(loan)? {
             Exit::Returned => Ok(()),
             _ => Err(self
                 .core
@@ -567,6 +659,7 @@ impl<H: Host> HostedVm<H> {
         f: Value,
         args: &[Value],
         nresults: i32,
+        loan: Lent<'_, H>,
     ) -> VmResult<Value> {
         let saved_top = self.core.exec.top;
         let at = self.core.scratch();
@@ -580,7 +673,7 @@ impl<H: Host> HostedVm<H> {
             self.core.set(at.saturating_add(1).saturating_add(i), v);
         }
         self.core.exec.top = at.saturating_add(1).saturating_add(args.len());
-        self.call_value(at, args.len(), nresults)?;
+        self.call_value(at, args.len(), nresults, loan)?;
         let result = if nresults > 0 {
             self.core.get(at)
         } else {
@@ -592,21 +685,21 @@ impl<H: Host> HostedVm<H> {
 
     /// Finishes a metamethod step from Rust: makes its call (`call_value`)
     /// and applies its `Post`.
-    pub(crate) fn meta_now(&mut self, meta: Meta) -> VmResult<Value> {
+    pub(crate) fn meta_now(&mut self, meta: Meta, loan: Lent<'_, H>) -> VmResult<Value> {
         match meta {
             Meta::Done(v) => Ok(v),
             Meta::Call(call) => {
                 let args = call.args.get(..call.nargs).unwrap_or_default();
-                let v = self.call_function(call.f, args, call.nresults)?;
+                let v = self.call_function(call.f, args, call.nresults, loan)?;
                 self.core.apply_post(call.post, v)
             }
         }
     }
 
     /// C++ `luaL_tolstring`: `__tostring`, else the default rendering.
-    pub(crate) fn tostring_value(&mut self, value: Value) -> VmResult<StrId> {
+    pub(crate) fn tostring_value(&mut self, value: Value, loan: Lent<'_, H>) -> VmResult<StrId> {
         let step = self.core.tostring_step(value)?;
-        match self.meta_now(step)? {
+        match self.meta_now(step, loan)? {
             Value::String(id) => Ok(id),
             _ => Err(self.core.lib_error("'__tostring' must return a string")),
         }
@@ -616,7 +709,7 @@ impl<H: Host> HostedVm<H> {
 /// The native for host entry `id` with `data`: frameless when the entry is
 /// plain. A continuation entry, one the host did not add, or one of
 /// another VM (`vm` is this VM's id) is refused.
-fn native_for<H>(fns: &[HostEntry<H>], vm: u32, id: HostFnId, data: u32) -> Result<NativeFn, Error> {
+fn native_for<H: Host>(fns: &[HostEntry<H>], vm: u32, id: HostFnId, data: u32) -> Result<NativeFn, Error> {
     if id.vm() != vm {
         return Err(Error::Host("a host function entry of another VM".to_owned()));
     }
@@ -650,6 +743,20 @@ impl<H: Host> HostedCtx<'_, H> {
     #[inline]
     pub fn host(&mut self) -> &mut H {
         &mut self.vm.host
+    }
+
+    /// The loan the call that reached this function carries
+    /// ([`HostedVm::enter_lent`]), if any.
+    #[inline]
+    pub fn loan(&mut self) -> Option<&mut <H::Loans as LoanFamily>::Loan<'_>> {
+        reborrow::<H>(&mut self.loan)
+    }
+
+    /// The VM and the loan at once: a host function that lends the VM
+    /// elsewhere while it runs keeps the loan for what it calls.
+    #[inline]
+    pub fn vm_and_loan(&mut self) -> (&mut HostedVm<H>, Lent<'_, H>) {
+        (&mut *self.vm, reborrow::<H>(&mut self.loan))
     }
 
     /// The function's host data.
@@ -697,8 +804,9 @@ impl<H: Host> HostedCtx<'_, H> {
     /// `nresults < 0`). An error propagates as the host function's.
     pub fn call_top(&mut self, nargs: usize, nresults: i32) -> Result<(), HostError> {
         let func = self.callee(nargs)?;
+        let loan = reborrow::<H>(&mut self.loan);
         self.vm
-            .call_value(func, nargs, nresults)
+            .call_value(func, nargs, nresults, loan)
             .map_err(|t| self.vm.core.host_throw(t))
     }
 
@@ -709,7 +817,8 @@ impl<H: Host> HostedCtx<'_, H> {
         let func = self.callee(nargs)?;
         let core = &mut self.vm.core;
         let (depth, saved) = (core.frames_observed().len(), core.saved_calls());
-        match self.vm.call_value(func, nargs, nresults) {
+        let loan = reborrow::<H>(&mut self.loan);
+        match self.vm.call_value(func, nargs, nresults, loan) {
             Ok(()) => Ok(CallStatus::Ok),
             Err(throw) => {
                 let core = &mut self.vm.core;
@@ -728,9 +837,10 @@ impl<H: Host> HostedCtx<'_, H> {
     /// does (`__tostring` honored).
     pub fn push_tostring(&mut self, i: isize) -> Result<(), HostError> {
         let v = self.stack().slot(i).map_or(Value::Nil, |s| self.vm.core.get(s));
+        let loan = reborrow::<H>(&mut self.loan);
         let s = self
             .vm
-            .tostring_value(v)
+            .tostring_value(v, loan)
             .map_err(|t| self.vm.core.host_throw(t))?;
         self.stack().push(Value::String(s))
     }
@@ -739,10 +849,11 @@ impl<H: Host> HostedCtx<'_, H> {
     /// `__index` honored.
     pub fn push_field(&mut self, i: isize, name: &[u8]) -> Result<(), HostError> {
         let object = self.stack().slot(i).map_or(Value::Nil, |s| self.vm.core.get(s));
+        let loan = reborrow::<H>(&mut self.loan);
         let got = (|| {
             let key = Value::String(self.vm.core.heap.intern(name)?);
             let step = self.vm.core.get_table_step(object, key)?;
-            self.vm.meta_now(step)
+            self.vm.meta_now(step, loan)
         })();
         let v = got.map_err(|t| self.vm.core.host_throw(t))?;
         self.stack().push(v)

@@ -76,6 +76,8 @@ struct AudioHost {
 }
 
 impl nuxie_luau_vm::Host for AudioHost {
+    type Loans = nuxie_luau_vm::NoLoan;
+
     fn interrupt(&mut self) -> Result<(), HostError> {
         if self.initializing && self.shared.cancelled.load(Ordering::Acquire) {
             return Err(rooted_error(self.stop_error, STOPPED_TEXT));

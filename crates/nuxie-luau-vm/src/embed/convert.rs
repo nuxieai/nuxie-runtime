@@ -19,29 +19,30 @@ use super::handle::{
 };
 use super::run::HostValue;
 use super::compat::Vm;
+use crate::hosted::LoanFamily;
 
 /// A Rust value that becomes one Lua value.
 pub trait IntoLua {
-    fn into_lua(self, vm: &mut Vm) -> Result<Value, Error>;
+    fn into_lua<L: LoanFamily>(self, vm: &mut Vm<L>) -> Result<Value, Error>;
 }
 
 /// A Rust value made from one Lua value.
 pub trait FromLua: Sized {
-    fn from_lua(value: Value, vm: &mut Vm) -> Result<Self, Error>;
+    fn from_lua<L: LoanFamily>(value: Value, vm: &mut Vm<L>) -> Result<Self, Error>;
 }
 
 /// A Rust value that becomes a list of Lua values (arguments or results).
 pub trait IntoLuaMulti {
-    fn into_lua_multi(self, vm: &mut Vm) -> Result<MultiValue, Error>;
+    fn into_lua_multi<L: LoanFamily>(self, vm: &mut Vm<L>) -> Result<MultiValue, Error>;
 }
 
 /// A Rust value made from a list of Lua values. A conversion error names
 /// the 1-based position it failed at (`Error::Conversion::position`).
 pub trait FromLuaMulti: Sized {
-    fn from_lua_multi(values: MultiValue, vm: &mut Vm) -> Result<Self, Error>;
+    fn from_lua_multi<L: LoanFamily>(values: MultiValue, vm: &mut Vm<L>) -> Result<Self, Error>;
 }
 
-pub(crate) fn conversion(value: &Value, vm: &Vm, to: &'static str) -> Error {
+pub(crate) fn conversion<L: LoanFamily>(value: &Value, vm: &Vm<L>, to: &'static str) -> Error {
     Error::Conversion {
         from: vm.value_type_name(value),
         to,
@@ -52,57 +53,57 @@ pub(crate) fn conversion(value: &Value, vm: &Vm, to: &'static str) -> Error {
 // ---- one value ----------------------------------------------------------
 
 impl IntoLua for Value {
-    fn into_lua(self, _: &mut Vm) -> Result<Value, Error> {
+    fn into_lua<L: LoanFamily>(self, _: &mut Vm<L>) -> Result<Value, Error> {
         Ok(self)
     }
 }
 
 impl FromLua for Value {
-    fn from_lua(value: Value, _: &mut Vm) -> Result<Value, Error> {
+    fn from_lua<L: LoanFamily>(value: Value, _: &mut Vm<L>) -> Result<Value, Error> {
         Ok(value)
     }
 }
 
 impl IntoLua for &Value {
-    fn into_lua(self, _: &mut Vm) -> Result<Value, Error> {
+    fn into_lua<L: LoanFamily>(self, _: &mut Vm<L>) -> Result<Value, Error> {
         Ok(self.clone())
     }
 }
 
 impl IntoLua for bool {
-    fn into_lua(self, _: &mut Vm) -> Result<Value, Error> {
+    fn into_lua<L: LoanFamily>(self, _: &mut Vm<L>) -> Result<Value, Error> {
         Ok(Value::Boolean(self))
     }
 }
 
 /// `lua_toboolean`: everything but nil and false is true.
 impl FromLua for bool {
-    fn from_lua(value: Value, _: &mut Vm) -> Result<bool, Error> {
+    fn from_lua<L: LoanFamily>(value: Value, _: &mut Vm<L>) -> Result<bool, Error> {
         Ok(!matches!(value, Value::Nil | Value::Boolean(false)))
     }
 }
 
 impl IntoLua for f64 {
-    fn into_lua(self, _: &mut Vm) -> Result<Value, Error> {
+    fn into_lua<L: LoanFamily>(self, _: &mut Vm<L>) -> Result<Value, Error> {
         Ok(Value::Number(self))
     }
 }
 
 impl IntoLua for f32 {
-    fn into_lua(self, _: &mut Vm) -> Result<Value, Error> {
+    fn into_lua<L: LoanFamily>(self, _: &mut Vm<L>) -> Result<Value, Error> {
         Ok(Value::Number(f64::from(self)))
     }
 }
 
 impl FromLua for f64 {
-    fn from_lua(value: Value, vm: &mut Vm) -> Result<f64, Error> {
+    fn from_lua<L: LoanFamily>(value: Value, vm: &mut Vm<L>) -> Result<f64, Error> {
         vm.coerce_number(&value)?
             .ok_or_else(|| conversion(&value, vm, "number"))
     }
 }
 
 impl FromLua for f32 {
-    fn from_lua(value: Value, vm: &mut Vm) -> Result<f32, Error> {
+    fn from_lua<L: LoanFamily>(value: Value, vm: &mut Vm<L>) -> Result<f32, Error> {
         f64::from_lua(value, vm).map(|n| n as f32)
     }
 }
@@ -110,7 +111,7 @@ impl FromLua for f32 {
 macro_rules! integer {
     ($($t:ty),*) => {$(
         impl IntoLua for $t {
-            fn into_lua(self, _: &mut Vm) -> Result<Value, Error> {
+            fn into_lua<L: LoanFamily>(self, _: &mut Vm<L>) -> Result<Value, Error> {
                 Ok(Value::Number(self as f64))
             }
         }
@@ -119,7 +120,7 @@ macro_rules! integer {
         /// zero (`luaL_checkinteger`'s cast). Out of range or not finite is
         /// a conversion error.
         impl FromLua for $t {
-            fn from_lua(value: Value, vm: &mut Vm) -> Result<$t, Error> {
+            fn from_lua<L: LoanFamily>(value: Value, vm: &mut Vm<L>) -> Result<$t, Error> {
                 if let Value::Integer(i) = value {
                     return <$t>::try_from(i).map_err(|_| conversion(&value, vm, stringify!($t)));
                 }
@@ -145,19 +146,19 @@ macro_rules! integer {
 integer!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize);
 
 impl IntoLua for &str {
-    fn into_lua(self, vm: &mut Vm) -> Result<Value, Error> {
+    fn into_lua<L: LoanFamily>(self, vm: &mut Vm<L>) -> Result<Value, Error> {
         vm.create_string(self).map(Value::String)
     }
 }
 
 impl IntoLua for String {
-    fn into_lua(self, vm: &mut Vm) -> Result<Value, Error> {
+    fn into_lua<L: LoanFamily>(self, vm: &mut Vm<L>) -> Result<Value, Error> {
         vm.create_string(self).map(Value::String)
     }
 }
 
 impl IntoLua for &[u8] {
-    fn into_lua(self, vm: &mut Vm) -> Result<Value, Error> {
+    fn into_lua<L: LoanFamily>(self, vm: &mut Vm<L>) -> Result<Value, Error> {
         vm.create_string(self).map(Value::String)
     }
 }
@@ -165,7 +166,7 @@ impl IntoLua for &[u8] {
 /// `lua_tolstring`: a string, or a number rendered with `%.14g`; must be
 /// UTF-8.
 impl FromLua for String {
-    fn from_lua(value: Value, vm: &mut Vm) -> Result<String, Error> {
+    fn from_lua<L: LoanFamily>(value: Value, vm: &mut Vm<L>) -> Result<String, Error> {
         let Some(s) = vm.coerce_string(&value)? else {
             return Err(conversion(&value, vm, "string"));
         };
@@ -175,13 +176,13 @@ impl FromLua for String {
 
 /// A vector (`LUA_VECTOR_SIZE` 3).
 impl IntoLua for [f32; 3] {
-    fn into_lua(self, _: &mut Vm) -> Result<Value, Error> {
+    fn into_lua<L: LoanFamily>(self, _: &mut Vm<L>) -> Result<Value, Error> {
         Ok(Value::Vector(self))
     }
 }
 
 impl FromLua for [f32; 3] {
-    fn from_lua(value: Value, vm: &mut Vm) -> Result<[f32; 3], Error> {
+    fn from_lua<L: LoanFamily>(value: Value, vm: &mut Vm<L>) -> Result<[f32; 3], Error> {
         match value {
             Value::Vector(v) => Ok(v),
             other => Err(conversion(&other, vm, "vector")),
@@ -190,13 +191,13 @@ impl FromLua for [f32; 3] {
 }
 
 impl IntoLua for LightUserData {
-    fn into_lua(self, _: &mut Vm) -> Result<Value, Error> {
+    fn into_lua<L: LoanFamily>(self, _: &mut Vm<L>) -> Result<Value, Error> {
         Ok(Value::LightUserData(self))
     }
 }
 
 impl FromLua for LightUserData {
-    fn from_lua(value: Value, vm: &mut Vm) -> Result<LightUserData, Error> {
+    fn from_lua<L: LoanFamily>(value: Value, vm: &mut Vm<L>) -> Result<LightUserData, Error> {
         match value {
             Value::LightUserData(l) => Ok(l),
             other => Err(conversion(&other, vm, "userdata")),
@@ -207,19 +208,19 @@ impl FromLua for LightUserData {
 macro_rules! handle_conversions {
     ($($t:ident => $variant:ident),*) => {$(
         impl IntoLua for $t {
-            fn into_lua(self, _: &mut Vm) -> Result<Value, Error> {
+            fn into_lua<L: LoanFamily>(self, _: &mut Vm<L>) -> Result<Value, Error> {
                 Ok(Value::$variant(self))
             }
         }
 
         impl IntoLua for &$t {
-            fn into_lua(self, _: &mut Vm) -> Result<Value, Error> {
+            fn into_lua<L: LoanFamily>(self, _: &mut Vm<L>) -> Result<Value, Error> {
                 Ok(Value::$variant(self.clone()))
             }
         }
 
         impl FromLua for $t {
-            fn from_lua(value: Value, vm: &mut Vm) -> Result<$t, Error> {
+            fn from_lua<L: LoanFamily>(value: Value, vm: &mut Vm<L>) -> Result<$t, Error> {
                 match value {
                     Value::$variant(h) => Ok(h),
                     other => Err(conversion(&other, vm, $t::TYPE_NAME)),
@@ -238,27 +239,27 @@ handle_conversions!(
 );
 
 impl IntoLua for LuaString {
-    fn into_lua(self, _: &mut Vm) -> Result<Value, Error> {
+    fn into_lua<L: LoanFamily>(self, _: &mut Vm<L>) -> Result<Value, Error> {
         Ok(Value::String(self))
     }
 }
 
 impl IntoLua for &LuaString {
-    fn into_lua(self, _: &mut Vm) -> Result<Value, Error> {
+    fn into_lua<L: LoanFamily>(self, _: &mut Vm<L>) -> Result<Value, Error> {
         Ok(Value::String(self.clone()))
     }
 }
 
 /// A string, or a number converted (`lua_tolstring`).
 impl FromLua for LuaString {
-    fn from_lua(value: Value, vm: &mut Vm) -> Result<LuaString, Error> {
+    fn from_lua<L: LoanFamily>(value: Value, vm: &mut Vm<L>) -> Result<LuaString, Error> {
         vm.coerce_string(&value)?
             .ok_or_else(|| conversion(&value, vm, "string"))
     }
 }
 
 impl<T: IntoLua> IntoLua for Option<T> {
-    fn into_lua(self, vm: &mut Vm) -> Result<Value, Error> {
+    fn into_lua<L: LoanFamily>(self, vm: &mut Vm<L>) -> Result<Value, Error> {
         match self {
             Some(v) => v.into_lua(vm),
             None => Ok(Value::Nil),
@@ -268,7 +269,7 @@ impl<T: IntoLua> IntoLua for Option<T> {
 
 /// `nil` is `None`; anything else converts.
 impl<T: FromLua> FromLua for Option<T> {
-    fn from_lua(value: Value, vm: &mut Vm) -> Result<Option<T>, Error> {
+    fn from_lua<L: LoanFamily>(value: Value, vm: &mut Vm<L>) -> Result<Option<T>, Error> {
         match value {
             Value::Nil => Ok(None),
             other => T::from_lua(other, vm).map(Some),
@@ -278,7 +279,7 @@ impl<T: FromLua> FromLua for Option<T> {
 
 /// A sequence table.
 impl<T: IntoLua> IntoLua for Vec<T> {
-    fn into_lua(self, vm: &mut Vm) -> Result<Value, Error> {
+    fn into_lua<L: LoanFamily>(self, vm: &mut Vm<L>) -> Result<Value, Error> {
         let table = vm.create_table_with_capacity(self.len(), 0)?;
         for (i, v) in self.into_iter().enumerate() {
             let v = v.into_lua(vm)?;
@@ -290,7 +291,7 @@ impl<T: IntoLua> IntoLua for Vec<T> {
 
 /// A table's sequence part, `t[1]` up to the first nil (raw reads).
 impl<T: FromLua> FromLua for Vec<T> {
-    fn from_lua(value: Value, vm: &mut Vm) -> Result<Vec<T>, Error> {
+    fn from_lua<L: LoanFamily>(value: Value, vm: &mut Vm<L>) -> Result<Vec<T>, Error> {
         match value {
             Value::Table(t) => t.sequence_values(vm),
             other => Err(conversion(&other, vm, "table")),
@@ -300,7 +301,7 @@ impl<T: FromLua> FromLua for Vec<T> {
 
 /// The plain-data value of the pre-lane-6 host API.
 impl IntoLua for HostValue {
-    fn into_lua(self, vm: &mut Vm) -> Result<Value, Error> {
+    fn into_lua<L: LoanFamily>(self, vm: &mut Vm<L>) -> Result<Value, Error> {
         Ok(match self {
             HostValue::Nil | HostValue::Object(_) => Value::Nil,
             HostValue::Boolean(b) => Value::Boolean(b),
@@ -314,19 +315,19 @@ impl IntoLua for HostValue {
 // ---- lists --------------------------------------------------------------
 
 impl IntoLuaMulti for MultiValue {
-    fn into_lua_multi(self, _: &mut Vm) -> Result<MultiValue, Error> {
+    fn into_lua_multi<L: LoanFamily>(self, _: &mut Vm<L>) -> Result<MultiValue, Error> {
         Ok(self)
     }
 }
 
 impl FromLuaMulti for MultiValue {
-    fn from_lua_multi(values: MultiValue, _: &mut Vm) -> Result<MultiValue, Error> {
+    fn from_lua_multi<L: LoanFamily>(values: MultiValue, _: &mut Vm<L>) -> Result<MultiValue, Error> {
         Ok(values)
     }
 }
 
 impl<T: IntoLua> IntoLuaMulti for T {
-    fn into_lua_multi(self, vm: &mut Vm) -> Result<MultiValue, Error> {
+    fn into_lua_multi<L: LoanFamily>(self, vm: &mut Vm<L>) -> Result<MultiValue, Error> {
         Ok(MultiValue(vec![self.into_lua(vm)?]))
     }
 }
@@ -334,20 +335,20 @@ impl<T: IntoLua> IntoLuaMulti for T {
 /// The first value (nil when there is none); the rest are ignored, as Lua
 /// adjusts a call's results to one.
 impl<T: FromLua> FromLuaMulti for T {
-    fn from_lua_multi(values: MultiValue, vm: &mut Vm) -> Result<T, Error> {
+    fn from_lua_multi<L: LoanFamily>(values: MultiValue, vm: &mut Vm<L>) -> Result<T, Error> {
         let first = values.0.into_iter().next().unwrap_or_default();
         T::from_lua(first, vm).map_err(|e| e.at_position(1))
     }
 }
 
 impl FromLuaMulti for () {
-    fn from_lua_multi(_: MultiValue, _: &mut Vm) -> Result<(), Error> {
+    fn from_lua_multi<L: LoanFamily>(_: MultiValue, _: &mut Vm<L>) -> Result<(), Error> {
         Ok(())
     }
 }
 
 impl IntoLuaMulti for () {
-    fn into_lua_multi(self, _: &mut Vm) -> Result<MultiValue, Error> {
+    fn into_lua_multi<L: LoanFamily>(self, _: &mut Vm<L>) -> Result<MultiValue, Error> {
         Ok(MultiValue::new())
     }
 }
@@ -355,13 +356,13 @@ impl IntoLuaMulti for () {
 macro_rules! tuple {
     ($($name:ident $index:tt),+) => {
         impl<$($name: IntoLua),+> IntoLuaMulti for ($($name,)+) {
-            fn into_lua_multi(self, vm: &mut Vm) -> Result<MultiValue, Error> {
+            fn into_lua_multi<L: LoanFamily>(self, vm: &mut Vm<L>) -> Result<MultiValue, Error> {
                 Ok(MultiValue(vec![$(self.$index.into_lua(vm)?),+]))
             }
         }
 
         impl<$($name: FromLua),+> FromLuaMulti for ($($name,)+) {
-            fn from_lua_multi(values: MultiValue, vm: &mut Vm) -> Result<Self, Error> {
+            fn from_lua_multi<L: LoanFamily>(values: MultiValue, vm: &mut Vm<L>) -> Result<Self, Error> {
                 let mut values = values.0.into_iter();
                 Ok(($(
                     $name::from_lua(values.next().unwrap_or_default(), vm)

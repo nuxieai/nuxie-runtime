@@ -42,7 +42,7 @@ pub use run::{HostValue, RunState};
 
 /// A host function's view of its call under the lane-6 API: the core's
 /// [`HostedCtx`] with this layer's host.
-pub type HostCtx<'a> = HostedCtx<'a, compat::Compat>;
+pub type HostCtx<'a, L = NoLoan> = HostedCtx<'a, compat::Compat<L>>;
 
 impl HostError {
     /// An error whose value is `value` (any Lua value, as `error(v, 0)`).
@@ -84,6 +84,8 @@ use crate::error::{Error, ErrorKind, Throw, VmResult};
 use handle::Handle;
 use crate::heap::Function as HeapFunction;
 use crate::host::{CallStatus, HostError, HostErrorKind, HostedCtx};
+use crate::hosted::{Lent, LoanFamily, NoLoan};
+use compat::Compat;
 use crate::native::Args;
 use crate::thread::{CoStatus, ThreadStatus};
 use crate::userdata::UTAG_LIMIT;
@@ -137,7 +139,7 @@ pub type DirectField<'a, T> = (&'a str, fn(&T) -> f64);
 
 // ---- raw <-> handle -------------------------------------------------------
 
-impl Vm {
+impl<L: LoanFamily> Vm<L> {
     /// The raw value of a handle value; an error for another VM's handle.
     pub(crate) fn lower(&self, v: &Value) -> Result<RawValue, Error> {
         Ok(match v {
@@ -157,10 +159,10 @@ impl Vm {
     }
 }
 
-impl Vm {
+impl<L: LoanFamily> Vm<L> {
     /// The handle form of a raw value (objects get a rooted handle).
     pub(crate) fn wrap(&mut self, v: RawValue) -> Result<Value, Error> {
-        let object = |vm: &mut Vm, v| vm.new_handle(v);
+        let object = |vm: &mut Vm<L>, v| vm.new_handle(v);
         Ok(match v {
             RawValue::Nil | RawValue::UpRef(_) => Value::Nil,
             RawValue::Boolean(b) => Value::Boolean(b),
@@ -217,7 +219,7 @@ impl Vm {
     /// frames and stack it left and is rendered.
     pub(crate) fn protect<R>(
         &mut self,
-        op: impl FnOnce(&mut Vm) -> VmResult<R>,
+        op: impl FnOnce(&mut Vm<L>) -> VmResult<R>,
     ) -> Result<R, Error> {
         self.check_entry()?;
         self.drain_freed();
@@ -249,7 +251,7 @@ impl Vm {
     /// `protect`, then the result as a handle value, then `settle`.
     fn protect_value(
         &mut self,
-        op: impl FnOnce(&mut Vm) -> VmResult<RawValue>,
+        op: impl FnOnce(&mut Vm<L>) -> VmResult<RawValue>,
     ) -> Result<Value, Error> {
         let raw = self.protect(op);
         let out = raw.and_then(|raw| self.wrap(raw));
@@ -259,7 +261,12 @@ impl Vm {
 
     /// Calls `f` with `args` and returns every result (C++ `lua_pcall`
     /// with `LUA_MULTRET`).
-    pub(crate) fn call_raw(&mut self, f: RawValue, args: &[RawValue]) -> Result<MultiValue, Error> {
+    pub(crate) fn call_raw(
+        &mut self,
+        f: RawValue,
+        args: &[RawValue],
+        loan: Lent<'_, Compat<L>>,
+    ) -> Result<MultiValue, Error> {
         let top = self.exec.top;
         let at = self.scratch();
         let called = self.protect(|vm| {
@@ -273,7 +280,7 @@ impl Vm {
                 vm.set(at.saturating_add(1).saturating_add(i), v);
             }
             vm.exec.top = at.saturating_add(1).saturating_add(args.len());
-            vm.call_value(at, args.len(), MULTRET)
+            vm.call_value(at, args.len(), MULTRET, loan)
         });
         let out = called.and_then(|()| {
             let end = self.exec.top;
@@ -355,8 +362,8 @@ impl Vm {
     fn new_native(
         &mut self,
         name: &str,
-        f: Rc<HostFn>,
-        k: Option<Rc<HostContFn>>,
+        f: Rc<HostFn<L>>,
+        k: Option<Rc<HostContFn<L>>>,
     ) -> Result<Function, Error> {
         let raw = self.protect(|vm| vm.new_host_native(name, f, k).map(RawValue::Function))?;
         let out = self.new_handle(raw).map(Function);
@@ -370,9 +377,9 @@ impl Vm {
     pub fn create_host_function(
         &mut self,
         name: &str,
-        f: impl Fn(&mut HostCtx<'_>) -> Result<usize, HostError> + 'static,
+        f: impl Fn(&mut HostCtx<'_, L>) -> Result<usize, HostError> + 'static,
     ) -> Result<Function, Error> {
-        let host: Rc<HostFn> = Rc::new(f);
+        let host: Rc<HostFn<L>> = Rc::new(f);
         self.new_native(name, host, None)
     }
 
@@ -383,11 +390,11 @@ impl Vm {
     pub fn create_host_function_k(
         &mut self,
         name: &str,
-        f: impl Fn(&mut HostCtx<'_>) -> Result<usize, HostError> + 'static,
-        k: impl Fn(&mut HostCtx<'_>, CallStatus) -> Result<usize, HostError> + 'static,
+        f: impl Fn(&mut HostCtx<'_, L>) -> Result<usize, HostError> + 'static,
+        k: impl Fn(&mut HostCtx<'_, L>, CallStatus) -> Result<usize, HostError> + 'static,
     ) -> Result<Function, Error> {
-        let host: Rc<HostFn> = Rc::new(f);
-        let cont: Rc<HostContFn> = Rc::new(k);
+        let host: Rc<HostFn<L>> = Rc::new(f);
+        let cont: Rc<HostContFn<L>> = Rc::new(k);
         self.new_native(name, host, Some(cont))
     }
 
@@ -398,7 +405,7 @@ impl Vm {
     where
         A: FromLuaMulti,
         R: IntoLuaMulti,
-        F: Fn(&mut HostCtx<'_>, A) -> Result<R, HostError> + 'static,
+        F: Fn(&mut HostCtx<'_, L>, A) -> Result<R, HostError> + 'static,
     {
         self.create_host_function(name, move |ctx| {
             let args = ctx.args_from::<A>(1)?;
@@ -586,7 +593,7 @@ impl Vm {
     /// host makes it read-only (seam item 3).
     pub fn register_userdata_type<T: 'static>(
         &mut self,
-        spec: UserDataType<T>,
+        spec: UserDataType<T, L>,
     ) -> Result<Table, Error> {
         let mt = self.create_table()?;
         let methods = self.create_table()?;
@@ -880,7 +887,7 @@ impl Vm {
     /// `tostring(value)` (`__tostring` honored).
     pub fn tostring(&mut self, value: &Value) -> Result<LuaString, Error> {
         let raw = self.lower(value)?;
-        let v = self.protect_value(|vm| vm.tostring_value(raw).map(RawValue::String))?;
+        let v = self.protect_value(|vm| vm.tostring_value(raw, None).map(RawValue::String))?;
         match v {
             Value::String(s) => Ok(s),
             other => Err(conversion(&other, self, "string")),
@@ -1037,7 +1044,7 @@ fn unknown_field_after(vm: &mut Resume<'_>, at: usize, _: Outcome) -> VmResult<u
 
 // ---- HostCtx: the stack and calls -----------------------------------------
 
-impl HostCtx<'_> {
+impl<L: LoanFamily> HostCtx<'_, L> {
     pub(crate) fn throw(&mut self, throw: Throw) -> HostError {
         self.vm.host_errors.push(throw.value);
         HostError(HostErrorKind::Throw(throw))
@@ -1432,41 +1439,41 @@ impl HostCtx<'_> {
 // ---- handle operations ------------------------------------------------------
 
 impl Table {
-    fn id(&self, vm: &Vm) -> Result<TableId, Error> {
+    fn id<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<TableId, Error> {
         vm.table_id(&self.0)
     }
 
     /// `t[key]` with metamethods (C++ `lua_gettable`).
-    pub fn get<V: FromLua>(&self, vm: &mut Vm, key: impl IntoLua) -> Result<V, Error> {
+    pub fn get<L: LoanFamily, V: FromLua>(&self, vm: &mut Vm<L>, key: impl IntoLua) -> Result<V, Error> {
         let t = self.id(vm)?;
         let (k, _key_root) = vm.lower_into(key)?;
         let v = vm.protect_value(|vm| {
             let step = vm.get_table_step(RawValue::Table(t), k)?;
-            vm.meta_now(step)
+            vm.meta_now(step, None)
         })?;
         V::from_lua(v, vm)
     }
 
     /// `t.name` (the old binding crate's patch `get_field`).
-    pub fn get_field<V: FromLua>(&self, vm: &mut Vm, name: &str) -> Result<V, Error> {
+    pub fn get_field<V: FromLua>(&self, vm: &mut Vm<impl LoanFamily>, name: &str) -> Result<V, Error> {
         self.get(vm, name)
     }
 
     /// `t[key] = value` with metamethods (C++ `lua_settable`).
-    pub fn set(&self, vm: &mut Vm, key: impl IntoLua, value: impl IntoLua) -> Result<(), Error> {
+    pub fn set<L: LoanFamily>(&self, vm: &mut Vm<L>, key: impl IntoLua, value: impl IntoLua) -> Result<(), Error> {
         let t = self.id(vm)?;
         let (k, _key_root) = vm.lower_into(key)?;
         let (v, _value_root) = vm.lower_into(value)?;
         let out = vm.protect(|vm| {
             let step = vm.set_table_step(RawValue::Table(t), k, v)?;
-            vm.meta_now(step).map(drop)
+            vm.meta_now(step, None).map(drop)
         });
         vm.settle();
         out
     }
 
     /// `rawget(t, key)`.
-    pub fn raw_get<V: FromLua>(&self, vm: &mut Vm, key: impl IntoLua) -> Result<V, Error> {
+    pub fn raw_get<L: LoanFamily, V: FromLua>(&self, vm: &mut Vm<L>, key: impl IntoLua) -> Result<V, Error> {
         let t = self.id(vm)?;
         let (k, _key_root) = vm.lower_into(key)?;
         let raw = vm.heap.table(t).get(k);
@@ -1475,7 +1482,7 @@ impl Table {
     }
 
     /// `rawset(t, key, value)`; a read-only table refuses.
-    pub fn raw_set(&self, vm: &mut Vm, key: impl IntoLua, value: impl IntoLua) -> Result<(), Error> {
+    pub fn raw_set<L: LoanFamily>(&self, vm: &mut Vm<L>, key: impl IntoLua, value: impl IntoLua) -> Result<(), Error> {
         let t = self.id(vm)?;
         let (k, _key_root) = vm.lower_into(key)?;
         let (v, _value_root) = vm.lower_into(value)?;
@@ -1490,34 +1497,34 @@ impl Table {
     }
 
     /// The border (`#t` without `__len`, C++ `lua_objlen`).
-    pub fn raw_len(&self, vm: &Vm) -> Result<usize, Error> {
+    pub fn raw_len<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<usize, Error> {
         Ok(vm.heap.table(self.id(vm)?).len())
     }
 
     /// `#t` with `__len`.
-    pub fn len(&self, vm: &mut Vm) -> Result<f64, Error> {
+    pub fn len<L: LoanFamily>(&self, vm: &mut Vm<L>) -> Result<f64, Error> {
         let t = self.id(vm)?;
         let v = vm.protect_value(|vm| {
             let step = vm.length_step(RawValue::Table(t))?;
-            vm.meta_now(step)
+            vm.meta_now(step, None)
         })?;
         f64::from_lua(v, vm)
     }
 
     /// `t[#t + 1] = value`, raw (C++ `lua_rawseti(n + 1)`).
-    pub fn raw_push(&self, vm: &mut Vm, value: impl IntoLua) -> Result<(), Error> {
+    pub fn raw_push<L: LoanFamily>(&self, vm: &mut Vm<L>, value: impl IntoLua) -> Result<(), Error> {
         let n = self.raw_len(vm)?;
         self.raw_set(vm, n.saturating_add(1) as f64, value)
     }
 
     /// Whether `t[key]` (with metamethods) is not nil.
-    pub fn contains_key(&self, vm: &mut Vm, key: impl IntoLua) -> Result<bool, Error> {
+    pub fn contains_key<L: LoanFamily>(&self, vm: &mut Vm<L>, key: impl IntoLua) -> Result<bool, Error> {
         let v: Value = self.get(vm, key)?;
         Ok(!v.is_nil())
     }
 
     /// Every entry, in `next` order (raw).
-    pub fn pairs<K: FromLua, V: FromLua>(&self, vm: &mut Vm) -> Result<Vec<(K, V)>, Error> {
+    pub fn pairs<K: FromLua, V: FromLua>(&self, vm: &mut Vm<impl LoanFamily>) -> Result<Vec<(K, V)>, Error> {
         let t = self.id(vm)?;
         let mut raw = Vec::new();
         let mut cursor = 0usize;
@@ -1540,7 +1547,7 @@ impl Table {
     }
 
     /// `t[1]`, `t[2]`, ... up to the first nil (raw).
-    pub fn sequence_values<V: FromLua>(&self, vm: &mut Vm) -> Result<Vec<V>, Error> {
+    pub fn sequence_values<V: FromLua>(&self, vm: &mut Vm<impl LoanFamily>) -> Result<Vec<V>, Error> {
         let t = self.id(vm)?;
         let mut out = Vec::new();
         for i in 1i64.. {
@@ -1555,7 +1562,7 @@ impl Table {
     }
 
     /// Removes every entry (raw).
-    pub fn clear(&self, vm: &mut Vm) -> Result<(), Error> {
+    pub fn clear<L: LoanFamily>(&self, vm: &mut Vm<L>) -> Result<(), Error> {
         let keys: Vec<(Value, Value)> = self.pairs(vm)?;
         for (k, _) in keys {
             self.raw_set(vm, k, Value::Nil)?;
@@ -1563,7 +1570,7 @@ impl Table {
         Ok(())
     }
 
-    pub fn metatable(&self, vm: &mut Vm) -> Result<Option<Table>, Error> {
+    pub fn metatable<L: LoanFamily>(&self, vm: &mut Vm<L>) -> Result<Option<Table>, Error> {
         let t = self.id(vm)?;
         match vm.heap.table(t).meta {
             Some(mt) => vm.new_handle(RawValue::Table(mt)).map(|h| Some(Table(h))),
@@ -1572,7 +1579,7 @@ impl Table {
     }
 
     /// C++ `lua_setmetatable` (no `__metatable` check, as the C API).
-    pub fn set_metatable(&self, vm: &mut Vm, mt: Option<&Table>) -> Result<(), Error> {
+    pub fn set_metatable<L: LoanFamily>(&self, vm: &mut Vm<L>, mt: Option<&Table>) -> Result<(), Error> {
         let t = self.id(vm)?;
         let mt = match mt {
             Some(m) => Some(m.id(vm)?),
@@ -1586,24 +1593,24 @@ impl Table {
     }
 
     /// C++ `lua_setreadonly`.
-    pub fn set_readonly(&self, vm: &mut Vm, readonly: bool) -> Result<(), Error> {
+    pub fn set_readonly<L: LoanFamily>(&self, vm: &mut Vm<L>, readonly: bool) -> Result<(), Error> {
         let t = self.id(vm)?;
         vm.heap.table_mut(t).readonly = readonly;
         Ok(())
     }
 
-    pub fn is_readonly(&self, vm: &Vm) -> Result<bool, Error> {
+    pub fn is_readonly<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<bool, Error> {
         Ok(vm.heap.table(self.id(vm)?).readonly)
     }
 
     /// C++ `lua_setsafeenv`.
-    pub fn set_safeenv(&self, vm: &mut Vm, safe: bool) -> Result<(), Error> {
+    pub fn set_safeenv<L: LoanFamily>(&self, vm: &mut Vm<L>, safe: bool) -> Result<(), Error> {
         let t = self.id(vm)?;
         vm.heap.table_mut(t).safeenv = safe;
         Ok(())
     }
 
-    pub fn to_pointer(&self, vm: &Vm) -> Result<u64, Error> {
+    pub fn to_pointer<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<u64, Error> {
         vm.to_pointer(&Value::Table(self.clone()))
     }
 }
@@ -1611,19 +1618,39 @@ impl Table {
 impl Function {
     /// Calls the function (C++ `lua_pcall`): an error comes back as
     /// [`Error`], with the VM as it was before the call.
-    pub fn call<A: IntoLuaMulti, R: FromLuaMulti>(&self, vm: &mut Vm, args: A) -> Result<R, Error> {
+    pub fn call<A: IntoLuaMulti, R: FromLuaMulti>(&self, vm: &mut Vm<impl LoanFamily>, args: A) -> Result<R, Error> {
+        self.call_with(vm, None, args)
+    }
+
+    /// [`Function::call`] with `loan` lent to the call: every host function
+    /// it reaches, through any depth of Lua, sees it ([`HostCtx::loan`]).
+    pub fn call_lent<A: IntoLuaMulti, R: FromLuaMulti, L: LoanFamily>(
+        &self,
+        vm: &mut Vm<L>,
+        loan: &mut <L as LoanFamily>::Loan<'_>,
+        args: A,
+    ) -> Result<R, Error> {
+        self.call_with(vm, Some(L::shorten(loan)), args)
+    }
+
+    fn call_with<A: IntoLuaMulti, R: FromLuaMulti, L: LoanFamily>(
+        &self,
+        vm: &mut Vm<L>,
+        loan: Lent<'_, Compat<L>>,
+        args: A,
+    ) -> Result<R, Error> {
         let f = vm.handle_value(&self.0)?;
         let args = args.into_lua_multi(vm)?;
         let mut raw = Vec::with_capacity(args.len());
         for a in &args.0 {
             raw.push(vm.lower(a)?);
         }
-        let results = vm.call_raw(f, &raw)?;
+        let results = vm.call_raw(f, &raw, loan)?;
         R::from_lua_multi(results, vm)
     }
 
     /// A Lua function's environment (`getfenv`); `None` for a native.
-    pub fn environment(&self, vm: &mut Vm) -> Result<Option<Table>, Error> {
+    pub fn environment<L: LoanFamily>(&self, vm: &mut Vm<L>) -> Result<Option<Table>, Error> {
         let RawValue::Function(id) = vm.handle_value(&self.0)? else {
             return Ok(None);
         };
@@ -1637,7 +1664,7 @@ impl Function {
     }
 
     /// Sets a Lua function's environment (`setfenv`); false for a native.
-    pub fn set_environment(&self, vm: &mut Vm, env: &Table) -> Result<bool, Error> {
+    pub fn set_environment<L: LoanFamily>(&self, vm: &mut Vm<L>, env: &Table) -> Result<bool, Error> {
         let env = env.id(vm)?;
         let RawValue::Function(id) = vm.handle_value(&self.0)? else {
             return Ok(false);
@@ -1651,13 +1678,13 @@ impl Function {
         }
     }
 
-    pub fn to_pointer(&self, vm: &Vm) -> Result<u64, Error> {
+    pub fn to_pointer<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<u64, Error> {
         vm.to_pointer(&Value::Function(self.clone()))
     }
 }
 
 impl LuaString {
-    pub fn as_bytes(&self, vm: &Vm) -> Result<Vec<u8>, Error> {
+    pub fn as_bytes<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<Vec<u8>, Error> {
         match vm.handle_value(&self.0)? {
             RawValue::String(id) => Ok(vm.heap.str_bytes(id).to_vec()),
             other => Err(Error::Host(format!("expected a string, got {}", other.type_name()))),
@@ -1665,7 +1692,7 @@ impl LuaString {
     }
 
     /// The bytes as UTF-8, or a conversion error.
-    pub fn to_str(&self, vm: &Vm) -> Result<String, Error> {
+    pub fn to_str<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<String, Error> {
         String::from_utf8(self.as_bytes(vm)?).map_err(|_| Error::Conversion {
             from: "string".to_owned(),
             to: "UTF-8 string",
@@ -1673,37 +1700,37 @@ impl LuaString {
         })
     }
 
-    pub fn to_string_lossy(&self, vm: &Vm) -> Result<String, Error> {
+    pub fn to_string_lossy<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<String, Error> {
         Ok(String::from_utf8_lossy(&self.as_bytes(vm)?).into_owned())
     }
 
-    pub fn to_pointer(&self, vm: &Vm) -> Result<u64, Error> {
+    pub fn to_pointer<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<u64, Error> {
         vm.to_pointer(&Value::String(self.clone()))
     }
 }
 
 impl Buffer {
-    fn id(&self, vm: &Vm) -> Result<crate::value::BufId, Error> {
+    fn id<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<crate::value::BufId, Error> {
         match vm.handle_value(&self.0)? {
             RawValue::Buffer(id) => Ok(id),
             other => Err(Error::Host(format!("expected a buffer, got {}", other.type_name()))),
         }
     }
 
-    pub fn len(&self, vm: &Vm) -> Result<usize, Error> {
+    pub fn len<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<usize, Error> {
         Ok(vm.heap.buffer(self.id(vm)?).len())
     }
 
-    pub fn is_empty(&self, vm: &Vm) -> Result<bool, Error> {
+    pub fn is_empty<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<bool, Error> {
         Ok(self.len(vm)? == 0)
     }
 
-    pub fn to_vec(&self, vm: &Vm) -> Result<Vec<u8>, Error> {
+    pub fn to_vec<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<Vec<u8>, Error> {
         Ok(vm.heap.buffer(self.id(vm)?).to_vec())
     }
 
     /// `len` bytes from `offset`; out of range is an error.
-    pub fn read_bytes(&self, vm: &Vm, offset: usize, len: usize) -> Result<Vec<u8>, Error> {
+    pub fn read_bytes<L: LoanFamily>(&self, vm: &Vm<L>, offset: usize, len: usize) -> Result<Vec<u8>, Error> {
         let bytes = vm.heap.buffer(self.id(vm)?);
         offset
             .checked_add(len)
@@ -1713,7 +1740,7 @@ impl Buffer {
     }
 
     /// Copies `data` in at `offset`; out of range is an error.
-    pub fn write_bytes(&self, vm: &mut Vm, offset: usize, data: &[u8]) -> Result<(), Error> {
+    pub fn write_bytes<L: LoanFamily>(&self, vm: &mut Vm<L>, offset: usize, data: &[u8]) -> Result<(), Error> {
         let id = self.id(vm)?;
         let bytes = vm.heap.buffer_mut(id);
         let target = offset
@@ -1725,24 +1752,24 @@ impl Buffer {
     }
 
     /// The bytes in place (seam item 10): `f` cannot reach the VM.
-    pub fn with_bytes_mut<R>(&self, vm: &mut Vm, f: impl FnOnce(&mut [u8]) -> R) -> Result<R, Error> {
+    pub fn with_bytes_mut<L: LoanFamily, R>(&self, vm: &mut Vm<L>, f: impl FnOnce(&mut [u8]) -> R) -> Result<R, Error> {
         let id = self.id(vm)?;
         Ok(f(vm.heap.buffer_mut(id)))
     }
 
-    pub fn to_pointer(&self, vm: &Vm) -> Result<u64, Error> {
+    pub fn to_pointer<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<u64, Error> {
         vm.to_pointer(&Value::Buffer(self.clone()))
     }
 }
 
 impl AnyUserData {
     /// Whether it holds a `T`.
-    pub fn is<T: 'static>(&self, vm: &Vm) -> Result<bool, Error> {
+    pub fn is<T: 'static>(&self, vm: &Vm<impl LoanFamily>) -> Result<bool, Error> {
         Ok(vm.ud_payload(vm.ud_id(&self.0)?).is_some_and(Payload::is::<T>))
     }
 
     /// The host value's cell. Borrowing it does not hold the VM.
-    pub fn cell<T: 'static>(&self, vm: &Vm) -> Result<Rc<RefCell<T>>, Error> {
+    pub fn cell<T: 'static>(&self, vm: &Vm<impl LoanFamily>) -> Result<Rc<RefCell<T>>, Error> {
         let data = vm.ud_payload(vm.ud_id(&self.0)?);
         data.and_then(Payload::cell::<T>).ok_or_else(|| Error::Conversion {
             from: data.map_or("userdata", |p| p.type_name).to_owned(),
@@ -1754,14 +1781,14 @@ impl AnyUserData {
     /// The host value's cell with its type erased: an `Rc<RefCell<T>>`
     /// as `Rc<dyn Any>`, for a host that keeps the cell beside its own
     /// handle and downcasts it later. Borrowing it does not hold the VM.
-    pub fn payload(&self, vm: &Vm) -> Result<Rc<dyn Any>, Error> {
+    pub fn payload<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<Rc<dyn Any>, Error> {
         vm.ud_payload(vm.ud_id(&self.0)?)
             .map(|p| Rc::clone(&p.value))
             .ok_or_else(|| Error::Host("a freed userdata has no payload".to_owned()))
     }
 
     /// Runs `f` on a shared borrow; a conflicting borrow is an error.
-    pub fn borrow<T: 'static, R>(&self, vm: &Vm, f: impl FnOnce(&T) -> R) -> Result<R, Error> {
+    pub fn borrow<L: LoanFamily, T: 'static, R>(&self, vm: &Vm<L>, f: impl FnOnce(&T) -> R) -> Result<R, Error> {
         let cell = self.cell::<T>(vm)?;
         let value = cell
             .try_borrow()
@@ -1770,7 +1797,7 @@ impl AnyUserData {
     }
 
     /// Runs `f` on an exclusive borrow; a conflicting borrow is an error.
-    pub fn borrow_mut<T: 'static, R>(&self, vm: &Vm, f: impl FnOnce(&mut T) -> R) -> Result<R, Error> {
+    pub fn borrow_mut<L: LoanFamily, T: 'static, R>(&self, vm: &Vm<L>, f: impl FnOnce(&mut T) -> R) -> Result<R, Error> {
         let cell = self.cell::<T>(vm)?;
         let mut value = cell
             .try_borrow_mut()
@@ -1779,21 +1806,21 @@ impl AnyUserData {
     }
 
     /// A copy of a plain-data payload (seam item 7, `tagged`).
-    pub fn get_copy<T: Copy + 'static>(&self, vm: &Vm) -> Result<T, Error> {
+    pub fn get_copy<T: Copy + 'static>(&self, vm: &Vm<impl LoanFamily>) -> Result<T, Error> {
         self.borrow(vm, |t: &T| *t)
     }
 
     /// Replaces a plain-data payload (seam item 7, `set_tagged`).
-    pub fn set_copy<T: Copy + 'static>(&self, vm: &Vm, value: T) -> Result<(), Error> {
+    pub fn set_copy<T: Copy + 'static>(&self, vm: &Vm<impl LoanFamily>, value: T) -> Result<(), Error> {
         self.borrow_mut(vm, |t: &mut T| *t = value)
     }
 
-    pub fn tag(&self, vm: &Vm) -> Result<u8, Error> {
+    pub fn tag<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<u8, Error> {
         Ok(vm.heap.userdata(vm.ud_id(&self.0)?).tag)
     }
 
     /// Its metatable, the shared per-type or per-tag one (seam item 3).
-    pub fn metatable(&self, vm: &mut Vm) -> Result<Option<Table>, Error> {
+    pub fn metatable<L: LoanFamily>(&self, vm: &mut Vm<L>) -> Result<Option<Table>, Error> {
         let id = vm.ud_id(&self.0)?;
         match vm.heap.userdata(id).meta {
             Some(mt) => vm.new_handle(RawValue::Table(mt)).map(|h| Some(Table(h))),
@@ -1801,7 +1828,7 @@ impl AnyUserData {
         }
     }
 
-    pub fn set_metatable(&self, vm: &mut Vm, mt: Option<&Table>) -> Result<(), Error> {
+    pub fn set_metatable<L: LoanFamily>(&self, vm: &mut Vm<L>, mt: Option<&Table>) -> Result<(), Error> {
         let id = vm.ud_id(&self.0)?;
         let mt = match mt {
             Some(m) => Some(m.id(vm)?),
@@ -1811,13 +1838,13 @@ impl AnyUserData {
         Ok(())
     }
 
-    pub fn to_pointer(&self, vm: &Vm) -> Result<u64, Error> {
+    pub fn to_pointer<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<u64, Error> {
         vm.to_pointer(&Value::UserData(self.clone()))
     }
 }
 
 impl Thread {
-    fn id(&self, vm: &Vm) -> Result<crate::value::ThreadId, Error> {
+    fn id<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<crate::value::ThreadId, Error> {
         match vm.handle_value(&self.0)? {
             RawValue::Thread(id) => Ok(id),
             other => Err(Error::Host(format!("expected a thread, got {}", other.type_name()))),
@@ -1828,7 +1855,7 @@ impl Thread {
     /// thread, as `coroutine.resume` does) and returns what it yielded or
     /// returned. A thread that fails, or cannot be resumed, is an error
     /// with the thread's error status.
-    pub fn resume<A: IntoLuaMulti, R: FromLuaMulti>(&self, vm: &mut Vm, args: A) -> Result<R, Error> {
+    pub fn resume<A: IntoLuaMulti, R: FromLuaMulti>(&self, vm: &mut Vm<impl LoanFamily>, args: A) -> Result<R, Error> {
         let co = self.id(vm)?;
         let args = args.into_lua_multi(vm)?;
         let mut raw = Vec::with_capacity(args.len().saturating_add(1));
@@ -1837,7 +1864,7 @@ impl Thread {
             raw.push(vm.lower(a)?);
         }
         let resume = vm.protect(|vm| vm.resume_function())?;
-        let mut results = vm.call_raw(resume, &raw)?.0.into_iter();
+        let mut results = vm.call_raw(resume, &raw, None)?.0.into_iter();
         let ok = matches!(results.next(), Some(Value::Boolean(true)));
         if ok {
             return R::from_lua_multi(MultiValue(results.collect()), vm);
@@ -1867,7 +1894,7 @@ impl Thread {
     }
 
     /// Its status as the running thread sees it.
-    pub fn status(&self, vm: &Vm) -> Result<ThreadState, Error> {
+    pub fn status<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<ThreadState, Error> {
         let co = self.id(vm)?;
         Ok(match vm.co_status(co) {
             CoStatus::Running => ThreadState::Running,
@@ -1889,7 +1916,7 @@ impl Thread {
     /// (as the old binding crate's resume moves them off). The execution stack
     /// below is never exposed. The running thread's stack belongs to its frames
     /// and is not readable here (an error).
-    pub fn stack_value(&self, vm: &mut Vm, index: i32) -> Result<Value, Error> {
+    pub fn stack_value<L: LoanFamily>(&self, vm: &mut Vm<L>, index: i32) -> Result<Value, Error> {
         let co = self.id(vm)?;
         if co == vm.current {
             return Err(Error::Host(
@@ -1918,7 +1945,7 @@ impl Thread {
     }
 
     /// C++ `lua_resetthread` on a thread that is not running.
-    pub fn reset(&self, vm: &mut Vm) -> Result<(), Error> {
+    pub fn reset<L: LoanFamily>(&self, vm: &mut Vm<L>) -> Result<(), Error> {
         let co = self.id(vm)?;
         if matches!(vm.co_status(co), CoStatus::Running | CoStatus::Normal) {
             return Err(Error::Host("cannot reset a running thread".to_owned()));
@@ -1927,7 +1954,7 @@ impl Thread {
         Ok(())
     }
 
-    pub fn to_pointer(&self, vm: &Vm) -> Result<u64, Error> {
+    pub fn to_pointer<L: LoanFamily>(&self, vm: &Vm<L>) -> Result<u64, Error> {
         vm.to_pointer(&Value::Thread(self.clone()))
     }
 }
@@ -1946,23 +1973,23 @@ impl Thread {
 /// Methods receive the payload through a `try_borrow`: a method that
 /// re-enters Lua which calls a `_mut` method on the same object gets an
 /// error, not a panic.
-pub struct UserDataType<T: 'static> {
+pub struct UserDataType<T: 'static, L: LoanFamily = NoLoan> {
     type_name: Option<String>,
-    getters: Vec<(String, Rc<HostFn>)>,
-    setters: Vec<(String, Rc<HostFn>)>,
-    methods: Vec<(String, Rc<HostFn>)>,
-    meta: Vec<(String, Rc<HostFn>)>,
+    getters: Vec<(String, Rc<HostFn<L>>)>,
+    setters: Vec<(String, Rc<HostFn<L>>)>,
+    methods: Vec<(String, Rc<HostFn<L>>)>,
+    meta: Vec<(String, Rc<HostFn<L>>)>,
     _type: PhantomData<fn() -> T>,
 }
 
-impl<T: 'static> Default for UserDataType<T> {
+impl<T: 'static, L: LoanFamily> Default for UserDataType<T, L> {
     fn default() -> Self {
         UserDataType::new()
     }
 }
 
 /// The receiver, `self` of a method: argument 1 as a `T`.
-fn receiver<T: 'static>(ctx: &mut HostCtx<'_>) -> Result<Rc<RefCell<T>>, HostError> {
+fn receiver<L: LoanFamily, T: 'static>(ctx: &mut HostCtx<'_, L>) -> Result<Rc<RefCell<T>>, HostError> {
     let args = ctx.args;
     if let Some(RawValue::Userdata(id)) = ctx.vm.arg(args, 1)
         && let Some(cell) = ctx.vm.ud_payload(id).and_then(Payload::cell::<T>)
@@ -1983,8 +2010,8 @@ fn borrow_mut_error() -> HostError {
     HostError::new("userdata already borrowed")
 }
 
-impl<T: 'static> UserDataType<T> {
-    pub fn new() -> UserDataType<T> {
+impl<T: 'static, L: LoanFamily> UserDataType<T, L> {
+    pub fn new() -> UserDataType<T, L> {
         UserDataType {
             type_name: None,
             getters: Vec::new(),
@@ -2005,10 +2032,10 @@ impl<T: 'static> UserDataType<T> {
     pub fn add_field_method_get<R, F>(&mut self, name: &str, f: F)
     where
         R: IntoLua,
-        F: Fn(&mut HostCtx<'_>, &T) -> Result<R, HostError> + 'static,
+        F: Fn(&mut HostCtx<'_, L>, &T) -> Result<R, HostError> + 'static,
     {
-        let host: Rc<HostFn> = Rc::new(move |ctx: &mut HostCtx<'_>| {
-            let cell = receiver::<T>(ctx)?;
+        let host: Rc<HostFn<L>> = Rc::new(move |ctx: &mut HostCtx<'_, L>| {
+            let cell = receiver::<L, T>(ctx)?;
             let value = cell.try_borrow().map_err(|_| borrow_error())?;
             let r = f(ctx, &value)?;
             drop(value);
@@ -2022,9 +2049,9 @@ impl<T: 'static> UserDataType<T> {
     pub fn add_field_function_get<R, F>(&mut self, name: &str, f: F)
     where
         R: IntoLua,
-        F: Fn(&mut HostCtx<'_>, AnyUserData) -> Result<R, HostError> + 'static,
+        F: Fn(&mut HostCtx<'_, L>, AnyUserData) -> Result<R, HostError> + 'static,
     {
-        let host: Rc<HostFn> = Rc::new(move |ctx: &mut HostCtx<'_>| {
+        let host: Rc<HostFn<L>> = Rc::new(move |ctx: &mut HostCtx<'_, L>| {
             let ud: AnyUserData = ctx.get(1)?;
             let r = f(ctx, ud)?;
             ctx.push(r)?;
@@ -2037,10 +2064,10 @@ impl<T: 'static> UserDataType<T> {
     pub fn add_field_method_set<V, F>(&mut self, name: &str, f: F)
     where
         V: FromLua,
-        F: Fn(&mut HostCtx<'_>, &mut T, V) -> Result<(), HostError> + 'static,
+        F: Fn(&mut HostCtx<'_, L>, &mut T, V) -> Result<(), HostError> + 'static,
     {
-        let host: Rc<HostFn> = Rc::new(move |ctx: &mut HostCtx<'_>| {
-            let cell = receiver::<T>(ctx)?;
+        let host: Rc<HostFn<L>> = Rc::new(move |ctx: &mut HostCtx<'_, L>| {
+            let cell = receiver::<L, T>(ctx)?;
             let v: V = ctx.args_from(2)?;
             let mut value = cell.try_borrow_mut().map_err(|_| borrow_mut_error())?;
             f(ctx, &mut value, v)?;
@@ -2054,10 +2081,10 @@ impl<T: 'static> UserDataType<T> {
     where
         A: FromLuaMulti,
         R: IntoLuaMulti,
-        F: Fn(&mut HostCtx<'_>, &T, A) -> Result<R, HostError> + 'static,
+        F: Fn(&mut HostCtx<'_, L>, &T, A) -> Result<R, HostError> + 'static,
     {
-        let host: Rc<HostFn> = Rc::new(move |ctx: &mut HostCtx<'_>| {
-            let cell = receiver::<T>(ctx)?;
+        let host: Rc<HostFn<L>> = Rc::new(move |ctx: &mut HostCtx<'_, L>| {
+            let cell = receiver::<L, T>(ctx)?;
             let a: A = ctx.args_from(2)?;
             let value = cell.try_borrow().map_err(|_| borrow_error())?;
             let r = f(ctx, &value, a)?;
@@ -2072,10 +2099,10 @@ impl<T: 'static> UserDataType<T> {
     where
         A: FromLuaMulti,
         R: IntoLuaMulti,
-        F: Fn(&mut HostCtx<'_>, &mut T, A) -> Result<R, HostError> + 'static,
+        F: Fn(&mut HostCtx<'_, L>, &mut T, A) -> Result<R, HostError> + 'static,
     {
-        let host: Rc<HostFn> = Rc::new(move |ctx: &mut HostCtx<'_>| {
-            let cell = receiver::<T>(ctx)?;
+        let host: Rc<HostFn<L>> = Rc::new(move |ctx: &mut HostCtx<'_, L>| {
+            let cell = receiver::<L, T>(ctx)?;
             let a: A = ctx.args_from(2)?;
             let mut value = cell.try_borrow_mut().map_err(|_| borrow_mut_error())?;
             let r = f(ctx, &mut value, a)?;
@@ -2090,9 +2117,9 @@ impl<T: 'static> UserDataType<T> {
     where
         A: FromLuaMulti,
         R: IntoLuaMulti,
-        F: Fn(&mut HostCtx<'_>, A) -> Result<R, HostError> + 'static,
+        F: Fn(&mut HostCtx<'_, L>, A) -> Result<R, HostError> + 'static,
     {
-        let host: Rc<HostFn> = Rc::new(move |ctx: &mut HostCtx<'_>| {
+        let host: Rc<HostFn<L>> = Rc::new(move |ctx: &mut HostCtx<'_, L>| {
             let a: A = ctx.args()?;
             let r = f(ctx, a)?;
             ctx.push_results(r)
@@ -2109,10 +2136,10 @@ impl<T: 'static> UserDataType<T> {
     where
         A: FromLuaMulti,
         R: IntoLuaMulti,
-        F: Fn(&mut HostCtx<'_>, &T, A) -> Result<R, HostError> + 'static,
+        F: Fn(&mut HostCtx<'_, L>, &T, A) -> Result<R, HostError> + 'static,
     {
-        let host: Rc<HostFn> = Rc::new(move |ctx: &mut HostCtx<'_>| {
-            let cell = receiver::<T>(ctx)?;
+        let host: Rc<HostFn<L>> = Rc::new(move |ctx: &mut HostCtx<'_, L>| {
+            let cell = receiver::<L, T>(ctx)?;
             let a: A = ctx.args_from(2)?;
             let value = cell.try_borrow().map_err(|_| borrow_error())?;
             let r = f(ctx, &value, a)?;
@@ -2127,9 +2154,9 @@ impl<T: 'static> UserDataType<T> {
     where
         A: FromLuaMulti,
         R: IntoLuaMulti,
-        F: Fn(&mut HostCtx<'_>, A) -> Result<R, HostError> + 'static,
+        F: Fn(&mut HostCtx<'_, L>, A) -> Result<R, HostError> + 'static,
     {
-        let host: Rc<HostFn> = Rc::new(move |ctx: &mut HostCtx<'_>| {
+        let host: Rc<HostFn<L>> = Rc::new(move |ctx: &mut HostCtx<'_, L>| {
             let a: A = ctx.args()?;
             let r = f(ctx, a)?;
             ctx.push_results(r)
@@ -2142,7 +2169,7 @@ impl<T: 'static> UserDataType<T> {
     pub fn add_meta_host_function(
         &mut self,
         name: &str,
-        f: impl Fn(&mut HostCtx<'_>) -> Result<usize, HostError> + 'static,
+        f: impl Fn(&mut HostCtx<'_, L>) -> Result<usize, HostError> + 'static,
     ) {
         self.meta.push((name.to_owned(), Rc::new(f)));
     }

@@ -41,8 +41,11 @@ pub(crate) struct LiftState {
     /// The flight's opacity, applied to the copy's entries as one picture or
     /// a scope.
     pub(crate) opacity: f32,
-    /// A zoom's box, in the element's own content space.
+    /// A zoom's box, in the element's box (live_move/in_place.rs, `Flying`).
     pub(crate) clip: Option<FlightClip>,
+    /// From the element's box to its own drawing space, where its world
+    /// draws: identity for a CSS box.
+    pub(crate) clip_space: Mat2D,
     /// The copy's entries in its Screen's draw order, set by its sort.
     pub(crate) entries: Vec<RuntimeDrawableOccurrence>,
     pub(crate) picture: GroupPicture,
@@ -63,6 +66,7 @@ impl Lift {
             matrix: Mat2D::identity(),
             opacity: 1.0,
             clip: None,
+            clip_space: Mat2D::identity(),
             entries: Vec::new(),
             picture: GroupPicture::default(),
             entry: None,
@@ -307,16 +311,19 @@ fn element_world(element: &CoreHandle) -> Option<Mat2D> {
 }
 
 /// The bounds in `row`'s drawing space of a zoom's box, `clip`, in
-/// `element`'s own content space: what bounds the lift's picture.
+/// `element`'s box, which `space` takes to its own drawing space: what
+/// bounds the lift's picture.
 pub(crate) fn clip_bounds(
     element: &CoreHandle,
     clip: FlightClip,
+    space: Mat2D,
 ) -> Option<crate::source::math::aabb::Aabb> {
-    Some(element_world(element)?.map_bounding_box(clip.area()))
+    Some((element_world(element)? * space).map_bounding_box(clip.area()))
 }
 
-/// Clips the renderer to a zoom's box, `clip`, in `element`'s own content
-/// space, under the element's world, so it turns and stretches with the copy.
+/// Clips the renderer to a zoom's box, `clip`, in `element`'s box, which
+/// `space` takes to its own drawing space, under the element's world, so it
+/// turns and stretches with the copy.
 /// The box reaches the renderer as a flying unit's does (`Artboard::draw`):
 /// its own outline under the element's world, the input the element's paint
 /// draws with, so the clip covers the samples the fill covers and a rounded
@@ -328,10 +335,11 @@ pub(crate) fn apply_clip(
     element: &CoreHandle,
     row: &CoreHandle,
     clip: FlightClip,
+    space: Mat2D,
 ) {
     use crate::source::{math::raw_path::RawPath, shapes::paint::shape_paint_path::ShapePaintPath};
     let (Some(world), Some(factory)) = (
-        element_world(element),
+        element_world(element).map(|world| world * space),
         row.with_downcast::<Artboard, _>(Artboard::factory)
             .flatten(),
     ) else {

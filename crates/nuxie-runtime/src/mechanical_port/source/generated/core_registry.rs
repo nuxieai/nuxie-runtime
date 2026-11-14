@@ -4763,6 +4763,14 @@ pub trait DataConverterCapability {
     fn may_advance(&self) -> bool {
         false
     }
+    /// The interpolator behind this capability, for its handle-level advance
+    /// (an owner may project an interpolator it is not).
+    fn as_data_converter_interpolator_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::data_bind::converters::data_converter_interpolator::DataConverterInterpolator>
+    {
+        None
+    }
     fn convert(
         &mut self,
         input: &dyn crate::mechanical_port::source::data_bind::data_values::data_value::DataValue,

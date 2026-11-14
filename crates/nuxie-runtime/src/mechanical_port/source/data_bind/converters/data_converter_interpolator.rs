@@ -292,12 +292,12 @@ impl DataConverterInterpolator {
     /// runs with no borrow of the converter (and, re-entering it, finds the
     /// state at rest rather than a `RefCell` panic).
     pub(crate) fn advance_interpolator_occurrence(owner: &CoreHandle, elapsed: f32) -> bool {
-        let Some(begun) = owner
-            .with_downcast_mut::<Self, _>(|converter| match converter.begin_advance(elapsed) {
+        let Some(begun) = Self::with_occurrence(owner, |converter| {
+            match converter.begin_advance(elapsed) {
                 Some(step) => Ok((step, std::mem::take(&mut converter.advancer))),
                 None => Err(converter.advancer_pending_result()),
-            })
-        else {
+            }
+        }) else {
             return false;
         };
         let (mut step, mut advancer) = match begun {
@@ -311,12 +311,24 @@ impl DataConverterInterpolator {
             elapsed,
         );
         step.advancer_elapsed = advancer.current().elapsed_seconds;
+        Self::with_occurrence(owner, |converter| {
+            converter.advancer = advancer;
+            converter.finish_advance(&step)
+        })
+        .unwrap_or(false)
+    }
+
+    /// Borrows the interpolator `owner` is or projects through its
+    /// converter capability.
+    fn with_occurrence<R>(owner: &CoreHandle, use_converter: impl FnOnce(&mut Self) -> R) -> Option<R> {
         owner
-            .with_downcast_mut::<Self, _>(|converter| {
-                converter.advancer = advancer;
-                converter.finish_advance(&step)
+            .with_mut(|owner| {
+                owner
+                    .as_data_converter_capability_mut()?
+                    .as_data_converter_interpolator_mut()
+                    .map(use_converter)
             })
-            .unwrap_or(false)
+            .flatten()
     }
 
     /// The part of `advance_interpolator` before the animation data moves:
@@ -545,6 +557,9 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
     }
     fn advance_after_binds(&mut self, elapsed: f32) -> bool {
         self.advance_interpolator(elapsed)
+    }
+    fn as_data_converter_interpolator_mut(&mut self) -> Option<&mut DataConverterInterpolator> {
+        Some(self)
     }
     fn advance(&mut self, elapsed: f32) -> bool {
         Self::advance(self, elapsed)

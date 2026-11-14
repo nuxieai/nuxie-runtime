@@ -284,16 +284,13 @@ impl RenderCanvasContract for NativeMetalRenderCanvas {
                 let mut info = RenderCanvasContract::render_image(self).ore_texture_info()?;
                 #[cfg(feature = "native-ore-metal-experimental")]
                 {
-                    let owner = Rc::new((
+                    info.canvas = Some(Rc::new(
                         nuxie_ore_metal::metal::context::MetalRenderCanvasBridge {
                             width: self.width(),
                             height: self.height(),
                             texture: target_texture.clone(),
                         },
-                        info.owner.take(),
                     ));
-                    info.canvas = std::ptr::from_ref(&owner.0).cast_mut().cast();
-                    info.owner = Some(owner);
                 }
                 #[cfg(not(feature = "native-ore-metal-experimental"))]
                 let _ = target_texture;

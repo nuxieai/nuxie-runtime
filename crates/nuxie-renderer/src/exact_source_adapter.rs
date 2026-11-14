@@ -1114,7 +1114,7 @@ impl<B: ExactSourceBackend> RenderCanvasContract for ExactSourceCanvasBacking<B>
     }
     fn ore_texture_info(&self) -> Option<nuxie_ore_metal::context::CanvasTextureInfo> {
         let mut info = self.render_image().ore_texture_info()?;
-        info.canvas = self.source.get().cast();
+        info.canvas = crate::ore_source_handle::source_canvas_handle(&self.source);
         Some(info)
     }
     fn width(&self) -> u32 {

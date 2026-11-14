@@ -800,17 +800,14 @@ pub(crate) fn ore_image_texture_info(
     let texture = unsafe { Retained::<AnyObject>::retain(native.cast()) }.map(|texture| unsafe {
         Retained::cast_unchecked::<ProtocolObject<dyn MTLTexture>>(texture)
     });
-    let owner = Rc::new((
-        nuxie_ore_metal::metal::context::MetalRiveTextureBridge { texture },
-        image.clone(),
-    ));
-    let texture = std::ptr::from_ref(&owner.0).cast_mut().cast();
+    let texture: Rc<dyn Any> =
+        Rc::new(nuxie_ore_metal::metal::context::MetalRiveTextureBridge { texture });
     Some(nuxie_ore_metal::context::CanvasTextureInfo {
-        canvas: std::ptr::null_mut(),
-        texture,
+        canvas: None,
+        texture: Some(texture),
         width,
         height,
-        owner: Some(owner),
+        owner: Some(Rc::new(image.clone())),
     })
 }
 
@@ -3587,7 +3584,7 @@ mod tests {
             let info = retained_before_replay
                 .ore_texture_info()
                 .expect("backed image");
-            assert!(unsafe { ore.borrow_mut().wrapImageSampleView(info) }.is_some());
+            assert!(ore.borrow_mut().wrapImageSampleView(info).is_some());
         }
         drop(canvas);
         drop(replay);
@@ -3657,19 +3654,65 @@ mod tests {
         // the temporary upper handles leave scope.
         drop(image);
         drop(canvas);
-        let image_bridge = unsafe { &*image_info.texture.cast::<MetalRiveTextureBridge>() };
+        let image_bridge = image_info
+            .texture
+            .as_deref()
+            .and_then(|texture| texture.downcast_ref::<MetalRiveTextureBridge>())
+            .expect("a Metal image texture bridge");
         assert_eq!(
             Retained::as_ptr(image_bridge.texture.as_ref().unwrap()),
             Retained::as_ptr(&native)
         );
-        let canvas_bridge = unsafe { &*canvas_info.canvas.cast::<MetalRenderCanvasBridge>() };
+        let canvas_bridge = canvas_info
+            .canvas
+            .as_deref()
+            .and_then(|canvas| canvas.downcast_ref::<MetalRenderCanvasBridge>())
+            .expect("a Metal canvas bridge");
         assert_eq!((canvas_bridge.width, canvas_bridge.height), (4, 3));
         assert_eq!(
             Retained::as_ptr(canvas_bridge.texture.as_ref().unwrap()),
             Retained::as_ptr(&native)
         );
-        assert!(unsafe { ore.borrow_mut().wrapCanvasTextureInfo(canvas_info) }.is_some());
-        assert!(unsafe { ore.borrow_mut().wrapImageSampleView(image_info) }.is_some());
+        assert!(ore.borrow_mut().wrapCanvasTextureInfo(canvas_info).is_some());
+        assert!(ore.borrow_mut().wrapImageSampleView(image_info).is_some());
+    }
+
+    #[cfg(feature = "native-ore-metal-experimental")]
+    #[test]
+    fn a_metal_context_wraps_only_the_handles_metal_issued() {
+        use nuxie_ore_metal::context::CanvasTextureInfo;
+        use nuxie_ore_metal::metal::context::MetalRiveTextureBridge;
+
+        let mut factory = NativeMetalFactory::new(4, 3).expect("native Metal factory");
+        let ore = factory.ore().expect("the renderer's shared ORE context");
+        let canvas = factory
+            .make_metal_render_canvas(4, 3)
+            .expect("source canvas");
+        let native = canvas.retained_metal_texture().expect("canvas texture");
+        let issued = canvas.render_image().ore_texture_info().expect("typed image projection");
+        let made_up = |handle: Rc<dyn Any>| CanvasTextureInfo {
+            canvas: Some(Rc::clone(&handle)),
+            texture: Some(handle),
+            width: 4,
+            height: 3,
+            owner: None,
+        };
+        // A handle Metal did not issue, whatever it holds, resolves to nothing.
+        for foreign in [
+            made_up(Rc::new(0usize)),
+            made_up(Rc::new(Retained::as_ptr(&native) as usize)),
+            made_up(Rc::new(issued.clone())),
+        ] {
+            let mut ore = ore.borrow_mut();
+            assert!(ore.wrapCanvasTextureInfo(foreign.clone()).is_none());
+            assert!(ore.wrapCanvasSampleView(foreign.clone()).is_none());
+            assert!(ore.wrapImageSampleView(foreign).is_none());
+        }
+        // An image texture bridge is not a canvas: it samples, never renders.
+        assert!(ore.borrow_mut().wrapCanvasTextureInfo(issued.clone()).is_none());
+        assert!(ore.borrow_mut().wrapImageSampleView(issued.clone()).is_some());
+        let bridge = issued.texture.expect("issued texture handle");
+        assert!(bridge.downcast_ref::<MetalRiveTextureBridge>().is_some());
     }
 
     #[cfg(feature = "native-ore-metal-experimental")]

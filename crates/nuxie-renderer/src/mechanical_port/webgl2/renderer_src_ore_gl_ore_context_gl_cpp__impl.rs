@@ -2090,6 +2090,27 @@ impl ContextApi for ContextGL {
         unsafe { wrapRiveTexture(self, texture, width, height) }
     }
 
+    fn wrapCanvasTextureInfo(
+        &mut self,
+        canvas: nuxie_ore_metal::context::CanvasTextureInfo,
+    ) -> Option<AnyResourceHandle> {
+        crate::ore_source_handle::wrap_source_canvas(self, &canvas)
+    }
+
+    fn wrapCanvasSampleView(
+        &mut self,
+        canvas: nuxie_ore_metal::context::CanvasTextureInfo,
+    ) -> Option<AnyResourceHandle> {
+        crate::ore_source_handle::wrap_source_texture(self, &canvas)
+    }
+
+    fn wrapImageSampleView(
+        &mut self,
+        image: nuxie_ore_metal::context::CanvasTextureInfo,
+    ) -> Option<AnyResourceHandle> {
+        crate::ore_source_handle::wrap_source_texture(self, &image)
+    }
+
     fn shaderTarget(&self) -> ShaderTarget {
         ContextGL::shaderTarget(self)
     }
@@ -2343,14 +2364,17 @@ mod tests {
         let source_name = unsafe { (*source).nativeHandle() } as usize as GLuint;
         assert_ne!(source_name, 0);
         let info = nuxie_ore_metal::context::CanvasTextureInfo {
-            canvas: canvas.get().cast(),
-            texture: source.cast(),
+            canvas: crate::ore_source_handle::source_canvas_handle(&canvas),
+            texture: crate::ore_source_handle::source_texture_handle(unsafe {
+                (*(*canvas.get()).renderImage()).refTexture()
+            }),
             width: 3,
             height: 4,
             owner: Some(Rc::new(canvas.clone())),
         };
-        let sampled =
-            unsafe { context.wrapImageSampleView(info) }.expect("immediate sampling view");
+        let sampled = context
+            .wrapImageSampleView(info)
+            .expect("immediate sampling view");
         let sampled = sampled.downcast_ref::<TextureViewGL>().unwrap();
         assert_eq!(
             sampled
@@ -2361,6 +2385,27 @@ mod tests {
             source_name,
             "canvas sampling wraps the same top-down source texture directly"
         );
+        // Only handles this crate issued resolve: the same addresses behind
+        // a made-up handle, or a canvas handle in the texture slot, wrap
+        // nothing.
+        let address: Rc<dyn std::any::Any> = Rc::new(source as usize);
+        let made_up = nuxie_ore_metal::context::CanvasTextureInfo {
+            canvas: Some(Rc::clone(&address)),
+            texture: Some(address),
+            width: 3,
+            height: 4,
+            owner: None,
+        };
+        assert!(context.wrapImageSampleView(made_up.clone()).is_none());
+        assert!(context.wrapCanvasTextureInfo(made_up).is_none());
+        let swapped = nuxie_ore_metal::context::CanvasTextureInfo {
+            canvas: None,
+            texture: crate::ore_source_handle::source_canvas_handle(&canvas),
+            width: 3,
+            height: 4,
+            owner: None,
+        };
+        assert!(context.wrapImageSampleView(swapped).is_none());
         drop(color_view);
         // sampled's handle drops before the context and implementation owners.
     }

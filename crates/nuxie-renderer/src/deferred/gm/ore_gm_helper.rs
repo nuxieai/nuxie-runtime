@@ -531,8 +531,7 @@ pub(super) fn wrap_canvas(
     ctx: &mut dyn ContextApi,
     canvas: &RenderCanvasHandle,
 ) -> AnyResourceHandle {
-    // The retained typed canvas owns both native pointers throughout wrapping.
-    unsafe { ctx.wrapCanvasTextureInfo(nuxie_render_api::canvas_texture_info(canvas)) }
+    ctx.wrapCanvasTextureInfo(nuxie_render_api::canvas_texture_info(canvas))
         .expect("GM target view")
 }
 pub(super) fn target_format(view: &AnyResourceHandle) -> TextureFormat {

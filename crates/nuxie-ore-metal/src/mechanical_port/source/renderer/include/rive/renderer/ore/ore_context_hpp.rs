@@ -405,26 +405,20 @@ pub trait ContextApi {
     ) -> Option<AnyResourceHandle> {
         None
     }
-    /// The source canvas' image/texture fields supplied across the opaque
-    /// host seam for the canvas sampling wrap.
-    unsafe fn wrapCanvasSampleView(
-        &mut self,
-        canvas: CanvasTextureInfo,
-    ) -> Option<AnyResourceHandle> {
-        unsafe { self.wrapRiveTexture(canvas.texture, canvas.width, canvas.height) }
+    /// Samples the texture of a source canvas. Only a backend that issued
+    /// `canvas.texture` can resolve it; any other handle wraps nothing.
+    fn wrapCanvasSampleView(&mut self, _canvas: CanvasTextureInfo) -> Option<AnyResourceHandle> {
+        None
     }
-    unsafe fn wrapCanvasTextureInfo(
-        &mut self,
-        canvas: CanvasTextureInfo,
-    ) -> Option<AnyResourceHandle> {
-        unsafe { self.wrapCanvasTexture(canvas.canvas) }
+    /// Renders into a source canvas. Only a backend that issued
+    /// `canvas.canvas` can resolve it; any other handle wraps nothing.
+    fn wrapCanvasTextureInfo(&mut self, _canvas: CanvasTextureInfo) -> Option<AnyResourceHandle> {
+        None
     }
-    /// Immediate Image:view sampling boundary, wrapping the projected image texture.
-    unsafe fn wrapImageSampleView(
-        &mut self,
-        image: CanvasTextureInfo,
-    ) -> Option<AnyResourceHandle> {
-        unsafe { self.wrapRiveTexture(image.texture, image.width, image.height) }
+    /// Immediate Image:view sampling boundary, wrapping the projected image
+    /// texture. Only a backend that issued `image.texture` can resolve it.
+    fn wrapImageSampleView(&mut self, _image: CanvasTextureInfo) -> Option<AnyResourceHandle> {
+        None
     }
     fn features(&self) -> Features;
     fn lastError(&self) -> String;
@@ -839,11 +833,21 @@ pub struct RenderTargetInfo {
     pub owner: Option<Rc<dyn std::any::Any>>,
 }
 
-/// Borrowed source RenderCanvas fields across the existing opaque GPU host seam.
+/// A source RenderCanvas, or a source image texture, as handed across the
+/// object-safe GPU host seam.
+///
+/// `canvas` and `texture` are opaque handles. The backend that produced the
+/// canvas or image issues them (its own typed bridge, behind `Rc<dyn Any>`),
+/// and only that backend resolves them, by downcasting to its own type. A
+/// handle issued by another backend, or made up by a caller, does not
+/// downcast and wraps nothing. No address crosses this seam, so wrapping one
+/// is safe.
 #[derive(Clone)]
 pub struct CanvasTextureInfo {
-    pub canvas: *mut c_void,
-    pub texture: *mut c_void,
+    /// What the backend renders into when the canvas is a target.
+    pub canvas: Option<Rc<dyn std::any::Any>>,
+    /// What the backend samples when the canvas or image is a source.
+    pub texture: Option<Rc<dyn std::any::Any>>,
     pub width: u32,
     pub height: u32,
     pub owner: Option<Rc<dyn std::any::Any>>,

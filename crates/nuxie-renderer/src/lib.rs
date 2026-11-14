@@ -5,6 +5,22 @@
 
 use nuxie_render_api::authored_ore_shader;
 pub mod deferred;
+// Lives beside the mechanical port, whose source types it hands out.
+#[cfg(any(
+    feature = "native-vulkan-experimental",
+    feature = "native-webgpu-experimental",
+    feature = "native-webgl2-experimental",
+    all(
+        feature = "native-metal-experimental",
+        any(
+            target_os = "ios",
+            target_os = "macos",
+            target_os = "tvos",
+            target_os = "visionos"
+        )
+    )
+))]
+mod ore_source_handle;
 mod renderer_types;
 mod stack_vector;
 pub use renderer_types::{BackendWorkMetrics, RenderMode, RendererError};

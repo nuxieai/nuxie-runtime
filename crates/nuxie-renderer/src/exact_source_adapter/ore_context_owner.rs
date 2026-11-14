@@ -106,17 +106,11 @@ impl ContextApi for OwnedContext {
             .borrow_mut()
             .recordWrapImageView(image_id, width, height)
     }
-    unsafe fn wrapCanvasSampleView(
-        &mut self,
-        canvas: CanvasTextureInfo,
-    ) -> Option<AnyResourceHandle> {
-        unsafe { self.context.borrow_mut().wrapCanvasSampleView(canvas) }
+    fn wrapCanvasSampleView(&mut self, canvas: CanvasTextureInfo) -> Option<AnyResourceHandle> {
+        self.context.borrow_mut().wrapCanvasSampleView(canvas)
     }
-    unsafe fn wrapCanvasTextureInfo(
-        &mut self,
-        canvas: CanvasTextureInfo,
-    ) -> Option<AnyResourceHandle> {
-        unsafe { self.context.borrow_mut().wrapCanvasTextureInfo(canvas) }
+    fn wrapCanvasTextureInfo(&mut self, canvas: CanvasTextureInfo) -> Option<AnyResourceHandle> {
+        self.context.borrow_mut().wrapCanvasTextureInfo(canvas)
     }
     unsafe fn wrapRenderTarget(&mut self, target: RenderTargetInfo) -> Option<AnyResourceHandle> {
         unsafe { self.context.borrow_mut().wrapRenderTarget(target) }
@@ -127,11 +121,8 @@ impl ContextApi for OwnedContext {
     fn exposesTarget(&self) -> bool {
         self.context.borrow().exposesTarget()
     }
-    unsafe fn wrapImageSampleView(
-        &mut self,
-        image: CanvasTextureInfo,
-    ) -> Option<AnyResourceHandle> {
-        unsafe { self.context.borrow_mut().wrapImageSampleView(image) }
+    fn wrapImageSampleView(&mut self, image: CanvasTextureInfo) -> Option<AnyResourceHandle> {
+        self.context.borrow_mut().wrapImageSampleView(image)
     }
     fn features(&self) -> Features {
         self.context.borrow().features()

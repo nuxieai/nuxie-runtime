@@ -5481,7 +5481,11 @@ impl PaintUnit {
                     ("originY", F(0.75)),
                 ],
             )),
-            ElementKind::Video => objects.extend(hosted("Video", vec![("assetId", U(0))])),
+            // Its poster is the file's second asset (`paint_file_shaped`).
+            ElementKind::Video => objects.extend(hosted(
+                "Video",
+                vec![("assetId", U(0)), ("posterAssetId", U(1))],
+            )),
             ElementKind::Placement => objects.extend([
                 (
                     "NestedArtboardLayout",
@@ -7497,30 +7501,44 @@ fn paint_file_shaped(spec: &PaintSpec, in_place: bool) -> Result<Vec<u8>, &'stat
                     && !has_video(&spec.b))),
         "an element pair's page has one asset"
     );
-    if elements(ElementKind::Image) {
-        // A 100 by 30 picture: a PNG signature and header, all a recording
-        // factory decodes.
+    // A 100 by 30 picture: a PNG signature and header, all a recording
+    // factory decodes. An image page's picture, and a video page's poster,
+    // which its video draws until a frame is presented.
+    let picture = |b: &mut Vec<u8>| {
         let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
         png.extend_from_slice(&100u32.to_be_bytes());
         png.extend_from_slice(&30u32.to_be_bytes());
         obj(
-            &mut b,
+            b,
             "ImageAsset",
             &[("assetId", U(0)), ("width", F(100.0)), ("height", F(30.0))],
         );
-        obj(&mut b, "FileAssetContents", &[("bytes", Bytes(&png))]);
+        obj(b, "FileAssetContents", &[("bytes", Bytes(&png))]);
+    };
+    if elements(ElementKind::Image) {
+        picture(&mut b);
     }
     if has_video(&spec.a) || has_video(&spec.b) || elements(ElementKind::Video) {
+        // A video page's video is its poster's size, as a poster made from
+        // its video is.
+        let (width, height) = if elements(ElementKind::Video) {
+            (100.0, 30.0)
+        } else {
+            (40.0, 40.0)
+        };
         obj(
             &mut b,
             "VideoAsset",
             &[
                 ("sourceKey", S("asset:mascot")),
                 ("contentType", S("video/mp4")),
-                ("width", F(40.0)),
-                ("height", F(40.0)),
+                ("width", F(width)),
+                ("height", F(height)),
             ],
         );
+    }
+    if elements(ElementKind::Video) {
+        picture(&mut b);
     }
     if spec.subtitle.is_some()
         || spec.units.iter().any(|u| u.text.is_some())

@@ -262,6 +262,9 @@ struct ScriptedPropertyState {
     disposed: Cell<bool>,
     track_index: Cell<usize>,
     owning_model: RefCell<Option<ScriptViewModel>>,
+    /// The charge of the instance a script created that this property
+    /// keeps alive, shared with the instance's table.
+    owning_charge: RefCell<Option<Rc<HostMemoryCharge>>>,
     owner_audio_processors: RefCell<super::lua_audio_processors::WeakProcessorOwner>,
     owner_properties: RefCell<Weak<RefCell<Vec<Weak<ScriptedPropertyState>>>>>,
     owner_watches: RefCell<Weak<RefCell<Vec<TrackedScriptedPropertyWatch>>>>,
@@ -481,8 +484,25 @@ impl ScriptViewModelFrameContext {
 struct ScriptedViewModelHandle {
     model: ScriptViewModel,
     /// For an instance a script created (`Data.X.new`, `model:new()`):
-    /// what [`instance_host_bytes`] estimates it holds; empty otherwise.
-    _charge: HostMemoryCharge,
+    /// what [`instance_bytes::of`] estimates it holds; empty otherwise.
+    _charge: Rc<HostMemoryCharge>,
+}
+
+/// A view model with the charge of its instance, for what a view-model
+/// table hands out (its methods and properties): each keeps the instance
+/// alive, so each keeps the charge.
+#[derive(Clone)]
+struct ChargedModel {
+    model: ScriptViewModel,
+    _charge: Rc<HostMemoryCharge>,
+}
+
+impl std::ops::Deref for ChargedModel {
+    type Target = ScriptViewModel;
+
+    fn deref(&self) -> &ScriptViewModel {
+        &self.model
+    }
 }
 
 /// Host memory of view-model instances a script creates or adds to lists.
@@ -987,16 +1007,21 @@ fn create_scripted_view_model_retained(
     charge: HostMemoryCharge,
 ) -> crate::luau::Result<Table> {
     let frame_context = ScriptViewModelFrameContext::for_lua(lua);
+    let charge = Rc::new(charge);
+    let charged = ChargedModel {
+        model: model.clone(),
+        _charge: Rc::clone(&charge),
+    };
     let table = lua.create_table();
     table.set(
         "__rive_model",
         lua.create_userdata(ScriptedViewModelHandle {
             model: model.clone(),
-            _charge: charge,
+            _charge: Rc::clone(&charge),
         })?,
     )?;
 
-    let get_number_model = model.clone();
+    let get_number_model = charged.clone();
     table.set(
         "getNumber",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1006,7 +1031,7 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let get_color_model = model.clone();
+    let get_color_model = charged.clone();
     table.set(
         "getColor",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1016,7 +1041,7 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let get_string_model = model.clone();
+    let get_string_model = charged.clone();
     table.set(
         "getString",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1026,7 +1051,7 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let get_list_model = model.clone();
+    let get_list_model = charged.clone();
     table.set(
         "getList",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1036,7 +1061,7 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let get_trigger_model = model.clone();
+    let get_trigger_model = charged.clone();
     table.set(
         "getTrigger",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1046,7 +1071,7 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let get_boolean_model = model.clone();
+    let get_boolean_model = charged.clone();
     table.set(
         "getBoolean",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1056,7 +1081,7 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let get_enum_model = model.clone();
+    let get_enum_model = charged.clone();
     table.set(
         "getEnum",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1066,7 +1091,7 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let get_index_model = model.clone();
+    let get_index_model = charged.clone();
     table.set(
         "getIndex",
         lua.create_function(move |_, _self: Table| {
@@ -1076,7 +1101,7 @@ fn create_scripted_view_model_retained(
                 .unwrap_or(-1))
         })?,
     )?;
-    let get_image_model = model.clone();
+    let get_image_model = charged.clone();
     table.set(
         "getImage",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1086,7 +1111,7 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let get_blob_model = model.clone();
+    let get_blob_model = charged.clone();
     table.set(
         "getBlob",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1096,13 +1121,13 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let get_font_model = model.clone();
+    let get_font_model = charged.clone();
     let properties = Rc::new(RefCell::new(BTreeMap::<String, MainThreadRef>::new()));
     #[cfg(feature = "scriptnet")]
     let nil_properties = Rc::new(RefCell::new(std::collections::BTreeSet::<Vec<u8>>::new()));
     #[cfg(feature = "scriptnet")]
     {
-        let model = model.clone();
+        let model = charged.clone();
         let properties = properties.clone();
         let nil_properties = nil_properties.clone();
         table.set(
@@ -1157,7 +1182,7 @@ fn create_scripted_view_model_retained(
         })?,
     )?;
     let instance_method =
-        |model: ScriptViewModel, listener_owner: Option<ScriptedPropertyListenerOwner>| {
+        |model: ChargedModel, listener_owner: Option<ScriptedPropertyListenerOwner>| {
             lua.create_function(move |lua, args: MultiValue| {
                 if model.native_model().is_none() {
                     return Ok(Value::Nil);
@@ -1181,13 +1206,13 @@ fn create_scripted_view_model_retained(
     // input (`lua_properties.cpp:940-955`).
     table.set(
         "instance",
-        instance_method(model.clone(), listener_owner.clone())?,
+        instance_method(charged.clone(), listener_owner.clone())?,
     )?;
     table.set(
         "new",
-        instance_method(model.clone(), listener_owner.clone())?,
+        instance_method(charged.clone(), listener_owner.clone())?,
     )?;
-    let get_view_model = model.clone();
+    let get_view_model = charged.clone();
     table.set(
         "getViewModel",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1242,6 +1267,9 @@ fn create_scripted_view_model_retained(
             else {
                 return Ok(Value::Nil);
             };
+            if let Some(state) = scripted_property_state(&property) {
+                *state.owning_charge.borrow_mut() = Some(Rc::clone(&charge));
+            }
             properties
                 .borrow_mut()
                 .insert(name, MainThreadRef::new(lua, property.clone())?);
@@ -5498,6 +5526,32 @@ mod tests {
         lua.load("kept = nil").exec().unwrap();
         lua.gc_collect().unwrap();
         assert_eq!(budget_used(&lua), 0, "a collected instance refunds");
+
+        // Codex review (lane G3): a property or a method of the instance
+        // kept it alive after its table was collected, uncharged.
+        let property = model
+            .properties()
+            .iter()
+            .find_map(|(name, kind)| {
+                (*kind != ScriptViewModelProperty::SymbolListIndex).then(|| name.clone())
+            })
+            .expect("a property");
+        lua.globals().set("property", property).unwrap();
+        lua.load("keptProperty = Data[name].new()[property] keptMethod = Data[name].new().getNumber")
+            .exec()
+            .unwrap();
+        lua.gc_collect().unwrap();
+        assert_eq!(budget_used(&lua), 2 * expected, "what keeps the instance keeps its charge");
+        // A dropped wrapper frees what it held only on the next cycle,
+        // so each release is collected twice.
+        lua.load("keptProperty = nil").exec().unwrap();
+        lua.gc_collect().unwrap();
+        lua.gc_collect().unwrap();
+        assert_eq!(budget_used(&lua), expected);
+        lua.load("keptMethod = nil").exec().unwrap();
+        lua.gc_collect().unwrap();
+        lua.gc_collect().unwrap();
+        assert_eq!(budget_used(&lua), 0);
     }
 
     // Inventory row 24: `model:new()` / `model:instance()` is the same

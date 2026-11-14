@@ -333,3 +333,15 @@ fn try_app_data_ref_reports_a_mutable_borrow() {
     drop(held);
     assert!(lua.try_app_data_ref::<u32>().unwrap().is_some());
 }
+
+/// A string's length is read in place: the same as its bytes, NULs included.
+#[test]
+fn string_length_matches_its_bytes() {
+    let lua = Lua::new();
+    for bytes in [&b""[..], b"abc", b"a\0b", &[0xff; 70_000]] {
+        let string = lua.create_string(bytes);
+        assert_eq!(string.len(), bytes.len());
+        assert_eq!(string.len(), string.as_bytes().len());
+        assert_eq!(string.is_empty(), bytes.is_empty());
+    }
+}

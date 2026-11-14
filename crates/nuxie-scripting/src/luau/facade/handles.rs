@@ -528,6 +528,18 @@ impl LuaString {
             .unwrap_or_default()
     }
 
+    /// The byte length, read without copying the bytes; 0 for a failed
+    /// handle, which [`Self::as_bytes`] reads as empty.
+    pub fn len(&self) -> usize {
+        self.vm_value()
+            .and_then(|value| self.lua.0.with_vm(|vm| vm.objlen(&value).map_err(Error::from_vm)))
+            .unwrap_or(0)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn to_str(&self) -> Result<String> {
         let raw = self.raw()?;
         let bytes = self

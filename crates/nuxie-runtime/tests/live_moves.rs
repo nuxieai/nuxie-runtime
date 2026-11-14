@@ -13386,10 +13386,10 @@ fn in_place_a_flight_inside_another_flight_is_refused() {
     assert_eq!(page.draw(), before, "the same stream");
 }
 
-/// A flight key on a text, an image or a video is refused at take-off by
-/// name, before anything is marked, and the page draws as before. Each
-/// reads its place and size through the participant it hosts, which no
-/// in-place page proves yet; boxes and component placements fly.
+/// A flight key on a component placement, a text, an image or a video is
+/// refused at take-off by name, before anything is marked, and the page
+/// draws as before. No in-place page has one of them as the keyed element
+/// yet, so the equivalence test proves none of their readers; boxes fly.
 fn refuses_a_keyed(kind: fixture::KeyedKind, named: &str) {
     let page = InPlacePage::load(fixture::InPlaceFixture::Keyed(kind));
     let mut moves = LiveMoves::default();
@@ -13411,6 +13411,11 @@ fn refuses_a_keyed(kind: fixture::KeyedKind, named: &str) {
     assert_eq!(nuxie_runtime::in_place_holds_begun(), holds, "no hold");
     assert_eq!(nuxie_runtime::in_place_lift_marks(), marks, "no lift");
     assert_eq!(page.draw(), before, "the same stream");
+}
+
+#[test]
+fn in_place_a_flight_key_on_a_component_placement_is_refused() {
+    refuses_a_keyed(fixture::KeyedKind::Placement, "a component placement");
 }
 
 #[test]

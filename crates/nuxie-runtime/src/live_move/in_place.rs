@@ -96,6 +96,19 @@ fn resting_size(element: &CoreHandle) -> Vec2D {
         .map_or_else(Vec2D::default, |rest| Vec2D::new(rest.width(), rest.height()))
 }
 
+/// The size `element` draws at now: a box's laid-out size, which layout
+/// interpolation moves toward its rest over time, else its rest.
+fn drawn_size(element: &CoreHandle) -> Vec2D {
+    layout_node(element)
+        .with(|object| {
+            object
+                .as_layout_component()
+                .map(|layout| Vec2D::new(layout.layout_width(), layout.layout_height()))
+        })
+        .flatten()
+        .unwrap_or_else(|| resting_size(element))
+}
+
 /// The CSS box whose own paints and clip a flight's corners and shadow
 /// replace: the element, or a placement's placed artboard's root.
 fn box_of(element: &CoreHandle) -> CoreHandle {
@@ -296,8 +309,9 @@ impl InPlaceFlight {
     /// With U the upper Screen's page matrix, L the copy's Screen's, S the
     /// copy's place now and P the blended pose, the lift's transform is
     /// U⁻¹ · P · S⁻¹ · L. In Scale mode P carries the stretch as its
-    /// innermost scale: the blended size over the copy's laid-out size now,
-    /// so a copy its parent resizes mid-step still draws at the blend. Where
+    /// innermost scale: the blended size over the size the copy draws at
+    /// now, so a copy resized mid-step still draws at the blend, while its
+    /// layout interpolates toward the new size too. Where
     /// S, U or the copy's size can't be inverted, as inside a box scaled to
     /// 0, the copy draws nothing and keeps its last transform until it can
     /// be solved again, as a zoomed version does.
@@ -311,7 +325,8 @@ impl InPlaceFlight {
         let own = end(&self.element)?;
         if self.size_mode == SizeMode::Scale {
             let size = frame_size(frame, a.size, b.size);
-            pose = pose * Mat2D::from_scale(size.x / own.size.x, size.y / own.size.y);
+            let drawn = drawn_size(&self.element);
+            pose = pose * Mat2D::from_scale(size.x / drawn.x, size.y / drawn.y);
         }
         let (upper, _, _) = draw_pose(&self.board)?;
         let (row, _, _) = draw_pose(&self.row)?;

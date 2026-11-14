@@ -531,17 +531,29 @@ impl DataConverter {
 
     /// Release the outer occurrence before nested converters can dirty it.
     pub fn advance_handle(owner: &CoreHandle, elapsed: f32) -> bool {
-        let handler = owner
+        Self::advance_handler_of(owner).is_some_and(|handler| handler(owner, elapsed))
+    }
+
+    /// The handler `advance_handle` dispatches `owner` to: one per converter
+    /// type, so a holder may keep it while `owner` stays the same occurrence.
+    pub(crate) fn advance_handler_of(owner: &CoreHandle) -> Option<ConverterAdvanceHandler> {
+        owner
             .with(|owner| {
                 owner
                     .as_data_converter_capability()
                     .map(|converter| converter.advance_handler())
             })
-            .flatten();
-        handler.is_some_and(|handler| handler(owner, elapsed))
+            .flatten()
     }
 
     pub fn advance_base_handle(owner: &CoreHandle, elapsed: f32) -> bool {
+        // A container whose current answer is that nothing advances is passed
+        // over without a copy of it.
+        if owner.with_data_bind_container(DataBindContainer::cached_may_advance)
+            == Some(Some(false))
+        {
+            return false;
+        }
         owner
             .data_bind_container()
             .is_some_and(|container| container.advance_data_binds(elapsed))

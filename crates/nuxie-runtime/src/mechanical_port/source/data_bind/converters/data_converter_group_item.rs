@@ -1,5 +1,9 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
+use super::data_converter::{ConverterAdvanceHandler, DataConverter};
 use crate::mechanical_port::source::{
     core::CoreHandle,
     generated::{
@@ -20,6 +24,8 @@ use crate::mechanical_port::source::{
 #[derive(Default)]
 pub(crate) struct GroupItemCells {
     converter: RefCell<Option<CoreHandle>>,
+    // The converter's advance handler once looked up; one per converter type.
+    handler: Cell<Option<ConverterAdvanceHandler>>,
 }
 
 impl GroupItemCells {
@@ -29,11 +35,35 @@ impl GroupItemCells {
 
     fn set_converter(&self, value: Option<CoreHandle>) {
         *self.converter.borrow_mut() = value;
+        self.handler.set(None);
         crate::source::data_bind::data_bind_container::DataBindContainer::may_advance_changed();
     }
 
     pub(crate) fn advancing_converter(&self) -> Option<CoreHandle> {
         self.converter()
+    }
+
+    /// Advance the converter as `DataConverter::advance_handle` does, looking
+    /// up its handler only once. A converter that is no longer live answers
+    /// false, as its lookup would.
+    pub(crate) fn advance(&self, elapsed: f32) -> bool {
+        let Some(converter) = self.converter() else {
+            return false;
+        };
+        if !converter.is_occupied() {
+            return false;
+        }
+        let handler = match self.handler.get() {
+            Some(handler) => handler,
+            None => {
+                let Some(handler) = DataConverter::advance_handler_of(&converter) else {
+                    return false;
+                };
+                self.handler.set(Some(handler));
+                handler
+            }
+        };
+        handler(&converter, elapsed)
     }
 }
 

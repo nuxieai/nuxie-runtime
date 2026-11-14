@@ -617,12 +617,18 @@ fn new_charged_instance(
     model: &ScriptViewModel,
     name: Option<&str>,
 ) -> crate::luau::Result<(ScriptViewModel, HostMemoryCharge)> {
-    // The new instance has the shape of the one it is created from.
-    let charge = HostMemoryCharge::for_lua(lua, instance_bytes::of(model))?;
+    // The new instance has at least the shape of the model it is created
+    // from; that is charged before the copy.
+    let mut charge = HostMemoryCharge::for_lua(lua, instance_bytes::of(model))?;
     let instance = model
         .named_instance(name)
         .or_else(|| model.named_instance(None))
         .ok_or_else(|| crate::luau::Error::runtime("view-model instance not found"))?;
+    // An authored template copies its lists and nested instances too, which
+    // the model's shape does not show, and the runtime has no way to measure
+    // a template before copying it. The copy is measured, and refused (and
+    // dropped) before the script can keep it if it does not fit.
+    charge.reserve_to(instance_bytes::of(&instance))?;
     Ok((instance, charge))
 }
 
@@ -5552,6 +5558,30 @@ mod tests {
         lua.gc_collect().unwrap();
         lua.gc_collect().unwrap();
         assert_eq!(budget_used(&lua), 0);
+    }
+
+    // Codex review (lane G3): `Data.X.new(name)` was charged for the
+    // model's shape, but copied the named template's populated lists.
+    #[test]
+    fn data_new_is_charged_for_the_named_template() {
+        let file = fixture_file("component_list_virtualized.riv");
+        let models = nuxie_runtime::script_view_models(&file);
+        let model = models.get("MainVM").expect("MainVM");
+        let template = model.named_instance(Some("Instance 1")).expect("template");
+        let schema = super::instance_bytes::of(model);
+        let copied = super::instance_bytes::of(&template);
+        assert!(copied > 4 * schema, "the template holds more than its shape");
+
+        let lua = budget_lua(copied - 1);
+        install_data_global(&lua, &models).unwrap();
+        refused_by_budget(&lua, "kept = Data.MainVM.new('Instance 1')");
+        lua.gc_collect().unwrap();
+        assert_eq!(budget_used(&lua), 0, "a refused copy keeps nothing");
+
+        let lua = budget_lua(64 * 1024);
+        install_data_global(&lua, &models).unwrap();
+        lua.load("kept = Data.MainVM.new('Instance 1')").exec().unwrap();
+        assert_eq!(budget_used(&lua), copied);
     }
 
     // Inventory row 24: `model:new()` / `model:instance()` is the same

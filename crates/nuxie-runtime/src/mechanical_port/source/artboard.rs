@@ -6194,13 +6194,27 @@ impl Artboard {
     /// when its origin is a pivot only, else upstream's origin times its
     /// layout size. Every route that places content by the origin reads it.
     pub fn content_origin(&self) -> Vec2D {
+        self.content_origin_at(Vec2D::new(self.layout_width(), self.layout_height()))
+    }
+
+    /// Nuxie: `content_origin` for this artboard laid out at `size`.
+    pub(crate) fn content_origin_at(&self, size: Vec2D) -> Vec2D {
         if self.origin_is_pivot_only() {
             Vec2D::new(0.0, 0.0)
         } else {
-            Vec2D::new(
-                self.layout_width() * self.origin_x(),
-                self.layout_height() * self.origin_y(),
-            )
+            Vec2D::new(size.x * self.origin_x(), size.y * self.origin_y())
+        }
+    }
+
+    /// Nuxie: where this artboard's layout box rests, its top left and its
+    /// size, while a live move's hold lays it out at another size
+    /// (css_layout/flight_hold.rs); its own layout box when not held. A
+    /// placed root flying in place is read where it rests.
+    pub(crate) fn resting_layout(&self) -> (Vec2D, Vec2D) {
+        let at = Vec2D::new(self.layout_x(), self.layout_y());
+        match self.base.base.flight_rest() {
+            Some((moved, size)) => (at + moved, size),
+            None => (at, Vec2D::new(self.layout_width(), self.layout_height())),
         }
     }
 

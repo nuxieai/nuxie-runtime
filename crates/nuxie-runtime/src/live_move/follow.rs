@@ -828,11 +828,21 @@ impl Resting {
                 let record = record::find_in(slot.children())?;
                 let node = o.as_transform_component()?.transform();
                 // The slot's own placement (nested_artboard_layout.rs): its
-                // layout box, and a pivot that stays put when it turns.
+                // layout box, and a pivot that stays put when it turns. A
+                // placed root flying in place rests where its hold keeps it,
+                // its origin and pivot taken from its resting size.
                 let (mut base, pivot) = slot.live_move_layout_instance()?.with_artboard(|i| {
+                    let (at, size) = i.resting_layout();
+                    let origin = if i.frame_origin() {
+                        Vec2D::default()
+                    } else {
+                        -i.content_origin_at(size)
+                    };
                     (
-                        Vec2D::new(i.layout_x(), i.layout_y()) - i.origin(),
-                        i.origin_is_pivot_only().then(|| i.origin_offset()),
+                        at - origin,
+                        i.origin_is_pivot_only().then(|| {
+                            Vec2D::new(i.pivot_origin_x() * size.x, i.pivot_origin_y() * size.y)
+                        }),
                     )
                 });
                 if let Some(origin) = parent
@@ -917,14 +927,7 @@ pub(super) fn lift_cover(
         .iter()
         .position(|item| draws_for(item, anchor, board))?;
     let mut rest = Resting::new(board);
-    // An anchor that is not a box rests in its own box, not its nearest
-    // box's (in_place.rs, `Flying`).
-    let anchor_box = match super::in_place::Flying::read(anchor).and_then(|f| f.rest_anchor()) {
-        Some((level, inside, size)) => rest
-            .world(&level)
-            .map(|world| transformed_box(world * inside, size)),
-        None => rest.drawable_box(&RuntimeDrawableOccurrence::Authored(anchor.clone())),
-    };
+    let anchor_box = anchor_box(&mut rest, anchor);
     list[..at]
         .iter()
         .rev()
@@ -939,6 +942,24 @@ pub(super) fn lift_cover(
                 }
         })
         .cloned()
+}
+
+/// A lifted copy's anchor's resting box on its Screen. An anchor that is
+/// not a box rests in its own box, not its nearest box's (in_place.rs,
+/// `Flying`).
+fn anchor_box(rest: &mut Resting, anchor: &CoreHandle) -> Option<Aabb> {
+    match super::in_place::Flying::read(anchor).and_then(|f| f.rest_anchor()) {
+        Some((level, inside, size)) => rest
+            .world(&level)
+            .map(|world| transformed_box(world * inside, size)),
+        None => rest.drawable_box(&RuntimeDrawableOccurrence::Authored(anchor.clone())),
+    }
+}
+
+/// `anchor`'s resting box on `board`, as its cover reads it.
+#[cfg(test)]
+pub(super) fn resting_anchor_box(board: &CoreHandle, anchor: &CoreHandle) -> Option<Aabb> {
+    anchor_box(&mut Resting::new(board), anchor)
 }
 
 /// The matrix placement gives a CSS slot's frame at rest, in its Screen's

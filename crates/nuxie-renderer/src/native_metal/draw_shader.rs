@@ -387,7 +387,19 @@ mod tests {
 
     #[test]
     fn generated_namespace_inventory_has_the_pinned_namespaces() {
-        let names: Vec<_> = DrawShaderSource::load().namespace_inventory().collect();
+        // The build script's translated generator output is what
+        // `native_metal_draw.metallib` is compiled from. The checked-in
+        // `shaders/draw_combinations.metal` is a historical capture
+        // (675703b9, before upstream 74e5d3f6 added ENABLE_ANGULAR_GRADIENT
+        // at feature index 9) and keeps the old 11-digit names.
+        let generated = include_str!(concat!(
+            env!("OUT_DIR"),
+            "/mechanical_shader_generated/draw_combinations.metal"
+        ));
+        let names: Vec<_> = generated
+            .lines()
+            .filter_map(|line| line.strip_prefix("namespace "))
+            .collect();
         assert_eq!(names.len(), 10);
         assert_eq!(
             names,

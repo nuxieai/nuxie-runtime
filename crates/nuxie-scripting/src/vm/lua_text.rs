@@ -1,8 +1,12 @@
 //! src/lua/renderer/lua_text.cpp and include/rive/lua/scripted_text.hpp at db31ea87.
 //! Retained layout plus epoch-checked indices replace interior C++ pointers.
 use super::{
-    host_memory_budget::{HostMemoryCharge, bytes_of, grown_capacity}, lua_font::ScriptedFont, lua_mat2d::ScriptedMat2D,
-    lua_paint::ScriptedPaint, lua_path::ScriptedPath, lua_renderer::ScriptedRenderer,
+    host_memory_budget::{HostMemoryCharge, bytes_of, grown_capacity},
+    lua_font::ScriptedFont,
+    lua_mat2d::ScriptedMat2D,
+    lua_paint::ScriptedPaint,
+    lua_path::ScriptedPath,
+    lua_renderer::ScriptedRenderer,
     lua_renderer_library::RendererBindings,
 };
 use crate::luau::{
@@ -31,15 +35,6 @@ use std::{
     sync::{Arc, Weak},
 };
 
-/// Host bytes one appended input byte is charged: a code point (4 bytes; a
-/// byte is at most one code point) and the shaped glyph data it may become
-/// (glyph id, text index, advance, x position, offset: about 20 bytes).
-const TEXT_BYTES_PER_INPUT_BYTE: usize = 24;
-/// Host bytes one append's `TextRun` is charged.
-const TEXT_RUN_BYTES: usize = 64;
-/// Host bytes one new style (a distinct paint and colour) is charged: the
-/// style, its paint handle and its retained render path.
-const TEXT_STYLE_BYTES: usize = 256;
 /// Styles one Text may hold: a glyph run names its style with a `u16`.
 const MAX_TEXT_STYLES: usize = 1 << 16;
 
@@ -61,11 +56,10 @@ struct TextLayout {
     /// `text.revision()` when last observed.
     seen_revision: u32,
     epoch: u64,
-    /// Host bytes this Text is charged: the most its content has needed
-    /// since it was created, since a clear keeps the capacity it grew to.
+    /// Host bytes this Text is charged: what `RawText::heap_bytes` reports,
+    /// its content, styles and layout. Attached to the VM's budget when the
+    /// Text is made, so every later charge needs no `Lua`.
     charge: HostMemoryCharge,
-    /// Bytes the content appended since the last clear needs.
-    content_bytes: usize,
     /// The decoded fonts the content was shaped with and their charges,
     /// one entry per change of font between appends. Shaped runs keep the
     /// faces alive past a clear (until the next layout), so like `charge`
@@ -84,16 +78,17 @@ struct TextFont {
 }
 
 impl TextLayout {
-    fn new(text: RawText) -> Self {
-        Self {
+    fn new(lua: &Lua, text: RawText) -> Result<Self> {
+        let mut charge = HostMemoryCharge::default();
+        charge.attach(lua)?;
+        Ok(Self {
             seen_revision: text.revision(),
             text,
             epoch: 0,
-            charge: HostMemoryCharge::default(),
-            content_bytes: 0,
+            charge,
             fonts: Vec::new(),
             fonts_charge: HostMemoryCharge::default(),
-        }
+        })
     }
 
     fn sync(&mut self) {
@@ -107,9 +102,36 @@ impl TextLayout {
         self.epoch
     }
 
+    /// The text, for reads and writes that do not lay it out (content,
+    /// settings). Anything that reads the layout goes through
+    /// [`Self::laid_out`], which charges it.
     fn text(&mut self) -> &mut RawText {
         self.sync();
         &mut self.text
+    }
+
+    /// Charges what the text holds now. A layout's size is known only once
+    /// it is built, so this runs right after each layout, before anything
+    /// reads it; when the layout does not fit, it is released again and the
+    /// budget error raised.
+    fn settle(&mut self) -> Result<()> {
+        if let Err(error) = self.charge.set(self.text.heap_bytes()) {
+            self.text.release_layout();
+            // Content and styles only, which were charged before they grew.
+            self.charge.set(self.text.heap_bytes())?;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    /// The text laid out and charged for its layout.
+    fn laid_out(&mut self) -> Result<&mut RawText> {
+        self.sync();
+        // An unchanged layout keeps the charge it was settled at.
+        if self.text.lay_out() {
+            self.settle()?;
+        }
+        Ok(&mut self.text)
     }
 
     /// The charge for `font`'s face if it was appended here; a font the
@@ -122,12 +144,12 @@ impl TextLayout {
             .map_or_else(Rc::default, |entry| Rc::clone(&entry.charge))
     }
 
-    /// The text, if nothing changed since `epoch`.
+    /// The text laid out, if nothing changed since `epoch`.
     fn fresh(&mut self, epoch: u64) -> Result<&mut RawText> {
         if self.epoch() != epoch {
             return Err(stale());
         }
-        Ok(&mut self.text)
+        self.laid_out()
     }
 }
 
@@ -249,17 +271,25 @@ impl ScriptedText {
             index,
         }
     }
-    fn line_count(&self) -> usize {
-        self.layout.borrow_mut().text().ordered_lines().len()
+    fn line_count(&self) -> Result<usize> {
+        Ok(self.layout.borrow_mut().laid_out()?.ordered_lines().len())
+    }
+    /// The bytes this Text's content and layout report holding, which is
+    /// what its charge is set to after every change.
+    #[cfg(test)]
+    pub(super) fn held_bytes(&self) -> usize {
+        self.layout.borrow().text.heap_bytes()
     }
 }
 impl UserData for ScriptedText {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("sizing", |_, t| match t.layout.borrow_mut().text().sizing() {
-            TextSizing::AutoWidth => Ok("autoWidth"),
-            TextSizing::AutoHeight => Ok("autoHeight"),
-            TextSizing::Fixed => Ok("fixed"),
-            TextSizing::Unknown(_) => Err(Error::runtime("Text has an invalid sizing value")),
+        fields.add_field_method_get("sizing", |_, t| {
+            match t.layout.borrow_mut().text().sizing() {
+                TextSizing::AutoWidth => Ok("autoWidth"),
+                TextSizing::AutoHeight => Ok("autoHeight"),
+                TextSizing::Fixed => Ok("fixed"),
+                TextSizing::Unknown(_) => Err(Error::runtime("Text has an invalid sizing value")),
+            }
         });
         fields.add_field_method_get("overflow", |_, t| {
             match t.layout.borrow_mut().text().overflow() {
@@ -290,10 +320,12 @@ impl UserData for ScriptedText {
                 }
             }
         });
-        fields.add_field_method_get("origin", |_, t| match t.layout.borrow_mut().text().origin() {
-            TextOrigin::Top => Ok("top"),
-            TextOrigin::Baseline => Ok("baseline"),
-            TextOrigin::Unknown(_) => Err(Error::runtime("Text has an invalid origin value")),
+        fields.add_field_method_get("origin", |_, t| {
+            match t.layout.borrow_mut().text().origin() {
+                TextOrigin::Top => Ok("top"),
+                TextOrigin::Baseline => Ok("baseline"),
+                TextOrigin::Unknown(_) => Err(Error::runtime("Text has an invalid origin value")),
+            }
         });
         fields.add_field_method_get("direction", |_, t| {
             enum_name(
@@ -313,7 +345,7 @@ impl UserData for ScriptedText {
         });
         fields.add_field_method_get("length", |_, t| Ok(t.layout.borrow_mut().text().length()));
         fields.add_field_method_get("isEmpty", |_, t| Ok(t.layout.borrow_mut().text().empty()));
-        fields.add_field_method_get("lineCount", |_, t| Ok(t.line_count()));
+        fields.add_field_method_get("lineCount", |_, t| t.line_count());
         fields.add_field_method_set("sizing", |_, t, v: String| {
             t.layout
                 .borrow_mut()
@@ -322,10 +354,11 @@ impl UserData for ScriptedText {
             Ok(())
         });
         fields.add_field_method_set("overflow", |_, t, v: String| {
-            t.layout
-                .borrow_mut()
-                .text()
-                .set_overflow_index(enum_index(&v, OVERFLOW, "TextOverflow")?);
+            t.layout.borrow_mut().text().set_overflow_index(enum_index(
+                &v,
+                OVERFLOW,
+                "TextOverflow",
+            )?);
             Ok(())
         });
         fields.add_field_method_set("align", |_, t, v: String| {
@@ -343,11 +376,10 @@ impl UserData for ScriptedText {
             Ok(())
         });
         fields.add_field_method_set("wordBreak", |_, t, v: String| {
-            t.layout.borrow_mut().text().set_word_break_index(enum_index(
-                &v,
-                WORD_BREAK,
-                "TextWordBreak",
-            )?);
+            t.layout
+                .borrow_mut()
+                .text()
+                .set_word_break_index(enum_index(&v, WORD_BREAK, "TextWordBreak")?);
             Ok(())
         });
         fields.add_field_method_set("origin", |_, t, v: String| {
@@ -358,10 +390,11 @@ impl UserData for ScriptedText {
             Ok(())
         });
         fields.add_field_method_set("direction", |_, t, v: String| {
-            t.layout
-                .borrow_mut()
-                .text()
-                .set_direction_index(enum_index(&v, DIRECTION, "TextDirection")?);
+            t.layout.borrow_mut().text().set_direction_index(enum_index(
+                &v,
+                DIRECTION,
+                "TextDirection",
+            )?);
             Ok(())
         });
         fields.add_field_method_set("maxWidth", |_, t, v: f32| {
@@ -406,19 +439,11 @@ impl UserData for ScriptedText {
                 let mut layout = t.layout.borrow_mut();
                 let layout = &mut *layout;
                 check_style_room(layout.text(), paint.as_ref(), foreground)?;
-                // Charged for a new style up front; the content keeps only
-                // what it used, the charge the most it has needed.
-                let appended = bytes
-                    .len()
-                    .saturating_mul(TEXT_BYTES_PER_INPUT_BYTE)
-                    .saturating_add(TEXT_RUN_BYTES);
-                layout.charge.attach(lua)?;
-                layout.charge.reserve_to(
-                    layout
-                        .content_bytes
-                        .saturating_add(appended)
-                        .saturating_add(TEXT_STYLE_BYTES),
-                )?;
+                // Charged before the content grows, for the most it can grow
+                // to; the exact size is charged once it has.
+                layout
+                    .charge
+                    .reserve_to(layout.text.heap_bytes_after_append(bytes.len()))?;
                 let face = Arc::downgrade(&font);
                 let new_font = !layout
                     .fonts
@@ -436,7 +461,6 @@ impl UserData for ScriptedText {
                         .try_reserve_exact(capacity.saturating_sub(len))
                         .map_err(|_| Error::runtime("not enough memory"))?;
                 }
-                let styles = layout.text.style_count();
                 layout.text().append(
                     &bytes,
                     paint,
@@ -453,23 +477,13 @@ impl UserData for ScriptedText {
                         charge: font_charge,
                     });
                 }
-                let new_style = if layout.text.style_count() > styles {
-                    TEXT_STYLE_BYTES
-                } else {
-                    0
-                };
-                layout.content_bytes = layout
-                    .content_bytes
-                    .saturating_add(appended)
-                    .saturating_add(new_style);
-                Ok(())
+                layout.settle()
             },
         );
         methods.add_method("clear", |_, t, ()| {
             let mut layout = t.layout.borrow_mut();
             layout.text().clear();
-            layout.content_bytes = 0;
-            Ok(())
+            layout.settle()
         });
         methods.add_method_lent(
             "draw",
@@ -477,23 +491,27 @@ impl UserData for ScriptedText {
                 let paint = paint
                     .map(|p| p.borrow::<ScriptedPaint>().map(|p| p.render_paint.clone()))
                     .transpose()?;
+                // Laid out and charged first: the render paths the draw builds
+                // are counted with the layout.
+                let mut layout = t.layout.borrow_mut();
+                let text = layout.laid_out()?;
                 renderer
                     .borrow::<ScriptedRenderer>()?
                     .with_renderer_mut(loan, |renderer| {
-                        t.layout.borrow_mut().text().render(renderer, paint);
+                        text.render(renderer, paint);
                         Ok(())
                     })
             },
         );
         methods.add_method("bounds", |_, t, ()| {
-            let b = t.layout.borrow_mut().text().bounds();
+            let b = t.layout.borrow_mut().laid_out()?.bounds();
             Ok((
                 vector(Vec2D::new(b.min_x, b.min_y)),
                 vector(Vec2D::new(b.max_x, b.max_y)),
             ))
         });
         methods.add_method("line", |lua, t, index: i32| {
-            let count = t.line_count();
+            let count = t.line_count()?;
             let line = usize::try_from(index)
                 .ok()
                 .and_then(|index| index.checked_sub(1))
@@ -503,7 +521,7 @@ impl UserData for ScriptedText {
             push_line(lua, t.line(line))
         });
         methods.add_method("lines", |lua, t, ()| {
-            let count = t.line_count();
+            let count = t.line_count()?;
             let lines = lua.create_table();
             for i in (0..count).map_while(|i| u32::try_from(i).ok()) {
                 lines.raw_push(push_line(lua, t.line(i))?)?;
@@ -512,7 +530,7 @@ impl UserData for ScriptedText {
         });
         methods.add_method("hitTest", |_, t, p: Vector| {
             let mut layout = t.layout.borrow_mut();
-            let view = layout.text().layout_view();
+            let view = layout.laid_out()?.layout_view();
             one_based(
                 CursorPosition::from_translation(Vec2D::new(p.x(), p.y()), &view)
                     .code_point_index(),
@@ -520,7 +538,7 @@ impl UserData for ScriptedText {
         });
         methods.add_method("caret", |_, t, index: i32| {
             let mut layout = t.layout.borrow_mut();
-            let view = layout.text().layout_view();
+            let view = layout.laid_out()?.layout_view();
             let p = CursorPosition::at_index(index.saturating_sub(1).max(0) as u32, &view)
                 .visual_position(&view);
             Ok(if p.found() {
@@ -538,7 +556,7 @@ impl UserData for ScriptedText {
             // VM object is made.
             let rects = {
                 let mut layout = t.layout.borrow_mut();
-                let view = layout.text().layout_view();
+                let view = layout.laid_out()?.layout_view();
                 let cursor = Cursor::new(
                     CursorPosition::at_index(from.saturating_sub(1).max(0) as u32, &view),
                     CursorPosition::at_index(to.saturating_sub(1).max(0) as u32, &view),
@@ -597,13 +615,9 @@ impl ScriptedTextLine {
 impl UserData for ScriptedTextLine {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("index", |_, l| l.with(|_| one_based(l.index)));
-        fields.add_field_method_get("x", |_, l| {
-            l.with(|t| Ok(line_at(t, l.index)?.start_x()))
-        });
+        fields.add_field_method_get("x", |_, l| l.with(|t| Ok(line_at(t, l.index)?.start_x())));
         fields.add_field_method_get("top", |_, l| l.with(|t| Ok(t.line_top(l.index))));
-        fields.add_field_method_get("baseline", |_, l| {
-            l.with(|t| Ok(line_at(t, l.index)?.y()))
-        });
+        fields.add_field_method_get("baseline", |_, l| l.with(|t| Ok(line_at(t, l.index)?.y())));
         fields.add_field_method_get("bottom", |_, l| {
             l.with(|t| Ok(line_at(t, l.index)?.bottom()))
         });
@@ -623,14 +637,20 @@ impl UserData for ScriptedTextLine {
         fields.add_field_method_get("firstIndex", |_, l| {
             l.with(|t| {
                 let view = t.layout_view();
-                let line = view.ordered_lines().get(l.index as usize).ok_or_else(stale)?;
+                let line = view
+                    .ordered_lines()
+                    .get(l.index as usize)
+                    .ok_or_else(stale)?;
                 one_based(line.first_code_point_index(view.glyph_lookup()))
             })
         });
         fields.add_field_method_get("lastIndex", |_, l| {
             l.with(|t| {
                 let view = t.layout_view();
-                let line = view.ordered_lines().get(l.index as usize).ok_or_else(stale)?;
+                let line = view
+                    .ordered_lines()
+                    .get(l.index as usize)
+                    .ok_or_else(stale)?;
                 one_based(line.last_code_point_index(view.glyph_lookup()))
             })
         });
@@ -776,10 +796,7 @@ impl UserData for ScriptedGlyph {
                     return Ok(path);
                 }
                 path.add_path(
-                    &RawText::glyph_path(
-                        run_font(r)?.as_ref(),
-                        glyph_value(&r.glyphs, g.glyph)?,
-                    ),
+                    &RawText::glyph_path(run_font(r)?.as_ref(), glyph_value(&r.glyphs, g.glyph)?),
                     Some(&RawText::glyph_transform(r, g.position)),
                 );
                 Ok(path)
@@ -800,7 +817,7 @@ pub(super) fn register(lua: &Lua) -> Result<()> {
                         .ok_or_else(|| Error::runtime("retained factory required"))
                 })?;
             let userdata = lua.create_userdata(ScriptedText {
-                layout: Rc::new(RefCell::new(TextLayout::new(RawText::new(factory)))),
+                layout: Rc::new(RefCell::new(TextLayout::new(lua, RawText::new(factory))?)),
             })?;
             super::lua_font::source_metatable(
                 lua,
@@ -1023,5 +1040,139 @@ mod epoch_tests {
         assert_eq!(seen, 5, "the revision is back where the handle saw it");
         assert_eq!(epoch, fetched + (1 << 32));
         assert_eq!(advance_epoch(9, 3, 3), 9, "no change keeps handles fresh");
+    }
+}
+
+/// What a Text is charged against its VM's host memory budget.
+#[cfg(all(test, feature = "compiler"))]
+mod budget_tests {
+    use super::super::host_memory_budget::HostMemoryBudget;
+    use crate::vm::{ScriptExecutionLimits, ScriptVm};
+    use nuxie_render_api::{PersistentFactory, RecordingFactory};
+
+    /// Bytes the fixture font's decoded face is charged.
+    const FONT_BYTES: usize = 226_004;
+
+    struct Vm {
+        vm: ScriptVm,
+        _factory: PersistentFactory<RecordingFactory>,
+    }
+
+    impl Vm {
+        fn with_budget(bytes: usize) -> Self {
+            let vm = ScriptVm::new_with_execution_limits(
+                ScriptExecutionLimits::new()
+                    .with_max_host_memory_bytes(bytes)
+                    .with_max_interrupts_per_callback(1_000_000),
+            )
+            .unwrap();
+            let mut factory = PersistentFactory::new(RecordingFactory::new());
+            vm.install_render_factory(&mut factory).unwrap();
+            vm.install_rive_globals().unwrap();
+            let bytes = include_bytes!("../../../../fixtures/fonts/ibm-plex-sans-arabic.ttf");
+            let globals = vm.lua().globals();
+            let readonly = globals.is_readonly();
+            globals.set_readonly(false);
+            globals
+                .set("fontBytes", vm.lua().create_buffer(bytes).unwrap())
+                .unwrap();
+            globals.set_readonly(readonly);
+            Self {
+                vm,
+                _factory: factory,
+            }
+        }
+
+        fn used(&self) -> usize {
+            HostMemoryBudget::for_lua(self.vm.lua()).unwrap().used()
+        }
+
+        fn text_bytes(&self) -> usize {
+            let text: crate::luau::AnyUserData = self.vm.lua().globals().get("text").unwrap();
+            let text = text.borrow::<super::ScriptedText>().unwrap();
+            let layout = text.layout.borrow();
+            assert_eq!(layout.charge.bytes(), layout.text.heap_bytes());
+            layout.charge.bytes()
+        }
+    }
+
+    /// A Text of `count` ASCII characters, laid out.
+    fn laid_out(vm: &Vm, count: usize) {
+        vm.vm
+            .eval::<()>(&format!(
+                "font = Font.decode(fontBytes) \
+                 text = Text.new() \
+                 text:append(string.rep('x', {count}), {{font = font}}) \
+                 local _ = text:bounds()"
+            ))
+            .unwrap();
+    }
+
+    // Lane E2b's review: 10,000 ASCII characters were charged 240 KB
+    // (24 bytes per input byte) while the layout held about 2.78 MB.
+    #[test]
+    fn a_laid_out_text_is_charged_what_its_layout_holds() {
+        let vm = Vm::with_budget(64 * 1024 * 1024);
+        laid_out(&vm, 10_000);
+        let text = vm.text_bytes();
+        let estimate = 24 * 10_000 + 64 + 256;
+        println!("10,000 ASCII characters: charged {text} bytes (estimate was {estimate})");
+        assert!(text > 2_000_000, "{text}");
+        // The font list is charged on its own: four 24-byte entries.
+        assert_eq!(vm.used(), FONT_BYTES + text + 4 * 24);
+        // A clear keeps the content's capacity until the next layout.
+        vm.vm
+            .eval::<()>("text:clear() local _ = text:bounds()")
+            .unwrap();
+        assert!(vm.text_bytes() < text);
+    }
+
+    #[test]
+    fn a_layout_over_the_budget_is_an_error_and_is_let_go() {
+        let vm = Vm::with_budget(FONT_BYTES + 600_000);
+        let (failed, error): (bool, String) = vm
+            .vm
+            .eval(
+                "font = Font.decode(fontBytes) \
+                 text = Text.new() \
+                 text:append(string.rep('x', 10000), {font = font}) \
+                 local ok, err = pcall(function() return text:bounds() end) \
+                 return not ok, tostring(err)",
+            )
+            .unwrap();
+        assert!(failed, "the layout fit");
+        assert!(error.contains("host memory budget"), "{error}");
+        let content = vm.text_bytes();
+        assert!(
+            content < 200_000,
+            "only the content stays charged: {content}"
+        );
+        assert!(vm.used() <= FONT_BYTES + 600_000);
+        // Every later read of the layout is refused the same way.
+        let (failed, _): (bool, String) = vm
+            .vm
+            .eval(
+                "local ok, err = pcall(function() return text.lineCount end) \
+                 return not ok, tostring(err)",
+            )
+            .unwrap();
+        assert!(failed);
+    }
+
+    #[test]
+    fn an_append_is_charged_before_the_content_grows() {
+        let vm = Vm::with_budget(FONT_BYTES + 100_000);
+        let (failed, error): (bool, String) = vm
+            .vm
+            .eval(
+                "font = Font.decode(fontBytes) \
+                 text = Text.new() \
+                 local ok, err = pcall(function() text:append(string.rep('x', 20000), {font = font}) end) \
+                 return not ok, tostring(err)",
+            )
+            .unwrap();
+        assert!(failed);
+        assert!(error.contains("host memory budget"), "{error}");
+        assert!(vm.vm.eval::<bool>("return text.isEmpty").unwrap());
     }
 }

@@ -25,11 +25,14 @@ use nuxie_runtime::group_opacity_fixture::{
     artboard_record, bind_page, box_record, row_opacity, screen_row, set_row_opacity, Block,
     BoxShadow, Host, Item, Overflow, Page, Scene, Unit, KEYED_SCREEN, MARKS,
 };
-use nuxie_runtime::live_move::{records::LiveSlot, slot_pose, Flight, LiveMoves};
+use nuxie_runtime::live_move::{
+    records::{LiveFlight, LiveSlot},
+    slot_pose, Flight, LiveMoves,
+};
 use nuxie_runtime::live_move_fixture::{
     css_flight_over_backing_fixture, css_flight_over_cached_backing_fixture,
-    css_flight_under_fading_box_fixture, css_paint_fixture, flight_animation_fixture, FlightWindow,
-    PaintCase, ABOVE_BADGE, ABOVE_BAR, FADING_BOX_UNIT, MARK_BACKING, MARK_CHILD, MARK_FLIGHT,
+    css_flight_under_fading_box_fixture, css_paint_fixture_shaped, flight_animation_fixture,
+    FlightWindow, PaintCase, PaintShape, ZoomCase, ABOVE_BADGE, ABOVE_BAR, FADING_BOX_UNIT, MARK_BACKING, MARK_CHILD, MARK_FLIGHT,
     MARK_PANEL, SCREEN_B_BACKING,
 };
 use nuxie_runtime::mechanical_port::source::{
@@ -44,7 +47,7 @@ use nuxie_runtime::mechanical_port::source::{
     viewmodel::viewmodel_instance_list_item::ViewModelInstanceListItem,
 };
 use nuxie_runtime::{
-    File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle,
+    CoreHandle, File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle,
     RuntimeStateMachineInstanceHandle,
 };
 use std::rc::Rc;
@@ -1733,12 +1736,31 @@ fn a_clipping_box_at_own_one_under_a_scope_reads_as_one_picture() {
 }
 
 const PROGRESS: i32 = 62003;
+/// A flight record's progress (docs/live-moves.md, Flying in place).
+const RECORD_PROGRESS: i32 = 62033;
+
+thread_local! {
+    /// The shape `paint_page` writes a paint case's page in: an in-place twin
+    /// runs a slot test's own assertions on its page flown in place.
+    static SHAPE: std::cell::Cell<PaintShape> = const { std::cell::Cell::new(PaintShape::Slots) };
+}
+
+/// `case`'s page in this thread's shape.
+fn paint_page(case: PaintCase) -> Vec<u8> {
+    let shape = SHAPE.with(std::cell::Cell::get);
+    css_paint_fixture_shaped(case, shape)
+        .unwrap_or_else(|why| panic!("{case:?} has no {shape:?} page: {why}"))
+}
 
 /// A step of a page with one flight: on a versions page, unit c flying alone
 /// from A to B by "t2", driven as the page player drives a frame, the page's
 /// own machine bound to its model. Fields drop in order, the page last.
 struct Journey {
-    flight: Flight,
+    /// The one slot flight, on a slot page.
+    flight: Option<Flight>,
+    /// Every flight's controls: a slot flight's values, or in place each
+    /// copy's flight record.
+    controls: Vec<CoreHandle>,
     moves: LiveMoves,
     machine: RuntimeStateMachineInstanceHandle,
     live: Live,
@@ -1764,10 +1786,16 @@ impl Journey {
         moves.prepare(&live.root).unwrap();
         moves.step_begin(&live.root, to, Some(step)).unwrap();
         let mut flights = moves.flights(&live.root);
-        assert_eq!(flights.len(), 1, "one unit flies alone");
-        let flight = flights.remove(0);
+        let controls = moves.flight_controls(&live.root);
+        let flight = if flights.is_empty() {
+            assert!(!controls.is_empty(), "in place, copies fly");
+            None
+        } else {
+            (flights.len() == 1).then(|| flights.remove(0))
+        };
         Self {
             flight,
+            controls,
             moves,
             machine,
             live,
@@ -1780,11 +1808,17 @@ impl Journey {
     /// Moves the flight to `progress` and runs a frame's advance and its
     /// follower, which must report no error.
     fn follow(&mut self, progress: f32, what: &str) {
-        assert!(CoreRegistry::set_double_handle(
-            &self.flight.controls(),
-            PROGRESS,
-            progress
-        ));
+        for controls in &self.controls {
+            let key = if controls
+                .with_downcast::<LiveFlight, _>(|_| ())
+                .is_some()
+            {
+                RECORD_PROGRESS
+            } else {
+                PROGRESS
+            };
+            assert!(CoreRegistry::set_double_handle(controls, key, progress));
+        }
         self.machine.advance_and_apply(0.0);
         if let Err(error) = self.moves.after_advance(&self.live.root) {
             panic!("{what}: the follower reports {error:#}");
@@ -1792,11 +1826,14 @@ impl Journey {
     }
     /// The flight's pose opacity, as the follower last wrote it.
     fn pose_opacity(&self) -> f32 {
-        slot_pose(&self.flight.flight).unwrap().opacity
+        slot_pose(&self.slot_flight().flight).unwrap().opacity
+    }
+    fn slot_flight(&self) -> &Flight {
+        self.flight.as_ref().expect("one unit flies alone in a flight slot")
     }
     /// Draws the frame, and reads it at the center of the flight's pose.
     fn draw(&mut self) -> (Drawn, [f32; 3]) {
-        let pose = slot_pose(&self.flight.flight).unwrap();
+        let pose = slot_pose(&self.slot_flight().flight).unwrap();
         let center = pose.transform * Vec2D::new(pose.size.x / 2.0, pose.size.y / 2.0);
         let drawn = self.live.draw(PLAIN);
         let read = drawn.at(center.x as usize, center.y as usize);
@@ -2727,7 +2764,7 @@ fn match_at(case: PaintCase, f: f32) -> Drawn {
         (0xff28_2828, T1, T2, B),
         "the design's 40, T1, T2 and B"
     );
-    let mut journey = Journey::on(&css_paint_fixture(case), (400, 300), "B", "go");
+    let mut journey = Journey::on(&paint_page(case), (400, 300), "B", "go");
     journey.set_screen("B", f);
     journey.machine.advance_and_apply(0.5);
     journey.follow(1.0, &format!("{case:?} at {f}, the red landing"));
@@ -2964,7 +3001,7 @@ const BELOW_BAR: (usize, usize) = (40, 250);
 /// on A, with Screen A at `a` and B at `b`.
 fn above_bar(badge: bool, a: f32, b: f32) -> Journey {
     let mut journey = Journey::on(
-        &css_paint_fixture(PaintCase::AboveBar { badge }),
+        &paint_page(PaintCase::AboveBar { badge }),
         (400, 300),
         "B",
         "go",
@@ -3140,7 +3177,7 @@ fn an_above_mark_back_to_zero_draws_in_place_again() {
 #[test]
 fn a_mark_of_3_leaves_the_rest_of_a_screen_at_1_as_a_plain_draw() {
     let mut journey = Journey::on(
-        &css_paint_fixture(match_marks(false, (0.5, 0.0), (1.0, 2.0))),
+        &paint_page(match_marks(false, (0.5, 0.0), (1.0, 2.0))),
         (400, 300),
         "B",
         "go",
@@ -3178,4 +3215,119 @@ fn a_draw_visitor_after_a_plain_draw_reports_no_split_change() {
         1.0,
         "under a visitor the bar draws in its row, under B's backing",
     );
+}
+
+/// 4.2 of the in-place plan, the renderer's mark and Above cases (the
+/// inventory's row 9): each test above, run again on its page flown in place,
+/// each copy drawn by its lift entry. The bitmap-cached host has no in-place
+/// page (a bitmap cache is an artboard's), so its case stays slot only.
+mod in_place_twins {
+    macro_rules! twins {
+        ($($name:ident),* $(,)?) => {
+            $(
+                #[test]
+                fn $name() {
+                    super::SHAPE.with(|shape| shape.set(super::PaintShape::InPlace));
+                    super::$name();
+                }
+            )*
+        };
+    }
+    twins!(
+        a_marked_panel_above_a_flight_draws_at_its_own_strength,
+        a_marked_panel_below_a_flight_draws_under_its_screens_fade,
+        a_marked_child_above_a_flight_leaves_its_plain_boxs_picture,
+        a_marked_child_above_a_flight_draws_with_its_screen_at_zero,
+        a_layer_mask_after_a_flight_makes_no_canvas_at_zero,
+        an_above_mark_draws_over_the_screen_on_top_at_full_strength,
+        an_above_mark_keeps_full_strength_in_a_fade,
+        above_marks_draw_by_rank_then_row,
+        an_above_mark_back_to_zero_draws_in_place_again,
+        a_mark_of_3_leaves_the_rest_of_a_screen_at_1_as_a_plain_draw,
+        a_draw_visitor_after_a_plain_draw_reports_no_split_change,
+    );
+}
+
+/// `case` flown by "go" to `progress` over U, in `shape`.
+fn zoom_at(case: ZoomCase, shape: PaintShape, progress: f32) -> Drawn {
+    let bytes = css_paint_fixture_shaped(PaintCase::Zoom(case), shape).unwrap();
+    let mut journey = Journey::on(&bytes, (400, 300), "B", "go");
+    journey.machine.advance_and_apply(progress);
+    journey.follow(progress, &format!("{case:?} {shape:?} at {progress}"));
+    journey.live.draw(PLAIN)
+}
+
+/// Both pages read the same at every pixel, within a level, and composite
+/// as many pictures.
+fn same_pixels(slots: &Drawn, in_place: &Drawn, what: &str) {
+    assert_eq!(slots.pixels.len(), in_place.pixels.len(), "{what}: size");
+    let pictures = |drawn: &Drawn| (drawn.canvases.clone(), drawn.composites);
+    let worst = slots
+        .pixels
+        .iter()
+        .zip(&in_place.pixels)
+        .enumerate()
+        .map(|(i, (a, b))| (i, a.abs_diff(*b)))
+        .max_by_key(|(_, d)| *d)
+        .unwrap();
+    let pixel = worst.0 / 4;
+    let (x, y) = (pixel % slots.width, pixel / slots.width);
+    // Where the pages differ: how many pixels, and the box around them.
+    let off = (0..slots.pixels.len() / 4)
+        .filter(|i| (0..4).any(|c| slots.pixels[i * 4 + c].abs_diff(in_place.pixels[i * 4 + c]) > 1))
+        .map(|i| (i % slots.width, i / slots.width))
+        .collect::<Vec<_>>();
+    let around = off.iter().fold((usize::MAX, usize::MAX, 0, 0), |(x0, y0, x1, y1), &(x, y)| {
+        (x0.min(x), y0.min(y), x1.max(x), y1.max(y))
+    });
+    assert!(
+        worst.1 <= 1,
+        "{what}: {} pixels differ, within {around:?}; at ({x}, {y}) by {}: slots {:?}, in place {:?}; pictures (canvases, composites) slots {:?}, in place {:?}",
+        off.len(),
+        worst.1,
+        &slots.pixels[pixel * 4..pixel * 4 + 4],
+        &in_place.pixels[pixel * 4..pixel * 4 + 4],
+        pictures(slots),
+        pictures(in_place),
+    );
+    assert_eq!(pictures(slots), pictures(in_place), "{what}: pictures");
+}
+
+/// docs/CSS_LAYOUT.md 4.4, group opacity, on a lifted copy: a copy whose
+/// flight fades it to 0.5 fades as one picture, as its unit did. Each
+/// version holds its fill and a child box over it, so a fade paint by paint
+/// would show the fill through the child. The page flown in place reads as
+/// the page flown in slots, pixel for pixel, with the same pictures, at
+/// take-off, half way and landing.
+#[test]
+fn in_place_a_lift_fades_as_one_picture() {
+    for progress in [0.0, 0.5, 1.0] {
+        let what = format!("FadeHeld at {progress}");
+        let slots = zoom_at(ZoomCase::FadeHeld, PaintShape::SlotCopies, progress);
+        if progress == 0.5 {
+            // Half way both versions draw, each at its fade.
+            assert!(slots.composites > 0, "{what}: the units fade as pictures");
+        }
+        let in_place = zoom_at(ZoomCase::FadeHeld, PaintShape::InPlace, progress);
+        same_pixels(&slots, &in_place, &what);
+    }
+}
+
+/// docs/CSS_LAYOUT.md 4.4 with docs/live-moves.md: an ancestor's fade does
+/// not reach a lifted copy as it renders; the lift applies the ends' fades
+/// instead, as a flight's pose takes back the fades around its slot. Each
+/// version rests in a box filling its Screen, one keyed from 1 to 0.5 and
+/// the other at 0.5. In place each copy reads as its unit did, pixel for
+/// pixel: an ancestor's fade counted twice, or not at all, would differ.
+#[test]
+fn in_place_a_fading_ancestor_does_not_fade_the_lift() {
+    for a_keyed in [false, true] {
+        for progress in [0.0, 0.5, 1.0] {
+            let case = ZoomCase::AncestorFades { a_keyed };
+            let what = format!("{case:?} at {progress}");
+            let slots = zoom_at(case, PaintShape::SlotCopies, progress);
+            let in_place = zoom_at(case, PaintShape::InPlace, progress);
+            same_pixels(&slots, &in_place, &what);
+        }
+    }
 }

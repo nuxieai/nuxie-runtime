@@ -451,8 +451,9 @@ fn next_contour(
 ) -> Result<Option<(Rc<ContourMeasure>, HostMemoryCharge)>> {
     let mut charge = None;
     let next = iter.borrow_mut().iter.get().next_admitted(|bytes| {
-        // A contour of no length is built and skipped; its charge is
-        // replaced by the next one's.
+        // A contour of no length is built and skipped: its tables are gone
+        // by now, so its charge goes before the next one's is taken.
+        drop(charge.take());
         charge = Some(HostMemoryCharge::for_lua(lua, bytes)?);
         Ok::<(), Error>(())
     })?;
@@ -1285,6 +1286,26 @@ mod budget_tests {
         vm.vm.eval::<()>("c = nil d = nil").unwrap();
         vm.vm.lua().gc_collect().unwrap();
         assert_eq!(vm.used(), 0);
+    }
+
+    // Codex review: a skipped contour of no length kept its charge while the
+    // next contour's was taken, so a next that fit was refused.
+    #[test]
+    fn a_skipped_contour_gives_its_charge_back_before_the_next() {
+        const PATH: &str = "source = Path.new() \
+             source:moveTo(Vector.xy(0, 0)) source:lineTo(Vector.xy(10, 0)) \
+             source:moveTo(Vector.xy(5, 5)) source:lineTo(Vector.xy(5, 5)) \
+             source:moveTo(Vector.xy(0, 9)) source:lineTo(Vector.xy(10, 9)) \
+             c = source:contours()";
+        let probe = Vm::with_budget(64 * 1024 * 1024);
+        probe.vm.eval::<()>(PATH).unwrap();
+        probe.vm.eval::<()>("d = c.next").unwrap();
+        assert!(probe.vm.eval::<bool>("return d ~= nil").unwrap());
+        // Exactly room for the source, the iterator and both contours kept.
+        let vm = Vm::with_budget(probe.used());
+        vm.vm.eval::<()>(PATH).unwrap();
+        vm.vm.eval::<()>("d = c.next").unwrap();
+        assert!(vm.vm.eval::<bool>("return d ~= nil").unwrap());
     }
 
     #[test]

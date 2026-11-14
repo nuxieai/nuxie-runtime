@@ -103,6 +103,56 @@ fn guarded_xpcall_handlers_nest_and_stay_host_frames() -> Result<()> {
     Ok(())
 }
 
+/// A guard kept from one xpcall belongs to that xpcall: called during a
+/// later, unrelated xpcall it fails rather than reaching that xpcall's
+/// handler, and an outer guard re-entered during a nested xpcall reaches the
+/// outer handler, not the inner one.
+#[test]
+fn a_kept_xpcall_guard_reaches_only_its_own_handler() -> Result<()> {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals()?;
+    let (later, nested): (String, String) = vm
+        .lua
+        .load(
+            r#"
+            local kept
+            xpcall(function() error("first", 0) end, function(e)
+              kept = debug.info(2, "f")
+              return e
+            end)
+            local later
+            xpcall(function()
+              local ok, result = pcall(kept, "probe")
+              later = tostring(ok) .. ":" .. tostring(result)
+              error("later", 0)
+            end, function(e) return "unrelated:" .. e end)
+
+            local nested
+            local depth = 0
+            xpcall(function() error("outer-body", 0) end, function(e)
+              depth += 1
+              if depth > 1 then return "outer:" .. e end
+              local outerGuard = debug.info(2, "f")
+              xpcall(function() error("inner-body", 0) end, function(inner)
+                local ok, result = pcall(outerGuard, "reentered")
+                nested = tostring(ok) .. ":" .. tostring(result)
+                return inner
+              end)
+              return e
+            end)
+            return later, nested
+            "#,
+        )
+        .eval()?;
+    assert!(
+        later.starts_with("false:")
+            && later.contains("xpcall error handler called outside its xpcall"),
+        "{later}"
+    );
+    assert_eq!(nested, "true:outer:reentered");
+    Ok(())
+}
+
 /// One round: `print` calls `tostring`, which fails with the object; the
 /// host callback's error comes back as a new object.
 const ERROR_CHAIN_ROUNDS: &str = r#"

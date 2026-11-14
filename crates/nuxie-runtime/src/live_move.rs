@@ -9,6 +9,7 @@ pub(crate) mod plan;
 pub mod records;
 mod transport;
 mod values;
+mod wide;
 pub use collapse::set_row_collapsed;
 pub(crate) use collapse::{
     apply_row_collapse, effectively_hidden, reconcile_row_hosts, reconcile_slot_collapse,

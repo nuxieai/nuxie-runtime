@@ -14,6 +14,7 @@ use super::{
     follow::{FlightFrame, SizeMode, draw_pose, lift_cover},
     plan::zoom::{self, Rule},
     records::{LiveFlight, Values},
+    wide::Wide,
 };
 use crate::{
     Artboard, CoreHandle,
@@ -30,7 +31,7 @@ use crate::{
         math::{mat2d::Mat2D, vec2d::Vec2D},
     },
 };
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use std::{cell::Cell, collections::HashSet};
 
 /// One end of a flight: where an element rests, without its own transform,
@@ -305,12 +306,7 @@ impl InPlaceFlight {
         let own = end(&self.element)?.place;
         let (upper, _, _) = draw_pose(&self.board)?;
         let (row, _, _) = draw_pose(&self.row)?;
-        let (mut upper_inverse, mut own_inverse) = (Mat2D::identity(), Mat2D::identity());
-        ensure!(
-            upper.invert(&mut upper_inverse) && own.invert(&mut own_inverse),
-            "singular flight parent"
-        );
-        let matrix = upper_inverse * pose * own_inverse * row;
+        let matrix = lift_matrix(upper, pose, own, row).context("singular flight parent")?;
         let t = frame.progress;
         let opacity = (a.opacity + (b.opacity - a.opacity) * t) * frame.fade();
         ensure!(
@@ -535,11 +531,7 @@ impl InPlacePair {
             let (row, _, _) = draw_pose(&copy.row)?;
             let now = drawn(&copy.element, When::Live)?;
             let matrix = target
-                .and_then(|target| {
-                    let (mut upper_inverse, mut now_inverse) = (Mat2D::identity(), Mat2D::identity());
-                    (upper.invert(&mut upper_inverse) && now.invert(&mut now_inverse))
-                        .then(|| upper_inverse * target * now_inverse * row)
-                })
+                .and_then(|target| lift_matrix(upper, target, now, row))
                 .filter(|matrix| matrix.values().iter().all(|v| v.is_finite()));
             match matrix {
                 Some(matrix) => {
@@ -638,4 +630,13 @@ pub(super) fn is_inside(inner: &CoreHandle, outer: &CoreHandle) -> bool {
             .flatten();
     }
     false
+}
+
+/// A lift's transform, `upper⁻¹ · pose · own⁻¹ · row`: from the copy's own
+/// Screen's drawing space to the upper Screen's, where `own` is the copy's
+/// place now. It cancels `own` by its inverse, so it is composed in f64
+/// (`wide.rs`). None when `upper` or `own` has no inverse.
+fn lift_matrix(upper: Mat2D, pose: Mat2D, own: Mat2D, row: Mat2D) -> Option<Mat2D> {
+    let lift = Wide::of(upper).inverse()? * Wide::of(pose) * Wide::of(own).inverse()? * Wide::of(row);
+    Some(lift.narrow())
 }

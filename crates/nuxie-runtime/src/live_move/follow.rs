@@ -67,6 +67,10 @@ pub(super) fn draw_pose(component: &CoreHandle) -> Result<(Mat2D, f32, f32)> {
     let matrix = if let Some(board) = board {
         board
             .with_downcast_mut::<Artboard, _>(|board| {
+                if let Some(root) = board.semantic_root_matrix() {
+                    return root * world;
+                }
+                // A host callback maps the root: only points can be read.
                 let origin = board.semantic_root_transform(world * Vec2D::new(0.0, 0.0));
                 let x = board.semantic_root_transform(world * Vec2D::new(1.0, 0.0)) - origin;
                 let y = board.semantic_root_transform(world * Vec2D::new(0.0, 1.0)) - origin;

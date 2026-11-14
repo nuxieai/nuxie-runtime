@@ -10,6 +10,7 @@ use std::rc::{Rc, Weak};
 use super::conversion::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use super::error::{Error, Result};
 use super::handles::{Buffer, Function, LuaString, Table, Thread};
+use super::loan::Loan;
 use super::multi::MultiValue;
 use super::userdata::{AnyUserData, UserData};
 use super::value::{self, Value};
@@ -88,7 +89,9 @@ impl Shared {
         let reused = self.spares.try_borrow_mut().ok().and_then(|mut s| s.pop());
         match reused {
             Some(spare) => Ok(spare),
-            None => vm::Vm::new().map(Box::new).map_err(Error::from_vm),
+            None => vm::Vm::lending(vm::Limits::default())
+                .map(Box::new)
+                .map_err(Error::from_vm),
         }
     }
 }
@@ -149,8 +152,9 @@ pub(crate) fn lend<R>(shared: &Shared, vm: &mut vm::Vm, f: impl FnOnce() -> R) -
     }
 }
 
-/// A host callback in the old binding crate's shape.
-pub(crate) type BoxedCallback = Box<dyn Fn(&Lua, MultiValue) -> Result<MultiValue>>;
+/// A host callback in the old binding crate's shape, plus the loan its call
+/// carries ([`Loan`]; most callbacks ignore it).
+pub(crate) type BoxedCallback = Box<dyn Fn(&Lua, Loan<'_>, MultiValue) -> Result<MultiValue>>;
 
 /// The state handle. Cloning shares the VM.
 ///
@@ -299,7 +303,7 @@ impl Lua {
     /// the VM nor the bytecode validator reads one; only compiling does
     /// ([`compile`], under its own flag profile).
     pub fn new() -> Lua {
-        let vm = vm::Vm::new().ok().map(Box::new);
+        let vm = vm::Vm::lending(vm::Limits::default()).ok().map(Box::new);
         let shared = Rc::new(Shared {
             slot: RefCell::new(vm),
             spares: RefCell::new(Vec::new()),
@@ -415,9 +419,25 @@ impl Lua {
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        let boxed: BoxedCallback = Box::new(move |lua, args| {
+        let boxed: BoxedCallback = Box::new(move |lua, _loan, args| {
             let a = A::from_lua_multi(args, lua)?;
             let r = func(lua, a)?;
+            r.into_lua_multi(lua)
+        });
+        self.create_callback_function("luaur-rt-callback", boxed)
+    }
+
+    /// [`Lua::create_function`] for a function that uses, or passes on,
+    /// the loan its call carries ([`Loan`]).
+    pub fn create_function_lent<F, A, R>(&self, func: F) -> Result<Function>
+    where
+        F: Fn(&Lua, Loan<'_>, A) -> Result<R> + 'static,
+        A: FromLuaMulti,
+        R: IntoLuaMulti,
+    {
+        let boxed: BoxedCallback = Box::new(move |lua, loan, args| {
+            let a = A::from_lua_multi(args, lua)?;
+            let r = func(lua, loan, a)?;
             r.into_lua_multi(lua)
         });
         self.create_callback_function("luaur-rt-callback", boxed)
@@ -912,8 +932,9 @@ fn trampoline(
     let lua = Lua::borrowed(shared);
     let raw: vm::MultiValue = ctx.args()?;
     let args = value::many_from_vm(&lua, ctx, raw).map_err(Error::into_host)?;
-    let outcome = lend(&lua.0, ctx, || {
-        catch_unwind(AssertUnwindSafe(|| callback(&lua, args)))
+    let (vm, loan) = ctx.vm_and_loan();
+    let outcome = lend(&lua.0, vm, || {
+        catch_unwind(AssertUnwindSafe(|| callback(&lua, loan, args)))
     })
     .map_err(Error::into_host)?;
     match outcome {
@@ -964,9 +985,20 @@ impl Scope {
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        let callback: BoxedCallback = Box::new(move |lua, args| {
+        self.create_function_lent(move |lua, _loan, args| func(lua, args))
+    }
+
+    /// [`Scope::create_function`] for a function that uses, or passes on,
+    /// the loan its call carries ([`Loan`]).
+    pub fn create_function_lent<F, A, R>(&self, func: F) -> Result<Function>
+    where
+        F: Fn(&Lua, Loan<'_>, A) -> Result<R> + 'static,
+        A: FromLuaMulti,
+        R: IntoLuaMulti,
+    {
+        let callback: BoxedCallback = Box::new(move |lua, loan, args| {
             let a = A::from_lua_multi(args, lua)?;
-            func(lua, a)?.into_lua_multi(lua)
+            func(lua, loan, a)?.into_lua_multi(lua)
         });
         let slot: ScopedSlot = Rc::new(RefCell::new(Some(callback)));
         if let Ok(mut callbacks) = self.callbacks.try_borrow_mut() {
@@ -974,8 +1006,8 @@ impl Scope {
         }
         self.lua.create_callback_function(
             "luaur-rt-callback",
-            Box::new(move |lua, args| match &*slot.try_borrow().map_err(|_| Error::RecursiveMutCallback)? {
-                Some(callback) => callback(lua, args),
+            Box::new(move |lua, loan, args| match &*slot.try_borrow().map_err(|_| Error::RecursiveMutCallback)? {
+                Some(callback) => callback(lua, loan, args),
                 None => Err(Error::CallbackDestructed),
             }),
         )

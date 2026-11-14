@@ -440,12 +440,37 @@ impl<K: FromLua, V: FromLua> Iterator for TablePairs<K, V> {
 impl Function {
     /// Calls the function, every result kept (`lua_pcall`, `LUA_MULTRET`).
     pub fn call<R: FromLuaMulti>(&self, args: impl IntoLuaMulti) -> Result<R> {
+        self.call_with(None, args)
+    }
+
+    /// [`Function::call`] with `loan` lent to the call: every host
+    /// callback it reaches, at any depth of Lua, receives it
+    /// ([`ScriptLoan`](super::ScriptLoan)).
+    pub fn call_lent<R: FromLuaMulti>(
+        &self,
+        loan: &mut dyn super::ScriptLoan,
+        args: impl IntoLuaMulti,
+    ) -> Result<R> {
+        self.call_with(Some(loan), args)
+    }
+
+    /// [`Function::call`] passing on `loan` if there is one (a host
+    /// callback forwarding the loan it received).
+    pub fn call_with<R: FromLuaMulti>(
+        &self,
+        loan: super::Loan<'_>,
+        args: impl IntoLuaMulti,
+    ) -> Result<R> {
         let args = args.into_lua_multi(&self.lua)?;
         let raw = self.raw()?;
         let lua = self.lua.clone();
         let results = self.lua.0.with_vm(|vm| {
             let args = value::many_to_vm(vm, args.iter())?;
-            let results: vm::MultiValue = raw.call(vm, args).map_err(Error::from_vm)?;
+            let results: vm::MultiValue = match loan {
+                Some(loan) => raw.call_lent(vm, loan, args),
+                None => raw.call(vm, args),
+            }
+            .map_err(Error::from_vm)?;
             value::many_from_vm(&lua, vm, results)
         })?;
         R::from_lua_multi(results, &self.lua)

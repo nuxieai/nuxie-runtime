@@ -81,6 +81,8 @@ impl TextLayout {
     fn new(lua: &Lua, text: RawText) -> Result<Self> {
         let mut charge = HostMemoryCharge::default();
         charge.attach(lua)?;
+        // Charged what it holds from the start, as after every change.
+        charge.set(text.heap_bytes())?;
         Ok(Self {
             seen_revision: text.revision(),
             text,
@@ -452,14 +454,26 @@ impl UserData for ScriptedText {
                 if new_font {
                     let len = layout.fonts.len();
                     let capacity = grown_capacity(layout.fonts.capacity(), len, 1);
-                    layout.fonts_charge.attach(lua)?;
-                    layout
+                    let reserved = layout
                         .fonts_charge
-                        .reserve_to(bytes_of::<TextFont>(capacity))?;
-                    layout
-                        .fonts
-                        .try_reserve_exact(capacity.saturating_sub(len))
-                        .map_err(|_| Error::runtime("not enough memory"))?;
+                        .attach(lua)
+                        .and_then(|()| {
+                            layout
+                                .fonts_charge
+                                .reserve_to(bytes_of::<TextFont>(capacity))
+                        })
+                        .and_then(|()| {
+                            layout
+                                .fonts
+                                .try_reserve_exact(capacity.saturating_sub(len))
+                                .map_err(|_| Error::runtime("not enough memory"))
+                        });
+                    if let Err(error) = reserved {
+                        // Nothing was appended: give back the content's
+                        // reservation before failing.
+                        layout.settle()?;
+                        return Err(error);
+                    }
                 }
                 layout.text().append(
                     &bytes,
@@ -1157,6 +1171,40 @@ mod budget_tests {
             )
             .unwrap();
         assert!(failed);
+    }
+
+    // Codex review: when the content's reservation fit but the font list's
+    // did not, the append failed with the content's charge still held.
+    #[test]
+    fn a_refused_font_list_gives_the_content_charge_back() {
+        let probe = Vm::with_budget(64 * 1024 * 1024);
+        probe
+            .vm
+            .eval::<()>("font = Font.decode(fontBytes) text = Text.new()")
+            .unwrap();
+        let empty = probe.used();
+        let content = {
+            let text: crate::luau::AnyUserData = probe.vm.lua().globals().get("text").unwrap();
+            let text = text.borrow::<super::ScriptedText>().unwrap();
+            let layout = text.layout.borrow();
+            layout.text.heap_bytes_after_append(1) - layout.charge.bytes()
+        };
+        // Room for the decoded face, the empty Text and one character's
+        // content, but not the four-entry font list.
+        let vm = Vm::with_budget(empty + content + 4 * 24 - 1);
+        let (failed, error): (bool, String) = vm
+            .vm
+            .eval(
+                "font = Font.decode(fontBytes) \
+                 text = Text.new() \
+                 local ok, err = pcall(function() text:append('x', {font = font}) end) \
+                 return not ok, tostring(err)",
+            )
+            .unwrap();
+        assert!(failed, "the font list fit");
+        assert!(error.contains("host memory budget"), "{error}");
+        assert!(vm.vm.eval::<bool>("return text.isEmpty").unwrap());
+        assert_eq!(vm.used(), empty);
     }
 
     #[test]

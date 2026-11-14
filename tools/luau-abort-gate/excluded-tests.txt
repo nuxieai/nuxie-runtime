@@ -1,0 +1,9 @@
+# Tests left out of the panic=abort run of `make luau-abort-gate`, one per line:
+#   package | full libtest name | reason
+# Every other test of nuxie-luau-vm and nuxie-scripting runs under abort.
+# Each test here still runs in the ordinary unwind suites. A line whose test
+# no longer exists fails the gate. Under abort, libtest runs every test in its
+# own child process (-Zpanic-abort-tests), so `#[should_panic]` tests do work
+# there; neither crate has one today.
+nuxie-scripting | luau::facade::tests::scoped_callbacks_are_revoked_when_the_scope_unwinds | catch_unwind around a panicking Lua::scope body; asserts the revocation an unwind performs, and an abort build has no unwind
+nuxie-scripting | luau::facade::tests::a_panicking_vm_operation_puts_the_vm_back | catch_unwind around a panicking with_vm, and a host callback panic that the trampoline's catch_unwind (facade/state.rs) turns into an error; under abort both kill the process by design

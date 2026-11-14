@@ -735,6 +735,46 @@ mod binding_tests {
         assert_eq!(vm.used(), decoded, "a collected variant gives its charge back");
     }
 
+    // Lane H2: `Text:append` keeps the paint's render paint, whose shader is
+    // the gradient's; the gradient's charge went when the script let go of
+    // the paint and the gradient, while the Text kept the shader.
+    #[test]
+    fn a_text_keeps_the_gradient_of_a_paint_it_styles_with() {
+        let vm = font_vm(1024 * 1024);
+        vm.set_global("n", 1000);
+        vm.vm
+            .eval::<()>(
+                "local stops = {} \
+                 for i = 1, n do stops[i] = {position = i / n, color = Color.rgba(255, 0, 0, 255)} end \
+                 font = Font.decode(fontBytes) text = Text.new() \
+                 local paint = Paint.new() \
+                 paint.gradient = Gradient.linear(Vector.xy(0, 0), Vector.xy(1, 0), stops) \
+                 text:append('hi', {font = font, paint = paint})",
+            )
+            .unwrap();
+        vm.vm.lua().gc_collect().unwrap();
+        vm.vm.lua().gc_collect().unwrap();
+        let text_bytes = || {
+            vm.vm
+                .lua()
+                .globals()
+                .get::<crate::luau::AnyUserData>("text")
+                .unwrap()
+                .borrow::<super::super::lua_text::ScriptedText>()
+                .unwrap()
+                .held_bytes()
+        };
+        let stops = 1000 * 8;
+        assert!(
+            vm.used() >= 226_004 + text_bytes() + stops,
+            "the text keeps the gradient: used {}",
+            vm.used()
+        );
+        vm.vm.eval::<()>("text:clear()").unwrap();
+        vm.vm.lua().gc_collect().unwrap();
+        assert_eq!(vm.used(), 226_004 + text_bytes(), "a clear lets it go");
+    }
+
     // Codex review (lane G3): a stop's `__index` added stops after the
     // table's length was charged, and the loop read them uncharged.
     #[test]

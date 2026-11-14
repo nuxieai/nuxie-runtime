@@ -1,10 +1,10 @@
 //! src/lua/renderer/lua_text.cpp and include/rive/lua/scripted_text.hpp at db31ea87.
 //! Retained layout plus epoch-checked indices replace interior C++ pointers.
 use super::{
-    host_memory_budget::HostMemoryCharge,
+    host_memory_budget::{HostMemoryCharge, bytes_of, grown_capacity},
     lua_font::ScriptedFont,
     lua_mat2d::ScriptedMat2D,
-    lua_paint::ScriptedPaint,
+    lua_paint::{GradientSlot, ScriptedPaint},
     lua_path::ScriptedPath,
     lua_renderer::ScriptedRenderer,
     lua_renderer_library::RendererBindings,
@@ -56,6 +56,12 @@ struct TextLayout {
     /// its content, styles and layout. Attached to the VM's budget when the
     /// Text is made, so every later charge needs no `Lua`.
     charge: HostMemoryCharge,
+    /// The gradient slot of each style's paint, for as long as the style
+    /// keeps the paint's render paint (whose shader is the gradient's): the
+    /// gradient's charge stays while the Text can draw with it.
+    paints: Vec<GradientSlot>,
+    /// The bytes of `paints`, at its capacity.
+    paints_charge: HostMemoryCharge,
 }
 
 impl TextLayout {
@@ -64,12 +70,32 @@ impl TextLayout {
         charge.attach(lua)?;
         // Charged what it holds from the start, as after every change.
         charge.set(text.heap_bytes())?;
+        let mut paints_charge = HostMemoryCharge::default();
+        paints_charge.attach(lua)?;
         Ok(Self {
             seen_revision: text.revision(),
             text,
             epoch: 0,
             charge,
+            paints: Vec::new(),
+            paints_charge,
         })
+    }
+
+    /// Makes room, charged, for one more style's paint.
+    fn reserve_paint(&mut self) -> Result<()> {
+        let capacity = grown_capacity(self.paints.capacity(), self.paints.len(), 1);
+        self.paints_charge
+            .reserve_to(bytes_of::<GradientSlot>(capacity))?;
+        self.paints
+            .try_reserve_exact(capacity.saturating_sub(self.paints.len()))
+            .map_err(|_| Error::runtime("not enough memory"))
+    }
+
+    /// Lets go of the styles' paints, with the content (`RawText::clear`).
+    fn clear_paints(&mut self) -> Result<()> {
+        self.paints = Vec::new();
+        self.paints_charge.set(0)
     }
 
     fn sync(&mut self) {
@@ -393,8 +419,12 @@ impl UserData for ScriptedText {
                 let font = font.borrow::<ScriptedFont>()?.native()?;
                 let paint: Option<AnyUserData> = style.raw_get("paint")?;
                 let paint = paint
-                    .map(|p| p.borrow::<ScriptedPaint>().map(|p| p.render_paint.clone()))
+                    .map(|p| {
+                        p.borrow::<ScriptedPaint>()
+                            .map(|p| (p.render_paint.clone(), p.gradient_slot()))
+                    })
                     .transpose()?;
+                let (paint, gradient) = paint.unzip();
                 let foreground: Value = style.raw_get("foregroundColor")?;
                 let foreground = if matches!(foreground, Value::Nil) {
                     0xff000000
@@ -409,6 +439,10 @@ impl UserData for ScriptedText {
                 let mut layout = t.layout.borrow_mut();
                 let layout = &mut *layout;
                 check_style_room(layout.text(), paint.as_ref(), foreground)?;
+                if gradient.is_some() {
+                    layout.reserve_paint()?;
+                }
+                let styles = layout.text.style_count();
                 // Charged before the content grows, for the most it can grow
                 // to; the exact size is charged once it has.
                 layout
@@ -423,12 +457,19 @@ impl UserData for ScriptedText {
                     letter_spacing,
                     foreground,
                 );
+                // A new style keeps the paint, so it keeps its gradient.
+                if let Some(gradient) = gradient
+                    && layout.text.style_count() > styles
+                {
+                    layout.paints.push(gradient);
+                }
                 layout.settle()
             },
         );
         methods.add_method("clear", |_, t, ()| {
             let mut layout = t.layout.borrow_mut();
             layout.text().clear();
+            layout.clear_paints()?;
             layout.settle()
         });
         methods.add_method_lent(

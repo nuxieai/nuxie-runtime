@@ -17,7 +17,7 @@ impl LoggingScriptingContextLua for LoggingScriptingContext {
             Error::RuntimeError(message)
             | Error::SyntaxError { message, .. }
             | Error::MemoryError(message) => self.print_error(Some(message.as_bytes())),
-            Error::CallbackError { cause, .. } => self.log_error(cause),
+            // A callback error prints as its cause does.
             _ => self.print_error(Some(error.to_string().as_bytes())),
         }
     }

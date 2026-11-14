@@ -1,7 +1,7 @@
 //! The facade's own contracts where they differ from a plain pass-through
 //! to the safe VM.
 
-use super::{Error, Function, Lua};
+use super::{CallbackCause, Error, Function, Lua};
 
 fn destructed_callback(lua: &Lua) -> Function {
     lua.scope(|scope| {
@@ -13,8 +13,9 @@ fn destructed_callback(lua: &Lua) -> Function {
 }
 
 /// The old binding crate raises the scope-destruction errors as a userdata error
-/// object and recovers them at each protected boundary as `CallbackError`, one
-/// layer per boundary.
+/// object and recovers them at each protected boundary as `CallbackError`. The
+/// old binding crate added one layer per boundary; here a relayed callback error
+/// keeps its root cause and stays one layer deep (lane E2a), with the same text.
 #[test]
 fn scope_destruction_errors_stay_structured_across_boundaries() {
     let lua = Lua::new();
@@ -24,7 +25,8 @@ fn scope_destruction_errors_stay_structured_across_boundaries() {
     let Error::CallbackError { cause, .. } = &error else {
         panic!("a direct call keeps the cause: {error}");
     };
-    assert!(matches!(cause.as_ref(), Error::CallbackDestructed));
+    assert_eq!(*cause, CallbackCause::CallbackDestructed);
+    let direct = error.to_string();
 
     // A script sees an error object, not text.
     let (ok, kind): (bool, String) = lua
@@ -34,7 +36,7 @@ fn scope_destruction_errors_stay_structured_across_boundaries() {
     assert!(!ok);
     assert_eq!(kind, "userdata");
 
-    // A Rust callback that passes the error on adds a layer.
+    // A Rust callback that passes the error on adds no layer.
     let relay = lua
         .create_function(|lua, ()| {
             let destructed: Function = lua.globals().get("destructed")?;
@@ -45,10 +47,8 @@ fn scope_destruction_errors_stay_structured_across_boundaries() {
     let Error::CallbackError { cause, .. } = &error else {
         panic!("the relay keeps the cause: {error}");
     };
-    let Error::CallbackError { cause: inner, .. } = cause.as_ref() else {
-        panic!("one layer per boundary: {cause}");
-    };
-    assert!(matches!(inner.as_ref(), Error::CallbackDestructed));
+    assert_eq!(*cause, CallbackCause::CallbackDestructed);
+    assert_eq!(error.to_string(), direct);
 }
 
 /// Other callback errors stay text, raised as their `Display` (so a
@@ -138,7 +138,7 @@ fn scoped_callbacks_are_revoked_when_the_scope_unwinds() {
     let Error::CallbackError { cause, .. } = &error else {
         panic!("a revoked callback reports why: {error}");
     };
-    assert!(matches!(cause.as_ref(), Error::CallbackDestructed));
+    assert_eq!(*cause, CallbackCause::CallbackDestructed);
 }
 
 /// A userdata made in a callback whose payload keeps a handle (as the canvases

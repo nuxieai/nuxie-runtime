@@ -36,9 +36,12 @@ pub enum Error {
     UserDataTypeMismatch,
     UserDataDestructed,
     CallbackDestructed,
+    /// A structured error that crossed a protected boundary. Its cause is a
+    /// [`CallbackCause`], never another `CallbackError`, so the chain is one
+    /// layer deep however often a host callback relays it.
     CallbackError {
         traceback: String,
-        cause: Arc<Error>,
+        cause: CallbackCause,
     },
     UserDataBorrowError,
     UserDataBorrowMutError,
@@ -117,17 +120,21 @@ impl Error {
         }
     }
 
-    /// Whether this error is raised as a userdata error object so the
-    /// caller can match it after a protected boundary (the old binding crate's
-    /// `callback::is_structured`): the scope-destruction errors, and a
-    /// `CallbackError` around one, which gains a layer per boundary.
-    pub(crate) fn is_structured(&self) -> bool {
+    /// The error object a structured error travels in (the old binding
+    /// crate's `callback::is_structured` errors: the scope-destruction errors,
+    /// and a `CallbackError` around one): its traceback and root cause. A `CallbackError` keeps both, so relaying it does not add a
+    /// layer (the old binding crate added one per boundary, and its
+    /// `Display` and `Drop` recursed once per layer).
+    fn structured(&self) -> Option<WrappedError> {
         match self {
-            Error::CallbackDestructed
-            | Error::UserDataDestructed
-            | Error::RecursiveMutCallback => true,
-            Error::CallbackError { cause, .. } => cause.is_structured(),
-            _ => false,
+            Error::CallbackError { traceback, cause } => Some(WrappedError {
+                traceback: traceback.clone(),
+                cause: *cause,
+            }),
+            other => CallbackCause::of(other).map(|cause| WrappedError {
+                traceback: String::new(),
+                cause,
+            }),
         }
     }
 
@@ -136,10 +143,10 @@ impl Error {
     /// `raise_structured_error`, which also falls back to text when the
     /// object cannot be made), anything else as [`Error::into_host`].
     pub(crate) fn raise(self, vm: &mut vm::Vm) -> vm::HostError {
-        if !self.is_structured() {
+        let Some(wrapped) = self.structured() else {
             return self.into_host();
-        }
-        match vm.create_userdata(WrappedError(self.clone())) {
+        };
+        match vm.create_userdata(wrapped) {
             Ok(object) => vm::HostError::from_value(vm::Value::UserData(object)),
             Err(_) => vm::HostError::raw(self.to_string()),
         }
@@ -147,7 +154,8 @@ impl Error {
 
     /// A Lua error whose value was not a string, as the old binding crate's
     /// `pop_error` reads it: the structured error a [`WrappedError`] object
-    /// carries, as `CallbackError`, or else `<non-string error>`. The safe
+    /// carries, as `CallbackError` (one layer, whatever the object went
+    /// through), or else `<non-string error>`. The safe
     /// VM renders such an object as `(error object is a <type> value)` and
     /// keeps it ([`vm::Vm::take_error_object`]); a string error that only
     /// reads like that rendering has no kept object and stays as raised.
@@ -161,19 +169,16 @@ impl Error {
         let Some(object) = vm.take_error_object() else {
             return self;
         };
-        let cause = match &object {
+        let wrapped = match &object {
             vm::Value::UserData(object) => object.payload(vm).ok().and_then(|payload| {
                 payload
                     .downcast_ref::<std::cell::RefCell<WrappedError>>()
-                    .and_then(|cell| cell.try_borrow().ok().map(|wrapped| wrapped.0.clone()))
+                    .and_then(|cell| cell.try_borrow().ok().map(|wrapped| wrapped.clone()))
             }),
             _ => None,
         };
-        match cause {
-            Some(cause) => Error::CallbackError {
-                traceback: String::new(),
-                cause: Arc::new(cause),
-            },
+        match wrapped {
+            Some(WrappedError { traceback, cause }) => Error::CallbackError { traceback, cause },
             None => Error::RuntimeError(NON_STRING_ERROR.to_owned()),
         }
     }
@@ -191,7 +196,47 @@ impl Error {
 }
 
 /// The userdata error object a structured error travels in.
-pub(crate) struct WrappedError(Error);
+#[derive(Clone)]
+pub(crate) struct WrappedError {
+    traceback: String,
+    cause: CallbackCause,
+}
+
+/// What a [`Error::CallbackError`] carries: one of the errors raised to
+/// scripts as an error object. It is not an [`Error`], so a callback error
+/// cannot wrap another one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CallbackCause {
+    CallbackDestructed,
+    UserDataDestructed,
+    RecursiveMutCallback,
+}
+
+impl CallbackCause {
+    fn of(error: &Error) -> Option<Self> {
+        match error {
+            Error::CallbackDestructed => Some(Self::CallbackDestructed),
+            Error::UserDataDestructed => Some(Self::UserDataDestructed),
+            Error::RecursiveMutCallback => Some(Self::RecursiveMutCallback),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for CallbackCause {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::CallbackDestructed => {
+                "a destructed callback or destructed userdata method was called"
+            }
+            Self::UserDataDestructed => "userdata used after being destructed",
+            Self::RecursiveMutCallback => "mutable callback called recursively",
+        })
+    }
+}
+
+impl StdError for CallbackCause {}
 
 /// What the old binding crate reads from a raised error value that is not a
 /// string.
@@ -238,19 +283,16 @@ impl fmt::Display for Error {
                 Ok(())
             }
             Error::UserDataTypeMismatch => write!(f, "userdata type mismatch"),
-            Error::UserDataDestructed => write!(f, "userdata used after being destructed"),
-            Error::CallbackDestructed => write!(
-                f,
-                "a destructed callback or destructed userdata method was called"
-            ),
-            Error::CallbackError { cause, .. } => write!(f, "{cause}"),
+            Error::UserDataDestructed => fmt::Display::fmt(&CallbackCause::UserDataDestructed, f),
+            Error::CallbackDestructed => fmt::Display::fmt(&CallbackCause::CallbackDestructed, f),
+            Error::CallbackError { cause, .. } => fmt::Display::fmt(cause, f),
             Error::UserDataBorrowError => write!(f, "userdata already mutably borrowed"),
             Error::UserDataBorrowMutError => write!(f, "userdata already borrowed"),
             Error::CoroutineUnresumable => write!(f, "cannot resume this coroutine"),
             Error::MismatchedRegistryKey => {
                 write!(f, "registry key used with the wrong Lua instance")
             }
-            Error::RecursiveMutCallback => write!(f, "mutable callback called recursively"),
+            Error::RecursiveMutCallback => fmt::Display::fmt(&CallbackCause::RecursiveMutCallback, f),
             Error::PreviouslyResumedPanic => {
                 write!(f, "previously resumed panic returned again")
             }
@@ -263,7 +305,7 @@ impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
             Error::ExternalError(err) => Some(&**err),
-            Error::CallbackError { cause, .. } => Some(&**cause),
+            Error::CallbackError { cause, .. } => Some(cause),
             _ => None,
         }
     }

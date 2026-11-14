@@ -5858,6 +5858,9 @@ mod bytecode_validation_tests {
 #[cfg(test)]
 mod script_call_gpu_scope_tests;
 
+#[cfg(all(test, feature = "compiler"))]
+mod recursion_and_hang_tests;
+
 #[cfg(test)]
 mod gpu_canvas_tests {
     use super::*;

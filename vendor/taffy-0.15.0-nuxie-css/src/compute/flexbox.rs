@@ -1870,8 +1870,20 @@ fn determine_flex_base_size(
             } else {
                 transferred_max_size.main(dir)
             };
+            // nuxie-css: a row item with a ratio, a definite height and a `min-content`,
+            // `max-content` or `fit-content` width has the width its height gives as its
+            // specified size: the keyword is the ratio width there (Chrome: a row with
+            // `width: max-content; aspect-ratio: 2`, stretched 100 tall around two 160
+            // wide boxes, is 200 wide; with an automatic width it is 320 wide).
+            let keyword_ratio_main_size = (dir.is_row()
+                && !is_replaced
+                && child_cross_size_is_definite
+                && child.size_style.width.is_sizing_keyword()
+                && !child.size_style.width.is_stretch())
+            .then(|| child.ratio.zip(child_known_dimensions.height).map(|(ratio, height)| ratio.width(height)))
+            .flatten();
             let clamped_min_content_size = min_content_main_size
-                .maybe_min(child.size.main(dir).or(stretch_main_size))
+                .maybe_min(child.size.main(dir).or(stretch_main_size).or(keyword_ratio_main_size))
                 .maybe_min(content_max);
             clamped_min_content_size.maybe_max(padding_border_axes_sums.main(dir))
         });

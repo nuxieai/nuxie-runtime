@@ -8,6 +8,7 @@ const MEMORY_LIMIT_ERROR: &str = "script VM exceeded its 16 MiB memory ceiling";
 const SAFEPOINT_LIMIT_ERROR: &str = "script cycle exceeds 100000 script safepoints";
 const ORIGINAL_PCALL: &str = "nuxie.resource_limits.pcall";
 const ORIGINAL_XPCALL: &str = "nuxie.resource_limits.xpcall";
+const GUARDED_XPCALL_HANDLER: &str = "nuxie.resource_limits.xpcall_handler";
 const ORIGINAL_RESUME: &str = "nuxie.resource_limits.resume";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -222,25 +223,47 @@ pub(super) fn install_protected_call_guards(
 
     let original: Function = lua.globals().get("xpcall")?;
     lua.set_named_registry_value(ORIGINAL_XPCALL, original)?;
+    // The script's handlers for the xpcalls in progress, innermost last. A
+    // guarded xpcall runs its body through a host call, which nothing yields
+    // across, so the xpcalls a handler can run under are properly nested.
+    let handlers: Rc<RefCell<Vec<Function>>> = Rc::default();
+    // One guarded handler for every xpcall, created here and never scoped:
+    // a script that keeps it (through `debug.info`) and calls it later gets
+    // an ordinary error, not a destructed-callback error object. It is a host
+    // function, as the per-call handler was, so the frames a handler sees are
+    // unchanged.
+    let handler_tracker = tracker.clone();
+    let active_handlers = Rc::clone(&handlers);
+    let guarded_handler = lua.create_function_lent(move |_, loan, error: Value| {
+        let handler = active_handlers
+            .try_borrow()
+            .ok()
+            .and_then(|handlers| handlers.last().cloned())
+            .ok_or_else(|| Error::runtime("xpcall error handler called outside its xpcall"))?;
+        handler_tracker.record_protected_memory_error(&error)?;
+        handler_tracker.reject_if_tripped()?;
+        handler.call_with::<MultiValue>(loan, error)
+    })?;
+    // In the registry, like the originals: a host closure that held the
+    // handle would keep the VM alive.
+    lua.set_named_registry_value(GUARDED_XPCALL_HANDLER, guarded_handler)?;
     let xpcall_tracker = tracker.clone();
     let guarded = lua.create_function_lent(move |lua, loan, mut args: MultiValue| {
         xpcall_tracker.reject_if_tripped()?;
         let original: Function = lua.named_registry_value(ORIGINAL_XPCALL)?;
-        let results: MultiValue = lua.scope(|scope| {
-            if let Some(Value::Function(handler)) = args.get(1).cloned() {
-                let handler_tracker = xpcall_tracker.clone();
-                let guarded_handler = scope.create_function_lent(move |_, loan, error: Value| {
-                    handler_tracker.record_protected_memory_error(&error)?;
-                    handler_tracker.reject_if_tripped()?;
-                    handler.call_with::<MultiValue>(loan, error)
-                })?;
-                let handler_slot = args
-                    .get_mut(1)
-                    .ok_or_else(|| Error::runtime("xpcall handler argument disappeared"))?;
-                *handler_slot = Value::Function(guarded_handler);
-            }
-            original.call_with(loan, args)
-        })?;
+        // A function handler runs behind the guard; anything else reaches
+        // the original xpcall as it is.
+        let mut active = None;
+        if let Some(slot) = args.get_mut(1)
+            && let Value::Function(handler) = slot
+        {
+            let guarded_handler: Function = lua.named_registry_value(GUARDED_XPCALL_HANDLER)?;
+            active = Some(ActiveHandler::push(&handlers, handler.clone())?);
+            *slot = Value::Function(guarded_handler);
+        }
+        let results = original.call_with::<MultiValue>(loan, args);
+        drop(active);
+        let results = results?;
         xpcall_tracker.record_protected_memory_result(&results)?;
         xpcall_tracker.reject_if_tripped()?;
         Ok(results)
@@ -259,6 +282,38 @@ pub(super) fn install_protected_call_guards(
         Ok(results)
     })?;
     coroutine.set("resume", guarded)
+}
+
+/// A script handler on the stack of xpcalls in progress, popped when the
+/// xpcall that pushed it returns.
+struct ActiveHandler {
+    handlers: Rc<RefCell<Vec<Function>>>,
+}
+
+impl ActiveHandler {
+    fn push(handlers: &Rc<RefCell<Vec<Function>>>, handler: Function) -> Result<Self> {
+        handlers
+            .try_borrow_mut()
+            .map_err(|_| Error::runtime("xpcall handlers are in use"))?
+            .push(handler);
+        Ok(Self {
+            handlers: Rc::clone(handlers),
+        })
+    }
+}
+
+impl Drop for ActiveHandler {
+    fn drop(&mut self) {
+        // Only the guarded handler borrows the stack, and only for the
+        // statement that reads it, so this borrow is free; a drop must not
+        // panic either way. The popped handle drops after the borrow ends.
+        let popped = self
+            .handlers
+            .try_borrow_mut()
+            .ok()
+            .and_then(|mut handlers| handlers.pop());
+        drop(popped);
+    }
 }
 
 fn resource_limit_error(limit: ScriptResourceLimit) -> Error {

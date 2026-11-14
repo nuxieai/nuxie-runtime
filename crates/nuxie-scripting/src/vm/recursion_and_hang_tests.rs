@@ -5,26 +5,103 @@
 use super::*;
 use crate::luau::CallbackCause;
 
-/// E1 4.1's starter: a scoped `xpcall` handler, obtained through
-/// `debug.info` and called after its scope ended, raises
-/// `CallbackDestructed` as an error object; `E1VICTIM`'s `__tostring`
-/// re-raises whatever `E1OBJ` holds.
+/// E1 4.1's starter was a scoped `xpcall` handler, obtained through
+/// `debug.info` and called after its scope ended; that no longer yields an
+/// error object (lane D3, `xpcall_handler_kept_past_its_xpcall_*`). Here the
+/// structured error comes from a host function the test installs
+/// (`structuredError`, which fails with `CallbackDestructed`), so the chain
+/// test keeps its input. `E1VICTIM`'s `__tostring` re-raises whatever
+/// `E1OBJ` holds.
 const ERROR_CHAIN_STARTER: &str = r#"
+local ok, err = pcall(structuredError)
+assert(not ok and typeof(err) == "userdata", "no structured starter")
+E1OBJ = err
+E1VICTIM = setmetatable({}, { __tostring = function() error(E1OBJ) end })
+"#;
+
+/// The script half of E1 4.1's old starter: keep every function on the
+/// handler's stack and call each after `xpcall` returns.
+const XPCALL_HANDLER_KEPT: &str = r#"
 local captured = {}
 xpcall(function() error("x") end, function(e)
   for level = 1, 8 do
     local ok, f = pcall(debug.info, level, "f")
-    if ok and f then table.insert(captured, f) end
+    -- Host frames only: a Luau frame here is this chunk or its body.
+    if ok and f and debug.info(f, "s") == "[C]" then table.insert(captured, f) end
   end
   return e
 end)
+local errors = {}
 for _, f in ipairs(captured) do
   local ok, err = pcall(f, "probe")
-  if not ok and typeof(err) == "userdata" then E1OBJ = err break end
+  if not ok then table.insert(errors, err) end
 end
-assert(E1OBJ ~= nil, "no structured starter")
-E1VICTIM = setmetatable({}, { __tostring = function() error(E1OBJ) end })
+return errors
 "#;
+
+fn install_structured_error(vm: &ScriptVm) -> Result<()> {
+    let structured = vm
+        .lua
+        .create_function(|_, ()| -> Result<()> { Err(Error::CallbackDestructed) })?;
+    vm.lua.globals().set("structuredError", structured)
+}
+
+/// Lane D3: the guarded `xpcall` handler is one host function made at
+/// install, not a scoped one, so a script that keeps it past its `xpcall`
+/// gets an ordinary error string, never a destructed-callback error object.
+#[test]
+fn xpcall_handler_kept_past_its_xpcall_raises_an_ordinary_error() -> Result<()> {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals()?;
+    let errors: Table = vm.lua.load(XPCALL_HANDLER_KEPT).eval()?;
+    let errors: Vec<Value> = errors.sequence_values().collect::<Result<_>>()?;
+    assert!(
+        errors.iter().all(|error| matches!(error, Value::String(_))),
+        "every kept function fails with a string"
+    );
+    let texts: Vec<String> = errors
+        .iter()
+        .filter_map(|error| match error {
+            Value::String(text) => text.to_str().ok(),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        texts
+            .iter()
+            .any(|text| text.contains("xpcall error handler called outside its xpcall")),
+        "{texts:?}"
+    );
+    Ok(())
+}
+
+/// The guard still runs the script's handler, nested xpcalls each reach
+/// their own, and the handler's frames are unchanged: level 2 is a host
+/// function, as the per-call handler was.
+#[test]
+fn guarded_xpcall_handlers_nest_and_stay_host_frames() -> Result<()> {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals()?;
+    let (outer, what): (String, String) = vm
+        .lua
+        .load(
+            r#"
+            local what
+            local _, outer = xpcall(function()
+              local _, inner = xpcall(function() error("inner", 0) end, function(e)
+                what = debug.info(2, "s")
+                return "handled " .. e
+              end)
+              error(inner, 0)
+            end, function(e) return "outer saw " .. e end)
+            return outer, what
+            "#,
+        )
+        .eval()?;
+    assert_eq!(outer, "outer saw handled inner");
+    assert_eq!(what, "[C]");
+    Ok(())
+}
 
 /// One round: `print` calls `tostring`, which fails with the object; the
 /// host callback's error comes back as a new object.
@@ -46,6 +123,7 @@ end
 fn relaying_a_structured_error_keeps_one_layer() -> Result<()> {
     let vm = ScriptVm::new();
     vm.install_rive_globals()?;
+    install_structured_error(&vm)?;
     vm.lua.load(ERROR_CHAIN_STARTER).exec()?;
     vm.lua
         .load("local ok, e = pcall(print, E1VICTIM) assert(not ok) E1OBJ = e")

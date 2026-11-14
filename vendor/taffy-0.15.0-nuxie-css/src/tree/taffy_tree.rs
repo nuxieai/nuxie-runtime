@@ -116,6 +116,10 @@ struct NodeData {
 
     /// The computation result from layout algorithm
     pub(crate) detailed_layout_info: DetailedLayoutInfo,
+
+    // nuxie-css: see `TaffyTree::relayout_at_size`.
+    /// The input of the node's last full layout (`RunMode::PerformLayout`), as its parent sent it.
+    pub(crate) last_layout_input: Option<LayoutInput>,
 }
 
 impl NodeData {
@@ -130,6 +134,7 @@ impl NodeData {
             has_context: false,
             hoisted_children: new_const_children_vec(),
             detailed_layout_info: DetailedLayoutInfo::None,
+            last_layout_input: None,
         }
     }
 
@@ -295,6 +300,11 @@ where
         if inputs.run_mode == RunMode::PerformHiddenLayout {
             debug_log!("HIDDEN");
             return compute_hidden_layout(self, node_id);
+        }
+
+        // nuxie-css: remember the request of the node's last full layout (`relayout_at_size`).
+        if inputs.run_mode == RunMode::PerformLayout {
+            self.taffy.nodes[node_id.into()].last_layout_input = Some(inputs);
         }
 
         // We run the following wrapped in "compute_cached_layout", which will check the cache for an entry matching the node and inputs and:
@@ -997,6 +1007,60 @@ impl<NodeContext> TaffyTree<NodeContext> {
             round_layout(&mut taffy_view, node_id);
         }
         Ok(())
+    }
+
+    // nuxie-css: lays a node out again as its parent last asked, at another size.
+    /// Lays `node_id` out again with the input of its last full layout (as its parent sent it in
+    /// the last [`compute_layout_with_measure`](Self::compute_layout_with_measure)), its known
+    /// dimensions replaced by `size` (a border-box size, definite in both axes), clamped by the
+    /// node's own minimum and maximum sizes as a parent clamps the size it sends. Writes the layouts
+    /// of the node's descendants; the node's own layout is its parent's to write, and keeps the one
+    /// the parent gave it. Returns the node's output, or `None` if it has not been laid out yet.
+    /// The parent is not visited or marked dirty, and the remembered input stays the parent's.
+    pub fn relayout_at_size<MeasureFunction>(
+        &mut self,
+        node_id: NodeId,
+        size: Size<f32>,
+        measure_function: MeasureFunction,
+    ) -> Option<LayoutOutput>
+    where
+        MeasureFunction: FnMut(LayoutInput, NodeId, Option<&mut NodeContext>, &Style) -> LayoutOutput,
+    {
+        use crate::tree::LayoutPartialTreeExt;
+        use crate::util::{MaybeMath, MaybeResolve, ResolveOrZero};
+        let last = self.nodes.get(node_id.into())?.last_layout_input?;
+        let style = self.nodes[node_id.into()].style.clone();
+        let mut taffy_view = TaffyView { taffy: self, measure_function };
+        // A parent sends a size within the node's limits, resolved against the parent's size and
+        // never below its padding and border.
+        let parent_size = last.parent_size;
+        let padding = style.padding.resolve_or_zero(parent_size.width, |val, basis| taffy_view.calc(val, basis));
+        let border = style.border.resolve_or_zero(parent_size.width, |val, basis| taffy_view.calc(val, basis));
+        let padding_border = (padding + border).sum_axes();
+        let box_sizing_adjustment =
+            if style.box_sizing == crate::style::BoxSizing::ContentBox { padding_border } else { Size::ZERO };
+        let min_size = style
+            .min_size
+            .maybe_resolve(parent_size, |val, basis| taffy_view.calc(val, basis))
+            .maybe_add(box_sizing_adjustment);
+        let max_size = style
+            .max_size
+            .maybe_resolve(parent_size, |val, basis| taffy_view.calc(val, basis))
+            .maybe_add(box_sizing_adjustment);
+        let size = size.maybe_clamp(min_size, max_size).zip_map(padding_border, f32::max);
+        let inputs = LayoutInput {
+            known_dimensions: size.map(Some),
+            known_dimensions_are_definite: Size { width: true, height: true },
+            ..last
+        };
+        let output = taffy_view.compute_child_layout(
+            node_id,
+            inputs,
+            #[cfg(feature = "block_layout")]
+            None,
+        );
+        self.nodes[node_id.into()].last_layout_input = Some(last);
+        Some(output)
     }
 
     /// Updates the stored layout of the provided `node` and its children

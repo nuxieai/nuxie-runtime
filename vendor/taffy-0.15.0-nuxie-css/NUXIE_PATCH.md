@@ -1425,3 +1425,47 @@ The fork left the size indefinite in a wrapping row, so the item's flex
 base size did not come from its ratio and it was 0 wide.
 
 Of the 29,914 layouts, 39 more match and none that matched differ.
+
+## Lay a node out again as its parent last asked, at another size
+
+An element flying in place (the runtime's `docs/live-moves.md`, "Flying in
+place") is laid out twice in a frame. First its parent lays it out as at
+rest, so the parent and its other children see exactly what they would
+without the flight. Then it is laid out again at the flight size for what is
+drawn. That second layout must be the request the parent made, with only the
+size replaced: the same margin collapsing, sizing mode, available space and
+the parent size that percentages resolve against. Taffy keeps that request
+only inside its cache key, packed and lossy, and its public API lays out
+roots only.
+
+- `src/tree/taffy_tree.rs`, `NodeData::last_layout_input`: the input of the
+  node's last `RunMode::PerformLayout`, stored at the top of
+  `TaffyView::compute_child_layout`, cache hit or not. Nothing in Taffy reads
+  it.
+- `TaffyTree::relayout_at_size(node, size, measure)`: runs
+  `compute_child_layout` on the node with that input, its known dimensions
+  replaced by `size` (border box, definite in both axes), clamped by the
+  node's own minimum and maximum sizes and floored at its padding and border,
+  as a parent clamps the size it sends: Taffy's algorithms take a known size
+  as already within the node's limits, and lay the inside out at an
+  unclamped one while reporting the clamped size. It writes the
+  node's descendants; the node's own layout stays the one its parent wrote.
+  The stored input is put back, so it stays the parent's. The parent is not
+  visited or marked dirty. The result goes into the node's cache under its
+  own key, which can only match an identical request.
+
+Nothing changes for any existing caller: the stored input is extra state,
+and only the new call reads it.
+
+### Guard tests
+
+On plain Taffy, in the runtime's `layout_flight_hold_tests.rs`:
+
+- `taffy_relayout_at_size_equals_a_fresh_layout_at_that_size`: an element in a
+  block parent, with percentage padding, a child whose top margin collapses
+  through it and an absolutely placed child. Relaid out at 120x80, its inside
+  equals a fresh tree whose element is styled 120x80. Its own place and its
+  sibling's stay as at rest, a second call gives the same output, and a
+  parent pass lays the inside out at rest again.
+- `taffy_relayout_at_size_needs_a_full_layout_first`: a node never laid out gives
+  `None`.

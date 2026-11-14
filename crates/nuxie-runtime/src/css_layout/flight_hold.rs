@@ -2,295 +2,172 @@
 //! in place).
 //!
 //! While a matched element flies in place in Layout mode, its parent keeps
-//! seeing the box it rests in, so its neighbors don't move, and its inside
-//! is laid out at the flight box each frame. For the step only, the
-//! element's node in its parent's Taffy children is replaced by a
-//! placeholder node (`LayoutNodeKind::Held`) with the element's resting
-//! style frozen at its resting border box. The element's own node becomes
-//! the placeholder's child, absolute at the placeholder's origin, at
-//! the flight size. The placeholder is positioned, so it is the element's
-//! containing block, and the element publishes the placeholder's offset: it
-//! stays where it rests. The element is positioned too, so its absolute
-//! descendants resolve against it, as against a unit root.
+//! seeing the element as it rests, so its neighbors don't move, and its
+//! inside is laid out at the flight size each frame. The element stays its
+//! parent's own Taffy child with its own style: the parent pass lays it out
+//! exactly as at rest. A flight pass then lays the element out again, alone,
+//! as its parent last asked but at the flight size
+//! (`TaffyTree::relayout_at_size`, vendor/taffy-0.15.0-nuxie-css/NUXIE_PATCH.md).
+//! That pass writes only the element's descendants; the element's own Taffy
+//! layout stays the place its parent gave it, its resting slot.
+//!
+//! Two readers turn that into what is published, and the layout checker
+//! reads the same two: `resting_slot` (the element's place and size in its
+//! parent) and `flight_layout` (that place at the flight's size and
+//! content). No Rive object and no Taffy node is added, and no style is
+//! changed: Taffy is driven differently only in the flight pass of a held
+//! element.
 //!
 //! The element is a layout node's owner: a box, or a participant (a text,
-//! an image or a video). Its synced style stays as authored; only the copy
-//! its tree receives is the held one (`LayoutData::tree_style`). No Rive
-//! object is added. Taffy is driven differently only at a held element:
-//! the placeholder lives in the Taffy tree alone, is published as the
-//! element's resting box (`resting_box`), and is swept when the hold ends.
-//! It aligns by the element's resting baseline through a zero-size marker
-//! it holds, when the element rested with one; the element keeps the
-//! padding and border it resolved to at rest.
-//!
-//! The rest is frozen at take-off, as a slot leaf's is: a percentage size
-//! does not follow a resize during the step, while the place does. While
-//! held, and in the frame the hold ends, the element's own box does not
-//! interpolate: the flight drives it.
+//! an image or a video). Its rest follows its parent through the step: a
+//! percentage or stretched size follows a parent resize, and its neighbors
+//! move as they would at rest when its content changes. While held, and in
+//! the frame the hold ends, the element's own box does not interpolate: the
+//! flight drives it.
 use crate::mechanical_port::source::{
     core::CoreHandle,
     layout_component::{Layout, LayoutComponent},
 };
-use taffy::prelude::{Dimension, LengthPercentage, LengthPercentageAuto, NodeId, Style};
-use taffy::style::{BoxSizing, Display, Overflow, Position};
+use taffy::prelude::{NodeId, Size, Style, TaffyTree};
+use taffy::style::BoxSizing;
+use taffy::tree::{LayoutInput, LayoutOutput};
 
 #[derive(Clone, Debug)]
 pub(crate) struct FlightHold {
-    /// The element's own style as it rests, frozen at take-off at its
-    /// resting border box: the placeholder's style.
-    rest_style: Style,
     /// The element's CSS width and height while held, under its own
     /// box-sizing, as the slot path sizes a unit's root.
     size: (f32, f32),
-    /// The width of the element's containing block at rest, which its
-    /// percentage padding and border resolve against. Held, its containing
-    /// block is its placeholder, so a percentage, even one keyed during the
-    /// flight, resolves against this instead; lengths stay live.
-    percent_base: Option<f32>,
-    /// The element's first baseline as it rested, from its border box's top,
-    /// when it had one of its own. The placeholder holds no in-flow content,
-    /// so a marker reports it (`LayoutNodeKind::HeldBaseline`): neighbors
-    /// aligned to it stay put.
-    pub(crate) baseline: Option<f32>,
-    /// The baseline marker's node, once the parent's children were synced.
-    pub(crate) marker: Option<NodeId>,
-    /// The placeholder's node, once the parent's children were synced.
-    pub(crate) placeholder: Option<NodeId>,
-    /// The placeholder's last solved box, relative to the element's layout
-    /// parent: the element's own published layout, were it at rest.
+    /// The element's resting slot, relative to its layout parent, as the
+    /// last solve published it: its own published layout, were it at rest.
     pub(crate) rest: Layout,
 }
 
 impl FlightHold {
-    /// Freeze `style` (the element's synced style) at its solved box `rest`,
-    /// with the padding and border it resolved to there.
-    fn new(
-        style: &Style,
-        rest: Layout,
-        size: (f32, f32),
-        percent_base: Option<f32>,
-        baseline: Option<f32>,
-    ) -> Self {
-        let mut frozen = style.clone();
-        let (w, h) = (rest.width(), rest.height());
-        frozen.box_sizing = BoxSizing::BorderBox;
-        frozen.size.width = Dimension::length(w);
-        frozen.size.height = Dimension::length(h);
-        frozen.min_size.width = LengthPercentageAuto::length(w);
-        frozen.min_size.height = LengthPercentageAuto::length(h);
-        frozen.max_size = frozen.min_size;
-        frozen.flex_grow = 0.0;
-        frozen.flex_shrink = 0.0;
-        frozen.flex_basis = Dimension::auto();
-        frozen.aspect_ratio = None;
-        // The placeholder paints nothing and holds the absolute element: no
-        // padding or border of its own, a plain block container, and
-        // positioned so that it is the element's containing block. It clips
-        // its overflow, so a flight larger than the rest reaches no
-        // ancestor's scroll range, without becoming a scroll container. Its
-        // margins, insets and grid placement are the element's.
-        let zero = LengthPercentage::length(0.0);
-        frozen.padding = taffy::geometry::Rect {
-            left: zero,
-            right: zero,
-            top: zero,
-            bottom: zero,
-        };
-        frozen.border = frozen.padding;
-        frozen.overflow = taffy::geometry::Point {
-            x: Overflow::Clip,
-            y: Overflow::Clip,
-        };
-        frozen.scroll_content = false;
-        frozen.item_is_replaced = false;
-        frozen.display = Display::Block;
-        if frozen.position == Position::Static {
-            frozen.position = Position::Relative;
-        }
-        Self {
-            rest_style: frozen,
-            size,
-            percent_base,
-            baseline,
-            marker: None,
-            placeholder: None,
-            rest,
-        }
-    }
-
-    /// The placeholder's style.
-    pub(crate) fn rest_style(&self) -> &Style {
-        &self.rest_style
-    }
-
-    /// The baseline marker's style: an empty in-flow box at the
-    /// placeholder's top.
-    pub(crate) fn marker_style() -> Style {
-        Style {
-            display: Display::Block,
-            size: taffy::geometry::Size {
-                width: Dimension::length(0.0),
-                height: Dimension::length(0.0),
-            },
-            flex_shrink: 0.0,
-            ..Style::default()
-        }
-    }
-
-    /// What the baseline marker lays out to: nothing, with the element's
-    /// resting baseline.
-    pub(crate) fn marker_output(&self) -> taffy::tree::LayoutOutput {
-        taffy::tree::LayoutOutput::from_sizes_and_baselines(
-            taffy::geometry::Size::ZERO,
-            taffy::geometry::Rect::ZERO,
-            taffy::tree::Baselines {
-                first: self.baseline,
-                last: None,
-            },
-        )
-    }
-
-    /// The element's own style while held: absolute at its placeholder's
-    /// origin, exactly the flight size under its own box-sizing, outside
-    /// every flow rule.
-    pub(crate) fn apply_to_element(&self, style: &mut Style) {
-        let (w, h) = self.size;
-        let zero = LengthPercentageAuto::length(0.0);
-        if let Some(base) = self.percent_base {
-            use taffy::util::ResolveOrZero;
-            style.padding = style
-                .padding
-                .resolve_or_zero(Some(base), NO_CALC)
-                .map(LengthPercentage::length);
-            style.border = style
-                .border
-                .resolve_or_zero(Some(base), NO_CALC)
-                .map(LengthPercentage::length);
-        }
-        style.position = Position::Absolute;
-        style.inset = taffy::geometry::Rect {
-            left: zero,
-            top: zero,
-            right: LengthPercentageAuto::auto(),
-            bottom: LengthPercentageAuto::auto(),
-        };
-        style.margin = taffy::geometry::Rect {
-            left: zero,
-            top: zero,
-            right: zero,
-            bottom: zero,
-        };
-        style.size.width = Dimension::length(w);
-        style.size.height = Dimension::length(h);
-        style.min_size.width = LengthPercentageAuto::length(w);
-        style.min_size.height = LengthPercentageAuto::length(h);
-        style.max_size = style.min_size;
-        style.flex_grow = 0.0;
-        style.flex_shrink = 0.0;
-        style.flex_basis = Dimension::auto();
-        style.aspect_ratio = None;
-        style.grid_row = Default::default();
-        style.grid_column = Default::default();
+    /// The flight size: CSS width and height under the element's box-sizing.
+    pub(crate) fn size(&self) -> (f32, f32) {
+        self.size
     }
 }
 
-/// Mixed lengths and percentages are refused at import: no calc() values.
-const NO_CALC: fn(*const (), f32) -> f32 = |_, _| 0.0;
+/// The element's resting slot: its place and size among its parent's
+/// children, as the parent pass laid it out. The flight pass leaves it as
+/// it is.
+pub(crate) fn resting_slot<T>(taffy: &TaffyTree<T>, node: NodeId) -> Option<taffy::Layout> {
+    taffy.layout(node).ok().copied()
+}
 
-/// Starts holding `element`'s place in its parent's layout at the box it
-/// was last laid out at; from the next solve it is laid out at `size`, its
-/// CSS width and height under its own box-sizing. False, and nothing held, for an element that is
-/// not laid out by a parent or is already held.
+/// The element's flight layout: its resting slot's place, at the size and
+/// with the content the flight pass gave it.
+pub(crate) fn flight_layout(slot: &taffy::Layout, flight: &LayoutOutput) -> taffy::Layout {
+    taffy::Layout {
+        size: flight.size,
+        scrollable_overflow_rect: flight.scrollable_overflow_rect,
+        ..*slot
+    }
+}
+
+/// The flight pass of one held element: lay its inside out at `size` (CSS
+/// width and height under its box-sizing), as its parent last asked. None
+/// before the element's first full layout.
+pub(crate) fn fly<T, M>(
+    taffy: &mut TaffyTree<T>,
+    node: NodeId,
+    (width, height): (f32, f32),
+    measure: M,
+) -> Option<LayoutOutput>
+where
+    M: FnMut(LayoutInput, NodeId, Option<&mut T>, &Style) -> LayoutOutput,
+{
+    let slot = resting_slot(taffy, node)?;
+    let border_box = match taffy.style(node).ok()?.box_sizing {
+        BoxSizing::BorderBox => Size { width, height },
+        // Padding and border resolve against the parent, which the flight
+        // pass asks as the parent pass did: the slot's are the flight's.
+        BoxSizing::ContentBox => {
+            let inset = slot.padding + slot.border;
+            Size {
+                width: width + inset.left + inset.right,
+                height: height + inset.top + inset.bottom,
+            }
+        }
+    };
+    taffy.relayout_at_size(node, border_box, measure)
+}
+
+/// Starts holding `element`'s place in its parent's layout; from the next
+/// solve its inside is laid out at `size`, its CSS width and height under
+/// its own box-sizing. False, and nothing held, for an element that is not
+/// laid out by a parent, has not been laid out, or is already held.
 pub(crate) fn begin(element: &CoreHandle, size: (f32, f32)) -> bool {
-    let resting = element
+    let begun = element
         .with_mut(|object| {
-            let parent =
-                LayoutComponent::layout_parent_of(object).filter(|parent| parent != element)?;
+            LayoutComponent::layout_parent_of(object).filter(|parent| parent != element)?;
             let data = LayoutComponent::layout_data_of(object)?;
-            if data.flight_hold.is_some() {
+            if data.flight_hold.is_some() || data.node().is_none() {
                 return None;
             }
             let rest = data.solved_layout;
             if !(rest.width().is_finite() && rest.height().is_finite()) {
                 return None;
             }
-            Some((parent, data.node()?.clone(), rest))
+            data.flight_hold = Some(Box::new(FlightHold { size, rest }));
+            data.request_solve();
+            Some(())
         })
-        .flatten();
-    let Some((parent, node, rest)) = resting else {
+        .flatten()
+        .is_some();
+    if !begun {
         return false;
-    };
-    // Read outside the element's borrow: measuring its subtree reaches it.
-    let Some(resolved) = LayoutComponent::solved_padding_and_border(&node) else {
-        return false;
-    };
-    let baseline = LayoutComponent::resting_baseline(element, &node, rest, resolved);
-    let percent_base = LayoutComponent::resting_percent_base(element, &node);
-    let parent = element
-        .with_mut(|object| {
-            let data = LayoutComponent::layout_data_of(object)?;
-            data.flight_hold = Some(Box::new(FlightHold::new(
-                data.style(),
-                rest,
-                size,
-                percent_base,
-                baseline,
-            )));
-            data.hold_changed();
-            Some(parent)
-        })
-        .flatten();
-    let Some(parent) = parent else {
-        return false;
-    };
+    }
     #[cfg(any(test, feature = "test-support"))]
     HOLDS_BEGUN.with(|count| count.set(count.get() + 1));
-    LayoutComponent::flight_hold_changed(&parent);
+    LayoutComponent::request_layout_solve(element);
     true
 }
 
-/// Lays the held element's inside out at `size` from the next solve.
+/// Lays the held element's inside out at `size` from the next solve. The
+/// parent's layout is not invalidated: it doesn't read the flight.
 pub(crate) fn set_size(element: &CoreHandle, size: (f32, f32)) {
-    let parent = element
+    let changed = element
         .with_mut(|object| {
-            let parent = LayoutComponent::layout_parent_of(object)?;
             let data = LayoutComponent::layout_data_of(object)?;
             let hold = data.flight_hold.as_mut()?;
             if hold.size == size {
                 return None;
             }
             hold.size = size;
-            data.hold_changed();
-            Some(parent)
+            data.request_solve();
+            Some(())
         })
-        .flatten();
-    if let Some(parent) = parent {
-        LayoutComponent::mark_layout_node_dirty_occurrence(&parent, false);
+        .flatten()
+        .is_some();
+    if changed {
+        LayoutComponent::request_layout_solve(element);
     }
 }
 
-/// Ends the hold: the next solve gives the element back its place, and its
-/// own box takes its resting layout at once.
+/// Ends the hold: the next solve lays the element's inside out at rest
+/// again, and its own box takes its resting layout at once.
 pub(crate) fn end(element: &CoreHandle) {
-    let parent = element
+    let ended = element
         .with_mut(|object| {
-            let parent = LayoutComponent::layout_parent_of(object);
             let data = LayoutComponent::layout_data_of(object)?;
             data.flight_hold.take()?;
-            data.hold_changed();
             data.snap_bounds_once();
-            parent
+            data.mark_dirty();
+            Some(())
         })
-        .flatten();
-    if let Some(parent) = parent {
-        LayoutComponent::flight_hold_changed(&parent);
+        .flatten()
+        .is_some();
+    if ended {
+        LayoutComponent::request_layout_solve(element);
     }
 }
 
 /// Where `element` rests, relative to its layout parent, as layout last
-/// solved it: while held, its placeholder's box; otherwise its own. The one
-/// reader of a resting box that a flight's size, its placement and a zoom's
-/// ends read.
+/// solved it: while held, its resting slot; otherwise its own layout. The
+/// one reader of a resting box that a flight's size, its placement and a
+/// zoom's ends read.
 pub(crate) fn resting_box(element: &CoreHandle) -> Option<Layout> {
     element
         .with_mut(|object| {

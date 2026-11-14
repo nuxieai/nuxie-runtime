@@ -720,12 +720,12 @@ fn patch_property_userdata(
         Ok(())
     })?;
     #[cfg(feature = "tools")]
-    let attributed_call = Some(lua.create_function(
-        |lua, (function, args): (Function, MultiValue)| {
+    let attributed_call = Some(lua.create_function_lent(
+        |lua, loan, (function, args): (Function, MultiValue)| {
             // The adaptation flushes deferred observers after releasing the
             // userdata borrow. Keep attribution live through that same write.
             let _write_source = super::luau_write_scope(lua);
-            function.call::<MultiValue>(args)
+            function.call_with::<MultiValue>(loan, args)
         },
     )?);
     #[cfg(not(feature = "tools"))]

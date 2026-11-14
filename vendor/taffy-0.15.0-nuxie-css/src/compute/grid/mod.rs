@@ -482,9 +482,15 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     // width is the width the laid out grid needs (Chrome: a `height: 100px` grid in a flex
     // row, around one `aspect-ratio: 4` item, is 400 wide; stock measured it 0 wide and the
     // item then overflowed it).
+    // A grid with its own ratio has the width that ratio gives. Only its smallest width
+    // (a min-content measurement) follows the rows, and only with a single row (Chrome:
+    // `height: 100px; aspect-ratio: 2` around that item is 400 wide in a flex row; with two
+    // automatic rows it stays 200 wide).
     let columns_follow_rows = outer_node_size.width.is_none()
-        && tree.get_grid_container_style(node).aspect_ratio().is_none()
-        && items.iter().any(|item| item.aspect_ratio.is_some());
+        && items.iter().any(|item| item.aspect_ratio.is_some())
+        && (tree.get_grid_container_style(node).aspect_ratio().is_none()
+            || (available_grid_space.width == AvailableSpace::MinContent
+                && rows.iter().filter(|track| track.kind == GridTrackKind::Track).count() == 1));
     if run_mode == RunMode::ComputeSize && inputs.axis == RequestedAxis::Horizontal && !columns_follow_rows {
         let width = (initial_column_sum + content_box_inset.horizontal_axis_sum())
             .maybe_clamp(min_size.width, max_size.width)

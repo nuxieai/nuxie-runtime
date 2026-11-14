@@ -664,8 +664,15 @@ fn judge(case: &str, header: &Header) -> Verdict {
         }
         _ => {}
     }
-    if outcome.contains("rust panic") {
-        return verdict(Some((Kind::Panic, outcome.clone())));
+    // A host panic is a failure even when a script's pcall swallowed the
+    // error the trampoline made of it: the panic hook still printed it.
+    if outcome.contains("rust panic") || output.contains("panicked at") {
+        let detail = if outcome.contains("rust panic") {
+            outcome.clone()
+        } else {
+            crash_summary(&output, "caught host panic")
+        };
+        return verdict(Some((Kind::Panic, detail)));
     }
     let (is_ok, text) = match outcome.split_once(' ') {
         Some(("ok", text)) => (true, text),

@@ -6,4 +6,4 @@ local ok, e = pcall(string.find, s, pat)
 assert(not string.find(tostring(e), "rust panic", 1, true), tostring(e))
 pcall(string.gsub, s, pat, "")
 for _ in string.gmatch(s, pat) do end
-error("backtracking finished without hitting the budget: exceeded nothing")
+error("backtracking finished without hitting the budget")

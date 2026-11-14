@@ -23,7 +23,9 @@ end
 local n = list.length
 assert(n <= 11, "length " .. n)
 -- wrong item types
-for _, v in ipairs({nil, 1, "x", {}, setmetatable({}, {__index = function() error("trap") end}), Data.Main.new()}) do
+-- table.pack keeps the nil that ipairs would stop at.
+local args1 = table.pack(nil, 1, "x", {}, setmetatable({}, {__index = function() error("trap") end}), Data.Main.new())
+for i1 = 1, args1.n do local v = args1[i1]
   pcall(function() list:push(v) end)
   pcall(function() list:insert(v, 1) end)
 end

@@ -5,7 +5,7 @@ use std::{cell::RefCell, rc::Rc};
 use crate::luau::{Error, Lua, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory as RenderFactory, Mat2D, RenderPaint as RenderPaintTrait,
-    RenderPaintStyle, RenderShader, StrokeCap, StrokeJoin,
+    RenderPaintStyle, StrokeCap, StrokeJoin,
 };
 use nuxie_runtime::ScriptPaint as RuntimeScriptPaint;
 
@@ -75,7 +75,7 @@ pub(super) struct ScriptedPaint {
     cap: StrokeCap,
     feather: f32,
     blend_mode: BlendMode,
-    gradient: Option<Rc<dyn RenderShader>>,
+    gradient: Option<ScriptedGradient>,
     gradient_transform: Mat2D,
 }
 
@@ -177,18 +177,19 @@ impl ScriptedPaint {
         );
     }
 
-    fn set_gradient(&mut self, gradient: Option<Rc<dyn RenderShader>>) {
+    /// Sets the gradient; the paint keeps its charge as long as its shader.
+    fn set_gradient(&mut self, gradient: Option<ScriptedGradient>) {
         self.gradient = gradient;
         self.render_paint
             .borrow_mut()
-            .shader(self.gradient.as_deref());
+            .shader(self.gradient.as_ref().map(|gradient| &*gradient.shader));
     }
 
     fn set_gradient_value(&mut self, value: Value) -> Result<()> {
         match value {
             Value::UserData(gradient) => {
                 if gradient.is::<ScriptedGradient>() {
-                    let gradient = Rc::clone(&gradient.borrow::<ScriptedGradient>()?.0);
+                    let gradient = gradient.borrow::<ScriptedGradient>()?.clone();
                     self.set_gradient(Some(gradient));
                 } else {
                     self.set_gradient(None);
@@ -255,9 +256,7 @@ impl UserData for ScriptedPaint {
         });
         fields.add_field_method_get("gradient", |lua, this| {
             Ok(match &this.gradient {
-                Some(gradient) => {
-                    Value::UserData(lua.create_userdata(ScriptedGradient(Rc::clone(gradient)))?)
-                }
+                Some(gradient) => Value::UserData(lua.create_userdata(gradient.clone())?),
                 None => Value::Nil,
             })
         });

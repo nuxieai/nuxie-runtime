@@ -626,6 +626,38 @@ mod binding_tests {
         assert_eq!(vm.used(), 0);
     }
 
+    // Inventory row 20: a gradient's shader keeps its stops, as many as the
+    // script's table holds.
+    #[test]
+    fn a_gradient_is_charged_for_its_stops() {
+        const STOPS: &str = "local stops = {} \
+             for i = 1, n do stops[i] = {position = i / n, color = Color.rgba(255, 0, 0, 255)} end";
+        let vm = Vm::with_budget(64 * 1024);
+        vm.set_global("n", 10_000);
+        vm.refused(&format!(
+            "{STOPS} local ok, err = pcall(function() \
+               return Gradient.radial(Vector.xy(0, 0), 5, stops) end) \
+             return not ok, tostring(err)"
+        ));
+        let vm = Vm::with_budget(1024 * 1024);
+        vm.set_global("n", 2);
+        vm.vm
+            .eval::<()>(&format!(
+                "{STOPS} local gradient = Gradient.linear(Vector.xy(0, 0), Vector.xy(1, 0), stops) \
+                 paint = Paint.new() paint.gradient = gradient \
+                 copy = Paint.with({{gradient = gradient}})"
+            ))
+            .unwrap();
+        vm.vm.lua().gc_collect().unwrap();
+        assert_eq!(vm.used(), 16, "two stops of 8 bytes, kept by the paints");
+        vm.vm.eval::<()>("kept = paint.gradient paint = nil copy = nil").unwrap();
+        vm.vm.lua().gc_collect().unwrap();
+        assert_eq!(vm.used(), 16, "a gradient read back shares the charge");
+        vm.vm.eval::<()>("kept = nil").unwrap();
+        vm.vm.lua().gc_collect().unwrap();
+        assert_eq!(vm.used(), 0);
+    }
+
     // Codex review: alternating fonts across clears grew the Text's font
     // list without a charge.
     #[test]

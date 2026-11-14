@@ -8398,3 +8398,14 @@ fn a_lent_host_outline_is_cached_and_survives_later_lookups() {
     }
     assert!(!lent.empty());
 }
+
+/// An artboard list makes its rows' instances, whose scripts hydrate as they
+/// are made, with no Core receiver mutably lent (before: under the list's
+/// own borrow in create_artboard_at_occurrence).
+#[test]
+fn component_list_rows_instance_with_no_core_receiver_lent() {
+    let ((), reports) = nuxie_runtime::script_borrow_check::record_script_borrow_reports(|| {
+        wave_b_focus_test_078_direct_port_expected_red();
+    });
+    assert!(reports.is_empty(), "{}", reports.join("\n"));
+}

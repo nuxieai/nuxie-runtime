@@ -88,8 +88,6 @@ struct CacheKey {
     /// Whether each known dimension is definite. Normalized such that an axis
     /// without a known dimension is always `true`.
     known_dimensions_are_definite: Size<bool>,
-    /// nuxie-css: see `LayoutInput::known_height_is_stretch_only`.
-    known_height_is_stretch_only: bool,
 }
 
 impl CacheKey {
@@ -128,7 +126,6 @@ impl From<&LayoutInput> for CacheKey {
             known_dimensions_are_definite: input
                 .known_dimensions_are_definite
                 .zip_map(input.known_dimensions, |is_definite, kd| is_definite || kd.is_none()),
-            known_height_is_stretch_only: input.known_height_is_stretch_only,
         }
     }
 }
@@ -257,7 +254,6 @@ impl Cache {
                     let Some(entry) = entry else { continue };
                     if entry.key.kd_available_space == key.kd_available_space
                         && entry.key.known_dimensions_are_definite == key.known_dimensions_are_definite
-                        && entry.key.known_height_is_stretch_only == key.known_height_is_stretch_only
                         // nuxie-css: the whole parent size, not its width alone: a node's
                         // percentage heights resolve against the parent's height, so a width
                         // measured under one height is not the width under another.
@@ -375,7 +371,6 @@ mod tests {
             axis: RequestedAxis::Both,
             known_dimensions: Size { width: Some(width), height: None },
             known_dimensions_are_definite: Size { width: true, height: true },
-            known_height_is_stretch_only: false,
             parent_size: Size::NONE,
             available_space: Size { width: AvailableSpace::MaxContent, height: AvailableSpace::MaxContent },
             vertical_margins_are_collapsible: Line::FALSE,

@@ -715,8 +715,6 @@ fn compute_inner(
         direction,
         own_margins_collapse_with_children,
         children_margins_adjoin_own_edges,
-        // nuxie-css: see `picture_stretch_height_resolves` there.
-        !inputs.known_height_is_stretch_only || size.height.is_some(),
         #[cfg(feature = "content_size")]
         is_scroll_container,
         block_ctx,
@@ -1240,11 +1238,6 @@ fn perform_final_layout_on_in_flow_children(
     direction: Direction,
     own_margins_collapse_with_children: Line<bool>,
     children_margins_adjoin_own_edges: Line<bool>,
-    // nuxie-css: whether a picture's `stretch` keyword height resolves against the
-    // container's height. Not against a height the container is only stretched to (a grid
-    // row sized by content, `LayoutInput::known_height_is_stretch_only`): Chrome leaves the
-    // picture at its natural size there.
-    picture_stretch_height_resolves: bool,
     #[cfg(feature = "content_size")] is_scroll_container: bool,
     block_ctx: &mut BlockContext<'_>,
     // nuxie-css: also returns the in-flow content's end after its trailing collapsed margins.
@@ -1534,7 +1527,7 @@ fn perform_final_layout_on_in_flow_children(
                     item_non_auto_margin,
                     children_margins_adjoin_own_edges,
                 )
-                .filter(|_| item.is_compressible_replaced && picture_stretch_height_resolves)
+                .filter(|_| item.is_compressible_replaced)
                 .maybe_clamp(item.min_size.height, item.max_size.height);
                 Size { width: None, height: keyword_height }
             } else {
@@ -1631,7 +1624,6 @@ fn perform_final_layout_on_in_flow_children(
                 axis: RequestedAxis::Both,
                 known_dimensions,
                 known_dimensions_are_definite: Size { width: true, height: true },
-                known_height_is_stretch_only: false,
                 parent_size,
                 available_space: available_space.map_width(|_| AvailableSpace::Definite(stretch_width)),
                 vertical_margins_are_collapsible: if item.is_in_same_bfc { Line::TRUE } else { Line::FALSE },

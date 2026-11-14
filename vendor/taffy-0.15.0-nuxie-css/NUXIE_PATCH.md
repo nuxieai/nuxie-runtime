@@ -1715,3 +1715,48 @@ Decided by Levi on 2026-11-15.
 The five rows moved from `TAFFY_FORK_REPLACED_ROWS` to
 `TAFFY_FORK_CHROME_MEASURE_QUIRK_ROWS`; the three joined the guard
 rows. One less field in the measure cache key.
+
+## A picture's stretch height counts like a percentage; the stretch-only flag is gone
+
+`LayoutInput::known_height_is_stretch_only` is removed, with
+`AlgoConstants::height_is_stretch_only`, `GridItem::rows_are_set`,
+`measure_child_size_stretched`, the block container's
+`picture_stretch_height_resolves` and the list in
+`compute_flexbox_layout` that decided when a row's items are measured
+again against a stretched height.
+
+The flag said: this height is one the node is stretched to, and a
+picture's `stretch` keyword height inside does not resolve against it
+while the node's width is measured. It was set for a grid item in rows
+that are not set lengths and for a flex column's item with an automatic
+height. Percentage heights, minimums and maximums, and a ratio box's
+`stretch` height already resolved there; only a picture's `stretch`
+height did not.
+
+Blink shows why Chrome behaves that way. A grid sizes its columns with
+row heights unknown, sizes its rows, and sizes the columns again when an
+item's width depends on its height
+(`grid_layout_algorithm.cc`, `is_sizing_dependent_on_block_size`). For a
+picture that dependence is decided in `length_utils.cc`,
+`ComputeMinAndMaxContentContributionForReplaced`, which checks for
+percentage heights and carries the note "TODO(https://crbug.com/40339056):
+These should also check for 'stretch' values." So a picture with
+`height: 100%` is measured again and one with `height: stretch` is not.
+That is an omission in Chrome, not a rule.
+
+The fork treats the keyword like the percentage. Checked in Chrome 152:
+144 probes of a picture or a ratio box in a grid item (block, row,
+column; `stretch`, percentage, minimum, maximum; rows set or not) show
+every case resolving except the picture with `height: stretch` in rows
+that are not set. Of the 32,600 Chrome rows, 25 change and none start
+matching; for each, the fork's frames are the ones the fork gives the
+same row with `height: 100%`, and for 19 of the 25 those are Chrome's
+frames for that row too (the others carry a separate open difference,
+or pad the picture so the two heights differ).
+
+The rows that record the difference are in
+`TAFFY_FORK_CHROME_PICTURE_STRETCH_ROWS` with Chrome's frames and the
+fork's: 33 moved from `TAFFY_FORK_REPLACED_ROWS` and 12 new probes. 182
+new Chrome guard rows cover the cases that do resolve in Chrome. One
+less field in the measure cache key. Decided by Levi on 2026-11-15.
+

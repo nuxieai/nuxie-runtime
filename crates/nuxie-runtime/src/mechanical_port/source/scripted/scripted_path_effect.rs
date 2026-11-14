@@ -241,7 +241,10 @@ impl StrokeEffect for ScriptedPathEffect {
         let Some(update) = self.begin_update(provider, source) else {
             return;
         };
-        let requested = update.run(source, crate::scripting::ScriptNode::from_path_effect(paint));
+        let requested = update.run(
+            source,
+            crate::scripting::ScriptNode::from_path_effect(paint),
+        );
         self.finish_update(requested);
     }
 }

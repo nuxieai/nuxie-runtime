@@ -270,9 +270,11 @@ impl ShapePaint {
         if (self.paint_mutator.is_none() || self.render_opacity() == 0.0)
             && !parent
                 .with(|container| {
-                    container.as_shape_paint_container().is_some_and(|container| {
-                        !(container.path_flags() & PathFlags::CLIPPING).is_empty()
-                    })
+                    container
+                        .as_shape_paint_container()
+                        .is_some_and(|container| {
+                            !(container.path_flags() & PathFlags::CLIPPING).is_empty()
+                        })
                 })
                 .unwrap_or(false)
         {

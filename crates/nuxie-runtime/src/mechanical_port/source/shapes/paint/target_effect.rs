@@ -154,9 +154,9 @@ impl TargetEffect {
         source: &ShapePaintPath,
         paint: &crate::mechanical_port::source::shapes::paint::effects_container::EffectPaint<'_>,
     ) -> bool {
-        let Some(target) = effect
-            .with_downcast::<Self, _>(|target| Some((target.group_effect()?, target.proxy(provider)?)))
-        else {
+        let Some(target) = effect.with_downcast::<Self, _>(|target| {
+            Some((target.group_effect()?, target.proxy(provider)?))
+        }) else {
             return false;
         };
         if let Some((group, proxy)) = target {

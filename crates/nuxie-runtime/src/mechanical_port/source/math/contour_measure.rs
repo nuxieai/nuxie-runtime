@@ -348,6 +348,53 @@ impl ContourMeasure {
     pub fn is_closed(&self) -> bool {
         self.is_closed
     }
+    /// Bytes a measure of `segments` segments and `points` points holds:
+    /// its two tables and its shared allocation.
+    pub fn bytes_for(segments: usize, points: usize) -> usize {
+        std::mem::size_of::<Segment>()
+            .saturating_mul(segments)
+            .saturating_add(std::mem::size_of::<Vec2D>().saturating_mul(points))
+            .saturating_add(std::mem::size_of::<Rc<Self>>().saturating_mul(2))
+            .saturating_add(std::mem::size_of::<Self>())
+    }
+    /// Bytes this measure holds: its segment and point tables (their
+    /// capacity) and its shared allocation.
+    pub fn heap_bytes(&self) -> usize {
+        Self::bytes_for(self.segments.capacity(), self.points.capacity())
+    }
+    /// The most verbs and points [`Self::get_segment`] appends for this
+    /// interval, without appending: one piece per segment the interval
+    /// covers plus a partial piece at each end, each piece one verb of at
+    /// most three points, and one move (verb and point) before the first.
+    pub fn segment_room(&self, start_distance: f32, end_distance: f32) -> (usize, usize) {
+        let start_distance = cpp_max(0.0, start_distance);
+        let end_distance = cpp_min(self.length, end_distance);
+        if start_distance >= end_distance {
+            return (0, 0);
+        }
+        let pieces = self
+            .segment_index(end_distance)
+            .saturating_sub(self.segment_index(start_distance))
+            .saturating_add(2);
+        (
+            pieces.saturating_add(1),
+            pieces.saturating_mul(3).saturating_add(1),
+        )
+    }
+    /// `find_segment`'s index, without its checks.
+    fn segment_index(&self, distance: f32) -> usize {
+        let mut index = self
+            .segments
+            .partition_point(|segment| segment.distance < distance);
+        while self
+            .segments
+            .get(index)
+            .is_some_and(|segment| segment.distance == 0.0)
+        {
+            index = index.saturating_add(1);
+        }
+        index
+    }
     fn find_segment(&self, distance: f32) -> usize {
         assert!(
             self.segments[0].distance >= 0.0
@@ -665,7 +712,47 @@ impl<'a> ContourMeasureIter<'a> {
         self.segment_counts.resize(path.verbs().len(), 0);
     }
 
-    fn try_next(&mut self) -> Option<Rc<ContourMeasure>> {
+    /// Bytes the iterator holds: its copy of the source path, if it owns
+    /// one, and its per-verb scratch counts.
+    pub fn heap_bytes(&self) -> usize {
+        let path = match &self.path {
+            Cow::Owned(path) => path.heap_bytes(),
+            Cow::Borrowed(_) => 0,
+        };
+        path.saturating_add(
+            std::mem::size_of::<u32>().saturating_mul(self.segment_counts.capacity()),
+        )
+    }
+
+    /// The next contour's measure, as [`Self::next`], after `admit` accepts
+    /// the bytes it will hold ([`ContourMeasure::bytes_for`]), which are
+    /// counted before its tables are allocated. When `admit` refuses,
+    /// nothing is allocated and the iterator stays where it was.
+    pub fn next_admitted<E>(
+        &mut self,
+        mut admit: impl FnMut(usize) -> Result<(), E>,
+    ) -> Result<Option<Rc<ContourMeasure>>, E> {
+        let mut refused = None;
+        loop {
+            let result = self.try_next(&mut |bytes| match admit(bytes) {
+                Ok(()) => true,
+                Err(error) => {
+                    refused = Some(error);
+                    false
+                }
+            });
+            if let Some(error) = refused.take() {
+                return Err(error);
+            }
+            if result.is_some() || self.cursor == self.path.end().cursor() {
+                return Ok(result);
+            }
+        }
+    }
+
+    /// One step of [`Self::next_admitted`]: `None` both at an empty
+    /// contour and when `admit` returns false, which leaves the cursor.
+    fn try_next(&mut self, admit: &mut impl FnMut(usize) -> bool) -> Option<Rc<ContourMeasure>> {
         let path = self.path.as_ref();
         let mut iter = path.iter_from(self.cursor);
         let end = path.end();
@@ -694,6 +781,7 @@ impl<'a> ContourMeasureIter<'a> {
         let mut line_count = 0usize;
         let mut curve_index = 0usize;
         let mut closed = false;
+        let mut closing_line = false;
         let mut scan = first.clone();
         while scan != end {
             match scan.verb() {
@@ -731,11 +819,25 @@ impl<'a> ContourMeasureIter<'a> {
                     curve_index += 1;
                 }
                 PathVerb::Close => {
-                    line_count += usize::from(scan.point_before_close() != start);
+                    closing_line = scan.point_before_close() != start;
+                    line_count += usize::from(closing_line);
                     closed = true;
                 }
             }
             let _ = scan.next();
+        }
+
+        // Both tables are sized by pass 1: admit them before allocating.
+        let point_count = end_of_contour
+            .cursor()
+            .point_index()
+            .saturating_sub(first.cursor().point_index().saturating_sub(1))
+            .saturating_add(usize::from(closing_line));
+        if !admit(ContourMeasure::bytes_for(
+            curve_segments.saturating_add(line_count),
+            point_count,
+        )) {
+            return None;
         }
 
         // Pass 2 emits into the fully reserved segment buffer. The math and
@@ -832,12 +934,8 @@ impl<'a> ContourMeasureIter<'a> {
         }
     }
     pub fn next(&mut self) -> Option<Rc<ContourMeasure>> {
-        loop {
-            let result = self.try_next();
-            if result.is_some() || self.cursor == self.path.end().cursor() {
-                return result;
-            }
-        }
+        let Ok(next) = self.next_admitted(|_| Ok::<(), std::convert::Infallible>(()));
+        next
     }
 }
 
@@ -846,6 +944,14 @@ impl ContourMeasureIter<'static> {
     /// can outlive it, as required by the scripting wrapper.
     pub fn from_path_copy(path: &RawPath, tolerance: f32) -> Self {
         Self::from_path(Cow::Owned(path.clone()), tolerance)
+    }
+
+    /// Bytes [`Self::from_path_copy`] allocates for `path`, known before it
+    /// copies: the copy's buffers (a clone holds exactly the path's length)
+    /// and one scratch count per verb.
+    pub fn copy_bytes(path: &RawPath) -> usize {
+        RawPath::bytes_for(path.verbs().len(), path.points().len())
+            .saturating_add(std::mem::size_of::<u32>().saturating_mul(path.verbs().len()))
     }
 }
 
@@ -861,6 +967,10 @@ impl RefCntContourMeasureIter {
     }
     pub fn get(&mut self) -> &mut ContourMeasureIter<'static> {
         &mut self.iterator
+    }
+    /// Bytes the iterator holds ([`ContourMeasureIter::heap_bytes`]).
+    pub fn heap_bytes(&self) -> usize {
+        self.iterator.heap_bytes()
     }
 }
 fn to_dot30(value: f32) -> u32 {

@@ -1,4 +1,6 @@
-//! Record picture modes during attachment, after the enclosing arena borrows end.
+//! Work that must wait until the enclosing arena borrows end: picture modes
+//! recorded during attachment, and value-change notifications raised under a
+//! Core borrow (`after_core_borrows`).
 use std::{
     cell::RefCell,
     collections::{HashSet, VecDeque},
@@ -20,6 +22,8 @@ thread_local! {
 enum Refresh {
     Attached(CoreHandle),
     Geometry(CoreHandle),
+    /// A notification raised while a Core receiver was lent out.
+    Released(Box<dyn FnOnce()>),
 }
 
 // Only attachment consults the fixed hierarchy. CSS record presence, rather
@@ -169,6 +173,7 @@ fn complete_pending() {
                     }
                 });
             }
+            Some(Refresh::Released(notification)) => notification(),
             Some(Refresh::Geometry(host)) => {
                 host.with_mut(|host| {
                     if let Some(sizeable) = host.as_intrinsically_sizeable_mut() {
@@ -187,4 +192,30 @@ pub(crate) fn attached(host: CoreHandle) {
 
 pub(crate) fn geometry(host: CoreHandle) {
     collect(Refresh::Geometry(host));
+}
+
+/// Runs `notification` once no Core receiver is lent out: at once when none
+/// is, else when the outermost one is released, in the order raised. A
+/// callback that may read or write Core objects (a value delegate, a script
+/// listener) must never run inside another object's `with`/`with_mut`.
+pub(crate) fn after_core_borrows(notification: impl FnOnce() + 'static) {
+    let mut notification = Some(notification);
+    let deferred = PENDING
+        .try_with(|pending| {
+            let mut pending = pending.borrow_mut();
+            if pending.borrows == 0 {
+                return false;
+            }
+            if let Some(notification) = notification.take() {
+                pending
+                    .requests
+                    .push_back(Refresh::Released(Box::new(notification)));
+            }
+            true
+        })
+        .unwrap_or(false);
+    // Never invoke a callback while holding the queue's RefCell borrow.
+    if !deferred && let Some(notification) = notification {
+        notification();
+    }
 }

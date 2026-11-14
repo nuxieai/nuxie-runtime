@@ -29,6 +29,17 @@ static CHANGE_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::Atomic
 
 pub type ViewModelInstanceValueDelegateHandle = Rc<RefCell<dyn ViewModelInstanceValueDelegate>>;
 type ViewModelInstanceValueDelegateWeakHandle = Weak<RefCell<dyn ViewModelInstanceValueDelegate>>;
+/// One entry of an in-flight traversal; `remove_delegate` empties it.
+type SharedDelegateSlot = Rc<RefCell<Option<ViewModelInstanceValueDelegateWeakHandle>>>;
+
+fn notify_delegates(delegates: Vec<SharedDelegateSlot>) {
+    for delegate in delegates {
+        let delegate = delegate.borrow().as_ref().and_then(Weak::upgrade);
+        if let Some(delegate) = delegate {
+            delegate.borrow_mut().value_changed();
+        }
+    }
+}
 
 #[derive(Clone)]
 pub enum ValueDependentHandle {
@@ -187,7 +198,7 @@ pub struct ViewModelInstanceValue {
     view_model_property: Option<CoreHandle>,
     change_flags: u8,
     delegates: Vec<ViewModelInstanceValueDelegateWeakHandle>,
-    delegates_copy: Vec<Rc<RefCell<Option<ViewModelInstanceValueDelegateWeakHandle>>>>,
+    delegates_copy: Vec<SharedDelegateSlot>,
     dependents: Vec<ValueDependentHandle>,
     view_model_instance: Option<CoreHandle>,
     change_sequence: u64,
@@ -546,15 +557,47 @@ impl ViewModelInstanceValue {
         self.clear_flag(ValueFlags::Delegating);
     }
 
+    /// Publishes this change to the delegates. The borrowed setters call
+    /// this inside the value's own `with_mut`, so the delegates run later,
+    /// once that borrow has ended (`dispatch_value_notification`); only a
+    /// value outside any arena, which no Core handle can reach, notifies at
+    /// once.
     pub fn on_value_changed(&mut self) {
+        let Some(delegates) = self.delegates_to_notify() else {
+            return;
+        };
+        let Some(owner) = self.handle() else {
+            self.set_flag(ValueFlags::Delegating);
+            notify_delegates(delegates);
+            self.clear_flag(ValueFlags::Delegating);
+            return;
+        };
+        Self::dispatch_delegates(owner, delegates);
+    }
+
+    pub(crate) fn on_value_changed_handle(owner: &CoreHandle) {
+        let Some(delegates) = owner
+            .with_mut(|owner| {
+                owner
+                    .as_view_model_instance_value_mut()?
+                    .delegates_to_notify()
+            })
+            .flatten()
+        else {
+            return;
+        };
+        Self::dispatch_delegates(owner.clone(), delegates);
+    }
+
+    /// Advances the change sequence and returns the delegates this change
+    /// notifies, or `None` when there are none or a notification of this
+    /// value is already running.
+    fn delegates_to_notify(&mut self) -> Option<Vec<SharedDelegateSlot>> {
         self.change_sequence = Self::next_change_sequence();
         self.delegates
             .retain(|delegate| delegate.strong_count() != 0);
-        if self.delegates.is_empty() {
-            return;
-        }
-        if self.has_flag(ValueFlags::Delegating) {
-            return;
+        if self.delegates.is_empty() || self.has_flag(ValueFlags::Delegating) {
+            return None;
         }
         if self.has_flag(ValueFlags::DelegatesChanged) {
             self.delegates_copy = self
@@ -565,67 +608,14 @@ impl ViewModelInstanceValue {
                 .collect();
             self.clear_flag(ValueFlags::DelegatesChanged);
         }
-        let delegates = self.delegates_copy.clone();
-        let owner = self.handle();
-        if crate::view_model_cell::defer_transaction_notification(move || {
-            let _suppress = owner.clone().map(SuppressDelegation::new);
-            for delegate in delegates {
-                let delegate = delegate.borrow().as_ref().and_then(Weak::upgrade);
-                if let Some(delegate) = delegate {
-                    delegate.borrow_mut().value_changed();
-                }
-            }
-        }) {
-            return;
-        }
-        self.set_flag(ValueFlags::Delegating);
-        for delegate in &self.delegates_copy {
-            let delegate = delegate.borrow().as_ref().and_then(Weak::upgrade);
-            if let Some(delegate) = delegate {
-                delegate.borrow_mut().value_changed();
-            }
-        }
-        self.clear_flag(ValueFlags::Delegating);
+        Some(self.delegates_copy.clone())
     }
 
-    pub(crate) fn on_value_changed_handle(owner: &CoreHandle) {
-        let Some(delegates) = owner
-            .with_mut(|owner| {
-                let value = owner.as_view_model_instance_value_mut()?;
-                value.change_sequence = Self::next_change_sequence();
-                value
-                    .delegates
-                    .retain(|delegate| delegate.strong_count() != 0);
-                if value.delegates.is_empty() {
-                    return None;
-                }
-                if value.has_flag(ValueFlags::Delegating) {
-                    return None;
-                }
-                if value.has_flag(ValueFlags::DelegatesChanged) {
-                    value.delegates_copy = value
-                        .delegates
-                        .iter()
-                        .cloned()
-                        .map(|delegate| Rc::new(RefCell::new(Some(delegate))))
-                        .collect();
-                    value.clear_flag(ValueFlags::DelegatesChanged);
-                }
-                Some(value.delegates_copy.clone())
-            })
-            .flatten()
-        else {
-            return;
-        };
-        let owner = owner.clone();
-        crate::view_model_cell::dispatch_transaction_notification(move || {
-            let _suppress = SuppressDelegation::new(owner.clone());
-            for delegate in delegates {
-                let delegate = delegate.borrow().as_ref().and_then(Weak::upgrade);
-                if let Some(delegate) = delegate {
-                    delegate.borrow_mut().value_changed();
-                }
-            }
+    fn dispatch_delegates(owner: CoreHandle, delegates: Vec<SharedDelegateSlot>) {
+        crate::view_model_cell::dispatch_value_notification(move || {
+            // A delegate writing this value does not notify it again.
+            let _suppress = SuppressDelegation::new(owner);
+            notify_delegates(delegates);
         });
     }
 
@@ -754,3 +744,7 @@ impl Drop for SuppressDelegation {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "delegate_release_tests.rs"]
+mod delegate_release_tests;

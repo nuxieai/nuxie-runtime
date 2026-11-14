@@ -1,6 +1,6 @@
 // Translated from:
 // /Users/levi/dev/oss/rive-runtime/src/lua/lua_artboards.cpp
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use crate::luau::{
@@ -62,6 +62,49 @@ impl RendererBindings {
 
 struct ScriptedArtboardOwner {
     artboard: Box<dyn ScriptArtboard>,
+    /// Held by an artboard `artboard:instance()` made, for as long as
+    /// anything keeps the instance.
+    _slot: Option<ArtboardInstanceSlot>,
+}
+
+/// The most artboard instances a script VM may hold at once
+/// (`artboard:instance()`). Each builds a full copy of the artboard's object
+/// graph, whose size the runtime does not report, so this is a count beside
+/// the host memory budget rather than a charge in bytes.
+const MAX_ARTBOARD_INSTANCES: usize = 1024;
+
+/// The VM's count of live artboard instances.
+#[derive(Clone, Default)]
+struct LiveArtboardInstances(Rc<Cell<usize>>);
+
+/// One live artboard instance, counted until it drops.
+struct ArtboardInstanceSlot(Rc<Cell<usize>>);
+
+impl ArtboardInstanceSlot {
+    fn admit(lua: &Lua) -> Result<Self> {
+        let live = match lua.try_app_data_ref::<LiveArtboardInstances>()? {
+            Some(live) => live.clone(),
+            None => {
+                let live = LiveArtboardInstances::default();
+                lua.try_set_app_data(live.clone())?;
+                live
+            }
+        };
+        let count = live.0.get();
+        if count >= MAX_ARTBOARD_INSTANCES {
+            return Err(Error::runtime(format!(
+                "script VM may hold at most {MAX_ARTBOARD_INSTANCES} artboard instances"
+            )));
+        }
+        live.0.set(count.saturating_add(1));
+        Ok(Self(live.0))
+    }
+}
+
+impl Drop for ArtboardInstanceSlot {
+    fn drop(&mut self) {
+        self.0.set(self.0.get().saturating_sub(1));
+    }
 }
 
 struct ScriptedArtboard {
@@ -108,8 +151,18 @@ impl UserData for ScriptedAnimation {
 
 impl ScriptedArtboard {
     fn new(artboard: Box<dyn ScriptArtboard>, bindings: RendererBindings) -> Self {
+        Self::owned(
+            ScriptedArtboardOwner {
+                artboard,
+                _slot: None,
+            },
+            bindings,
+        )
+    }
+
+    fn owned(owner: ScriptedArtboardOwner, bindings: RendererBindings) -> Self {
         Self {
-            owner: Rc::new(ScriptedArtboardOwner { artboard }),
+            owner: Rc::new(owner),
             bindings,
             data: RefCell::new(None),
         }
@@ -222,13 +275,20 @@ impl UserData for ScriptedArtboard {
         });
         methods.add_method("instance", |lua, this, view_model: Option<Table>| {
             let view_model = view_model.as_ref().map(model_from_table).transpose()?;
+            let slot = ArtboardInstanceSlot::admit(lua)?;
             let instance = this.bindings.with_factory(|factory| {
                 this.owner
                     .artboard
                     .instance_with_factory(view_model, factory)
                     .map_err(|error| Error::runtime(error.to_string()))
             })?;
-            lua.create_userdata(ScriptedArtboard::new(instance, this.bindings.clone()))
+            lua.create_userdata(ScriptedArtboard::owned(
+                ScriptedArtboardOwner {
+                    artboard: instance,
+                    _slot: Some(slot),
+                },
+                this.bindings.clone(),
+            ))
         });
         methods.add_method("advance", |_, this, seconds: f32| {
             this.owner
@@ -1103,6 +1163,38 @@ end
         )
         .exec()
         .expect("pinned addToPath overloads");
+    }
+
+    // Inventory row 19: each `artboard:instance()` built a full copy of the
+    // artboard with no bound.
+    #[test]
+    fn artboard_instances_are_capped_while_held() {
+        let lua = Lua::new();
+        lua.globals()
+            .set(
+                "artboard",
+                fixture_userdata(&lua, "joel_v3.riv", Some("Character")),
+            )
+            .unwrap();
+        let (ok, error, held): (bool, String, usize) = lua
+            .load(
+                r#"
+                held = {}
+                local ok, err = pcall(function()
+                  for i = 1, 2000 do held[i] = artboard:instance() end
+                end)
+                return ok, tostring(err), #held
+                "#,
+            )
+            .eval()
+            .unwrap();
+        assert!(!ok, "expected a refusal");
+        assert!(error.contains("at most 1024 artboard instances"), "{error}");
+        assert_eq!(held, super::MAX_ARTBOARD_INSTANCES);
+        // An instance's animations keep it; dropping all of them frees slots.
+        lua.load("held = nil").exec().unwrap();
+        lua.gc_collect().unwrap();
+        lua.load("kept = artboard:instance()").exec().unwrap();
     }
 
     // Lane E2b: addToPath grew the path through a closure that could not

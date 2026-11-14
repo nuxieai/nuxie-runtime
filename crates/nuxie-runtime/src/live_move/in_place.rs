@@ -193,11 +193,12 @@ impl Flying {
                 .element
                 .with(|object| object.as_layout_component().map(|l| l.layout_translation()))
                 .flatten(),
-            Shape::Hosted(participant) => participant
-                .with_downcast::<LayoutParticipant, _>(|participant| {
+            Shape::Hosted(participant) => {
+                participant.with_downcast::<LayoutParticipant, _>(|participant| {
                     let bounds = participant.layout_bounds();
                     Vec2D::new(bounds.left(), bounds.top())
-                }),
+                })
+            }
             Shape::Placement(_) => self
                 .element
                 .with(|object| {
@@ -243,11 +244,12 @@ impl Flying {
                         .map(|l| Vec2D::new(l.layout_width(), l.layout_height()))
                 })
                 .flatten(),
-            Shape::Hosted(participant) => participant
-                .with_downcast::<LayoutParticipant, _>(|participant| {
+            Shape::Hosted(participant) => {
+                participant.with_downcast::<LayoutParticipant, _>(|participant| {
                     let bounds = participant.layout_bounds();
                     Vec2D::new(bounds.width(), bounds.height())
-                }),
+                })
+            }
             Shape::Placement(root) => root.with_downcast::<Artboard, _>(|root| {
                 Vec2D::new(root.layout_width(), root.layout_height())
             }),
@@ -552,15 +554,14 @@ impl InPlaceFlight {
 
     /// Both ends, read live for an awake Screen and kept for one asleep.
     fn ends(&self, active: Option<&HashSet<CoreHandle>>) -> Result<(End, End)> {
-        let read =
-            |element: &Flying, row: &CoreHandle, kept: &Cell<Option<End>>| match kept.get() {
-                Some(end) if active.is_some_and(|active| !active.contains(row)) => Ok(end),
-                _ => {
-                    let end = end(element)?;
-                    kept.set(Some(end));
-                    Ok::<_, anyhow::Error>(end)
-                }
-            };
+        let read = |element: &Flying, row: &CoreHandle, kept: &Cell<Option<End>>| match kept.get() {
+            Some(end) if active.is_some_and(|active| !active.contains(row)) => Ok(end),
+            _ => {
+                let end = end(element)?;
+                kept.set(Some(end));
+                Ok::<_, anyhow::Error>(end)
+            }
+        };
         Ok((
             read(&self.from_box, &self.from_row, &self.from_end)?,
             read(&self.to_box, &self.to_row, &self.to_end)?,

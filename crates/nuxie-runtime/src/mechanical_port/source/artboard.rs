@@ -5197,7 +5197,8 @@ impl Artboard {
         }
         renderer.save();
         renderer.transform(nuxie_render_api::Mat2D(*matrix.values()));
-        let clip_area = clip.and_then(|clip| crate::css_layout::lift::clip_bounds(&element, clip, clip_space));
+        let clip_area =
+            clip.and_then(|clip| crate::css_layout::lift::clip_bounds(&element, clip, clip_space));
         let plain = visitor.is_none();
         // The zoom's clip is part of what the copy draws, inside its picture,
         // as a flying unit's is: clipping where the picture composites would

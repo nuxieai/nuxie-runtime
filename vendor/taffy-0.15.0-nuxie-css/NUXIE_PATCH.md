@@ -1507,3 +1507,18 @@ width is not.
 
 Of the 29,914 layouts, 6 more match and none that matched differ. A
 wrapping absolute row still counts such a picture at its natural width.
+
+## An absolute row's measured height is not a definite one
+
+An absolutely positioned flex container with no height is as tall as its
+content. The fork then laid it out treating that measured height as
+definite, so a column still breaks its lines at it. For a row that made
+the height a definite cross size, and a picture stretched to it took the
+width the height gives. Chrome keeps the picture's width: in an absolute
+row around a 120 by 60 picture and two 80 by 80 boxes that do not shrink,
+the picture is 120 wide and 80 tall. The fork made it 160 wide, which
+pushed the boxes out of the row.
+
+`compute_flexbox_layout` now keeps the override for columns only.
+
+Of the 29,914 layouts, 39 more match and none that matched differ.

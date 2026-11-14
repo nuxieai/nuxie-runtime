@@ -6,14 +6,43 @@ use crate::luau::{
 use std::cell::Cell;
 use std::rc::Rc;
 
+use super::host_memory_budget::{HostMemoryCharge, grown_capacity};
+
 use nuxie_render_api::{
     Factory as RenderFactory, ImageMeshInstanceData, ImageMeshInstancesHandle, RenderBuffer,
     RenderBufferFlags, RenderBufferType, Vec2D,
 };
 
+/// Host bytes one vertex slot holds: the staged `Vec2D` and its mirror in
+/// the render buffer `update` makes.
+const VERTEX_SLOT_BYTES: usize = 2 * std::mem::size_of::<Vec2D>();
+/// Host bytes one triangle-index slot holds: the staged `u16` and its mirror.
+const INDEX_SLOT_BYTES: usize = 2 * std::mem::size_of::<u16>();
+
+/// Makes room for `additional` more values, charging every slot of the
+/// capacity it reserves (`slot_bytes` each) before reserving it.
+fn reserve_values<T>(
+    lua: &Lua,
+    values: &mut Vec<T>,
+    charge: &mut HostMemoryCharge,
+    additional: usize,
+    slot_bytes: usize,
+) -> Result<()> {
+    let capacity = grown_capacity(values.capacity(), values.len(), additional);
+    if capacity == values.capacity() {
+        return Ok(());
+    }
+    charge.attach(lua)?;
+    charge.reserve_to(capacity.saturating_mul(slot_bytes))?;
+    values
+        .try_reserve_exact(capacity.saturating_sub(values.len()))
+        .map_err(|_| Error::runtime("not enough memory"))
+}
+
 pub(super) struct ScriptedVertexBuffer {
     values: Vec<Vec2D>,
     render_buffer: Option<Box<dyn RenderBuffer>>,
+    charge: HostMemoryCharge,
 }
 
 impl ScriptedVertexBuffer {
@@ -21,6 +50,7 @@ impl ScriptedVertexBuffer {
         Self {
             values: Vec::new(),
             render_buffer: None,
+            charge: HostMemoryCharge::default(),
         }
     }
 
@@ -43,8 +73,11 @@ impl ScriptedVertexBuffer {
         );
         let mapped = buffer.map_mut();
         for (chunk, value) in mapped.chunks_exact_mut(8).zip(&self.values) {
-            chunk[..4].copy_from_slice(&value.x.to_ne_bytes());
-            chunk[4..].copy_from_slice(&value.y.to_ne_bytes());
+            let [x0, x1, x2, x3] = value.x.to_ne_bytes();
+            let [y0, y1, y2, y3] = value.y.to_ne_bytes();
+            for (byte, value) in chunk.iter_mut().zip([x0, x1, x2, x3, y0, y1, y2, y3]) {
+                *byte = value;
+            }
         }
         buffer.unmap();
         self.render_buffer = Some(buffer);
@@ -62,7 +95,14 @@ impl UserData for ScriptedVertexBuffer {
             this.render_buffer = None;
             Ok(())
         });
-        methods.add_method_mut("add", |_, this, values: MultiValue| {
+        methods.add_method_mut("add", |lua, this, values: MultiValue| {
+            reserve_values(
+                lua,
+                &mut this.values,
+                &mut this.charge,
+                values.len(),
+                VERTEX_SLOT_BYTES,
+            )?;
             for value in values {
                 let Value::Vector(value) = value else {
                     return Err(Error::runtime("expected vector"));
@@ -79,6 +119,7 @@ pub(super) struct ScriptedTriangleBuffer {
     values: Vec<u16>,
     max: u16,
     render_buffer: Option<Box<dyn RenderBuffer>>,
+    charge: HostMemoryCharge,
 }
 
 impl ScriptedTriangleBuffer {
@@ -87,6 +128,7 @@ impl ScriptedTriangleBuffer {
             values: Vec::new(),
             max: 0,
             render_buffer: None,
+            charge: HostMemoryCharge::default(),
         }
     }
 
@@ -142,7 +184,8 @@ impl UserData for ScriptedTriangleBuffer {
             this.render_buffer = None;
             Ok(())
         });
-        methods.add_method_mut("add", |_, this, (a, b, c): (u64, u64, u64)| {
+        methods.add_method_mut("add", |lua, this, (a, b, c): (u64, u64, u64)| {
+            reserve_values(lua, &mut this.values, &mut this.charge, 3, INDEX_SLOT_BYTES)?;
             for index in [a, b, c] {
                 let index = u16::try_from(index)
                     .map_err(|_| Error::runtime(format!("index {index} exceeds {}", u16::MAX)))?;
@@ -155,29 +198,33 @@ impl UserData for ScriptedTriangleBuffer {
     }
 }
 
-/// Host memory one script VM's mesh instances may hold, staged here and
-/// mirrored once by the renderer: as much again as the VM's own 16 MiB
-/// ceiling, which the instances are outside of.
+/// Instances one script VM's `MeshInstances` may hold together, a fixed
+/// count beside the VM's host memory budget (which their bytes are charged
+/// to): 16 MiB of 48-byte instances, 349,525.
 pub(super) const MAX_IMAGE_MESH_INSTANCE_BYTES: usize = 16 * 1024 * 1024;
 /// 349,525 instances of 48 bytes.
 pub(super) const MAX_IMAGE_MESH_INSTANCES: usize =
     MAX_IMAGE_MESH_INSTANCE_BYTES / std::mem::size_of::<ImageMeshInstanceData>();
+/// Host bytes one charged instance may hold: its staging slot here and the
+/// renderer's mirror (`ImageMeshInstancesStorage::edit`, a `Vec::resize` that
+/// grows by doubling, so up to two slots per instance of the largest count).
+const IMAGE_MESH_INSTANCE_HOST_BYTES: usize = 3 * std::mem::size_of::<ImageMeshInstanceData>();
 
-/// Instances charged by every live `MeshInstances` of one VM, each charged
+/// Instances counted by every live `MeshInstances` of one VM, each counted
 /// for the largest staging capacity it has asked for (which also bounds the
-/// renderer's mirror) before allocating it, and refunded when it is dropped.
+/// renderer's mirror) before allocating it, and released when it is dropped.
 #[derive(Clone, Default)]
-struct MeshInstanceBudget(Rc<Cell<usize>>);
+struct MeshInstanceCount(Rc<Cell<usize>>);
 
-impl MeshInstanceBudget {
-    /// The VM's budget, installed with the first `MeshInstances` global.
-    fn for_lua(lua: &Lua) -> Self {
-        if let Some(budget) = lua.app_data_ref::<Self>() {
-            return budget.clone();
+impl MeshInstanceCount {
+    /// The VM's count, installed with the first `MeshInstances` global.
+    fn for_lua(lua: &Lua) -> Result<Self> {
+        if let Some(count) = lua.try_app_data_ref::<Self>()? {
+            return Ok(count.clone());
         }
-        let budget = Self::default();
-        lua.set_app_data(budget.clone());
-        budget
+        let count = Self::default();
+        lua.try_set_app_data(count.clone())?;
+        Ok(count)
     }
 
     fn fits(&self, count: usize) -> bool {
@@ -199,26 +246,80 @@ impl MeshInstanceBudget {
     }
 }
 
+/// What one `MeshInstances` holds against its VM: the instance count and
+/// the host bytes of the largest staging capacity it has asked for. Both
+/// are released together when it is dropped.
+struct MeshInstanceCharge {
+    count: MeshInstanceCount,
+    bytes: HostMemoryCharge,
+    /// Instances charged: the largest staging capacity asked for.
+    instances: usize,
+}
+
+impl MeshInstanceCharge {
+    fn new(lua: &Lua, count: MeshInstanceCount) -> Result<Self> {
+        let mut bytes = HostMemoryCharge::default();
+        bytes.attach(lua)?;
+        Ok(Self {
+            count,
+            bytes,
+            instances: 0,
+        })
+    }
+
+    /// Whether `target` instances in all would fit both limits.
+    fn fits(&self, target: usize) -> bool {
+        let growth = target.saturating_sub(self.instances);
+        self.count.fits(growth)
+            && self
+                .bytes
+                .fits(target.saturating_mul(IMAGE_MESH_INSTANCE_HOST_BYTES))
+    }
+
+    /// Charges the growth to `target` instances; the count is checked first,
+    /// so its error is the one a script sees when both would refuse.
+    fn charge_to(&mut self, target: usize) -> Result<()> {
+        let growth = target.saturating_sub(self.instances);
+        self.count.charge(growth)?;
+        if let Err(error) = self
+            .bytes
+            .reserve_to(target.saturating_mul(IMAGE_MESH_INSTANCE_HOST_BYTES))
+        {
+            self.count.release(growth);
+            return Err(error);
+        }
+        self.instances = self.instances.max(target);
+        Ok(())
+    }
+}
+
+impl Drop for MeshInstanceCharge {
+    fn drop(&mut self) {
+        self.count.release(self.instances);
+    }
+}
+
 pub(super) struct ScriptedImageMeshInstances {
     pub(super) instances: ImageMeshInstancesHandle,
     staged: Vec<ImageMeshInstanceData>,
     dirty: bool,
-    budget: MeshInstanceBudget,
-    /// Instances charged to `budget`: the largest staging capacity asked for.
-    charged: usize,
+    charge: MeshInstanceCharge,
 }
 
 impl ScriptedImageMeshInstances {
-    fn new(factory: &mut dyn RenderFactory, budget: MeshInstanceBudget, count: usize) -> Result<Self> {
+    fn new(
+        factory: &mut dyn RenderFactory,
+        mut charge: MeshInstanceCharge,
+        count: usize,
+    ) -> Result<Self> {
         let mut staged = Vec::new();
-        reserve_staging(&budget, &mut staged, 0, count)?;
+        reserve_staging(&mut charge, &mut staged, count)?;
         staged.resize(count, ImageMeshInstanceData::default());
         Ok(Self {
             instances: factory.make_image_mesh_instances(count),
             staged,
             dirty: false,
-            budget,
-            charged: count,
+            charge,
         })
     }
 
@@ -226,17 +327,17 @@ impl ScriptedImageMeshInstances {
         if self.staged.len() == count {
             return Ok(());
         }
-        if count > self.charged {
-            // Grow by doubling while the budget allows it, so growing one
+        let charged = self.charge.instances;
+        if count > charged {
+            // Grow by doubling while the limits allow it, so growing one
             // instance at a time is not quadratic; otherwise exactly.
-            let doubled = self.charged.saturating_mul(2).max(count);
-            let target = if self.budget.fits(doubled.saturating_sub(self.charged)) {
+            let doubled = charged.saturating_mul(2).max(count);
+            let target = if self.charge.fits(doubled) {
                 doubled
             } else {
                 count
             };
-            reserve_staging(&self.budget, &mut self.staged, self.charged, target)?;
-            self.charged = target;
+            reserve_staging(&mut self.charge, &mut self.staged, target)?;
         }
         // A shrink refunds nothing: the renderer's mirror keeps the capacity
         // of the largest count it was given, so the charge stays at that high
@@ -246,9 +347,14 @@ impl ScriptedImageMeshInstances {
         Ok(())
     }
 
-    fn stage(&mut self, index: usize) -> &mut ImageMeshInstanceData {
+    /// The staged instance at `index`, or the script error for an index past
+    /// the end.
+    fn stage(&mut self, index: usize) -> Result<&mut ImageMeshInstanceData> {
+        let data = self.staged.get_mut(index).ok_or_else(|| {
+            Error::runtime(format!("index {index} is past the end of MeshInstances"))
+        })?;
         self.dirty = true;
-        &mut self.staged[index]
+        Ok(data)
     }
 
     pub(super) fn commit(&mut self) {
@@ -256,38 +362,36 @@ impl ScriptedImageMeshInstances {
             return;
         }
         let mut instances = self.instances.borrow_mut();
-        instances
-            .edit(Some(self.staged.len()))
-            .copy_from_slice(&self.staged);
+        let mirror = instances.edit(Some(self.staged.len()));
+        for (slot, value) in mirror.iter_mut().zip(&self.staged) {
+            *slot = *value;
+        }
         instances.end_edit();
         self.dirty = false;
     }
 }
 
-/// Charges the growth from `charged` to `target` instances, then reserves
-/// staging for `target`; a refused reservation is refunded.
+/// Charges the growth to `target` instances, then reserves staging for
+/// `target`; a refused reservation is refunded.
 fn reserve_staging(
-    budget: &MeshInstanceBudget,
+    charge: &mut MeshInstanceCharge,
     staged: &mut Vec<ImageMeshInstanceData>,
-    charged: usize,
     target: usize,
 ) -> Result<()> {
-    let growth = target.saturating_sub(charged);
-    budget.charge(growth)?;
+    let instances = charge.instances;
+    let bytes = charge.bytes.bytes();
+    charge.charge_to(target)?;
     if staged
         .try_reserve_exact(target.saturating_sub(staged.len()))
         .is_err()
     {
-        budget.release(growth);
+        charge.count.release(charge.instances.saturating_sub(instances));
+        charge.instances = instances;
+        // Lowering a charge always succeeds.
+        charge.bytes.set(bytes)?;
         return Err(Error::runtime("cannot allocate MeshInstances"));
     }
     Ok(())
-}
-
-impl Drop for ScriptedImageMeshInstances {
-    fn drop(&mut self) {
-        self.budget.release(self.charged);
-    }
 }
 
 impl UserData for ScriptedImageMeshInstances {
@@ -305,7 +409,7 @@ impl UserData for ScriptedImageMeshInstances {
             }
             let matrix = AnyUserData::from_lua(value(1), lua)?;
             let matrix = matrix.borrow::<super::lua_mat2d::ScriptedMat2D>()?.0;
-            let data = this.stage(index);
+            let data = this.stage(index)?;
             data.transform = matrix;
             data.opacity = Option::<f32>::from_lua(value(2), lua)?.unwrap_or(1.0);
             data.additiveness = Option::<f32>::from_lua(value(3), lua)?.unwrap_or(0.0);
@@ -349,18 +453,15 @@ pub(super) fn install_mesh_globals(lua: &Lua) -> Result<()> {
     install_callable_constructor(lua, "TriangleBuffer", |_| Ok(ScriptedTriangleBuffer::new()))?;
     let table = lua.create_table();
     let metatable = lua.create_table();
-    let budget = MeshInstanceBudget::for_lua(lua);
+    let instance_count = MeshInstanceCount::for_lua(lua)?;
     metatable.set(
         "__call",
         lua.create_function(move |lua, (_table, count): (Table, Option<u32>)| {
             let bindings = super::lua_renderer_library::RendererBindings::for_lua(lua)
                 .ok_or_else(|| Error::runtime("renderer bindings are not installed"))?;
+            let charge = MeshInstanceCharge::new(lua, instance_count.clone())?;
             let instances = bindings.with_factory(|factory| {
-                ScriptedImageMeshInstances::new(
-                    factory,
-                    budget.clone(),
-                    count.unwrap_or(0) as usize,
-                )
+                ScriptedImageMeshInstances::new(factory, charge, count.unwrap_or(0) as usize)
             })?;
             lua.create_userdata(instances)
         })?,

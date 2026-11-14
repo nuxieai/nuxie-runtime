@@ -23,6 +23,7 @@ owned files. Branch `claude/luaur-lane-e2b-host-budget-877d5b`, based on
 | `766877e8f4` | an empty measure extract needs no budget room (review) |
 | `d51435146f` | a data-value string cut at NUL drops the rest of its copy (review) |
 | `2310d4300a` | a Text's font list is charged by capacity (review) |
+| `9608f5dbb6` | `Path:reset` keeps the render path and its charge (reverts the render-path drop of `61877e5c90`, see Checks) |
 
 ## The budget as built
 
@@ -57,7 +58,7 @@ Nothing is cached, pooled or retained by the budget; it is two counters.
 
 | Row | Binding | Charge |
 |---|---|---|
-| 1, 12 | `Path` commands, `add` (incl. self-add), measure extracts, `Font:glyphPath`, `Path.new` from a source | `3 × (verbs × 1 + points × 8)` bytes for the raw path's verb and point vectors plus the render path built from them; charged at the counts after the operation, before it. Extracts check the worst case (`2·pieces` verbs, `4·pieces` points, `pieces = 2V + 2`) fits, then charge the actual result. `reset` refunds to 0. |
+| 1, 12 | `Path` commands, `add` (incl. self-add), measure extracts, `Font:glyphPath`, `Path.new` from a source | `3 × (verbs × 1 + points × 8)` bytes for the raw path's verb and point vectors plus the render path built from them; charged at the counts after the operation, before it. Extracts check the worst case (`2·pieces` verbs, `4·pieces` points, `pieces = 2V + 2`) fits, then charge the actual result. `reset` refunds to 0 if no render path was built; once one is, it is kept (a draw rewinds it in place) and the charge stays as a high-water mark. |
 | 2 | `print` | not charged: a line is cut at 1 MiB (`MAX_PRINT_LINE_BYTES`) and ends with ` [truncated]`. The count is kept for the logging context's one shared line buffer, not per call, so a `__tostring` that prints and fails part-way (leaving bytes in the buffer) counts against the outer line. Why truncate: the line is handed to the host logger and freed when the call returns, so a charge would be refunded at once; the danger was only the size of one line (8,000 × 8 MiB args). Every argument is still `tostring`'d, in order, so `__tostring` side effects are unchanged. |
 | 3, 4 | `context:decodeImage` | `len(encoded)` before the copy, plus `width × height × 4` from the header preflight before submit; held until the promise settles (the result is then a VM buffer the VM's own allocator charges) or, if cancelled, until the task drops its buffers. The decoder is the bounded one (8,192 px a side, 64 MiB decoded). At most 16 decodes in flight per VM: `decodeImage: at most 16 images may be decoding at once`. |
 | 10 | `VertexBuffer:add` | `grown_capacity × 16` (the `Vec2D` values plus the byte mirror `update` builds) |
@@ -200,7 +201,7 @@ Left open from review round 4:
 
 | Round | Findings | Outcome |
 |---|---|---|
-| 1 | font charge lost when the decoded font is collected; `Path:reset` keeps the render path; cancelled decode refunded early; `RawText::update` geometry uncharged | first three fixed; the last needs `RawText` to report its size (nuxie-runtime), listed above |
+| 1 | font charge lost when the decoded font is collected; `Path:reset` keeps the render path; cancelled decode refunded early; `RawText::update` geometry uncharged | font and decode fixed; the reset fix (drop the render path) changed the golden stream and was replaced by keeping the charge; geometry needs `RawText` to report its size (nuxie-runtime), listed above |
 | 2 | nested print bypasses the cap; `glyph.font` uncharged; clear refunds fonts shaped runs still hold; extract admission on the whole source | first three fixed; empty extracts fixed, the whole-source bound kept and explained above |
 | 3 | NUL-cut string keeps its copy's capacity; Text font list grows across clears | both fixed |
 | 4 | a font assigned to a view-model font property loses its charge; `measure()`/`contours()` storage uncharged; outline text geometry; a data-value string is copied before its charge is checked | not fixed: the review limit was reached, and three need files or types outside this lane (below) |
@@ -216,11 +217,23 @@ Left open from review round 4:
 | `make golden-compare` | exact 356, diverges 8 | 22.13 → 29.70 |
 | `tools/ratchets/panic-lints.sh` | PASS, 160 / 160 | above |
 
-The `nuxie` suite, `luau-vm-diff` and the two golden compares ran before the
-eight review fixes (fonts, `Path:reset`, cancelled decodes, nested print,
-`glyph.font`, empty extracts, NUL-cut strings, the Text font list); after
-them only `nuxie-scripting` (39/39, load 7.95 → 33.59) and the lints
-(160, PASS) were rerun.
+Rerun on the tip after the review fixes:
+
+| Check | Result | Load average (start → end) |
+|---|---|---|
+| `nuxie-scripting` tests | 39/39 | 11.45 → (with the next two) 12.88 |
+| `nuxie` tests | 41/42, only `stateful_component_image_bind` | → 12.88 16.81 14.58 |
+| `make luau-vm-diff` | 409 runs, 0 disagreements | 16.54 |
+| `make scripted-golden-compare` | exact 348, diverges 16 | 11.45 → 12.88 |
+| `make golden-compare` | exact 356, diverges 8 | 15.03 → 11.69 |
+
+The first rerun caught a regression: the round-1 `Path:reset` fix dropped
+the render path, so the next draw made a new one through the factory, and
+`script_layout_test` failed exact verification on an extra
+`makeEmptyRenderPath`. That fix was replaced (reset keeps the render path
+and the charge), and the scripted compare and both test suites were run
+again green; `luau-vm-diff` and `golden-compare` ran green on the tip
+before that one-line change. Disk stayed at 160–162 GB free.
 
 Each fixed row has a test that fails on the old code: the path self-add
 (1 MiB budget, 30 doublings), path commands and extracts (64 KiB), vertex
@@ -235,10 +248,9 @@ line, the epoch check, and print truncation.
 
 ## Not verified
 
-- The eight review fixes against the `nuxie` suite, `luau-vm-diff` and the
-  golden compares (see above).
-- `Path:reset` dropping the render path has no dedicated test (the refund
-  was already 0 in the existing reset test, which never draws).
+- `Path:reset` keeping the charge once a render path exists has no
+  dedicated test (the existing reset test never draws).
+- `golden-compare` and `luau-vm-diff` after the last `Path:reset` change.
 - The wasm lint count after the review fixes (Apple only; the touched code
   has no target-specific parts).
 - The real size of `RawText`'s shaped data per layout.

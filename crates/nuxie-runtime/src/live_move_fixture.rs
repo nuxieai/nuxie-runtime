@@ -485,6 +485,10 @@ pub enum InPlaceFixture {
     SlotOnly,
     /// `Plain` with its two flight records on A instead of B.
     FlightsOnA,
+    /// `Plain` with a box "badge", 40 by 40, inside each Screen's card,
+    /// keyed 3 on A and 4 on B, two more flight records on B, 13 and 14,
+    /// and a second unit of t1 naming them: a flight inside another.
+    Nested,
 }
 
 /// A page of two CSS Screens, each with a box "card" (A's 120 by 80, B's
@@ -522,13 +526,13 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
     }
     // A box at `id`: the component, its style, its record, a Fill and its
     // color (`id` to `id + 4`).
-    let boxed = |b: &mut Vec<u8>, id: u64, name: &str, size: (f32, f32), key: u64, color: u32| {
+    let boxed_in = |b: &mut Vec<u8>, parent: u64, id: u64, name: &str, size: (f32, f32), key: u64, color: u32| {
         obj(
             b,
             "LayoutComponent",
             &[
                 ("name", S(name)),
-                ("parentId", U(0)),
+                ("parentId", U(parent)),
                 ("styleId", U(id + 1)),
             ],
         );
@@ -551,6 +555,9 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
             "SolidColor",
             &[("parentId", U(id + 3)), ("colorValue", Color(color))],
         );
+    };
+    let boxed = |b: &mut Vec<u8>, id: u64, name: &str, size: (f32, f32), key: u64, color: u32| {
+        boxed_in(b, 0, id, name, size, key, color)
     };
     for (screen, card, key) in [("A", (120.0, 80.0), 1), ("B", (200.0, 140.0), 2)] {
         obj(
@@ -614,10 +621,15 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
         if screen == "B" && kind == DuplicateElementKey {
             boxed(&mut b, 13, "badge", (40.0, 40.0), 2, 0xff33cc33); // 13 to 17
         }
+        if kind == Nested {
+            let badge = if screen == "A" { 3 } else { 4 };
+            boxed_in(&mut b, 3, 13, "badge", (40.0, 40.0), badge, 0xff33cc33); // 13 to 17
+        }
         if screen == records_on {
             if keyed {
                 let second = if kind == DuplicateRecordKey { 11 } else { 12 };
-                for record_key in [11, second] {
+                let nested: &[u64] = if kind == Nested { &[13, 14] } else { &[] };
+                for &record_key in [11, second].iter().chain(nested) {
                     obj(
                         &mut b,
                         "LiveFlight",
@@ -685,6 +697,19 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
                 ("transfers", B(kind == Transfers)),
             ],
         ); // 3
+        if kind == Nested {
+            obj(
+                &mut b,
+                "LiveStepUnit",
+                &[
+                    ("parentId", U(2)),
+                    ("outgoingUnitKey", U(3)),
+                    ("incomingUnitKey", U(4)),
+                    ("outgoingFlightKey", U(13)),
+                    ("incomingFlightKey", U(14)),
+                ],
+            ); // 4
+        }
     }
     machine(&mut b, false);
     b
@@ -4619,6 +4644,22 @@ const PAINT_PAGE_VM: u64 = 3;
 /// `DrawableFlag::OPAQUE`: a hit on this drawable blocks what is behind it.
 const PAINT_OPAQUE: u64 = 1 << 3;
 
+/// What `PaintCase::Shadows` keys on "go"'s flights.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ShadowCase {
+    /// Nothing: each version draws its own shadow in flight.
+    Unkeyed,
+    /// a's flight keys the seven controls by `SHADOW_KEYS`, b's holds alpha
+    /// at 0.
+    Keyed,
+    /// `Keyed`, with a's own shadow inset.
+    Inset,
+    /// `Keyed`, with both flights' fade held at 0.5.
+    Faded,
+    /// Both flights hold alpha at -1, which leaves each version its own.
+    AlphaOff,
+}
+
 /// The paint order cases (UNIV-5635). Each is a page of two CSS Screens,
 /// A and B, 400 by 300, both rows at the page's origin, B drawn above A.
 /// Every box and unit fills with `paint_color` of its own name. B, the
@@ -4653,6 +4694,36 @@ pub enum PaintCase {
     },
     Sizes,
     TwoVersions,
+    /// `TwoVersions` with each version inside a box "W" over its whole
+    /// Screen, at opacity 0.4 on A and 0.8 on B: the ends' opacity above
+    /// each copy.
+    EndOpacities,
+    /// Two versions: a, 80 by 60 with corners of 4, at (20, 36) on A, and
+    /// b, 160 by 120 with corners of 8, at (120, 40) on B. "go" keys the
+    /// first `keys` of each of its flights' four corners 4 to 8 over the
+    /// second, in CSS order; "back" keys none.
+    Corners {
+        keys: u8,
+    },
+    /// `Corners`' versions, unkeyed, with a shadow under each fill: a's
+    /// `UNIT_A_SHADOW`, b's `UNIT_B_SHADOW` with alpha 0, as the compiler
+    /// writes a clear one.
+    Shadows(ShadowCase),
+    /// `FadeWrite`'s E, its flight's path offsets keyed 0 to 40 and 0 to -30
+    /// over the second.
+    PathOffsets,
+    /// `Corners`' versions, unkeyed, with "go" flying a's copy in Scale mode
+    /// and b's in Layout mode.
+    MixedModes,
+    /// A box E holding a text that wraps, between N1 and N2 in a flex row
+    /// on each Screen: `a` points wide on A, 300 on B, so the text refills
+    /// its box as E flies.
+    TextRefill {
+        a: u16,
+    },
+    /// E holding a flex row "row" of two boxes; E's own timeline switches
+    /// the row to a column at half a second, mid-step.
+    StyleSwitch,
     PlainAnchor,
     TurnedFrame,
     FadeWrite,
@@ -5143,6 +5214,12 @@ struct PaintUnit {
     own_scale: Option<(f32, f32)>,
     /// It holds a box "`name` child", 30 by 20, 10 from its right and bottom.
     child: bool,
+    /// A box shadow under its fill, as the compiler writes one, and whether
+    /// it is inset.
+    shadow: Option<(Shadow, bool)>,
+    /// A text of these words, 20 points on 24, in its flow, filling its
+    /// width, so it wraps to the unit's width.
+    text: Option<&'static str>,
 }
 /// What a unit's own timeline keys, from 0 to this many points.
 #[derive(Clone, Copy)]
@@ -5158,6 +5235,10 @@ enum UnitKey {
     Turn(f32),
     /// Its own transform properties, as (key, from, to).
     Own(&'static [(u64, f32, f32)]),
+    /// It holds "row", a flex row filling its width, of two boxes 40 by 30,
+    /// "one" and "two"; its timeline switches the row to a column at frame
+    /// 30.
+    Flow,
 }
 fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
     PaintUnit {
@@ -5177,9 +5258,23 @@ fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
         corner: 0.0,
         own_scale: None,
         child: false,
+        shadow: None,
+        text: None,
     }
 }
 impl PaintUnit {
+    fn shadowed(mut self, shadow: Shadow, inset: bool) -> Self {
+        self.shadow = Some((shadow, inset));
+        self
+    }
+    fn texted(mut self, words: &'static str) -> Self {
+        self.text = Some(words);
+        self
+    }
+    /// Whether it holds anything but its fill, besides a shadow or a text.
+    fn holds_more(&self) -> bool {
+        self.child || self.cached || self.tappable || self.hosts.is_some() || self.keyed.is_some()
+    }
     fn turned(mut self, turn: f32) -> Self {
         self.turn = turn;
         self
@@ -5261,6 +5356,30 @@ fn hit_listener(b: &mut Vec<u8>, target: u64) {
         &[("inputId", U(0)), ("value", F(9.0))],
     );
 }
+/// A text of `words` at object `id`, a child of `parent`: the Text, its
+/// style (20 points on 24, the file's font 0), the style's fill and color,
+/// and one run (`id` to `id + 4`).
+fn unit_text(b: &mut Vec<u8>, id: u64, parent: u64, words: &str, color: u32) {
+    use V::*;
+    obj(b, "Text", &[("parentId", U(parent))]); // id
+    obj(
+        b,
+        "TextStylePaint",
+        &[
+            ("parentId", U(id)),
+            ("fontAssetId", U(0)),
+            ("fontSize", F(20.0)),
+            ("lineHeight", F(24.0)),
+        ],
+    ); // id + 1
+    obj(b, "Fill", &[("parentId", U(id + 1))]); // id + 2
+    obj(b, "SolidColor", &[("parentId", U(id + 2)), ("colorValue", Color(color))]); // id + 3
+    obj(
+        b,
+        "TextValueRun",
+        &[("parentId", U(id)), ("styleId", U(id + 1)), ("text", S(words))],
+    ); // id + 4
+}
 fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
     use V::*;
     let mut props = vec![
@@ -5313,18 +5432,30 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
         style.push(("cornerRadiusTL", F(u.corner)));
     }
     obj(b, "LayoutComponentStyle", &style); // 2
-    obj(b, "Fill", &[("parentId", U(0))]); // 3
+    assert!(
+        (u.shadow.is_none() && u.text.is_none()) || !u.holds_more(),
+        "a unit with a shadow or a text holds nothing else"
+    );
+    // A shadow's Fill comes first, so it draws below the fill.
+    if let Some((shadow, inset)) = u.shadow {
+        unit_shadow_paint(b, shadow.color, shadow, inset); // 3 to 6
+    }
+    let fill = if u.shadow.is_some() { 7 } else { 3 };
+    obj(b, "Fill", &[("parentId", U(0))]); // 3, or 7 after a shadow
     obj(
         b,
         "SolidColor",
         &[
-            ("parentId", U(3)),
+            ("parentId", U(fill)),
             (
                 "colorValue",
                 Color(u.color.unwrap_or_else(|| paint_color(u.name))),
             ),
         ],
-    ); // 4
+    ); // 4, or 8
+    if let Some(words) = u.text {
+        unit_text(b, fill + 2, 0, words, paint_color(&format!("{} text", u.name)));
+    }
     if u.child {
         assert!(
             !u.cached && !u.tappable && u.hosts.is_none(),
@@ -5424,6 +5555,10 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
                 .iter()
                 .map(|&(key, from, to)| track("frame", key, &[(0, from), (60, to)]))
                 .collect(),
+            UnitKey::Flow => {
+                art.emit(&flow_row(), 0);
+                vec![flow_switch()]
+            }
         };
         let names = art.names;
         paint_entrance(b, &tracks, &names);
@@ -5431,6 +5566,20 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
     }
 }
 
+/// `UnitKey::Flow`'s row: a flex row of two boxes 40 by 30.
+fn flow_row() -> PaintEl {
+    bx("row", vec![("display", V::U(1))])
+        .paintless()
+        .kids(vec![bx("one", css_size(40.0, 30.0)), bx("two", css_size(40.0, 30.0))])
+}
+/// `UnitKey::Flow`'s key: the row's direction, a row to frame 30, then a
+/// column.
+fn flow_switch() -> PaintTrack {
+    PaintTrack {
+        whole: Whole::Uint,
+        ..hold("row.css", 61006, &[(0, 0.0), (30, 2.0)])
+    }
+}
 /// A track of B's entrance timeline, on a named object of B: an element,
 /// "`name`.css" (its record), "`name`.track`n`" (its nth grid track) or
 /// "`name`.place" (its grid placement).
@@ -5440,9 +5589,17 @@ struct PaintTrack {
     key: u64,
     frames: Vec<(u64, f32)>,
     hold: bool,
-    int: bool,
+    /// The keyframe type, which is the keyed field's: a number, an int or a
+    /// uint (an enum such as `flexDirection`).
+    whole: Whole,
     /// On the Screen's cubic curve, `PaintSpec::ease`.
     eased: bool,
+}
+#[derive(Clone, Copy, PartialEq)]
+enum Whole {
+    No,
+    Int,
+    Uint,
 }
 fn track(target: &str, key: u64, frames: &[(u64, f32)]) -> PaintTrack {
     PaintTrack {
@@ -5450,7 +5607,7 @@ fn track(target: &str, key: u64, frames: &[(u64, f32)]) -> PaintTrack {
         key,
         frames: frames.to_vec(),
         hold: false,
-        int: false,
+        whole: Whole::No,
         eased: false,
     }
 }
@@ -5789,6 +5946,29 @@ impl PaintArt<'_> {
                 &[("parentId", U(id)), ("originX", F(x)), ("originY", F(y))],
             );
         }
+        if let Some((shadow, inset)) = u.shadow {
+            let fill = self.add("Fill", &[("parentId", U(id))]);
+            self.add(
+                "SolidColor",
+                &[
+                    ("name", S("shadow")),
+                    ("parentId", U(fill)),
+                    ("colorValue", Color(shadow.color)),
+                ],
+            );
+            let feather = self.add(
+                "Feather",
+                &[
+                    ("parentId", U(fill)),
+                    ("spaceValue", U(1)),
+                    ("strength", F(shadow.blur)),
+                    ("offsetX", F(shadow.offset.0)),
+                    ("offsetY", F(shadow.offset.1)),
+                    ("inner", B(inset)),
+                ],
+            );
+            self.add("BoxShadow", &[("parentId", U(feather))]);
+        }
         let fill = self.add("Fill", &[("parentId", U(id))]);
         self.add(
             "SolidColor",
@@ -5800,6 +5980,11 @@ impl PaintArt<'_> {
                 ),
             ],
         );
+        if let Some(words) = u.text {
+            let text = self.next;
+            unit_text(self.b, text, id, words, paint_color(&format!("{} text", u.name)));
+            self.next += 5;
+        }
         if u.child {
             let mut css = vec![
                 ("position", U(2)),
@@ -5858,6 +6043,10 @@ impl PaintArt<'_> {
                     .iter()
                     .map(|&(key, from, to)| track(&own, key, &[(0, from), (60, to)]))
                     .collect(),
+                UnitKey::Flow => {
+                    self.emit(&flow_row(), id);
+                    vec![flow_switch()]
+                }
             };
             self.unit_tracks.extend(tracks);
         }
@@ -6180,13 +6369,23 @@ fn paint_entrance(
                             ("interpolatorId", U(names["ease"])),
                         ],
                     );
-                } else if t.int {
+                } else if t.whole == Whole::Int {
                     obj(
                         b,
                         "KeyFrameInt",
                         &[
                             ("frame", U(frame)),
                             ("value", I(value as i64)),
+                            ("interpolationType", interpolation),
+                        ],
+                    );
+                } else if t.whole == Whole::Uint {
+                    obj(
+                        b,
+                        "KeyFrameUint",
+                        &[
+                            ("frame", U(frame)),
+                            ("value", U(value as u64)),
                             ("interpolationType", interpolation),
                         ],
                     );
@@ -6762,7 +6961,7 @@ fn paint_file_shaped(spec: &PaintSpec, in_place: bool) -> Result<Vec<u8>, &'stat
             ],
         );
     }
-    if spec.subtitle.is_some() {
+    if spec.subtitle.is_some() || spec.units.iter().any(|u| u.text.is_some()) {
         obj(
             &mut b,
             "FontAsset",
@@ -7559,7 +7758,7 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                         bx("V", css_rel(css_size(300.0, 60.0))),
                     ],
                     PaintTrack {
-                        int: true,
+                        whole: Whole::Int,
                         ..hold("J.place", 1047, &[(0, 2.0), (30, 1.0)])
                     },
                 ),
@@ -7622,7 +7821,7 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                         grid(&[100.0, 100.0]).kids(vec![bx("P", css_size(100.0, 60.0)).column(1)]),
                     ],
                     PaintTrack {
-                        int: true,
+                        whole: Whole::Int,
                         ..hold("P.place", 1047, &[(0, 1.0), (30, 2.0)])
                     },
                 ),
@@ -7720,6 +7919,139 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
             ];
             spec
         }
+        PaintCase::EndOpacities => {
+            let mut spec = paint_spec(PaintCase::TwoVersions);
+            let wrap = |els: Vec<PaintEl>, opacity: f32| {
+                let (inside, outside): (Vec<_>, Vec<_>) = els
+                    .into_iter()
+                    .partition(|el| matches!(el.kind, PaintKind::Slot { .. }));
+                let mut wrapped = vec![
+                    bx("W", css_at(0.0, 0.0, 400.0, 300.0))
+                        .paintless()
+                        .props(&[("opacity", F(opacity))])
+                        .kids(inside),
+                ];
+                wrapped.extend(outside);
+                wrapped
+            };
+            spec.a = wrap(std::mem::take(&mut spec.a), 0.4);
+            spec.b = wrap(std::mem::take(&mut spec.b), 0.8);
+            spec
+        }
+        PaintCase::Corners { .. }
+        | PaintCase::Shadows(_)
+        | PaintCase::MixedModes => {
+            let shadows = match case {
+                PaintCase::Shadows(shadows) => Some(shadows),
+                _ => None,
+            };
+            let mut a = unit("a", 80.0, 60.0).corner(4.0);
+            let mut b = unit("b", 160.0, 120.0).corner(8.0);
+            if let Some(shadows) = shadows {
+                a = a.shadowed(UNIT_A_SHADOW, shadows == ShadowCase::Inset);
+                b = b.shadowed(
+                    Shadow {
+                        color: UNIT_B_SHADOW.color & 0x00ff_ffff,
+                        ..UNIT_B_SHADOW
+                    },
+                    false,
+                );
+            }
+            let a_mode = if case == PaintCase::MixedModes { 0 } else { 1 };
+            let mut spec = PaintSpec::new(
+                vec![a, b],
+                vec![rest_as("v", "a", 1, css_at(20.0, 36.0, 80.0, 60.0))],
+                vec![
+                    rest_as("v", "b", 2, css_at(120.0, 40.0, 160.0, 120.0)),
+                    bx("C", css_at(300.0, 200.0, 60.0, 60.0)),
+                    flight_slot("a go", "a", 1, 11, a_mode),
+                    flight_slot("b go", "b", 2, 12, 1),
+                    flight_slot("a back", "a", 1, 14, 1),
+                    flight_slot("b back", "b", 2, 13, 1),
+                ],
+            );
+            spec.steps = vec![
+                ("go", "A", "B", vec![[2, 1, 12, 11, 0]]),
+                ("back", "B", "A", vec![[1, 2, 14, 13, 0]]),
+            ];
+            let mut tracks = Vec::new();
+            if let PaintCase::Corners { keys } = case {
+                for flight in ["a go.live", "b go.live"] {
+                    for corner in 0..u64::from(keys) {
+                        tracks.push(track(flight, 62015 + corner, &[(0, 4.0), (60, 8.0)]));
+                    }
+                }
+            }
+            match shadows {
+                Some(ShadowCase::Unkeyed) | None => {}
+                Some(ShadowCase::AlphaOff) => {
+                    for flight in ["a go.live", "b go.live"] {
+                        tracks.push(hold(flight, SHADOW_CONTROLS[0].1, &[(0, -1.0)]));
+                    }
+                }
+                Some(keyed) => {
+                    for ((_, property), (from, to)) in SHADOW_CONTROLS.into_iter().zip(SHADOW_KEYS) {
+                        tracks.push(track("a go.live", property, &[(0, from), (60, to)]));
+                    }
+                    tracks.push(hold("b go.live", SHADOW_CONTROLS[0].1, &[(0, 0.0)]));
+                    if keyed == ShadowCase::Faded {
+                        for flight in ["a go.live", "b go.live"] {
+                            tracks.push(hold(flight, 62014, &[(0, 0.5)]));
+                        }
+                    }
+                }
+            }
+            spec.tracks(tracks)
+        }
+        PaintCase::PathOffsets => paint_spec(PaintCase::FadeWrite).tracks(vec![
+            track("E flight.live", 62004, &[(0, 0.0), (60, 40.0)]),
+            track("E flight.live", 62005, &[(0, 0.0), (60, -30.0)]),
+        ]),
+        // N1 and N2 are 40 wide; E is `a` by 100 on A and 300 by 100 on
+        // B, in its Screen's 400 wide flex row, so B's row fits with 20 to
+        // spare and nothing shrinks.
+        PaintCase::TextRefill { a } => {
+            let a = f32::from(a);
+            const WORDS: &str =
+                "Breathe in slowly, let the day settle, and watch the evening light fade";
+            let row = |el: PaintEl| {
+                bx("R", css_with(css_size(400.0, 100.0), &[("display", U(1))]))
+                    .paintless()
+                    .kids(vec![
+                        bx("N1", css_size(40.0, 100.0)),
+                        el,
+                        bx("N2", css_size(40.0, 100.0)),
+                    ])
+            };
+            let mut spec = PaintSpec::new(
+                vec![
+                    unit("Ea", a, 100.0).texted(WORDS),
+                    unit("Eb", 300.0, 100.0).texted(WORDS),
+                ],
+                vec![row(rest_as("E", "Ea", 1, css_size(a, 100.0)))],
+                vec![
+                    row(rest_as("E", "Eb", 2, css_size(300.0, 100.0))),
+                    flight_slot("Ea go", "Ea", 1, 11, 1),
+                    flight_slot("Eb go", "Eb", 2, 12, 1),
+                    flight_slot("Ea back", "Ea", 1, 14, 1),
+                    flight_slot("Eb back", "Eb", 2, 13, 1),
+                ],
+            );
+            spec.steps = vec![
+                ("go", "A", "B", vec![[2, 1, 12, 11, 0]]),
+                ("back", "B", "A", vec![[1, 2, 14, 13, 0]]),
+            ];
+            spec
+        }
+        PaintCase::StyleSwitch => PaintSpec::new(
+            vec![unit("E", 160.0, 100.0).keyed(UnitKey::Flow)],
+            vec![at_rest("E", 1, 36.0, 20.0, 160.0, 100.0)],
+            vec![
+                at_rest("E", 1, 120.0, 60.0, 160.0, 100.0),
+                fly("E", 1, 11),
+            ],
+        )
+        .one_version(&[(1, 11)]),
         // A static plain host at (50, 40) holding E's CSS frame, turned at
         // rest, and a later in-flow C over it.
         PaintCase::PlainAnchor => PaintSpec::new(

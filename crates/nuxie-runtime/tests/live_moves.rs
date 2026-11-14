@@ -9292,6 +9292,19 @@ mod paint_order {
             Hinge { flex: true },
             Sizes,
             TwoVersions,
+            EndOpacities,
+            Corners { keys: 0 },
+            Corners { keys: 3 },
+            Corners { keys: 4 },
+            Shadows(fixture::ShadowCase::Unkeyed),
+            Shadows(fixture::ShadowCase::Keyed),
+            Shadows(fixture::ShadowCase::Inset),
+            Shadows(fixture::ShadowCase::Faded),
+            Shadows(fixture::ShadowCase::AlphaOff),
+            PathOffsets,
+            MixedModes,
+            TextRefill { a: 100 },
+            StyleSwitch,
             TurnedFrame,
             FadeWrite,
             FadeAtRest { native: false },
@@ -9515,25 +9528,29 @@ mod paint_order {
         // child inside b, jumping in at take-off and out at landing; in place
         // it stays placed against the Screen. Only mid-step frames differ.
         let mid_step_differs = matches!(case, PaintCase::Zoom(fixture::ZoomCase::BoundSubtitle));
-        // The fourth: in a frame where the cards are at scale exactly 0, a
-        // copy flying in place inside one draws nothing, as nothing draws
-        // inside a `scale(0)` box; the slot path's copies fly outside the
-        // cards and still draw. Only that frame is skipped, and only when
-        // neither page draws a card with any area.
-        let cards = [fixture::paint_color("card a"), fixture::paint_color("card b")]
-            .map(|color| color & 0x00ff_ffff);
-        let collapsed = |s: &PaintScene| {
-            !shown(&page_draws(s))
-                .iter()
-                .any(|d| d.rgb.is_some_and(|rgb| cards.contains(&rgb)))
-        };
+        // The fourth: inside a card at scale exactly 0, a copy flying in
+        // place draws nothing, as nothing draws inside a `scale(0)` box; the
+        // slot path's copies fly outside the cards and still draw. The two
+        // Screens' clocks can differ (a Screen put back after a cancel starts
+        // its timelines again), so each card is read on its own: where a
+        // card draws nothing with area on both pages, the slot page's copies
+        // inside it are left out of that frame's comparison, and nothing
+        // else is.
+        let rgb = |name: &str| fixture::paint_color(name) & 0x00ff_ffff;
+        let inside = [("card a", ["a", "a child"]), ("card b", ["b", "b child"])]
+            .map(|(card, copies)| (rgb(card), copies.map(rgb)));
+        let has = |shown: &[Shown], color: u32| shown.iter().any(|d| d.rgb == Some(color));
         let both = |slots: &PaintScene, in_place: &PaintScene, label: &str| {
-            same_draws(
-                &format!("{case:?} {label}"),
-                &shown(&page_draws(slots)),
-                &shown(&page_draws(in_place)),
-                near_zero,
-            );
+            let (mut slots, in_place) = (shown(&page_draws(slots)), shown(&page_draws(in_place)));
+            if near_zero {
+                for (card, copies) in inside {
+                    if !has(&in_place, card) {
+                        assert!(!has(&slots, card), "{case:?} {label}: only a card at 0 is skipped");
+                        slots.retain(|d| !d.rgb.is_some_and(|color| copies.contains(&color)));
+                    }
+                }
+            }
+            same_draws(&format!("{case:?} {label}"), &slots, &in_place, near_zero);
         };
         both(&slots, &in_place, "at rest");
         for (to, step) in [("B", "go"), ("A", "back")] {
@@ -9543,10 +9560,6 @@ mod paint_order {
             for &p in frames {
                 for s in [&mut slots, &mut in_place] {
                     s.to(p);
-                }
-                if near_zero && collapsed(&in_place) {
-                    assert!(collapsed(&slots), "{case:?} {step} at {p}: only the cards' zero frame is skipped");
-                    continue;
                 }
                 if !mid_step_differs {
                     both(&slots, &in_place, &format!("{step} at {p}"));
@@ -9569,9 +9582,12 @@ mod paint_order {
                 near_zero,
             );
         }
-        // Go again, and cancel half way by removing B.
-        for s in [&mut slots, &mut in_place] {
-            let page = RuntimeOwnedViewModelHandle::from_native(
+        // Go again, and cancel half way by removing B; go once more to
+        // landing, then come back and cancel half way by removing A. A
+        // cancelled step's records end where its keys were, so the next
+        // step's take-off frame reads its own first keys.
+        let pages = [&slots, &in_place].map(|s| {
+            RuntimeOwnedViewModelHandle::from_native(
                 s._file.clone(),
                 s.root
                     .data_context()
@@ -9579,22 +9595,247 @@ mod paint_order {
                     .with_context(|c| c.main_view_model_instance())
                     .unwrap(),
             )
-            .unwrap();
-            let incoming = page.list_item_by_property_name_path("screens", 1).unwrap();
-            s.begin("B", "go");
-            for p in [0.0, 0.25, 0.5] {
-                s.to(p);
+            .unwrap()
+        });
+        let frame = |slots: &PaintScene, in_place: &PaintScene, label: &str| {
+            if !mid_step_differs {
+                both(slots, in_place, label);
             }
-            assert!(page.remove_list_item_by_property_name_path("screens", 1));
-            s.advance(0.0);
-            assert!(
-                s.moves.flight_controls(&s.root).is_empty(),
-                "{case:?}: removing B cancels"
-            );
-            assert!(page.insert_list_item_by_property_name_path("screens", 1, &incoming));
-            s.advance(0.0);
+        };
+        for (to, step, row, cancelled, halves) in [
+            ("B", "go", 1, true, &[0.0, 0.25, 0.5][..]),
+            ("B", "go", 1, false, frames),
+            ("A", "back", 0, true, &[0.0, 0.25, 0.5][..]),
+        ] {
+            for s in [&mut slots, &mut in_place] {
+                s.begin(to, step);
+            }
+            for &p in halves {
+                for s in [&mut slots, &mut in_place] {
+                    s.to(p);
+                }
+                frame(&slots, &in_place, &format!("{step} again at {p}"));
+            }
+            if !cancelled {
+                for s in [&mut slots, &mut in_place] {
+                    s.end(to, step);
+                }
+                both(&slots, &in_place, &format!("after {step} again"));
+                continue;
+            }
+            let removed = pages[0].list_item_by_property_name_path("screens", row).unwrap();
+            let removed_in_place = pages[1].list_item_by_property_name_path("screens", row).unwrap();
+            for (s, page) in [(&mut slots, &pages[0]), (&mut in_place, &pages[1])] {
+                assert!(page.remove_list_item_by_property_name_path("screens", row));
+                s.advance(0.0);
+                assert!(
+                    s.moves.flight_controls(&s.root).is_empty(),
+                    "{case:?}: removing {} cancels {step}",
+                    ["A", "B"][row]
+                );
+            }
+            both(&slots, &in_place, &format!("{step} cancelled, {} removed", ["A", "B"][row]));
+            for (s, page, item) in [
+                (&mut slots, &pages[0], &removed),
+                (&mut in_place, &pages[1], &removed_in_place),
+            ] {
+                assert!(page.insert_list_item_by_property_name_path("screens", row, item));
+                s.advance(0.0);
+            }
+            both(&slots, &in_place, &format!("after {step} cancelled"));
         }
-        both(&slots, &in_place, "after the cancel");
+    }
+
+    /// The lines of `row`'s one text, each as its first and last
+    /// characters and its box (left, top, bottom) in the text's own space.
+    fn text_lines(s: &PaintScene, row: &str) -> Vec<(Option<usize>, Option<usize>, [f32; 3])> {
+        use nuxie_runtime::source::text::text::Text;
+        let texts = s.row(row).with_artboard(|b| b.find_all_handles::<Text>());
+        assert_eq!(texts.len(), 1, "{row} holds one text");
+        texts[0]
+            .with_downcast::<Text, _>(|text| {
+                text.ordered_lines()
+                    .iter()
+                    .map(|line| {
+                        (
+                            line.start_logical(),
+                            line.end_logical(),
+                            [line.start_x(), line.y(), line.bottom()],
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap()
+    }
+    type Lines = Vec<(Option<usize>, Option<usize>, [f32; 3])>;
+    fn same_lines(label: &str, got: &Lines, want: &Lines) {
+        assert_eq!(got.len(), want.len(), "{label}: line count");
+        for (n, (g, w)) in got.iter().zip(want).enumerate() {
+            assert_eq!((g.0, g.1), (w.0, w.1), "{label}: line {n}'s characters");
+            for (a, b) in g.2.iter().zip(w.2) {
+                assert!(
+                    (a - b).abs() <= 1e-3,
+                    "{label}: line {n}'s box {:?} against {:?}",
+                    g.2,
+                    w.2
+                );
+            }
+        }
+    }
+    /// Each named box's layout place in its parent and its size.
+    fn boxes(s: &PaintScene, names: &[(&str, &str)]) -> Vec<[f32; 4]> {
+        names
+            .iter()
+            .map(|(row, name)| {
+                s.layout(row, name)
+                    .with_downcast::<LayoutComponent, _>(|b| {
+                        let at = b.layout_translation();
+                        [at.x, at.y, b.layout_width(), b.layout_height()]
+                    })
+                    .unwrap()
+            })
+            .collect()
+    }
+
+    /// Section 10 of the in-place plan, Levi's ruling: the flying element is
+    /// laid out at its flight size every frame, so a text inside it refills
+    /// the larger box. E is 100 wide on A and 300 on B; half way it flies
+    /// 200 wide, and both copies' text lines are a fresh page's whose E is
+    /// 200 wide: fewer than at take-off going, more again coming back. Its
+    /// neighbors on both Screens rest on every frame.
+    #[test]
+    fn in_place_text_refills_its_box_as_it_flies() {
+        let mut s = PaintScene::shaped(PaintCase::TextRefill { a: 100 }, PaintShape::InPlace);
+        let neighbors = [("A", "N1"), ("A", "N2"), ("B", "N1"), ("B", "N2")];
+        let rest = boxes(&s, &neighbors);
+        let (narrow, wide) = (text_lines(&s, "A"), text_lines(&s, "B"));
+        let fresh = PaintScene::shaped(PaintCase::TextRefill { a: 200 }, PaintShape::InPlace);
+        let half = text_lines(&fresh, "A");
+        assert!(
+            wide.len() < half.len() && half.len() < narrow.len(),
+            "the words wrap to the width: {} lines at 300, {} at 200, {} at 100",
+            wide.len(),
+            half.len(),
+            narrow.len()
+        );
+        for (to, step, from_lines, to_lines) in
+            [("B", "go", &narrow, &wide), ("A", "back", &wide, &narrow)]
+        {
+            s.begin(to, step);
+            for p in PROGRESS {
+                s.to(p);
+                assert_eq!(boxes(&s, &neighbors), rest, "{step} at {p}: the neighbors rest");
+                let want = if p == 0.0 {
+                    from_lines
+                } else if p == 0.5 {
+                    &half
+                } else if p == 1.0 {
+                    to_lines
+                } else {
+                    continue;
+                };
+                for row in ["A", "B"] {
+                    same_lines(&format!("{step} at {p}, {row}'s copy"), &text_lines(&s, row), want);
+                }
+            }
+            s.end(to, step);
+            same_lines(&format!("after {step}, A"), &text_lines(&s, "A"), &narrow);
+            same_lines(&format!("after {step}, B"), &text_lines(&s, "B"), &wide);
+        }
+    }
+
+    /// Section 10 of the in-place plan: a layout field of a child of the
+    /// flying element changes mid-step and shows the next frame. E's own
+    /// timeline, which in place plays on its Screen's, turns its row of
+    /// "one" and "two" into a column at half a second; a breakpoint group
+    /// writes such a field the same way, through the record. Before it both
+    /// copies lay "two" beside "one"; from the frame it changes, under it,
+    /// as the same page resting after the change does; and after landing E
+    /// rests with the column. E rests at the same size on both Screens, so
+    /// its flight size is its resting size.
+    #[test]
+    fn in_place_a_style_change_inside_a_flying_element_shows_next_frame() {
+        let mut s = PaintScene::shaped(PaintCase::StyleSwitch, PaintShape::InPlace);
+        let two = [("A", "two"), ("B", "two")];
+        let beside = boxes(&s, &two);
+        assert_eq!(beside[0], [40.0, 0.0, 40.0, 30.0], "a row at rest");
+        // The same page after its timeline has switched the row: the oracle.
+        let mut fresh = PaintScene::shaped(PaintCase::StyleSwitch, PaintShape::InPlace);
+        fresh.advance(2.0);
+        let under = boxes(&fresh, &two);
+        assert_eq!(under[0], [0.0, 30.0, 40.0, 30.0], "a column after its switch");
+        s.begin("B", "go");
+        for p in [0.0, 0.25, 0.45, 0.5, 0.75, 1.0] {
+            s.to(p);
+            let want = if p < 0.5 { &beside } else { &under };
+            assert_eq!(&boxes(&s, &two), want, "go at {p}");
+        }
+        s.end("B", "go");
+        assert_eq!(boxes(&s, &two), under, "after landing");
+    }
+
+    /// Inventory row 4, restated for two copies: following them plays
+    /// nothing and solves each layout tree that holds a copy once, however
+    /// many barriers the frame has; settling the poses solves nothing more,
+    /// and following the same frame again solves nothing. The slot path's
+    /// count of row passes (`following_two_flights_settles_their_shared_row_once_without_playback`)
+    /// is restated as solves, since each copy is laid out in its own
+    /// Screen. E is 100 wide on A and 300 on B, so half way both copies
+    /// take a new size and their trees must solve.
+    #[test]
+    fn in_place_following_two_copies_solves_each_layout_tree_once_without_playback() {
+        use nuxie_runtime::source::artboard::Artboard;
+        let mut s = PaintScene::shaped(PaintCase::TextRefill { a: 100 }, PaintShape::InPlace);
+        // A Screen that lays itself out is its own tree; one that does not
+        // is laid out by the page above it.
+        let own = ["A", "B"].map(|row| s.row(row).with_artboard(|b| b.updates_own_layout()));
+        let trees = own.iter().filter(|own| **own).count() + usize::from(own.contains(&false));
+        s.begin("B", "go");
+        s.advance(0.0);
+        for controls in s.moves.flight_controls(&s.root) {
+            set(&controls, progress_key(&controls), 0.5);
+        }
+        s.machine.advance_and_apply(0.5);
+        let solves = Artboard::layout_pass_count();
+        nuxie_runtime::hosted_scene::measure_walks(true);
+        s.moves.after_advance(&s.root).unwrap();
+        let visits = nuxie_runtime::hosted_scene::measure_walks(false);
+        assert_eq!(visits.advance, 0, "no playback");
+        assert_eq!(
+            Artboard::layout_pass_count() - solves,
+            trees as u64,
+            "each tree holding a copy solves once"
+        );
+        let solves = Artboard::layout_pass_count();
+        s.moves.after_advance(&s.root).unwrap();
+        assert_eq!(Artboard::layout_pass_count(), solves, "the same frame again solves nothing");
+    }
+
+    /// Inventory row 14: a write to an end mid-step shows the next frame.
+    /// E is 300 wide on both Screens, after N1, 40 wide. Widening N1 on B
+    /// to 60 moves B's E 20 to the right; half way, both copies draw from
+    /// 10 to the right of where they drew, and at the end of the step from
+    /// 20.
+    #[test]
+    fn in_place_a_write_to_an_end_mid_step_shows_next_frame() {
+        let mut s = PaintScene::shaped(PaintCase::TextRefill { a: 300 }, PaintShape::InPlace);
+        let left = |s: &PaintScene| {
+            let colors = ["Ea", "Eb"].map(|name| fixture::paint_color(name) & 0x00ff_ffff);
+            shown(&page_draws(s))
+                .iter()
+                .filter(|d| d.rgb.is_some_and(|rgb| colors.contains(&rgb)))
+                .map(|d| d.points.iter().map(|p| p.x).fold(f32::INFINITY, f32::min))
+                .collect::<Vec<_>>()
+        };
+        s.begin("B", "go");
+        s.to(0.5);
+        assert_eq!(left(&s), [40.0, 40.0], "both copies from 40 half way");
+        set(&record_of(&s.layout("B", "N1")), 61022, 60.0);
+        s.to(0.5);
+        assert_eq!(left(&s), [50.0, 50.0], "the next frame, half way to the moved end");
+        s.to(1.0);
+        assert_eq!(left(&s), [60.0, 60.0], "at the moved end");
+        s.end("B", "go");
     }
 
     /// 4.2 of the in-place plan: each test above, run again on its page's
@@ -12720,12 +12961,15 @@ fn in_place_a_duplicate_key_is_refused() {
 }
 
 /// A file without flight records reads no in-place state: on a record-free
-/// page and on a slot page, a step and its frames begin no hold, and the
-/// bookkeeping counters do not move.
+/// page and on a slot page, a step and its frames begin no hold and mark no
+/// lift, and the bookkeeping counters do not move. Their walks are the
+/// record-free and slot suites' own (`record_free_frames_scan_capability_once_per_occurrence`,
+/// `following_two_flights_settles_their_shared_row_once_without_playback`).
 #[test]
 fn a_file_without_flight_records_reads_no_in_place_state() {
     let holds_begun = nuxie_runtime::in_place_holds_begun;
-    let holds = holds_begun();
+    let lift_marks = nuxie_runtime::in_place_lift_marks;
+    let (holds, marks) = (holds_begun(), lift_marks());
     // A slot page: a whole step. Its own bookkeeping is the slot path's.
     let mut s = Scene::new();
     s.begin();
@@ -12735,6 +12979,7 @@ fn a_file_without_flight_records_reads_no_in_place_state() {
     s.end();
     s.advance(0.0);
     assert_eq!(holds_begun(), holds, "a slot step holds nothing");
+    assert_eq!(lift_marks(), marks, "a slot step lifts nothing");
     drop(s);
     // A record-free page: its frames.
     let before = hosted_scene::bookkeeping_counts();
@@ -12765,6 +13010,7 @@ fn a_file_without_flight_records_reads_no_in_place_state() {
         assert!(!moves.after_advance(&root).unwrap());
     }
     assert_eq!(holds_begun(), holds);
+    assert_eq!(lift_marks(), marks);
     drop((machine, root, file));
     assert_eq!(hosted_scene::bookkeeping_counts(), before);
 }
@@ -12806,4 +13052,155 @@ fn in_place_replacing_the_slot_screen_reads_the_new_shape() {
         file.with_file_mut(|f| f.replace_artboard(0, &screen)),
         ImportResult::Success
     );
+}
+
+// ---------------------------------------------------------------------------
+// Flying in place: the step's states (docs/live-moves.md, Flying in place).
+
+impl InPlacePage {
+    /// Every object of each Screen, in its artboard's order.
+    fn objects(&self) -> Vec<Option<CoreHandle>> {
+        let rows = screens(&self.root).unwrap();
+        ["A", "B"]
+            .iter()
+            .flat_map(|name| rows[*name].with_artboard(|b| b.objects().to_vec()))
+            .collect()
+    }
+    fn frame(&self, moves: &mut LiveMoves, dt: f32) {
+        self.machine.advance_and_apply(dt);
+        moves.after_advance(&self.root).unwrap();
+    }
+}
+
+/// Inventory row 2, `rejected_moves_do_not_mutate_slots` rewritten: a
+/// refused step marks nothing. A step that names no step of the file and a
+/// second step while one runs are refused; the first leaves no hold, no
+/// lift and the same draw stream, and the second leaves the running step
+/// as it was.
+#[test]
+fn in_place_a_refused_step_marks_nothing() {
+    let page = InPlacePage::load(fixture::InPlaceFixture::Plain);
+    let mut moves = LiveMoves::default();
+    moves.prepare(&page.root).unwrap();
+    let (before, holds, marks) = (
+        page.draw(),
+        nuxie_runtime::in_place_holds_begun(),
+        nuxie_runtime::in_place_lift_marks(),
+    );
+    assert!(moves.step_begin(&page.root, "B", Some("nowhere")).is_err());
+    page.frame(&mut moves, 0.0);
+    assert!(moves.flight_controls(&page.root).is_empty());
+    assert_eq!(nuxie_runtime::in_place_holds_begun(), holds, "no hold");
+    assert_eq!(nuxie_runtime::in_place_lift_marks(), marks, "no lift");
+    assert_eq!(page.draw(), before, "the same stream");
+    moves.step_begin(&page.root, "B", Some("t1")).unwrap();
+    page.frame(&mut moves, 0.1);
+    let (flying, controls) = (page.draw(), moves.flight_controls(&page.root));
+    let holds = nuxie_runtime::in_place_holds_begun();
+    let error = moves.step_begin(&page.root, "B", Some("t1")).unwrap_err();
+    assert!(error.to_string().contains("already active"), "{error}");
+    page.frame(&mut moves, 0.0);
+    assert_eq!(moves.flight_controls(&page.root), controls, "the step runs on");
+    assert_eq!(nuxie_runtime::in_place_holds_begun(), holds, "nothing held again");
+    assert_eq!(page.draw(), flying, "the same frame");
+    moves.step_end(&page.root, "B", Some("t1")).unwrap();
+    page.frame(&mut moves, 0.0);
+    assert_eq!(page.draw(), before, "landing leaves the page at rest");
+}
+
+/// Section 10 of the in-place plan: a matched element inside another
+/// matched element of the same step is refused at begin, before anything
+/// is marked, and the page draws as before. Hero flies both; none of the
+/// references nor Calmly holds such a pair, and the compiler today keeps
+/// the inner one inside the outer one's unit, with a warning.
+#[test]
+fn in_place_a_flight_inside_another_flight_is_refused() {
+    let page = InPlacePage::load(fixture::InPlaceFixture::Nested);
+    let mut moves = LiveMoves::default();
+    moves.prepare(&page.root).unwrap();
+    let (before, holds, marks) = (
+        page.draw(),
+        nuxie_runtime::in_place_holds_begun(),
+        nuxie_runtime::in_place_lift_marks(),
+    );
+    let error = moves.step_begin(&page.root, "B", Some("t1")).unwrap_err();
+    assert!(error.to_string().contains("inside another"), "{error}");
+    page.frame(&mut moves, 0.1);
+    assert!(moves.flight_controls(&page.root).is_empty());
+    assert_eq!(nuxie_runtime::in_place_holds_begun(), holds, "no hold");
+    assert_eq!(nuxie_runtime::in_place_lift_marks(), marks, "no lift");
+    assert_eq!(page.draw(), before, "the same stream");
+}
+
+/// Inventory rows 20 and 22: nothing is remounted or moved. Every object
+/// of both Screens is the same object, in the same place, before, during
+/// and after a step, and no bookkeeping is built for it: the counters do
+/// not move across the step. Dropping the page mid-step reclaims all of
+/// it. (Both Screens' clocks keep running through a step: the
+/// equivalence test's home check draws each page as one that never
+/// stepped.)
+#[test]
+fn in_place_a_step_builds_no_bookkeeping_and_keeps_every_object() {
+    let empty = hosted_scene::bookkeeping_counts();
+    let page = InPlacePage::load(fixture::InPlaceFixture::Plain);
+    let mut moves = LiveMoves::default();
+    moves.prepare(&page.root).unwrap();
+    page.frame(&mut moves, 0.0);
+    let (objects, counts) = (page.objects(), hosted_scene::bookkeeping_counts());
+    for _ in 0..2 {
+        moves.step_begin(&page.root, "B", Some("t1")).unwrap();
+        for _ in 0..3 {
+            page.frame(&mut moves, 0.1);
+            assert!(page.objects() == objects, "no object moves or is made");
+            assert_eq!(hosted_scene::bookkeeping_counts(), counts, "mid-step");
+        }
+        moves.step_end(&page.root, "B", Some("t1")).unwrap();
+        page.frame(&mut moves, 0.0);
+        assert!(page.objects() == objects, "after landing");
+        assert_eq!(hosted_scene::bookkeeping_counts(), counts, "after landing");
+    }
+    moves.step_begin(&page.root, "B", Some("t1")).unwrap();
+    page.frame(&mut moves, 0.1);
+    let weak = page.root.downgrade();
+    drop((moves, page));
+    assert!(weak.upgrade().is_none());
+    assert_eq!(hosted_scene::bookkeeping_counts(), empty, "dropped mid-step");
+}
+
+/// `pending_insert_is_applied_before_takeoff`, in place. B is removed, a
+/// frame passes, and B is put back with no advance or draw before take-off.
+/// The step begins on the fresh B and holds both copies, and the first draw
+/// after take-off is an untouched page's first draw after take-off: the
+/// fresh B's copy draws only from the lift, as the untouched B's does.
+#[test]
+fn in_place_a_pending_insert_is_applied_before_takeoff() {
+    use fixture::InPlaceFixture::Plain;
+    let untouched = InPlacePage::load(Plain);
+    let mut moves = LiveMoves::default();
+    moves.prepare(&untouched.root).unwrap();
+    moves.step_begin(&untouched.root, "B", Some("t1")).unwrap();
+    let want = untouched.draw();
+    let page = InPlacePage::load(Plain);
+    let model = page
+        .root
+        .data_context()
+        .unwrap()
+        .with_context(|c| c.main_view_model_instance())
+        .unwrap();
+    let model = RuntimeOwnedViewModelHandle::from_native(page._file.clone(), model).unwrap();
+    let mut moves = LiveMoves::default();
+    moves.prepare(&page.root).unwrap();
+    let b = model.list_item_by_property_name_path("screens", 1).unwrap();
+    assert!(model.remove_list_item_by_property_name_path("screens", 1));
+    page.machine.advance_and_apply(0.0);
+    moves.after_advance(&page.root).unwrap();
+    assert!(!screens(&page.root).unwrap().contains_key("B"));
+    assert!(model.insert_list_item_by_property_name_path("screens", 1, &b));
+    // No advance or draw between the insert and take-off.
+    let holds = nuxie_runtime::in_place_holds_begun();
+    moves.step_begin(&page.root, "B", Some("t1")).unwrap();
+    assert!(screens(&page.root).unwrap().contains_key("B"), "the insert is applied");
+    assert_eq!(moves.flight_controls(&page.root).len(), 2, "both copies fly");
+    assert_eq!(nuxie_runtime::in_place_holds_begun(), holds + 2, "both are held");
+    assert_eq!(page.draw(), want, "the first draw after take-off");
 }

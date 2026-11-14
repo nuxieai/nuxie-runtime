@@ -210,3 +210,49 @@ fn a_real_require_cycle_keeps_the_cycle_error() {
         );
     }
 }
+
+/// Runs `source` on a fresh VM on its own thread and fails if it does not
+/// finish within `seconds` (the old code looped up to `i32::MAX` times; the
+/// thread is left behind and ends with the test process).
+fn finishes_within(seconds: u64, source: &'static str) -> std::result::Result<(), String> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let vm = ScriptVm::new();
+        let outcome = vm
+            .install_rive_globals()
+            .and_then(|()| vm.lua.load(source).exec())
+            .map_err(|error| error.to_string());
+        let _ = sender.send(outcome);
+    });
+    receiver
+        .recv_timeout(std::time::Duration::from_secs(seconds))
+        .map_err(|_| format!("did not finish within {seconds} s"))?
+}
+
+/// E1 section 3: `buffer.stridedcopy` with zero strides (so a zero element
+/// size) and `count = i32::MAX`, source and destination the same buffer.
+#[test]
+fn a_zero_stride_strided_copy_is_bounded() {
+    finishes_within(
+        10,
+        "local b = buffer.create(4096) buffer.stridedcopy(b, 0, 0, b, 0, 0, 0, 2147483647)",
+    )
+    .unwrap();
+}
+
+/// `buffer.convert` with both strides zero and `count = i32::MAX`, apart and
+/// aliased.
+#[test]
+fn a_zero_stride_convert_is_bounded() {
+    finishes_within(
+        10,
+        r#"
+local a, b = buffer.create(64), buffer.create(64)
+for i = 0, 63 do buffer.writeu8(a, i, i * 3) end
+buffer.convert(b, 0, "u16", a, 0, "u8", 2147483647, 4, 0, 0)
+assert(buffer.readu16(b, 6) == 9)
+buffer.convert(a, 1, "u8", a, 0, "u8", 2147483647, 4, 0, 0)
+"#,
+    )
+    .unwrap();
+}

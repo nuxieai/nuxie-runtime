@@ -1,7 +1,7 @@
 //! src/lua/renderer/lua_text.cpp and include/rive/lua/scripted_text.hpp at db31ea87.
 //! Retained layout plus epoch-checked indices replace interior C++ pointers.
 use super::{
-    host_memory_budget::{HostMemoryCharge, bytes_of, grown_capacity},
+    host_memory_budget::HostMemoryCharge,
     lua_font::ScriptedFont,
     lua_mat2d::ScriptedMat2D,
     lua_paint::ScriptedPaint,
@@ -24,16 +24,12 @@ use nuxie_runtime::{
             raw_text::RawText,
         },
         text_engine::{
-            Font, FontRef, GlyphRenderKind, GlyphRun, OrderedLine, TextDirection, TextOrigin,
+            GlyphRenderKind, GlyphRun, OrderedLine, TextDirection, TextOrigin,
             TextOverflow, TextSizing, TextWordBreak, TextWrap,
         },
     },
 };
-use std::{
-    cell::RefCell,
-    rc::Rc,
-    sync::{Arc, Weak},
-};
+use std::{cell::RefCell, rc::Rc};
 
 /// Styles one Text may hold: a glyph run names its style with a `u16`.
 const MAX_TEXT_STYLES: usize = 1 << 16;
@@ -60,21 +56,6 @@ struct TextLayout {
     /// its content, styles and layout. Attached to the VM's budget when the
     /// Text is made, so every later charge needs no `Lua`.
     charge: HostMemoryCharge,
-    /// The decoded fonts the content was shaped with and their charges,
-    /// one entry per change of font between appends. Shaped runs keep the
-    /// faces alive past a clear (until the next layout), so like `charge`
-    /// this is kept for the Text's life.
-    fonts: Vec<TextFont>,
-    /// The capacity of `fonts`, which grows with every change of font
-    /// between appends, across clears too.
-    fonts_charge: HostMemoryCharge,
-}
-
-/// A face appended to a Text, known by address only (a `Weak` does not keep
-/// the face's data), and the charge for its bytes.
-struct TextFont {
-    face: Weak<dyn Font>,
-    charge: Rc<HostMemoryCharge>,
 }
 
 impl TextLayout {
@@ -88,8 +69,6 @@ impl TextLayout {
             text,
             epoch: 0,
             charge,
-            fonts: Vec::new(),
-            fonts_charge: HostMemoryCharge::default(),
         })
     }
 
@@ -134,16 +113,6 @@ impl TextLayout {
             self.settle()?;
         }
         Ok(&mut self.text)
-    }
-
-    /// The charge for `font`'s face if it was appended here; a font the
-    /// shaper fell back to was not decoded by the script.
-    fn font_charge(&self, font: &FontRef) -> Rc<HostMemoryCharge> {
-        self.fonts
-            .iter()
-            .rev()
-            .find(|entry| std::ptr::addr_eq(entry.face.as_ptr(), Arc::as_ptr(font)))
-            .map_or_else(Rc::default, |entry| Rc::clone(&entry.charge))
     }
 
     /// The text laid out, if nothing changed since `epoch`.
@@ -419,10 +388,9 @@ impl UserData for ScriptedText {
                 let bytes = chars.as_bytes();
                 let font: Option<AnyUserData> = style.raw_get("font")?;
                 let font = font.ok_or_else(|| Error::runtime("Text:append needs a font."))?;
-                let (font, font_charge) = {
-                    let font = font.borrow::<ScriptedFont>()?;
-                    (font.native()?, font.charge())
-                };
+                // A face the script decoded keeps its charge itself, for as
+                // long as the runs shaped with it keep it.
+                let font = font.borrow::<ScriptedFont>()?.native()?;
                 let paint: Option<AnyUserData> = style.raw_get("paint")?;
                 let paint = paint
                     .map(|p| p.borrow::<ScriptedPaint>().map(|p| p.render_paint.clone()))
@@ -446,35 +414,6 @@ impl UserData for ScriptedText {
                 layout
                     .charge
                     .reserve_to(layout.text.heap_bytes_after_append(bytes.len()))?;
-                let face = Arc::downgrade(&font);
-                let new_font = !layout
-                    .fonts
-                    .last()
-                    .is_some_and(|last| Weak::ptr_eq(&last.face, &face));
-                if new_font {
-                    let len = layout.fonts.len();
-                    let capacity = grown_capacity(layout.fonts.capacity(), len, 1);
-                    let reserved = layout
-                        .fonts_charge
-                        .attach(lua)
-                        .and_then(|()| {
-                            layout
-                                .fonts_charge
-                                .reserve_to(bytes_of::<TextFont>(capacity))
-                        })
-                        .and_then(|()| {
-                            layout
-                                .fonts
-                                .try_reserve_exact(capacity.saturating_sub(len))
-                                .map_err(|_| Error::runtime("not enough memory"))
-                        });
-                    if let Err(error) = reserved {
-                        // Nothing was appended: give back the content's
-                        // reservation before failing.
-                        layout.settle()?;
-                        return Err(error);
-                    }
-                }
                 layout.text().append(
                     &bytes,
                     paint,
@@ -484,13 +423,6 @@ impl UserData for ScriptedText {
                     letter_spacing,
                     foreground,
                 );
-                if new_font {
-                    // Reserved above, so this does not reallocate.
-                    layout.fonts.push(TextFont {
-                        face,
-                        charge: font_charge,
-                    });
-                }
                 layout.settle()
             },
         );
@@ -772,15 +704,14 @@ impl UserData for ScriptedGlyph {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("id", |_, g| g.with(|r| glyph_value(&r.glyphs, g.glyph)));
         fields.add_field_method_get("font", |lua, g| {
-            // A decoded font's face is shared with the font it came from.
-            let (font, charge) = {
+            // A decoded font's face (and with it its charge) is shared with
+            // the font it came from.
+            let font = {
                 let mut layout = g.layout.borrow_mut();
                 let line = line_at(layout.fresh(g.epoch)?, g.line)?;
-                let font = run_font(run_at(line, g.run)?)?.clone();
-                let charge = layout.font_charge(&font);
-                (font, charge)
+                run_font(run_at(line, g.run)?)?.clone()
             };
-            super::lua_font::push_charged_font(lua, font, charge)
+            super::lua_font::push_font(lua, font)
         });
         fields.add_field_method_get("size", |_, g| g.with(|r| Ok(r.size)));
         fields.add_field_method_get("x", |_, g| g.with(|_| Ok(g.position.x)));
@@ -1132,8 +1063,7 @@ mod budget_tests {
         let estimate = 24 * 10_000 + 64 + 256;
         println!("10,000 ASCII characters: charged {text} bytes (estimate was {estimate})");
         assert!(text > 2_000_000, "{text}");
-        // The font list is charged on its own: four 24-byte entries.
-        assert_eq!(vm.used(), FONT_BYTES + text + 4 * 24);
+        assert_eq!(vm.used(), FONT_BYTES + text);
         // A clear keeps the content's capacity until the next layout.
         vm.vm
             .eval::<()>("text:clear() local _ = text:bounds()")
@@ -1171,40 +1101,6 @@ mod budget_tests {
             )
             .unwrap();
         assert!(failed);
-    }
-
-    // Codex review: when the content's reservation fit but the font list's
-    // did not, the append failed with the content's charge still held.
-    #[test]
-    fn a_refused_font_list_gives_the_content_charge_back() {
-        let probe = Vm::with_budget(64 * 1024 * 1024);
-        probe
-            .vm
-            .eval::<()>("font = Font.decode(fontBytes) text = Text.new()")
-            .unwrap();
-        let empty = probe.used();
-        let content = {
-            let text: crate::luau::AnyUserData = probe.vm.lua().globals().get("text").unwrap();
-            let text = text.borrow::<super::ScriptedText>().unwrap();
-            let layout = text.layout.borrow();
-            layout.text.heap_bytes_after_append(1) - layout.charge.bytes()
-        };
-        // Room for the decoded face, the empty Text and one character's
-        // content, but not the four-entry font list.
-        let vm = Vm::with_budget(empty + content + 4 * 24 - 1);
-        let (failed, error): (bool, String) = vm
-            .vm
-            .eval(
-                "font = Font.decode(fontBytes) \
-                 text = Text.new() \
-                 local ok, err = pcall(function() text:append('x', {font = font}) end) \
-                 return not ok, tostring(err)",
-            )
-            .unwrap();
-        assert!(failed, "the font list fit");
-        assert!(error.contains("host memory budget"), "{error}");
-        assert!(vm.vm.eval::<bool>("return text.isEmpty").unwrap());
-        assert_eq!(vm.used(), empty);
     }
 
     #[test]

@@ -477,9 +477,6 @@ mod binding_tests {
         assert_eq!((empty, contour), (0, 0));
     }
 
-    /// A Text's first font-list growth: four 24-byte entries.
-    const FONT_LIST_BYTES: usize = 4 * 24;
-
     fn font_vm(budget: usize) -> Vm {
         let vm = Vm::with_budget(budget);
         let bytes = include_bytes!("../../../../fixtures/fonts/ibm-plex-sans-arabic.ttf");
@@ -511,7 +508,7 @@ mod binding_tests {
             )
             .unwrap();
         vm.vm.lua().gc_collect().unwrap();
-        // The charge is what the text reports holding, plus its font list.
+        // The charge is what the text reports holding, and the face's.
         let text_bytes = || {
             vm.vm
                 .lua()
@@ -521,15 +518,14 @@ mod binding_tests {
                 .borrow::<super::super::lua_text::ScriptedText>()
                 .unwrap()
                 .held_bytes()
-                + FONT_LIST_BYTES
         };
         assert_eq!(vm.used(), 226_004 + text_bytes());
         vm.vm.eval::<()>("derived = nil").unwrap();
         vm.vm.lua().gc_collect().unwrap();
         assert_eq!(vm.used(), 226_004 + text_bytes(), "the text keeps the face");
-        // Shaped runs keep the face past a clear, so the charge stays too.
+        // A clear lets the shaped runs go, and the face's charge with them.
         vm.vm.eval::<()>("text:clear()").unwrap();
-        assert_eq!(vm.used(), 226_004 + text_bytes(), "a clear keeps the face");
+        assert_eq!(vm.used(), text_bytes(), "a clear lets the face go");
         vm.vm.eval::<()>("text = nil").unwrap();
         vm.vm.lua().gc_collect().unwrap();
         assert_eq!(vm.used(), 0);
@@ -587,8 +583,7 @@ mod binding_tests {
                 .unwrap()
                 .borrow::<super::super::lua_text::ScriptedText>()
                 .unwrap()
-                .held_bytes()
-                + FONT_LIST_BYTES,
+                .held_bytes(),
             "the charge is what the text reports holding"
         );
     }
@@ -725,24 +720,5 @@ mod binding_tests {
              return not ok, tostring(err)",
         );
         assert_eq!(vm.used(), 0);
-    }
-
-    // Codex review: alternating fonts across clears grew the Text's font
-    // list without a charge.
-    #[test]
-    fn a_texts_font_list_is_charged_across_clears() {
-        let vm = font_vm(1024 * 1024);
-        vm.refused(
-            "local a = Font.decode(fontBytes) \
-             local b = a:withOptions({}, {}) \
-             local text = Text.new() \
-             local ok, err = pcall(function() \
-               for i = 1, 200000 do \
-                 text:clear() \
-                 text:append('x', {font = if i % 2 == 0 then a else b}) \
-               end \
-             end) \
-             return not ok, tostring(err)",
-        );
     }
 }

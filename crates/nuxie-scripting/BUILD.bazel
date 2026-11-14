@@ -916,7 +916,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["apple-authored-msl", "luau", "luau-host"],
-    deps = ["//crates/nuxie-image-codec:nuxie-image-codec__apple", "//crates/nuxie-luau-vm:nuxie-luau-vm__apple", "//crates/nuxie-ore-metal:nuxie-ore-metal__apple", "//crates/nuxie-render-api:nuxie-render-api__apple", "//crates/nuxie-runtime:nuxie-runtime__apple"] + crate_deps(["serde_json", "sha2"], package_name = "bazel/cargo/nuxie-scripting") + [":nuxie-scripting__apple__build_script"],
+    deps = ["//crates/nuxie-image-codec:nuxie-image-codec__apple", "//crates/nuxie-luau-vm:nuxie-luau-vm__apple", "//crates/nuxie-ore-metal:nuxie-ore-metal__apple", "//crates/nuxie-render-api:nuxie-render-api__apple", "//crates/nuxie-runtime:nuxie-runtime__apple"] + crate_deps(["serde_json"], package_name = "bazel/cargo/nuxie-scripting") + [":nuxie-scripting__apple__build_script"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/nuxie-scripting"),
     rustc_env = dict({"CARGO_PKG_NAME": "nuxie-scripting"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -946,7 +946,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["android-authored-wgsl", "luau", "luau-host"],
-    deps = ["//crates/nuxie-image-codec:nuxie-image-codec__android", "//crates/nuxie-luau-vm:nuxie-luau-vm__android", "//crates/nuxie-ore-metal:nuxie-ore-metal__android", "//crates/nuxie-render-api:nuxie-render-api__android", "//crates/nuxie-runtime:nuxie-runtime__android"] + crate_deps(["serde_json", "sha2"], package_name = "bazel/cargo/nuxie-scripting") + [":nuxie-scripting__android__build_script"],
+    deps = ["//crates/nuxie-image-codec:nuxie-image-codec__android", "//crates/nuxie-luau-vm:nuxie-luau-vm__android", "//crates/nuxie-ore-metal:nuxie-ore-metal__android", "//crates/nuxie-render-api:nuxie-render-api__android", "//crates/nuxie-runtime:nuxie-runtime__android"] + crate_deps(["serde_json"], package_name = "bazel/cargo/nuxie-scripting") + [":nuxie-scripting__android__build_script"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/nuxie-scripting"),
     rustc_env = dict({"CARGO_PKG_NAME": "nuxie-scripting"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )

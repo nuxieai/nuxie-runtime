@@ -1318,6 +1318,7 @@ dependencies = [
  "nuxie-audio",
  "nuxie-binary",
  "nuxie-ore-metal",
+ "sha2",
 ]
 
 [[package]]

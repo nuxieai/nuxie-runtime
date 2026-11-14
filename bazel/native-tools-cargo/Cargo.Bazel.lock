@@ -1,5 +1,5 @@
 {
-  "checksum": "6c79528dbd606a9d94f521149034fe8d6ce31463983bf0a78a3bad7cf4229217",
+  "checksum": "edf4f80d0f3cefa1aad7908753fac133f74af5cee7d11db8c297850906ded9ea",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -6376,6 +6376,10 @@
           {
             "id": "harfrust 0.12.0",
             "target": "harfrust"
+          },
+          {
+            "id": "sha2 0.10.9",
+            "target": "sha2"
           }
         ],
         "edition": "2024"
@@ -6961,10 +6965,6 @@
           {
             "id": "serde_json 1.0.150",
             "target": "serde_json"
-          },
-          {
-            "id": "sha2 0.10.9",
-            "target": "sha2"
           }
         ],
         "deps_dev": [
@@ -6975,6 +6975,10 @@
           {
             "id": "libhydrogen 0.4.6",
             "target": "libhydrogen"
+          },
+          {
+            "id": "sha2 0.10.9",
+            "target": "sha2"
           }
         ],
         "edition": "2024",

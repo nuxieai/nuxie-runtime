@@ -333,6 +333,7 @@ impl Table {
 
     /// Looks up `table[key]` and calls it with `args` for no results; `false`
     /// when it is not a function (the old binding crate's `call_function_unit`).
+#[cfg_attr(debug_assertions, track_caller)]
     pub fn call_function_unit(&self, key: impl IntoLua, args: impl IntoLuaMulti) -> Result<bool> {
         let f: Value = self.get(key)?;
         match f {
@@ -346,6 +347,7 @@ impl Table {
 
     /// Looks up `table[key]`, calls it for one result and reads that
     /// result's truthiness; `false` when it is not a function.
+#[cfg_attr(debug_assertions, track_caller)]
     pub fn call_function_truthy(&self, key: impl IntoLua, args: impl IntoLuaMulti) -> Result<bool> {
         let f: Value = self.get(key)?;
         match f {
@@ -449,6 +451,7 @@ impl<K: FromLua, V: FromLua> Iterator for TablePairs<K, V> {
 
 impl Function {
     /// Calls the function, every result kept (`lua_pcall`, `LUA_MULTRET`).
+    #[cfg_attr(debug_assertions, track_caller)]
     pub fn call<R: FromLuaMulti>(&self, args: impl IntoLuaMulti) -> Result<R> {
         self.call_with(None, args)
     }
@@ -456,6 +459,7 @@ impl Function {
     /// [`Function::call`] with `loan` lent to the call: every host
     /// callback it reaches, at any depth of Lua, receives it
     /// ([`ScriptLoan`](super::ScriptLoan)).
+    #[cfg_attr(debug_assertions, track_caller)]
     pub fn call_lent<R: FromLuaMulti>(
         &self,
         loan: &mut dyn super::ScriptLoan,
@@ -466,6 +470,7 @@ impl Function {
 
     /// [`Function::call`] passing on `loan` if there is one (a host
     /// callback forwarding the loan it received).
+    #[cfg_attr(debug_assertions, track_caller)]
     pub fn call_with<R: FromLuaMulti>(
         &self,
         loan: super::Loan<'_>,
@@ -473,6 +478,7 @@ impl Function {
     ) -> Result<R> {
         let args = args.into_lua_multi(&self.lua)?;
         let raw = self.raw()?;
+        nuxie_runtime::script_borrow_check::script_entered(std::panic::Location::caller());
         let lua = self.lua.clone();
         let results = self.lua.0.with_vm(|vm| {
             let args = value::many_to_vm(vm, args.iter())?;
@@ -757,6 +763,7 @@ impl Thread {
         self.status() == ThreadStatus::Error
     }
 
+    #[cfg_attr(debug_assertions, track_caller)]
     pub fn resume<R: FromLuaMulti>(&self, args: impl IntoLuaMulti) -> Result<R> {
         let args = args.into_lua_multi(&self.lua)?;
         if self.status() != ThreadStatus::Resumable {
@@ -766,8 +773,10 @@ impl Thread {
         R::from_lua_multi(results, &self.lua)
     }
 
+    #[cfg_attr(debug_assertions, track_caller)]
     fn resume_raw(&self, args: MultiValue) -> Result<MultiValue> {
         let raw = self.raw()?;
+        nuxie_runtime::script_borrow_check::script_entered(std::panic::Location::caller());
         let lua = self.lua.clone();
         self.lua.0.with_vm(|vm| {
             let args = value::many_to_vm(vm, args.iter())?;
@@ -845,6 +854,7 @@ impl Thread {
     /// yield. `begin` runs right before the resume and its guard drops
     /// right after; `on_error` sees the thread when the body failed. The
     /// messages are the patch's, prefixed `"{display}:1: "`.
+    #[cfg_attr(debug_assertions, track_caller)]
     pub fn resume_module<R: FromLuaMulti, G>(
         &self,
         display: &str,

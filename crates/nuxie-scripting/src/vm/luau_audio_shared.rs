@@ -82,6 +82,9 @@ impl SharedBudget {
             objects,
         })
     }
+    fn is_closed(&self) -> bool {
+        lock(&self.state).closed
+    }
     pub fn reserve_decode(self: &Arc<Self>, bytes: usize) -> Result<DecodeReservation, String> {
         self.charge(bytes, 0).map(DecodeReservation)
     }
@@ -163,15 +166,32 @@ impl Drop for Charge {
 /// below walks the chain with a list: before a link it owns outright drops,
 /// its own holds are moved onto the list, and the link then drops with no
 /// holds left. A link someone else still owns only loses one reference.
+///
+/// The values' storage is charged to the budget of the ring or snapshot that
+/// keeps them, at its capacity, plus `extra` bytes for the entry that holds
+/// the list (a ring's map entry); the record's own index words are in the
+/// ring's bytes.
 #[derive(Default)]
 struct Holds {
     values: Vec<SharedValue>,
+    _charge: Option<Charge>,
 }
 impl Holds {
-    fn new(values: Vec<SharedValue>) -> Self {
-        Self { values }
+    fn new(values: Vec<SharedValue>, budget: &Arc<SharedBudget>, extra: usize) -> Result<Self, String> {
+        let bytes = values
+            .capacity()
+            .saturating_mul(std::mem::size_of::<SharedValue>())
+            .saturating_add(extra);
+        let charge = budget.charge(bytes, 0)?;
+        Ok(Self {
+            values,
+            _charge: Some(charge),
+        })
     }
 }
+/// A ring's map entry for one record's holds: its key and its value.
+const RING_HOLDS_ENTRY_BYTES: usize =
+    std::mem::size_of::<usize>().saturating_add(std::mem::size_of::<Holds>());
 impl Drop for Holds {
     fn drop(&mut self) {
         let mut pending = std::mem::take(&mut self.values);
@@ -316,7 +336,7 @@ impl RingState {
 pub struct SharedRing {
     capacity: usize,
     state: Arc<Mutex<RingState>>,
-    _charge: Charge,
+    charge: Charge,
 }
 impl std::fmt::Debug for SharedRing {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -345,7 +365,7 @@ impl SharedRing {
         Ok(Self {
             capacity,
             state,
-            _charge: charge,
+            charge,
         })
     }
     pub fn capacity(&self) -> usize {
@@ -423,12 +443,25 @@ impl SharedRing {
             }
             trailer.extend_from_slice(&count.to_le_bytes());
         }
+        // Charged before the ring lock, and refunded (outside it) if the
+        // record does not fit.
+        let holds = if encoded.holds.is_empty() {
+            None
+        } else {
+            match Holds::new(encoded.holds, &self.charge.budget, RING_HOLDS_ENTRY_BYTES) {
+                Ok(holds) => Some(holds),
+                // A released owner's ring refuses the record, as before.
+                Err(_) if self.charge.budget.is_closed() => return Ok(false),
+                Err(error) => return Err(error),
+            }
+        };
         let mut state = lock(&self.state);
         let Some(tail) = state.push(&[&word.to_le_bytes(), &encoded.bytes, &trailer]) else {
+            drop(state);
             return Ok(false);
         };
-        if !encoded.holds.is_empty() {
-            state.holds.insert(tail, Holds::new(encoded.holds));
+        if let Some(holds) = holds {
+            state.holds.insert(tail, holds);
         }
         Ok(true)
     }
@@ -584,7 +617,7 @@ impl SnapshotState {
 pub struct SharedSnapshot {
     capacity: usize,
     state: Arc<SnapshotState>,
-    _charge: Charge,
+    charge: Charge,
 }
 impl std::fmt::Debug for SharedSnapshot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -618,7 +651,7 @@ impl SharedSnapshot {
         Ok(Self {
             capacity,
             state,
-            _charge: charge,
+            charge,
         })
     }
     pub fn capacity(&self) -> usize {
@@ -650,8 +683,21 @@ impl SharedSnapshot {
             return Ok(false);
         }
         let encoded = encode(&value)?;
+        let has_holds = !encoded.holds.is_empty();
+        // Charged before the writer lock; a refusal below refunds it after.
+        let holds = if has_holds {
+            match Holds::new(encoded.holds, &self.charge.budget, 0) {
+                Ok(holds) => holds,
+                // A released owner's snapshot refuses the value, as before.
+                Err(_) if self.charge.budget.is_closed() => return Ok(false),
+                Err(error) => return Err(error),
+            }
+        } else {
+            Holds::default()
+        };
         let mut writer = lock(&self.state.writer);
         if writer.closed {
+            drop(writer);
             return Ok(false);
         }
         let published = self.state.published();
@@ -669,11 +715,10 @@ impl SharedSnapshot {
             target.store(*byte, Ordering::SeqCst);
         }
         copy.size.store(encoded.bytes.len(), Ordering::SeqCst);
-        copy.has_holds
-            .store(!encoded.holds.is_empty(), Ordering::SeqCst);
+        copy.has_holds.store(has_holds, Ordering::SeqCst);
         writer.sequence = writer.sequence.wrapping_add(1);
         copy.sequence.store(writer.sequence, Ordering::SeqCst);
-        let old = std::mem::replace(index.of_mut(&mut writer.holds), Holds::new(encoded.holds));
+        let old = std::mem::replace(index.of_mut(&mut writer.holds), holds);
         copy.version.fetch_add(1, Ordering::SeqCst);
         self.state.published.store(index.number(), Ordering::SeqCst);
         // The prior publication is no longer live. Keep neither duplicate holds
@@ -866,11 +911,13 @@ mod tests {
     }
     #[test]
     fn shared_budget_refunds_and_close_breaks_payload_cycles() {
-        let budget = Arc::new(SharedBudget::new(64));
+        // The ring's bytes and the one hold its record keeps fill the budget.
+        let hold = std::mem::size_of::<SharedValue>() + RING_HOLDS_ENTRY_BYTES;
+        let budget = Arc::new(SharedBudget::new(64 + hold));
         let ring = Arc::new(SharedRing::with_budget(64, budget.clone()).unwrap());
-        assert!(SharedSnapshot::with_budget(1, budget.clone()).is_err());
         let weak = Arc::downgrade(&ring);
         assert!(ring.send(SharedValue::Ring(ring.clone())).unwrap());
+        assert!(SharedSnapshot::with_budget(1, budget.clone()).is_err());
         drop(ring);
         assert!(weak.upgrade().is_some());
         budget.close();
@@ -1054,6 +1101,39 @@ mod tests {
             drop(head);
         });
         assert!(weak.upgrade().is_none());
+    }
+    #[test]
+    fn ring_and_snapshot_holds_are_charged_at_their_size() {
+        // They were charged nothing past the ring's bytes (9 per handle).
+        let budget = Arc::new(SharedBudget::default());
+        let ring = SharedRing::with_budget(4096, budget.clone()).unwrap();
+        let snapshot = SharedSnapshot::with_budget(4096, budget.clone()).unwrap();
+        let blob = Arc::new(SharedBlob::with_budget(&[1, 2, 3], budget.clone()).unwrap());
+        let handles = || SharedValue::Array((0..100).map(|_| SharedValue::Blob(blob.clone())).collect());
+        let bytes = || lock(&budget.state).bytes;
+        let held = 100 * std::mem::size_of::<SharedValue>();
+        let base = bytes();
+        assert!(ring.send(handles()).unwrap());
+        assert!(bytes() - base >= held + RING_HOLDS_ENTRY_BYTES, "{}", bytes() - base);
+        assert!(ring.receive().is_some());
+        assert_eq!(bytes(), base);
+        assert!(snapshot.publish(handles()).unwrap());
+        assert!(bytes() - base >= held, "{}", bytes() - base);
+        // The next publication retires the previous holds.
+        assert!(snapshot.publish(SharedValue::Nil).unwrap());
+        assert_eq!(bytes(), base);
+    }
+    #[test]
+    fn holds_past_the_shared_budget_are_refused() {
+        let budget = Arc::new(SharedBudget::new(4096 + 2048 + 3));
+        let ring = SharedRing::with_budget(4096, budget.clone()).unwrap();
+        let snapshot = SharedSnapshot::with_budget(1024, budget.clone()).unwrap();
+        let blob = Arc::new(SharedBlob::with_budget(&[1, 2, 3], budget.clone()).unwrap());
+        let handles = SharedValue::Array((0..100).map(|_| SharedValue::Blob(blob.clone())).collect());
+        assert_eq!(ring.send(handles.clone()).unwrap_err(), "shared memory budget exceeded");
+        assert_eq!(snapshot.publish(handles).unwrap_err(), "shared memory budget exceeded");
+        assert_eq!(ring.used(), 0);
+        assert!(snapshot.latest().is_none());
     }
     #[test]
     fn a_dropped_chain_keeps_the_holds_of_links_still_owned_elsewhere() {

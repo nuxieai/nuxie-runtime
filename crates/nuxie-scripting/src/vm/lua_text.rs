@@ -1,7 +1,7 @@
 //! src/lua/renderer/lua_text.cpp and include/rive/lua/scripted_text.hpp at db31ea87.
 //! Retained layout plus epoch-checked indices replace interior C++ pointers.
 use super::{
-    host_memory_budget::HostMemoryCharge, lua_font::ScriptedFont, lua_mat2d::ScriptedMat2D,
+    host_memory_budget::{HostMemoryCharge, bytes_of, grown_capacity}, lua_font::ScriptedFont, lua_mat2d::ScriptedMat2D,
     lua_paint::ScriptedPaint, lua_path::ScriptedPath, lua_renderer::ScriptedRenderer,
     lua_renderer_library::RendererBindings,
 };
@@ -71,6 +71,9 @@ struct TextLayout {
     /// faces alive past a clear (until the next layout), so like `charge`
     /// this is kept for the Text's life.
     fonts: Vec<TextFont>,
+    /// The capacity of `fonts`, which grows with every change of font
+    /// between appends, across clears too.
+    fonts_charge: HostMemoryCharge,
 }
 
 /// A face appended to a Text, known by address only (a `Weak` does not keep
@@ -89,6 +92,7 @@ impl TextLayout {
             charge: HostMemoryCharge::default(),
             content_bytes: 0,
             fonts: Vec::new(),
+            fonts_charge: HostMemoryCharge::default(),
         }
     }
 
@@ -415,8 +419,24 @@ impl UserData for ScriptedText {
                         .saturating_add(appended)
                         .saturating_add(TEXT_STYLE_BYTES),
                 )?;
-                let styles = layout.text.style_count();
                 let face = Arc::downgrade(&font);
+                let new_font = !layout
+                    .fonts
+                    .last()
+                    .is_some_and(|last| Weak::ptr_eq(&last.face, &face));
+                if new_font {
+                    let len = layout.fonts.len();
+                    let capacity = grown_capacity(layout.fonts.capacity(), len, 1);
+                    layout.fonts_charge.attach(lua)?;
+                    layout
+                        .fonts_charge
+                        .reserve_to(bytes_of::<TextFont>(capacity))?;
+                    layout
+                        .fonts
+                        .try_reserve_exact(capacity.saturating_sub(len))
+                        .map_err(|_| Error::runtime("not enough memory"))?;
+                }
+                let styles = layout.text.style_count();
                 layout.text().append(
                     &bytes,
                     paint,
@@ -426,19 +446,12 @@ impl UserData for ScriptedText {
                     letter_spacing,
                     foreground,
                 );
-                if !layout
-                    .fonts
-                    .last()
-                    .is_some_and(|last| Weak::ptr_eq(&last.face, &face))
-                {
-                    // Within the run's charge; a failed reservation only
-                    // leaves the font uncounted here, it stays alive anyway.
-                    if layout.fonts.try_reserve(1).is_ok() {
-                        layout.fonts.push(TextFont {
-                            face,
-                            charge: font_charge,
-                        });
-                    }
+                if new_font {
+                    // Reserved above, so this does not reallocate.
+                    layout.fonts.push(TextFont {
+                        face,
+                        charge: font_charge,
+                    });
                 }
                 let new_style = if layout.text.style_count() > styles {
                     TEXT_STYLE_BYTES

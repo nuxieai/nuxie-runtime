@@ -269,3 +269,84 @@ budgets (Android has 2.3% headroom).
    sites, 1,766 panic-lint sites, tools and build hosts only), or the rest
    of the device graph (about 11,900 panic-lint sites, which is what
    actually decides the panic strategy)? Levi's call.
+
+## 12. Addendum, 2026-11-14: what lanes A, B, C.1 and E.1 changed in this design
+
+Evidence: `docs/evidence/luaur-client-path-lane-{a,b,c1}-2026-11-14.md`,
+`docs/evidence/luaur-client-path-lane-e1-inventory-2026-11-14.md` (E1).
+
+### 12.1 Lane C.1: the renderer loan goes through the VM's embedding API
+
+Section 5 item 1 was wrong: the facade's `lend` lends the VM, not host
+data, and every route to a host callback is `'static`. Approved instead
+(lane C.1 evidence, section 3): a loan family on the host type
+(`LoanFamily` with a generic associated type), an optional loan carried by
+the driver and the host-function context, and lent variants of the entry
+points that run Lua from Rust. `nuxie-luau-vm` stays at 0 `unsafe`, 0 forced
+panic-lint sites, no dependency. The renderer is then reachable only from
+Lua run through a call that carries the loan. Rust-to-Lua calls made inside
+an open renderer scope are audited and the loan forwarded wherever the call
+site has it; any that cannot forward are listed. Both golden compares must
+stay exact.
+
+### 12.2 Lane E, from the inventory
+
+`RefCell`: no guard in the crate is alive across an operation that runs
+Luau in a way that can conflict today (E1 section 2). So there is no borrow
+redesign. What remains is mechanical and goes to the owner of each file:
+end the borrow before creating a VM object (E1 2(a) rows 2 to 14), and
+replace `set_app_data` followed by `expect` with an install that returns an
+error (E1 section 3). E1 2(a) row 1 is in `nuxie-runtime` (a property
+listener runs while the value's slot is mutably borrowed): reproduce it,
+then report; the fix is outside this crate.
+
+**E2a, recursion and hangs** (files: `luau/facade/error.rs`,
+`vm/native_registration.rs`, `vm/buffer_ext.rs`, the budget reset in
+`vm.rs`):
+
+1. `Error::CallbackError` never wraps another `CallbackError`. Wrapping an
+   error that is already a callback error keeps the existing root cause and
+   the existing traceback. `Display` prints only the cause today, so the
+   text is unchanged; depth is at most one, so `Display`, `is_structured`
+   and `Drop` need no recursion. E1's script (4.1) is the test.
+2. `sort` becomes an iterative topological sort with an explicit stack. It
+   also stops reporting cycles that do not exist (E1 4.2: 9,560 of 76,871
+   random acyclic graphs); that is a bug fix scripts can observe, and the
+   minimal input in E1 is the test. A real cycle keeps today's error text.
+3. Nested host entries do not reset the execution budget: a nesting depth,
+   and only the outermost entry resets (E1 section 3). A test with a script
+   that re-enters in a loop must hit the cap.
+4. `buffer.stridedcopy` and `buffer.convert` with a zero stride or a huge
+   count: bounded work, checked against the interrupt budget, no
+   whole-buffer copy per iteration.
+
+**E2b, one host memory budget per VM** (new module in `vm/`, applied in
+`lua_path.rs`, `lua_mesh.rs`, `lua_text.rs`, `lua_rive_base.rs`,
+`lua_image_decode.rs`, `lua_font.rs`, `renderer.rs`, `lua_data_value.rs`,
+and the listener lists in `view_model.rs`):
+
+The VM's memory ceiling covers the VM's heap only. Host-side containers a
+script can grow (E1 section 5, 26 rows) have no bound, and one of them
+doubles per call (`Path:add(self)`: 14 GB in 40 calls). The shape: one
+`HostMemoryBudget` per script VM, in bytes, owned by the VM's host state
+and reachable from every binding. A binding charges before it grows and the
+payload refunds when it drops; growth uses `try_reserve`. The mesh budget
+lane A added becomes a charge against it, not a second budget. Counts that
+are not bytes (listeners per property, processors per VM, image decodes in
+flight) are small fixed caps beside it. `decodeImage` uses the bounded
+decoder. `print` charges or truncates its line. Default: the same number as
+the VM's own default ceiling (`DEFAULT_SCRIPT_VM_MEMORY_BYTES`, 64 MiB),
+settable through `ScriptExecutionLimits` like the VM ceiling. Exceeding it
+is an ordinary script error, one text for all bindings. No fixture may
+change result; report the largest charge any fixture reaches.
+
+**Audio follow-ups** (to the audio lane, after D1): iterative drop for
+snapshot and ring hold chains (E1 4.4, reproduced abort), `HostStream::
+restart` on an oversized record (hang), the processor VM's `pcmReader`
+charged and freed, a cap on processors per VM and on the init queue, holds
+charged at their size.
+
+**GPU follow-ups** (to the GPU lane, after D4): the ORE path charges a
+per-VM GPU byte budget at create and refunds on drop, canvas and texture
+dimension caps as the direct path has, borrows of the ORE context ended
+before `create_userdata` (E1 2(a) rows 2 to 8).

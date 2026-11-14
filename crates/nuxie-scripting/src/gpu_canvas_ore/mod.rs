@@ -45,6 +45,34 @@ pub(super) fn texture_type_for_host(value: &str) -> Result<TextureType> {
     texture_type(value)
 }
 
+/// Largest width or height of a canvas or texture a script creates: the
+/// image decoder's per-side limit (`nuxie_image_codec::MAX_IMAGE_DIMENSION`).
+pub(crate) const MAX_SCRIPT_GPU_DIMENSION: u32 = 8_192;
+
+/// Most pixels in one canvas or texture a script creates (width x height x
+/// layers): the image decoder's 64 MiB RGBA ceiling
+/// (`nuxie_image_codec::MAX_DECODED_IMAGE_BYTES`) at 4 bytes per pixel.
+pub(crate) const MAX_SCRIPT_GPU_PIXELS: u64 = 16_777_216;
+
+/// Refuses a canvas or texture size over the fixed caps, before anything is
+/// charged or allocated.
+pub(crate) fn check_gpu_size(caller: &str, width: u32, height: u32, layers: u32) -> Result<()> {
+    if width > MAX_SCRIPT_GPU_DIMENSION || height > MAX_SCRIPT_GPU_DIMENSION {
+        return Err(Error::runtime(format!(
+            "{caller}: width and height must be at most {MAX_SCRIPT_GPU_DIMENSION} (got {width}x{height})"
+        )));
+    }
+    let pixels = u64::from(width)
+        .saturating_mul(u64::from(height))
+        .saturating_mul(u64::from(layers.max(1)));
+    if pixels > MAX_SCRIPT_GPU_PIXELS {
+        return Err(Error::runtime(format!(
+            "{caller}: {width}x{height}x{layers} is more than {MAX_SCRIPT_GPU_PIXELS} pixels"
+        )));
+    }
+    Ok(())
+}
+
 fn context(lua: &Lua) -> Result<OreContextHandle> {
     RendererBindings::for_lua(lua)
         .and_then(|bindings| bindings.ore_context())

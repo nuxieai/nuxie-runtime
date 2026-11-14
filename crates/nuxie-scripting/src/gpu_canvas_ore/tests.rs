@@ -646,3 +646,44 @@ fn a_bind_group_made_from_a_video_picture_follows_its_frames() {
     );
     vm.lua().load("rp:finish()").exec().unwrap();
 }
+
+// Inventory (lane E1) section 5 rows 5-6: texture and GPU canvas sizes had
+// no cap on the shipped ORE path.
+#[test]
+fn texture_and_gpu_canvas_sizes_are_capped() {
+    let vm = recording_vm();
+    vm.lua()
+        .load(
+            r#"
+        local function refused(f, text)
+            local ok, message = pcall(f)
+            assert(not ok, 'expected a refusal')
+            assert(string.find(tostring(message), text, 1, true), tostring(message))
+        end
+        refused(function() GPUTexture.new {width = 8193, height = 1} end,
+            'GPUTexture.new: width and height must be at most 8192 (got 8193x1)')
+        refused(function() GPUTexture.new {width = 1, height = 8193} end, 'at most 8192')
+        refused(function() GPUTexture.new {width = 8192, height = 8192} end,
+            'GPUTexture.new: 8192x8192x1 is more than 16777216 pixels')
+        refused(function() GPUTexture.new {width = 4096, height = 4096, layers = 2, format = 'r8unorm'} end,
+            'GPUTexture.new: 4096x4096x2 is more than 16777216 pixels')
+        assert(GPUTexture.new {width = 4096, height = 4096, format = 'r8unorm'})
+        assert(GPUTexture.new {width = 8192, height = 2, format = 'r8unorm'})
+        refused(function() canvas:resize(8193, 1) end,
+            'GPUCanvas:resize(): width and height must be at most 8192 (got 8193x1)')
+        refused(function() canvas:resize(8192, 4097) end, 'more than 16777216 pixels')
+        assert(canvas.width == 0, 'a refused resize leaves the canvas as it was')
+    "#,
+        )
+        .exec()
+        .unwrap();
+    let error = Canvas::create(vm.lua(), RendererBindings::for_lua(vm.lua()).unwrap(), 9000, 2)
+        .err()
+        .unwrap();
+    assert!(
+        error
+            .to_string()
+            .contains("context:gpuCanvas(): width and height must be at most 8192"),
+        "{error}"
+    );
+}

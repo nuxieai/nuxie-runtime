@@ -275,6 +275,7 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         if desc.width == 0 || desc.height == 0 {
             return Err(Error::runtime("GPUTexture requires width and height"));
         }
+        check_gpu_size("GPUTexture.new", desc.width, desc.height, 1)?;
         if let Some(value) = string(&table, "format")? {
             desc.format = texture_format(&value)?;
         }
@@ -296,6 +297,7 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         check_sample_count(&*context.borrow(), desc.sampleCount)?;
         desc.numMipmaps = number(&table, "mipmaps", 1.0)? as u32;
         desc.depthOrArrayLayers = number(&table, "layers", 1.0)? as u32;
+        check_gpu_size("GPUTexture.new", desc.width, desc.height, desc.depthOrArrayLayers)?;
         // Lua field access can invoke __index, including another ORE call.
         // Borrow the selected context only after those source field reads.
         let mut ctx = context.borrow_mut();

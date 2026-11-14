@@ -32,6 +32,7 @@ impl Canvas {
             pending_height: 0,
         };
         if width != 0 && height != 0 {
+            check_gpu_size("context:gpuCanvas()", width, height, 1)?;
             if value.render_context.is_none() {
                 if value.bindings.deferred_canvas_host().is_none() {
                     return Err(Error::runtime(
@@ -171,6 +172,7 @@ impl UserData for Canvas {
             }) {
                 return Ok(());
             }
+            check_gpu_size("GPUCanvas:resize()", width, height, 1)?;
             this.pending_width = width;
             this.pending_height = height;
             this.satisfy_pending(lua)

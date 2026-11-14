@@ -420,6 +420,26 @@ mod binding_tests {
         );
     }
 
+    // Codex review: an empty interval appends nothing, so it needs no room.
+    #[test]
+    fn an_empty_extract_needs_no_room() {
+        let vm = Vm::with_budget(1000);
+        let (empty, contour): (usize, usize) = vm
+            .vm
+            .eval(
+                "local source = Path.new() \
+                 source:moveTo(Vector.xy(0, 0)) \
+                 for i = 1, 10 do source:lineTo(Vector.xy(i, 0)) end \
+                 local dest = Path.new() \
+                 source:measure():extract(5, 5, dest) \
+                 local contour = Path.new() \
+                 source:contours():extract(3, 1, contour) \
+                 return #dest, #contour",
+            )
+            .unwrap();
+        assert_eq!((empty, contour), (0, 0));
+    }
+
     fn font_vm(budget: usize) -> Vm {
         let vm = Vm::with_budget(budget);
         let bytes = include_bytes!("../../../../fixtures/fonts/ibm-plex-sans-arabic.ttf");

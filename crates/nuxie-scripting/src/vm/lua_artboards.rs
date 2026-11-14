@@ -1216,9 +1216,13 @@ end
                 artboard:advance(0)
                 local once = Path.new()
                 artboard:addToPath(once)
+                -- Each add is charged at least 3 bytes a verb, so this many
+                -- adds reach four times the budget: the old code finished
+                -- them all.
+                local adds = math.ceil(4 * 256 * 1024 / (3 * #once))
                 local path = Path.new()
                 local ok, err = pcall(function()
-                  for i = 1, 100000 do artboard:addToPath(path) end
+                  for i = 1, adds do artboard:addToPath(path) end
                 end)
                 return ok, tostring(err), #once
                 "#,

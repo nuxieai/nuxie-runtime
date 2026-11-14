@@ -206,10 +206,16 @@ fn layout_place(element: &CoreHandle) -> Result<(CoreHandle, Vec2D)> {
     let translation = match css_box {
         Some(translation) => translation,
         None => {
-            let world = world_of(element)
+            let (world, local) = element
+                .with(|object| {
+                    let local = object.as_transform_component()?.transform();
+                    Some((world_of(element)?, Vec2D::new(local[4], local[5])))
+                })
+                .flatten()
                 .ok_or_else(|| anyhow::anyhow!("a flying element has no transform"))?;
-            offset_in(world_of(&parent).unwrap_or_default(), world)
-                .ok_or_else(|| anyhow::anyhow!("a flying element's parent can't be inverted"))?
+            // Under a parent scaled to 0 nothing draws, and the lift can't be
+            // solved through it: the copy draws nothing until it can.
+            offset_in(world_of(&parent).unwrap_or_default(), world).unwrap_or(local)
         }
     };
     Ok((parent, translation))

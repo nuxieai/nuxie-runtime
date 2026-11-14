@@ -1367,6 +1367,44 @@ fn in_place_an_images_end_is_its_participants_place() {
     });
 }
 
+/// The same image with its parent scaled to 0: its place in that parent
+/// can't be read back through it, and its end still reads, so the step
+/// goes on and the lift, which can't be solved through a scale of 0, draws
+/// nothing until it can.
+#[test]
+fn in_place_an_images_end_reads_under_a_parent_scaled_to_0() {
+    checked(|| {
+        let scene = scene(
+            (400.0, 300.0),
+            B {
+                image_participants: vec![("Picture", vec![F(FLEX_SHRINK, 0.0)])],
+                ..css(
+                    "Frame",
+                    [
+                        [U(DISPLAY, 1), U(ALIGN_ITEMS, 2), F(COLUMN_GAP, 10.0)].as_slice(),
+                        &width(400.0),
+                        &height(300.0),
+                    ]
+                    .concat(),
+                    vec![sized("N1", 80.0, 100.0)],
+                )
+            },
+        );
+        scene.advance(2);
+        let frame = scene.named("Frame");
+        for key in [16u16, 17] {
+            assert!(CoreRegistry::set_double_handle(&frame, key.into(), 0.0));
+        }
+        scene.advance(2);
+        let image = picture(&scene)
+            .with_downcast::<LayoutParticipant, _>(LayoutParticipant::measurement_host_handle)
+            .flatten()
+            .expect("the image");
+        let end = crate::live_move::in_place_end(&image).expect("the image's end reads");
+        assert_eq!((end.size.x, end.size.y), (100.0, 30.0));
+    });
+}
+
 /// An image caught mid-retarget by its own interpolation: the hold snaps it
 /// past both animations, it flies at its resting place, and when the hold
 /// ends nothing it snapped past resumes.

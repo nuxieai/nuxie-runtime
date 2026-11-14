@@ -489,14 +489,16 @@ pub enum InPlaceFixture {
     /// keyed 3 on A and 4 on B, two more flight records on B, 13 and 14,
     /// and a second unit of t1 naming them: a flight inside another.
     Nested,
-    /// `Plain` with each Screen's card a text, an image or a video hosting
-    /// a layout participant, its record holding the card's size and key.
+    /// `Plain` with each Screen's card a component placement of "unit x",
+    /// or a text, an image or a video hosting a layout participant; its
+    /// record holds the card's size and key.
     Keyed(KeyedKind),
 }
 
 /// What `InPlaceFixture::Keyed` keys in place of a box.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum KeyedKind {
+    Placement,
     Text,
     Image,
     Video,
@@ -612,16 +614,23 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
         obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
         let note = if let Keyed(element_kind) = kind {
             let type_name = match element_kind {
+                KeyedKind::Placement => "NestedArtboardLayout",
                 KeyedKind::Text => "Text",
                 KeyedKind::Image => "Image",
                 KeyedKind::Video => "Video",
             };
             let mut element = vec![("name", S("card")), ("parentId", U(0))];
-            if element_kind == KeyedKind::Video {
-                element.push(("assetId", U(0)));
+            match element_kind {
+                KeyedKind::Video => element.push(("assetId", U(0))),
+                KeyedKind::Placement => element.push(("artboardId", U(2))),
+                _ => {}
             }
             obj(&mut b, type_name, &element); // 3
-            obj(&mut b, "LayoutParticipant", &[("parentId", U(3))]); // 4
+            // A placement lays its unit out itself; the others host one.
+            let participant = element_kind != KeyedKind::Placement;
+            if participant {
+                obj(&mut b, "LayoutParticipant", &[("parentId", U(3))]); // 4
+            }
             obj(
                 &mut b,
                 "LayoutCssStyle",
@@ -634,8 +643,8 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
                     ("height", F(card.1)),
                     ("flightKey", U(key)),
                 ],
-            ); // 5
-            6
+            ); // 4 or 5
+            if participant { 6 } else { 5 }
         } else {
             boxed(
                 &mut b,
@@ -700,7 +709,7 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
             }
         }
     }
-    if slot {
+    if slot || kind == Keyed(KeyedKind::Placement) {
         obj(
             &mut b,
             "Artboard",

@@ -75,27 +75,21 @@ pub(super) fn flight_records(objects: &[CoreHandle]) -> Vec<(u32, CoreHandle)> {
         .collect()
 }
 
-/// What a flight key may name in place: a CSS box, or a component
-/// placement, whose placed artboard's root is one. Decided here, by what
-/// the element is, at take-off, before anything is marked. A text, an image
-/// or a video reads its place and size through the participant it hosts,
-/// which no in-place page proves yet, so a key on one is refused by name;
-/// so is a key on anything else.
+/// What a flight key may name in place: a CSS box. Decided here, by what
+/// the element is, at take-off, before anything is marked. No kind of
+/// element flies in place until an in-place page with it as the keyed
+/// element runs through the equivalence test, and only boxes have one: a
+/// key on a component placement, a text, an image, a video or anything
+/// else is refused by name.
 fn flies_in_place(element: &CoreHandle) -> Result<()> {
     use crate::source::generated::{shapes::image_base::ImageBase, text::text_base::TextBase};
-    let flies = element
-        .with(|object| {
-            object.as_nested_artboard().is_some()
-                || object
-                    .as_layout_component()
-                    .is_some_and(|layout| !layout.is_artboard())
-        })
-        .unwrap_or(false);
-    if flies {
+    if css_box(element).is_some() {
         return Ok(());
     }
     // A video is an image too, so it is asked first.
-    let kind = if element.is_type_of(crate::video::Video::TYPE_KEY) {
+    let kind = if element.with(|object| object.as_nested_artboard().is_some()) == Some(true) {
+        "a component placement"
+    } else if element.is_type_of(crate::video::Video::TYPE_KEY) {
         "a video"
     } else if element.is_type_of(ImageBase::TYPE_KEY) {
         "an image"
@@ -104,57 +98,55 @@ fn flies_in_place(element: &CoreHandle) -> Result<()> {
     } else {
         "an element that is not a box"
     };
-    anyhow::bail!(
-        "a flight key on {kind} does not fly in place yet: only a box or a component placement does"
-    )
+    anyhow::bail!("a flight key on {kind} does not fly in place yet: only a box does")
 }
 
-/// The CSS box a flight holds, sizes and paints: the element, or a
-/// placement's placed artboard's root.
-fn box_of(element: &CoreHandle) -> CoreHandle {
+/// `element`'s CSS box: its layout position in its parent, its own
+/// transform, and that transform for the copy stretched to `size`, the
+/// stretch innermost, as a frame's own transform is built
+/// (`hosted_frame::self_transform`): turning and scaling about its pivot
+/// taken from `size`, with its CSS translate unscaled. None for an element
+/// that is not a CSS box.
+fn css_box(element: &CoreHandle) -> Option<CssBox> {
     element
         .with(|object| {
-            object
-                .as_nested_artboard()
-                .and_then(|nested| nested.artboard_instance_default())
-                .map(|instance| instance.core_handle())
+            let layout = object
+                .as_layout_component()
+                .filter(|layout| layout.is_css_mode() && !layout.is_artboard())?;
+            Some(CssBox {
+                translation: layout.layout_translation(),
+                drawn: Vec2D::new(layout.layout_width(), layout.layout_height()),
+            })
         })
         .flatten()
-        .unwrap_or_else(|| element.clone())
+}
+
+struct CssBox {
+    translation: Vec2D,
+    drawn: Vec2D,
 }
 
 /// Where `element` rests in its layout parent, its size from its hold while
 /// held. Zero when it has no layout node.
 fn resting_size(element: &CoreHandle) -> Vec2D {
-    flight_hold::resting_box(&box_of(element)).map_or_else(Vec2D::default, |rest| {
+    flight_hold::resting_box(element).map_or_else(Vec2D::default, |rest| {
         Vec2D::new(rest.width(), rest.height())
     })
 }
 
 /// The size `element` draws at now, which layout interpolation moves toward
-/// its rest over time: its box's laid-out size.
+/// its rest over time: its laid-out size.
 fn drawn_size(element: &CoreHandle) -> Vec2D {
-    box_of(element)
-        .with(|object| {
-            object
-                .as_layout_component()
-                .map(|layout| Vec2D::new(layout.layout_width(), layout.layout_height()))
-        })
-        .flatten()
-        .unwrap_or_else(|| resting_size(element))
+    css_box(element).map_or_else(|| resting_size(element), |css| css.drawn)
 }
 
 /// `element`'s own transform, the part of its draw inside its place, and
 /// that transform for the copy stretched to `size`, the stretch innermost:
 /// as a frame's own transform is built (`hosted_frame::self_transform`), a
 /// box turning and scaling about its pivot taken from `size`, with its CSS
-/// translate unscaled. A component placement's own transform is its local
-/// matrix without its translation, which its place holds, then its placed
-/// root's content transform, which the root's draw applies; stretched, the
-/// root's is built with the stretch, as a flying unit's root draws in a
-/// flight slot (`Artboard::content_transform_stretched`).
+/// translate unscaled.
 fn own_transforms(element: &CoreHandle, size: Vec2D, stretch: Vec2D) -> Option<(Mat2D, Mat2D)> {
-    let css_box = element
+    element
         .with(|object| {
             let layout = object
                 .as_layout_component()
@@ -163,40 +155,13 @@ fn own_transforms(element: &CoreHandle, size: Vec2D, stretch: Vec2D) -> Option<(
             sized.scale_by_values(stretch.x, stretch.y);
             Some((layout.build_own_transform(), sized))
         })
-        .flatten();
-    if css_box.is_some() {
-        return css_box;
-    }
-    let (local, root) = element
-        .with(|object| {
-            let local = object.as_transform_component()?.transform();
-            let root = object
-                .as_nested_artboard()
-                .and_then(|nested| nested.artboard_instance_default());
-            Some((
-                Mat2D::new(local[0], local[1], local[2], local[3], 0.0, 0.0),
-                root,
-            ))
-        })
-        .flatten()?;
-    let content = |stretch: Vec2D| {
-        root.as_ref().map_or_else(
-            || Mat2D::from_scale(stretch.x, stretch.y),
-            |root| root.with_artboard(|board| board.content_transform_stretched(stretch)),
-        )
-    };
-    Some((
-        local * content(Vec2D::new(1.0, 1.0)),
-        local * content(stretch),
-    ))
+        .flatten()
 }
 
 /// One end: the element's place in its parent without its own transform, as
 /// a slot's pose is today, so its own turn, scale and offset stay inside its
-/// draw. A CSS box's place is its parent's under its layout position; a
-/// component placement's is its parent's under its offset in it, which
-/// holds its layout position. Its opacity is its parent's child opacity
-/// times the fades the boxes above it hold out of it.
+/// draw: its parent's under its layout position. Its opacity is its parent's
+/// child opacity times the fades the boxes above it hold out of it.
 pub(super) fn end(element: &CoreHandle) -> Result<End> {
     let (parent, translation) = layout_place(element)?;
     let (parent_page, _, child_opacity) = draw_pose(&parent)?;
@@ -207,70 +172,15 @@ pub(super) fn end(element: &CoreHandle) -> Result<End> {
     })
 }
 
-/// `element`'s parent and its place in it without its own transform: a CSS
-/// box's layout position, or a component placement's offset in its parent,
-/// read from the two world transforms: layout moves a placement's world,
-/// not its local matrix.
+/// `element`'s parent and its layout position in it, without its own
+/// transform.
 fn layout_place(element: &CoreHandle) -> Result<(CoreHandle, Vec2D)> {
     let parent = element
         .with(|object| object.component_parent_handle())
         .flatten()
         .ok_or_else(|| anyhow::anyhow!("a flying element has no parent"))?;
-    let css_box = element
-        .with(|object| {
-            object
-                .as_layout_component()
-                .filter(|layout| layout.is_css_mode() && !layout.is_artboard())
-                .map(|layout| layout.layout_translation())
-        })
-        .flatten();
-    let translation = match css_box {
-        Some(translation) => translation,
-        None => {
-            let (world, local) = element
-                .with(|object| {
-                    let local = object.as_transform_component()?.transform();
-                    Some((world_of(element)?, Vec2D::new(local[4], local[5])))
-                })
-                .flatten()
-                .ok_or_else(|| anyhow::anyhow!("a flying element has no transform"))?;
-            // Under a parent scaled to 0 nothing draws, and the lift can't be
-            // solved through it: the copy draws nothing until it can.
-            offset_in(world_of(&parent).unwrap_or_default(), world).unwrap_or(local)
-        }
-    };
-    Ok((parent, translation))
-}
-
-/// A component's world; an artboard's is its own space.
-fn world_of(component: &CoreHandle) -> Option<Mat2D> {
-    component
-        .with(|object| {
-            if object.as_artboard().is_some() {
-                return Some(Mat2D::identity());
-            }
-            object
-                .as_world_transform_component()
-                .map(|transform| transform.world_transform())
-        })
-        .flatten()
-}
-
-/// Where `world`'s origin sits in `parent`'s space, in f64: `parent`'s
-/// linear part inverted over the difference of the translations.
-fn offset_in(parent: Mat2D, world: Mat2D) -> Option<Vec2D> {
-    let p = parent.values().map(f64::from);
-    let w = world.values().map(f64::from);
-    let det = p[0] * p[3] - p[1] * p[2];
-    if det == 0.0 || !det.is_finite() {
-        return None;
-    }
-    let (dx, dy) = (w[4] - p[4], w[5] - p[5]);
-    #[allow(clippy::cast_possible_truncation)]
-    Some(Vec2D::new(
-        ((p[3] * dx - p[2] * dy) / det) as f32,
-        ((p[0] * dy - p[1] * dx) / det) as f32,
-    ))
+    let css = css_box(element).ok_or_else(|| anyhow::anyhow!("a flying element is not a box"))?;
+    Ok((parent, css.translation))
 }
 
 /// Where `element` is placed without its own transform, read at `when`:
@@ -342,7 +252,7 @@ impl InPlaceFlight {
         let departure = resting_size(&element);
         // A zoomed version is held at its departure size: its hold begins
         // there and has no Size barrier to change it.
-        let held = (size_mode == SizeMode::Layout || zoomed).then(|| box_of(&element));
+        let held = (size_mode == SizeMode::Layout || zoomed).then(|| element.clone());
         if let Some(node) = &held {
             ensure!(
                 flight_hold::can_begin(node),
@@ -592,14 +502,8 @@ impl InPlacePair {
         center: Vec2D,
     ) -> Result<Self> {
         let corners = |element: &CoreHandle| {
-            box_of(element)
-                .with(|object| {
-                    let layout = object.as_artboard().map_or_else(
-                        || object.as_layout_component(),
-                        |board| Some(&board.base.base),
-                    )?;
-                    layout.css_box_geometry()
-                })
+            element
+                .with(|object| object.as_layout_component()?.css_box_geometry())
                 .flatten()
                 .map_or_else(Radii::default, |geometry| geometry.radii)
         };
@@ -730,15 +634,7 @@ fn frame_size(frame: &FlightFrame, a: Vec2D, b: Vec2D) -> Vec2D {
 /// Writes the corners and shadow `element`'s box draws in place of its own;
 /// None for its own. A change rebuilds its paths, as on a unit's root.
 fn set_flight_paint(element: &CoreHandle, corners: Option<[f32; 4]>, shadow: Option<FlightShadow>) {
-    let node = box_of(element);
-    if node.with(|object| object.as_artboard().is_some()) == Some(true) {
-        node.with_downcast_mut::<Artboard, _>(|artboard| {
-            artboard.set_flight_corners(corners);
-            artboard.set_flight_shadow(shadow);
-        });
-        return;
-    }
-    let changed = node
+    let changed = element
         .with_mut(|object| {
             let layout = object.as_layout_component_mut()?;
             let corners = layout.set_flight_corners(corners);
@@ -748,8 +644,10 @@ fn set_flight_paint(element: &CoreHandle, corners: Option<[f32; 4]>, shadow: Opt
         .flatten()
         .unwrap_or(false);
     if changed {
-        crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(node)
-            .add_dirt(ComponentDirt::PATH, false);
+        crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+            element.clone(),
+        )
+        .add_dirt(ComponentDirt::PATH, false);
     }
 }
 
@@ -803,7 +701,3 @@ fn lift_matrix(
     }
     Some((lift * Wide::of(own).inverse()? * Wide::of(row)).narrow())
 }
-
-#[cfg(test)]
-#[path = "in_place_tests.rs"]
-mod tests;

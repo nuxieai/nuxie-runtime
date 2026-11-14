@@ -637,27 +637,51 @@ impl ProcessorHandle {
 }
 
 type InitJob = Box<dyn FnOnce() + Send>;
+/// Processor initializations that may wait for the `luau-audio-init` thread,
+/// process-wide. Tests queue a handful at once; a queued job holds a copy of
+/// its processor's input (up to 256 MiB), so the queue has a fixed bound.
+#[cfg(not(target_arch = "wasm32"))]
+const MAX_QUEUED_INITIALIZATIONS: usize = 256;
+/// A bounded queue and the one thread that runs its jobs in order.
+#[cfg(not(target_arch = "wasm32"))]
+struct InitQueue {
+    sender: std::sync::mpsc::SyncSender<InitJob>,
+    bound: usize,
+}
+#[cfg(not(target_arch = "wasm32"))]
+impl InitQueue {
+    fn spawn(bound: usize) -> Result<Self, String> {
+        let (sender, receiver) = std::sync::mpsc::sync_channel::<InitJob>(bound);
+        std::thread::Builder::new()
+            .name("luau-audio-init".into())
+            .spawn(move || {
+                while let Ok(job) = receiver.recv() {
+                    job();
+                }
+            })
+            .map_err(|error| format!("cannot initialize audio processor worker: {error}"))?;
+        Ok(Self { sender, bound })
+    }
+    fn submit(&self, job: InitJob) -> Result<(), String> {
+        self.sender.try_send(job).map_err(|error| match error {
+            std::sync::mpsc::TrySendError::Full(_) => format!(
+                "Audio.start: at most {} processors may wait to initialize at once",
+                self.bound
+            ),
+            std::sync::mpsc::TrySendError::Disconnected(_) => {
+                "audio processor initialization worker stopped".into()
+            }
+        })
+    }
+}
 #[cfg(not(target_arch = "wasm32"))]
 fn submit_initialization(job: InitJob) -> Result<(), String> {
-    static QUEUE: OnceLock<Result<std::sync::mpsc::Sender<InitJob>, String>> = OnceLock::new();
-    let sender = QUEUE
-        .get_or_init(|| {
-            let (sender, receiver) = std::sync::mpsc::channel::<InitJob>();
-            std::thread::Builder::new()
-                .name("luau-audio-init".into())
-                .spawn(move || {
-                    while let Ok(job) = receiver.recv() {
-                        job();
-                    }
-                })
-                .map_err(|error| format!("cannot initialize audio processor worker: {error}"))?;
-            Ok(sender)
-        })
+    static QUEUE: OnceLock<Result<InitQueue, String>> = OnceLock::new();
+    QUEUE
+        .get_or_init(|| InitQueue::spawn(MAX_QUEUED_INITIALIZATIONS))
         .as_ref()
-        .map_err(Clone::clone)?;
-    sender
-        .send(job)
-        .map_err(|_| "audio processor initialization worker stopped".into())
+        .map_err(Clone::clone)?
+        .submit(job)
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -709,6 +733,41 @@ mod tests {
         // Native upstream gives the first block an extended warm-up budget.
         vm.warm = true;
         vm
+    }
+    #[test]
+    fn the_initialization_queue_refuses_jobs_past_its_bound() {
+        let queue = InitQueue::spawn(4).unwrap();
+        // The thread takes the first job and blocks in it; four more wait.
+        let (release, blocked) = std::sync::mpsc::channel::<()>();
+        let (started, running) = std::sync::mpsc::channel::<()>();
+        queue
+            .submit(Box::new(move || {
+                started.send(()).unwrap();
+                let _ = blocked.recv();
+            }))
+            .unwrap();
+        running.recv().unwrap();
+        let ran = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        for _ in 0..4 {
+            let ran = ran.clone();
+            queue
+                .submit(Box::new(move || {
+                    ran.fetch_add(1, Ordering::SeqCst);
+                }))
+                .unwrap();
+        }
+        let error = queue.submit(Box::new(|| {})).unwrap_err();
+        assert_eq!(
+            error,
+            "Audio.start: at most 4 processors may wait to initialize at once"
+        );
+        release.send(()).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while ran.load(Ordering::SeqCst) != 4 {
+            assert!(std::time::Instant::now() < deadline, "queued jobs did not run");
+            std::thread::yield_now();
+        }
+        assert!(queue.submit(Box::new(|| {})).is_ok());
     }
     #[test]
     fn pcm_stream_reader_runs_in_isolated_luau_with_actual_format() {

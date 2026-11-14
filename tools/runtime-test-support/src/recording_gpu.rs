@@ -107,6 +107,9 @@ impl ContextApi for ObservedContext {
     fn isRecording(&self) -> bool {
         self.inner.isRecording()
     }
+    fn keepWithRecording(&self, owner: Rc<dyn std::any::Any>) {
+        self.inner.keepWithRecording(owner)
+    }
     fn featuresKnown(&self) -> bool {
         self.inner.featuresKnown()
     }
@@ -251,6 +254,9 @@ impl RenderPassApi for ObservedPass {
     }
     fn activeToken(&self) -> std::rc::Weak<dyn ActiveRenderPass> {
         self.inner.activeToken()
+    }
+    fn keepWithRecording(&mut self, owner: Rc<dyn std::any::Any>) {
+        self.inner.keepWithRecording(owner)
     }
     fn setPipeline(&mut self, value: Option<&AnyResourceHandle>) {
         self.inner.setPipeline(value)

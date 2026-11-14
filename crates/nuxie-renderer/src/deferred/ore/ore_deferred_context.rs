@@ -398,6 +398,9 @@ impl ContextApi for DeferredOreContext {
     fn isRecording(&self) -> bool {
         true
     }
+    fn keepWithRecording(&self, owner: Rc<dyn std::any::Any>) {
+        self.render.borrow_mut().keep(owner);
+    }
     fn featuresKnown(&self) -> bool {
         self.caps.featuresKnown
     }

@@ -87,6 +87,9 @@ impl ContextApi for OwnedContext {
     fn pendingFrame(&self) -> SharedOreCommandBuffer {
         self.context.borrow().pendingFrame()
     }
+    fn keepWithRecording(&self, owner: Rc<dyn Any>) {
+        self.context.borrow().keepWithRecording(owner);
+    }
     fn recordWrapCanvasImage(&mut self, canvas: CanvasTextureInfo) -> Option<AnyResourceHandle> {
         self.context.borrow_mut().recordWrapCanvasImage(canvas)
     }

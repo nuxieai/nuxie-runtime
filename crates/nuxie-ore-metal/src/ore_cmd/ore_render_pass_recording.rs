@@ -317,4 +317,7 @@ impl RenderPassApi for RenderPassRecording {
     fn validate(&self) {
         self.state.base.borrow().validate();
     }
+    fn keepWithRecording(&mut self, owner: Rc<dyn Any>) {
+        self.state.cmd.borrow_mut().keep(owner);
+    }
 }

@@ -3067,7 +3067,9 @@ impl UserData for ScriptedContext {
             this.require_live("audio")?;
             super::lua_audio::ScriptedAudioAssets::lookup(lua, &name)
         });
-        methods.add_method("canvas", |lua, this, descriptor: Option<Table>| {
+        // A descriptor's `__index` gets the loan of the call reading it, so
+        // it can draw with the renderer of a draw that called this.
+        methods.add_method_lent("canvas", |lua, this, mut loan, descriptor: Option<Table>| {
             this.require_live("canvas")?;
             let bindings =
                 super::lua_renderer_library::RendererBindings::for_lua(lua).ok_or_else(|| {
@@ -3077,15 +3079,21 @@ impl UserData for ScriptedContext {
                 })?;
             let (width, height) = match descriptor {
                 Some(descriptor) => (
-                    descriptor.get::<Option<u32>>("width")?.unwrap_or(0),
-                    descriptor.get::<Option<u32>>("height")?.unwrap_or(0),
+                    descriptor
+                        .get_with::<Option<u32>>(crate::luau::reborrow_loan(&mut loan), "width")?
+                        .unwrap_or(0),
+                    descriptor
+                        .get_with::<Option<u32>>(crate::luau::reborrow_loan(&mut loan), "height")?
+                        .unwrap_or(0),
                 ),
                 None => (0, 0),
             };
             super::lua_canvas::ScriptedCanvas::create(lua, bindings, width, height)
                 .map(Value::UserData)
         });
-        methods.add_method("gpuCanvas", |lua, this, descriptor: Option<Table>| {
+        // A descriptor's `__index` gets the loan of the call reading it, so
+        // it can draw with the renderer of a draw that called this.
+        methods.add_method_lent("gpuCanvas", |lua, this, mut loan, descriptor: Option<Table>| {
             this.require_live("gpuCanvas")?;
             let gpu_canvas = this
                 .gpu_canvas
@@ -3093,8 +3101,12 @@ impl UserData for ScriptedContext {
                 .ok_or_else(|| crate::luau::Error::runtime("GPU-canvas context is unavailable"))?;
             let (width, height) = match descriptor {
                 Some(descriptor) => (
-                    descriptor.get::<Option<u32>>("width")?.unwrap_or(0),
-                    descriptor.get::<Option<u32>>("height")?.unwrap_or(0),
+                    descriptor
+                        .get_with::<Option<u32>>(crate::luau::reborrow_loan(&mut loan), "width")?
+                        .unwrap_or(0),
+                    descriptor
+                        .get_with::<Option<u32>>(crate::luau::reborrow_loan(&mut loan), "height")?
+                        .unwrap_or(0),
                 ),
                 None => (0, 0),
             };
@@ -3712,6 +3724,63 @@ mod tests {
         assert_eq!(
             (width, height, deferred_width, retained_width),
             (320, 180, 0, 320)
+        );
+    }
+
+    // Lane H2: `context:canvas{...}` and `context:gpuCanvas{...}` read their
+    // descriptor without the loan of the call, so an `__index` reached from
+    // a draw could not draw with the draw's renderer.
+    #[test]
+    fn a_canvas_descriptor_index_reaches_the_draw_renderer() {
+        use nuxie_render_api::{PersistentFactory, RecordingFactory};
+        use nuxie_runtime::{NoopScriptHost, ScriptInstance};
+        let vm = ScriptVm::new();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        vm.install_render_factory(&mut factory).unwrap();
+        vm.install_rive_globals().unwrap();
+        let lua = vm.lua();
+        let context = lua
+            .create_userdata(ScriptedContext::new(
+                lua,
+                Rc::new(RefCell::new(None)),
+                Vec::new(),
+                Rc::new(Cell::new(false)),
+                Some(crate::gpu_canvas::GpuCanvasContextBindings::for_test()),
+            ))
+            .expect("scripted context");
+        let globals = lua.globals();
+        let readonly = globals.is_readonly();
+        globals.set_readonly(false);
+        globals.set("context", context).unwrap();
+        globals.set_readonly(readonly);
+        let table: Table = vm
+            .eval(
+                r#"
+                return {
+                    draw = function(self, renderer)
+                        local canvas = context:gpuCanvas(setmetatable({}, {__index = function(_, key)
+                            renderer:save()
+                            renderer:restore()
+                            return 4
+                        end}))
+                        assert(canvas.width == 4)
+                    end,
+                }
+                "#,
+            )
+            .unwrap();
+        let mut instance = vm.script_instance_from_table(table);
+        let mut renderer = factory.borrow().make_renderer();
+        instance
+            .call_draw(&mut factory, &mut renderer, &mut NoopScriptHost)
+            .unwrap();
+        assert!(
+            factory
+                .borrow()
+                .stream()
+                .contains("save\nrestore\nsave\nrestore\n"),
+            "{}",
+            factory.borrow().stream()
         );
     }
 

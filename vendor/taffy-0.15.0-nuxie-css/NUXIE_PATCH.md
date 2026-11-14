@@ -1540,3 +1540,20 @@ request is for more than the width.
 
 Of the 29,914 layouts, 24 more match and none that matched differ.
 Twelve new Chrome probes of the shape are guard rows.
+
+## A keyword width with a ratio and a definite height is the ratio width
+
+A row item with an aspect ratio, a definite height and a `min-content`,
+`max-content` or `fit-content` width has the width its height gives.
+Its automatic minimum is capped by that width, as it is by a length.
+The fork capped the minimum by lengths and `stretch` only, so an item
+that is itself a row stayed as wide as its content. Chrome: in a 300 by
+100 row, a row with `width: max-content; aspect-ratio: 2` around two 160
+wide boxes is 200 wide. The fork made it 320 wide. With an automatic
+width Chrome makes it 320 wide too, and that did not change.
+
+`determine_flex_base_size` now uses the ratio width as the specified
+size for such an item.
+
+Of the 29,914 layouts, 8 more match and none that matched differ. Of 44
+new Chrome probes of the shape, 5 differed before and all match now.

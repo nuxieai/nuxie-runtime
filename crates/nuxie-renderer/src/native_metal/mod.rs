@@ -3624,7 +3624,6 @@ mod tests {
             "gradientData",
             "contourData",
             "paintAuxData",
-            "paintData",
             "pathData",
             "flushUniformData",
             "scissorLookup",

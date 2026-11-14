@@ -8,6 +8,16 @@ build --@rules_rust//rust/settings:extra_rustc_flag=-Cpanic=unwind
 # tools/bazel/runtime.py, RUSTFLAGS=-Cdebuginfo=line-tables-only). Shipping
 # artifacts set -Cdebuginfo=0 in tools/bazel_runtime_build.py either way.
 build:debuginfo --@rules_rust//rust/settings:extra_rustc_flag=-Cdebuginfo=line-tables-only
+# Abort-strategy test builds (`make luau-abort-gate`, through
+# NUX_RUNTIME_PANIC=abort in tools/bazel/runtime.py). Target crates only: the
+# exec configuration (proc macros, build scripts) keeps unwind. Stable rustc
+# refuses `--test` with panic=abort unless libtest runs each test in its own
+# child process (-Zpanic-abort-tests), which needs RUSTC_BOOTSTRAP for the
+# pinned stable toolchain. The flags change the configuration, so this builds
+# into its own output tree beside the default one.
+build:panic-abort --@rules_rust//rust/settings:extra_rustc_flag=-Cpanic=abort
+build:panic-abort --@rules_rust//rust/settings:extra_rustc_flag=-Zpanic-abort-tests
+build:panic-abort --action_env=RUSTC_BOOTSTRAP=1
 build:release --compilation_mode=opt
 build:release --@rules_rust//rust/settings:lto=fat
 build:release --@rules_rust//rust/settings:codegen_units=1

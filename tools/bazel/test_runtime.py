@@ -378,6 +378,26 @@ class RuntimeBuildTest(unittest.TestCase):
         self.assertIn("--@rules_rust//rust/settings:extra_rustc_flag=-Cstrip=none", run.call_args.args[0])
         self.assertIn("--@rules_rust//rust/settings:extra_exec_rustc_flag=-Cstrip=none", run.call_args.args[0])
 
+    def test_panic_abort_selects_the_abort_config_without_widening_action_env(self):
+        def arguments(panic):
+            environment = {} if panic is None else {"NUX_RUNTIME_PANIC": panic}
+            with patch.dict(os.environ, environment, clear=True), \
+                 patch.object(runtime, "packages_from_workspace", return_value={}), \
+                 patch.object(runtime, "materialize", return_value=["//core:core"]), \
+                 patch.object(runtime, "bazel_command", return_value=["bazel"]), \
+                 patch.object(runtime.subprocess, "check_output", return_value=""), \
+                 patch.object(runtime.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run, \
+                 patch("sys.argv", ["runtime.py", "build", "-p", "core"]):
+                status = runtime.main()
+            return status, (run.call_args.args[0] if run.call_args else [])
+        status, abort = arguments("abort")
+        self.assertEqual(status, 0)
+        self.assertIn("--config=panic-abort", abort)
+        self.assertFalse([a for a in abort if a.startswith("--action_env=NUX_RUNTIME_PANIC")])
+        self.assertNotIn("--config=panic-abort", arguments(None)[1])
+        self.assertNotIn("--config=panic-abort", arguments("unwind")[1])
+        self.assertEqual(arguments("sideways")[0], 2)
+
     def test_coverage_build_preserves_instrumentation_and_isolated_products(self):
         manifest = self.package("rust-golden-runner", '[features]\nscripting = []\ncoverage-trace = []\n', library=False)
         executable = self.root / "bazel-out/rust-golden-runner"

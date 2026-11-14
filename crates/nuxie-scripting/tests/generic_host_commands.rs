@@ -270,3 +270,53 @@ fn transition_callback_failure_is_recorded_for_transaction_veto_and_rollback() {
     assert!(host.drain(next).is_empty());
     vm.end_script_cycle();
 }
+
+/// E1 section 5 row 26: a payload table was copied whole (three times over)
+/// before the node budget looked at it. It is now read one entry at a time,
+/// so a huge table stops at the budget: the walk takes at most one step per
+/// node the budget admits, plus the one that fails.
+#[test]
+fn a_huge_payload_table_is_walked_only_as_far_as_the_node_budget() {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals().expect("Rive globals install");
+    // Count the walk's steps: the module takes the `next` installed before it.
+    vm.lua()
+        .load(
+            r#"
+            local builtin = next
+            nextSteps = 0
+            next = function(t, k)
+                nextSteps += 1
+                return builtin(t, k)
+            end
+            "#,
+        )
+        .exec()
+        .expect("counting next");
+    let limits = HostCommandLimits::default();
+    let host = HostCommandHost::install(&vm, "bridge", limits).expect("generic host module installs");
+    vm.lua()
+        .load("next = nil")
+        .exec()
+        .expect("the module keeps its own next");
+
+    vm.begin_script_cycle();
+    let checkpoint = host.begin_cycle();
+    let error = vm
+        .lua()
+        .load(r#"require("bridge").command("huge", table.create(1000000, true))"#)
+        .exec()
+        .expect_err("the payload exceeds the node budget");
+    assert!(
+        error.to_string().contains("host value exceeds 4096 nodes"),
+        "{error}"
+    );
+    let steps: i64 = vm.lua().globals().get("nextSteps").expect("step count");
+    assert!(
+        steps <= limits.max_value_nodes() as i64 + 1,
+        "{steps} steps for a node budget of {}",
+        limits.max_value_nodes()
+    );
+    host.rollback_cycle(checkpoint);
+    vm.end_script_cycle();
+}

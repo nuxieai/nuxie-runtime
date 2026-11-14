@@ -9,7 +9,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::rc::{Rc, Weak};
 
-use crate::luau::{Error, Lua, LuaString, MultiValue, Result, Table, Value};
+use crate::luau::{Error, Function, Lua, LuaString, MultiValue, Result, Table, Value};
 
 use crate::vm::{ScriptResourceGuard, ScriptVm};
 
@@ -349,7 +349,8 @@ impl HostCommandHost {
         }
         self.state.commands.borrow_mut().push_back(command);
         self.state.resource_guard.note_host_command();
-        self.state.commands_this_cycle.set(count + 1);
+        // Below the per-cycle cap, so the sum is exact.
+        self.state.commands_this_cycle.set(count.saturating_add(1));
         self.state.nodes_this_cycle.set(nodes);
         self.state.bytes_this_cycle.set(total);
         Ok(())
@@ -357,6 +358,9 @@ impl HostCommandHost {
 }
 
 fn host_module(lua: &Lua, host: HostCommandHost) -> Result<Table> {
+    // The builtin `next`, taken before any script runs, walks a payload
+    // table one entry at a time (see `table_value`).
+    let next: Function = lua.globals().get("next")?;
     let module = lua.create_table();
     module.set(
         "command",
@@ -369,6 +373,7 @@ fn host_module(lua: &Lua, host: HostCommandHost) -> Result<Table> {
             )?;
             let payload = host_value(
                 args.pop_front().unwrap_or(Value::Nil),
+                &next,
                 host.state.limits,
                 host.state.resource_guard.clone(),
             )?;
@@ -380,7 +385,8 @@ fn host_module(lua: &Lua, host: HostCommandHost) -> Result<Table> {
     Ok(module)
 }
 
-struct Conversion {
+struct Conversion<'a> {
+    next: &'a Function,
     active_tables: HashSet<usize>,
     nodes: usize,
     bytes: usize,
@@ -388,7 +394,7 @@ struct Conversion {
     resource_guard: ScriptResourceGuard,
 }
 
-impl Conversion {
+impl Conversion<'_> {
     fn account_node(&mut self) -> Result<()> {
         self.nodes = self.nodes.saturating_add(1);
         if self.nodes > self.limits.max_value_nodes {
@@ -417,6 +423,7 @@ impl Conversion {
 
 fn host_value(
     value: Value,
+    next: &Function,
     limits: HostCommandLimits,
     resource_guard: ScriptResourceGuard,
 ) -> Result<HostValue> {
@@ -424,6 +431,7 @@ fn host_value(
         value,
         1,
         &mut Conversion {
+            next,
             active_tables: HashSet::new(),
             nodes: 0,
             bytes: 0,
@@ -483,9 +491,20 @@ fn table_value(table: Table, depth: usize, conversion: &mut Conversion) -> Resul
         let mut object = BTreeMap::new();
         let mut list = Vec::new();
         let mut entry_count = 0_usize;
-        for entry in table.pairs::<Value, Value>() {
-            let (key, value) = entry?;
+        // One entry at a time, in `next` order (the order `pairs` reads),
+        // so the node and byte budgets stop a huge table after as many
+        // entries as they admit, instead of after a copy of all of them.
+        let mut cursor = Value::Nil;
+        loop {
+            let (key, value): (Value, Value) =
+                conversion.next.call((table.clone(), cursor))?;
+            if key.is_nil() {
+                break;
+            }
+            cursor = key.clone();
             entry_count = entry_count.saturating_add(1);
+            // `depth` is at most the depth limit (64), so one more is exact.
+            let child_depth = depth.saturating_add(1);
             match key {
                 Value::String(key) if list.is_empty() => {
                     let key = checked_identifier(
@@ -498,12 +517,12 @@ fn table_value(table: Table, depth: usize, conversion: &mut Conversion) -> Resul
                         return Err(Error::runtime("host object keys must not be empty"));
                     }
                     conversion.account_bytes(key.len())?;
-                    object.insert(key, value_at_depth(value, depth + 1, conversion)?);
+                    object.insert(key, value_at_depth(value, child_depth, conversion)?);
                 }
                 Value::Integer(index) if object.is_empty() && index > 0 => {
                     let index = usize::try_from(index)
                         .map_err(|_| Error::runtime("mixed or invalid host table keys"))?;
-                    list.push((index, value_at_depth(value, depth + 1, conversion)?));
+                    list.push((index, value_at_depth(value, child_depth, conversion)?));
                 }
                 Value::Number(index)
                     if object.is_empty()
@@ -514,7 +533,7 @@ fn table_value(table: Table, depth: usize, conversion: &mut Conversion) -> Resul
                 {
                     list.push((
                         index as usize,
-                        value_at_depth(value, depth + 1, conversion)?,
+                        value_at_depth(value, child_depth, conversion)?,
                     ));
                 }
                 _ => return Err(Error::runtime("mixed or invalid host table keys")),

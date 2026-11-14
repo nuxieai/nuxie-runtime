@@ -2483,7 +2483,10 @@ impl ArtboardComponentList {
     /// The source artboard and the override for the item at `index`, read
     /// so the instance (whose scripts hydrate as it is made) is created with
     /// no borrow of this list open.
-    fn artboard_source_for_index(&mut self, index: i32) -> Option<(CoreHandle, Option<CoreHandle>)> {
+    fn artboard_source_for_index(
+        &mut self,
+        index: i32,
+    ) -> Option<(CoreHandle, Option<CoreHandle>)> {
         let item = self.list_item(index)?;
         let source = self.find_artboard(&item)?;
         let artboard_override = self.artboard_override_for_item(item);
@@ -2503,7 +2506,10 @@ impl ArtboardComponentList {
             .with_downcast_mut::<Self, _>(|owner| owner.artboard_source_for_index(index))
             .expect("live ArtboardComponentList");
         let artboard = source.and_then(|(source, artboard_override)| {
-            Some((Artboard::nested_instance_from_handle(&source)?, artboard_override))
+            Some((
+                Artboard::nested_instance_from_handle(&source)?,
+                artboard_override,
+            ))
         });
         if let Some((artboard, artboard_override)) = artboard {
             if let Some(artboard_override) = artboard_override {

@@ -735,7 +735,9 @@ pub(crate) enum EffectPaint<'a> {
 impl EffectPaint<'_> {
     pub(crate) fn with<R>(
         &self,
-        use_paint: impl FnOnce(&crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaint) -> R,
+        use_paint: impl FnOnce(
+            &crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaint,
+        ) -> R,
     ) -> Option<R> {
         match self {
             Self::Lent(paint) => Some(use_paint(paint)),

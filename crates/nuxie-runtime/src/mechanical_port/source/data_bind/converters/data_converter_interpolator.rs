@@ -292,12 +292,12 @@ impl DataConverterInterpolator {
     /// runs with no borrow of the converter (and, re-entering it, finds the
     /// state at rest rather than a `RefCell` panic).
     pub(crate) fn advance_interpolator_occurrence(owner: &CoreHandle, elapsed: f32) -> bool {
-        let Some(begun) = Self::with_occurrence(owner, |converter| {
-            match converter.begin_advance(elapsed) {
+        let Some(begun) =
+            Self::with_occurrence(owner, |converter| match converter.begin_advance(elapsed) {
                 Some(step) => Ok((step, std::mem::take(&mut converter.advancer))),
                 None => Err(converter.advancer_pending_result()),
-            }
-        }) else {
+            })
+        else {
             return false;
         };
         let (mut step, mut advancer) = match begun {
@@ -320,7 +320,10 @@ impl DataConverterInterpolator {
 
     /// Borrows the interpolator `owner` is or projects through its
     /// converter capability.
-    fn with_occurrence<R>(owner: &CoreHandle, use_converter: impl FnOnce(&mut Self) -> R) -> Option<R> {
+    fn with_occurrence<R>(
+        owner: &CoreHandle,
+        use_converter: impl FnOnce(&mut Self) -> R,
+    ) -> Option<R> {
         owner
             .with_mut(|owner| {
                 owner

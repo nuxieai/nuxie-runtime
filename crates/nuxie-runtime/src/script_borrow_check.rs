@@ -172,7 +172,10 @@ mod check {
         let loans: Vec<Loan> = LENT
             .try_with(|lent| lent.borrow().clone())
             .unwrap_or_default();
-        if !loans.iter().any(|(lending, _)| *lending == Lending::Mutable) {
+        if !loans
+            .iter()
+            .any(|(lending, _)| *lending == Lending::Mutable)
+        {
             return None;
         }
         let mut report = format!(
@@ -231,16 +234,28 @@ mod tests {
         assert!(check::report(entry).is_none());
         let shared_at = Location::caller();
         let shared = Lent::new(Lending::Shared, shared_at);
-        assert!(check::report(entry).is_none(), "a shared loan alone is not a failure");
+        assert!(
+            check::report(entry).is_none(),
+            "a shared loan alone is not a failure"
+        );
         let mutable_at = Location::caller();
         let report = {
             let _mutable = Lent::new(Lending::Mutable, mutable_at);
             check::report(entry).expect("a mutable loan is reported")
         };
         assert!(report.contains(&format!("entered at {entry}")), "{report}");
-        assert!(report.contains(&format!("Shared at {shared_at}")), "{report}");
-        assert!(report.contains(&format!("Mutable at {mutable_at}")), "{report}");
-        assert!(check::report(entry).is_none(), "the loan ends with its guard");
+        assert!(
+            report.contains(&format!("Shared at {shared_at}")),
+            "{report}"
+        );
+        assert!(
+            report.contains(&format!("Mutable at {mutable_at}")),
+            "{report}"
+        );
+        assert!(
+            check::report(entry).is_none(),
+            "the loan ends with its guard"
+        );
         drop(shared);
     }
 
@@ -261,10 +276,20 @@ mod tests {
         let arena = crate::source::core::CoreArena::default();
         let node = arena.insert(crate::source::node::Node::default());
         assert!(super::open_mutable_loans().is_empty());
-        let inside = node.with_mut(|_| super::open_mutable_loans()).expect("live node");
+        let inside = node
+            .with_mut(|_| super::open_mutable_loans())
+            .expect("live node");
         assert_eq!(inside.len(), 1);
-        assert_eq!(inside[0].file(), file!(), "the loan names the with_mut caller");
-        assert!(node.with(|_| super::open_mutable_loans()).expect("live").is_empty());
+        assert_eq!(
+            inside[0].file(),
+            file!(),
+            "the loan names the with_mut caller"
+        );
+        assert!(
+            node.with(|_| super::open_mutable_loans())
+                .expect("live")
+                .is_empty()
+        );
         assert!(super::open_mutable_loans().is_empty());
     }
 }

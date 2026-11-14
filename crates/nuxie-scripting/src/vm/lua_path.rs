@@ -462,7 +462,11 @@ impl UserData for ScriptedContourMeasure {
             let start = number_arg(args.front(), "startDistance")?;
             let end = number_arg(args.get(1), "endDistance")?;
             let start_with_move = bool_arg_or(args.get(3), true)?;
-            extract_measure_segment(lua, args.get(2), this.source_verbs, |destination| {
+            // The contour clamps the interval to [0, length] this way.
+            let length = this.measure().length();
+            let empty = !is_less(cpp_max(0.0, start), cpp_min(length, end));
+            let verbs = if empty { 0 } else { this.source_verbs };
+            extract_measure_segment(lua, args.get(2), verbs, |destination| {
                 this.measure()
                     .get_segment(start, end, destination, start_with_move);
             })
@@ -502,7 +506,12 @@ impl UserData for ScriptedPathMeasure {
             let start = number_arg(args.front(), "startDistance")?;
             let end = number_arg(args.get(1), "endDistance")?;
             let start_with_move = bool_arg_or(args.get(3), true)?;
-            extract_measure_segment(lua, args.get(2), this.source_verbs, |destination| {
+            // The measure clamps the interval to [0, length] this way.
+            let length = this.measure.length();
+            let clamp = |distance: f32| cpp_max(0.0, cpp_min(distance, length));
+            let empty = !is_less(clamp(start), clamp(end));
+            let verbs = if empty { 0 } else { this.source_verbs };
+            extract_measure_segment(lua, args.get(2), verbs, |destination| {
                 this.measure
                     .get_segment(start, end, Some(destination), start_with_move);
             })
@@ -518,7 +527,8 @@ impl UserData for ScriptedPathMeasure {
 /// plus a partial piece at each end, so at most `source_verbs + contours`
 /// pieces, and contours are at most `source_verbs + 1`. A piece is at most
 /// two verbs (a move, then a curve) and four points. The bound is checked
-/// before appending and the exact size charged after.
+/// before appending and the exact size charged after. An empty interval
+/// appends nothing and passes `source_verbs` 0, so it needs no room.
 fn extract_measure_segment(
     lua: &Lua,
     destination: Option<&Value>,
@@ -531,7 +541,11 @@ fn extract_measure_segment(
         ));
     };
     let mut destination = destination.borrow_mut::<ScriptedPath>()?;
-    let pieces = source_verbs.saturating_mul(2).saturating_add(2);
+    let pieces = if source_verbs == 0 {
+        0
+    } else {
+        source_verbs.saturating_mul(2).saturating_add(2)
+    };
     destination.charge.attach(lua)?;
     if !destination.fits(pieces.saturating_mul(2), pieces.saturating_mul(4)) {
         let limit = super::host_memory_budget::HostMemoryBudget::for_lua(lua)?.limit();
@@ -1129,4 +1143,18 @@ mod upstream_scripted_path_tests {
             .expect("ScriptedPath userdata");
         assert!(!path.raw_path.verbs().is_empty());
     }
+}
+
+/// The measures' `std::min`/`std::max` order, so NaN clamps as they do.
+fn cpp_min(a: f32, b: f32) -> f32 {
+    if b < a { b } else { a }
+}
+
+fn cpp_max(a: f32, b: f32) -> f32 {
+    if a < b { b } else { a }
+}
+
+/// `a < b`, false for NaN.
+fn is_less(a: f32, b: f32) -> bool {
+    matches!(a.partial_cmp(&b), Some(std::cmp::Ordering::Less))
 }

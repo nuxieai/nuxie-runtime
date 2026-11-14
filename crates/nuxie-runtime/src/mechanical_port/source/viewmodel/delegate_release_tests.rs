@@ -245,6 +245,61 @@ fn a_detached_value_notifies_at_once() {
     assert_eq!(calls.get(), 1);
 }
 
+/// Writes `other` through the borrowed setter each time it is notified, at
+/// most `limit` times, so a cycle that is not stopped still ends.
+struct Echo {
+    other: CoreHandle,
+    calls: Rc<Cell<u32>>,
+    limit: u32,
+}
+
+impl ViewModelInstanceValueDelegate for Echo {
+    fn value_changed(&mut self) {
+        self.calls.set(self.calls.get() + 1);
+        if self.calls.get() <= self.limit {
+            let next = format!("{}", self.calls.get());
+            self.other
+                .with_downcast_mut::<ViewModelInstanceString, _>(|value| value.set_value(&next));
+        }
+    }
+}
+
+fn echo(
+    value: &CoreHandle,
+    other: &CoreHandle,
+) -> (ViewModelInstanceValueDelegateHandle, Rc<Cell<u32>>) {
+    let calls = Rc::new(Cell::new(0));
+    let delegate: ViewModelInstanceValueDelegateHandle = Rc::new(RefCell::new(Echo {
+        other: other.clone(),
+        calls: calls.clone(),
+        limit: 10,
+    }));
+    value
+        .with_downcast_mut::<ViewModelInstanceString, _>(|value| value.base.add_delegate(&delegate))
+        .unwrap();
+    (delegate, calls)
+}
+
+// Codex review: deferred delivery let A's suppression end before B's
+// notification ran, so A -> B -> A fed back until something else stopped
+// it. Inline delivery stopped the cycle at A.
+#[test]
+fn a_delegate_cycle_stops_at_the_value_that_started_it() {
+    let arena = CoreArena::default();
+    let a = arena.insert(ViewModelInstanceString::default());
+    let b = arena.insert(ViewModelInstanceString::default());
+    let (_a_delegate, a_calls) = echo(&a, &b);
+    let (_b_delegate, b_calls) = echo(&b, &a);
+    a.with_downcast_mut::<ViewModelInstanceString, _>(|value| value.set_value("x"));
+    assert_eq!((a_calls.get(), b_calls.get()), (1, 1));
+    // The same inside a host mutation.
+    let notifications = crate::view_model_cell::RuntimeHostMutationNotifications::begin()
+        .expect("no outer host mutation");
+    a.with_downcast_mut::<ViewModelInstanceString, _>(|value| value.set_value("y"));
+    notifications.commit();
+    assert_eq!((a_calls.get(), b_calls.get()), (2, 2));
+}
+
 #[test]
 fn delegates_that_are_gone_leave_the_list_as_others_are_added() {
     let arena = CoreArena::default();

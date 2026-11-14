@@ -113,14 +113,18 @@ fn write_each_type(arena: &CoreArena, write: &dyn Fn(&CoreHandle, &dyn Fn(&CoreH
             "boolean",
             arena.insert(ViewModelInstanceBoolean::default()),
             Box::new(|value: &CoreHandle| {
-                value.with_downcast_mut::<ViewModelInstanceBoolean, _>(|value| value.set_value(true));
+                value.with_downcast_mut::<ViewModelInstanceBoolean, _>(|value| {
+                    value.set_value(true)
+                });
             }),
         ),
         (
             "enum",
             arena.insert(ViewModelInstanceEnum::default()),
             Box::new(|value: &CoreHandle| {
-                value.with_downcast_mut::<ViewModelInstanceEnum, _>(|value| value.apply_value(&DataValueInteger::new(1)));
+                value.with_downcast_mut::<ViewModelInstanceEnum, _>(|value| {
+                    value.apply_value(&DataValueInteger::new(1))
+                });
             }),
         ),
         (
@@ -239,4 +243,26 @@ fn a_detached_value_notifies_at_once() {
     value.base.add_delegate(&delegate);
     value.set_value("x");
     assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn delegates_that_are_gone_leave_the_list_as_others_are_added() {
+    let arena = CoreArena::default();
+    let value = arena.insert(ViewModelInstanceString::default());
+    let kept = observe(&value);
+    for _ in 0..10_000 {
+        // A watch registered and dropped again, as a script can do in a loop.
+        let _gone = observe(&value);
+    }
+    let capacity = value
+        .with(|value| {
+            value
+                .as_view_model_instance_value()
+                .map(|value| value.delegates.capacity())
+        })
+        .flatten()
+        .unwrap();
+    assert!(capacity <= 4, "delegate list capacity {capacity}");
+    value.with_downcast_mut::<ViewModelInstanceString, _>(|value| value.set_value("x"));
+    assert_notified_once("kept", &kept);
 }

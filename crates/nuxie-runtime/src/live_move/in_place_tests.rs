@@ -101,10 +101,10 @@ fn a_placements_offset_under_a_parent_scaled_to_0_has_no_answer() {
 }
 
 /// A held placement's cover anchor is where it rests. The keyed page's
-/// card on A places "unit x", here with its origin at its center, so where
-/// its content starts follows its size. Held at twice its resting size, as
-/// a Layout-mode copy is laid out mid-flight, its anchor is still the box
-/// it had before the hold.
+/// card on A is turned and places "unit x", a CSS artboard with its origin
+/// at its center, so the pivot the turn goes about follows the root's size.
+/// Held at twice its resting size, as a Layout-mode copy is laid out
+/// mid-flight, its anchor is still the box it had before the hold.
 #[test]
 fn a_held_placements_cover_anchor_is_where_it_rests() {
     use crate::css_layout::flight_hold;
@@ -117,35 +117,22 @@ fn a_held_placements_cover_anchor_is_where_it_rests() {
     let (screen, placement, machine) = (&keyed.screen, &keyed.placement, &keyed.machine);
     let flying = super::Flying::of(placement).unwrap();
     let root = flying.layout_node().clone();
-    root.with_downcast_mut::<Artboard, _>(|root| {
-        root.set_origin_x(0.5);
-        root.set_origin_y(0.5);
-    });
-    machine.advance_and_apply(0.0);
     let board = screen.core_handle();
     let resting = super::super::follow::resting_anchor_box(&board, placement).expect("an anchor");
     let size = flying.resting_size();
-    assert!(flight_hold::begin(&root, (size.x, size.y)), "the hold begins");
+    assert!(
+        flight_hold::begin(&root, (size.x, size.y)),
+        "the hold begins"
+    );
     flight_hold::set_size(&root, (size.x * 2.0, size.y * 2.0));
     machine.advance_and_apply(0.0);
-    let (laid_out, origin_now, origin_at_rest) = root
-        .with_downcast::<Artboard, _>(|root| {
-            (
-                Vec2D::new(root.layout_width(), root.layout_height()),
-                root.content_origin(),
-                root.content_origin_at(size),
-            )
-        })
+    let laid_out = root
+        .with_downcast::<Artboard, _>(|root| Vec2D::new(root.layout_width(), root.layout_height()))
         .unwrap();
     assert_eq!(
         (laid_out.x, laid_out.y),
         (size.x * 2.0, size.y * 2.0),
         "held at twice its size"
-    );
-    assert_ne!(
-        (origin_now.x, origin_now.y),
-        (origin_at_rest.x, origin_at_rest.y),
-        "where its content starts follows its size"
     );
     let held = super::super::follow::resting_anchor_box(&board, placement).expect("an anchor");
     let near = |a: f32, b: f32| (a - b).abs() < 1e-3;
@@ -157,4 +144,24 @@ fn a_held_placements_cover_anchor_is_where_it_rests() {
         "held {held:?}, at rest {resting:?}"
     );
     flight_hold::end(&root);
+}
+
+/// A placement of an artboard without its own CSS record is not admitted:
+/// its root is laid out by its own layout, and its in-place page does not
+/// draw as its slot page even at rest (`ElementCase::NativeRoot`: the slot
+/// page draws a's root at (36, 20), the in-place page at (0, 0)).
+#[test]
+fn a_placement_of_a_native_layout_artboard_is_refused() {
+    use crate::live_move_fixture::{ElementCase, ElementKind};
+    let bytes = css_paint_fixture_shaped(
+        PaintCase::Element(ElementKind::Placement, ElementCase::NativeRoot),
+        PaintShape::InPlace,
+    )
+    .unwrap();
+    let native = page(&bytes, "a");
+    let error = super::Flying::of(&native.placement)
+        .err()
+        .expect("refused")
+        .to_string();
+    assert!(error.contains("without its own CSS record"), "{error}");
 }

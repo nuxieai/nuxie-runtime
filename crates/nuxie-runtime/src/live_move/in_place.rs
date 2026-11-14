@@ -82,16 +82,17 @@ pub(super) fn flight_records(objects: &[CoreHandle]) -> Vec<(u32, CoreHandle)> {
 /// ends, tracker and clip, its corners and shadow, and its cover anchor.
 ///
 /// The box is the element's layout box: the border box its layout node gets
-/// in its parent, at its offset there. Its place is its parent as drawn,
-/// then that offset. Its own transform O takes the box into its place: a
-/// CSS box's own transform; a component placement's own matrix without its
-/// translation, then its placed root's frame origin; nothing for a text, an
-/// image or a video. What draws inside the box is its content: a text's
-/// wrapping, an image's fit and origin, a placed root's own turn and scale,
-/// as a flight slot carries a unit holding the element. The box matrix is
-/// place · O, and C takes the box to the element's own drawing space, where
-/// its world draws: a box's is identity. Only a box paints a box of its
-/// own, so only a box draws a flight's corners and shadow.
+/// in its parent, at its offset there (for a placement, where its placed
+/// root's frame starts). Its place is its parent as drawn, then that
+/// offset. Its own transform O takes the box into its place: a CSS box's
+/// own transform; a component placement's own matrix without its
+/// translation; nothing for a text, an image or a video. What draws inside
+/// the box is its content: a text's wrapping, an image's fit and origin, a
+/// placed root's own turn and scale, as a flight slot carries a unit holding
+/// the element. The box matrix is place · O, and C takes the box to the
+/// element's own drawing space, where its world draws: a box's is
+/// identity. Only a box paints a box of its own, so only a box draws a
+/// flight's corners and shadow.
 #[derive(Clone)]
 pub(super) struct Flying {
     element: CoreHandle,
@@ -139,9 +140,10 @@ impl Flying {
 
     /// What a flight key may name in place, decided here, by what the
     /// element is, at take-off, before anything is marked: a box, a text, an
-    /// image, a video or a component placement, each admitted once an
-    /// in-place page with it as the keyed element ran through the
-    /// equivalence test. A key on anything else is refused by name.
+    /// image, a video or a component placement of a CSS artboard, each
+    /// admitted once an in-place page with it as the keyed element ran
+    /// through the equivalence test. A key on anything else is refused by
+    /// name.
     pub(super) fn of(element: &CoreHandle) -> Result<Self> {
         use crate::source::generated::{shapes::image_base::ImageBase, text::text_base::TextBase};
         // A video is an image too.
@@ -160,7 +162,21 @@ impl Flying {
             "a flight key on an element that is not a box, a text, an image, a video or a \
              component placement does not fly in place"
         );
-        Self::read(element).ok_or_else(|| anyhow::anyhow!("a flight key names no layout box"))
+        let flying = Self::read(element)
+            .ok_or_else(|| anyhow::anyhow!("a flight key names no layout box"))?;
+        // A placed root without its own CSS record is laid out by its own
+        // layout, and no in-place page with one draws as its slot page even
+        // at rest, so it is not admitted.
+        if let Shape::Placement(root) = &flying.shape {
+            ensure!(
+                root.with(|object| object.as_layout_component().map(|l| l.is_css_mode()))
+                    .flatten()
+                    .unwrap_or(false),
+                "a flight key on a component placement of an artboard without its own CSS \
+                 record does not fly in place"
+            );
+        }
+        Ok(flying)
     }
 
     /// Whether `element` still reads as this box: a placement still shows
@@ -194,11 +210,12 @@ impl Flying {
 
     /// The box's offset in its parent, without its own transform: a CSS
     /// box's layout position; a participant's laid-out box, where its host's
-    /// world is placed from; a placement's world origin in its parent's,
-    /// which holds its layout position, since layout moves a placement's
-    /// world and not its local matrix. Under a parent scaled to 0 that has
-    /// no answer, and a placement falls back to its local translation: the
-    /// lift, which can't be solved through a scale of 0, draws nothing
+    /// world is placed from; for a placement, its world origin in its
+    /// parent's, which holds its layout position, since layout moves a
+    /// placement's world and not its local matrix, then where its root's
+    /// frame starts from there. Under a parent scaled to 0 the world origin
+    /// has no answer, and a placement falls back to its local translation:
+    /// the lift, which can't be solved through a scale of 0, draws nothing
     /// until it can.
     fn offset(&self, parent: &CoreHandle) -> Result<Vec2D> {
         use crate::source::layout::layout_participant::LayoutParticipant;
@@ -213,17 +230,19 @@ impl Flying {
                     Vec2D::new(bounds.left(), bounds.top())
                 })
             }
-            Shape::Placement(_) => self
+            Shape::Placement(root) => self
                 .element
                 .with(|object| {
                     let local = object.as_transform_component()?.transform();
                     Some(Vec2D::new(local[4], local[5]))
                 })
                 .flatten()
-                .map(|local| {
-                    world_of(&self.element)
+                .zip(self.placement_linear().zip(frame_start(root)))
+                .map(|(local, (linear, start))| {
+                    let origin = world_of(&self.element)
                         .and_then(|world| offset_in(world_of(parent).unwrap_or_default(), world))
-                        .unwrap_or(local)
+                        .unwrap_or(local);
+                    origin + linear * start
                 }),
         };
         offset.ok_or_else(|| anyhow::anyhow!("a flying element has no layout place"))
@@ -302,7 +321,7 @@ impl Flying {
                     .flatten();
             }
             Shape::Hosted(_) => Mat2D::identity(),
-            Shape::Placement(root) => self.placement_linear()? * frame_origin(root)?,
+            Shape::Placement(_) => self.placement_linear()?,
         };
         Some((own, own * Mat2D::from_scale(stretch.x, stretch.y)))
     }
@@ -314,21 +333,21 @@ impl Flying {
             Shape::Css => drawn(&self.element, when),
             Shape::Hosted(_) => self.place(when),
             Shape::Placement(root) => {
-                let origin =
-                    frame_origin(root).ok_or_else(|| anyhow::anyhow!("a placed root retired"))?;
-                Ok(drawn(&self.element, when)? * origin)
+                let start =
+                    frame_start(root).ok_or_else(|| anyhow::anyhow!("a placed root retired"))?;
+                Ok(drawn(&self.element, when)? * Mat2D::from_translation(start))
             }
         }
     }
 
     /// C: from the box to the element's own drawing space, the space its
-    /// world draws in. Identity for a box; a placed root's frame origin; for
-    /// a text, an image or a video, its world taken back from its place.
-    /// None when its world can't be inverted.
+    /// world draws in. Identity for a box; for a placement, to where its
+    /// root's frame starts; for a text, an image or a video, its world taken
+    /// back from its place. None when its world can't be inverted.
     pub(super) fn content_from_box(&self) -> Option<Mat2D> {
         match &self.shape {
             Shape::Css => Some(Mat2D::identity()),
-            Shape::Placement(root) => frame_origin(root),
+            Shape::Placement(root) => frame_start(root).map(Mat2D::from_translation),
             Shape::Hosted(_) => {
                 let parent = self.parent().ok()?;
                 let place = Wide::of(world_of(&parent)?)
@@ -378,8 +397,9 @@ impl Flying {
     /// Where the box rests, for its cover: the level whose resting world it
     /// sits under, its matrix there, and its resting size. A text's, an
     /// image's or a video's sits in its parent at its participant's resting
-    /// box; a placement's is its own resting world, at its root's frame
-    /// origin. None for a box, which the cover reads as any box.
+    /// box; a placement's is its own resting world, from where its root's
+    /// frame starts at its resting size. None for a box, which the cover
+    /// reads as any box.
     pub(super) fn rest_anchor(&self) -> Option<(CoreHandle, Mat2D, Vec2D)> {
         match &self.shape {
             Shape::Css => None,
@@ -393,33 +413,36 @@ impl Flying {
             }
             Shape::Placement(root) => Some((
                 self.element.clone(),
-                resting_frame_origin(root)?,
+                Mat2D::from_translation(resting_frame_start(root)?),
                 self.resting_size(),
             )),
         }
     }
 }
 
-/// A placed root's frame origin: where its draw puts its content's origin,
-/// before its own transform.
-fn frame_origin(root: &CoreHandle) -> Option<Mat2D> {
-    frame_origin_at(root, |root| {
+/// Where a placed root's frame starts in its placement's space, before the
+/// root's own transform: the top left of its bounds (`Artboard::bounds`).
+/// A mounted root draws its content's origin at its placement's, so its
+/// frame starts its content origin before it; one that frames its origin
+/// starts at 0.
+fn frame_start(root: &CoreHandle) -> Option<Vec2D> {
+    frame_start_at(root, |root| {
         Vec2D::new(root.layout_width(), root.layout_height())
     })
 }
 
-/// A placed root's frame origin where it rests: at its resting size while
-/// its hold lays it out at another.
-fn resting_frame_origin(root: &CoreHandle) -> Option<Mat2D> {
-    frame_origin_at(root, |root| root.resting_layout().1)
+/// Where a placed root's frame starts where it rests: at its resting size
+/// while its hold lays it out at another.
+fn resting_frame_start(root: &CoreHandle) -> Option<Vec2D> {
+    frame_start_at(root, |root| root.resting_layout().1)
 }
 
-fn frame_origin_at(root: &CoreHandle, size: impl FnOnce(&Artboard) -> Vec2D) -> Option<Mat2D> {
+fn frame_start_at(root: &CoreHandle, size: impl FnOnce(&Artboard) -> Vec2D) -> Option<Vec2D> {
     root.with_downcast::<Artboard, _>(|root| {
         if root.frame_origin() {
-            Mat2D::from_translation(root.content_origin_at(size(root)))
+            Vec2D::default()
         } else {
-            Mat2D::identity()
+            -root.content_origin_at(size(root))
         }
     })
 }

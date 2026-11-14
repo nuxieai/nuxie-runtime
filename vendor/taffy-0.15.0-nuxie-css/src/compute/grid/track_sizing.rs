@@ -499,9 +499,28 @@ fn resolve_item_baselines(
                 continue;
             }
 
+            // nuxie-css: a ratio item stretched in neither axis is measured at its content
+            // width, so the height its ratio gives is the height its baseline comes from
+            // (`GridItem::ratio_follows_content_width`).
+            let known_dimensions = if item.ratio_follows_content_width() {
+                let available_width =
+                    inner_node_size.width.map(AvailableSpace::Definite).unwrap_or(AvailableSpace::MaxContent);
+                let width = tree.measure_child_size(
+                    item.node,
+                    Size::NONE,
+                    inner_node_size,
+                    Size { width: available_width, height: AvailableSpace::MinContent },
+                    SizingMode::InherentSize,
+                    crate::AbsoluteAxis::Horizontal,
+                    Line::FALSE,
+                );
+                Size { width: Some(width), height: None }
+            } else {
+                Size::NONE
+            };
             let measured_size_and_baselines = tree.perform_child_layout(
                 item.node,
-                Size::NONE,
+                known_dimensions,
                 inner_node_size,
                 Size::MIN_CONTENT,
                 SizingMode::InherentSize,

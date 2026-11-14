@@ -861,7 +861,8 @@ impl Resting {
                 Some((local, record))
             })
             .flatten()?;
-        if self.holds_keyed_layout(level) || self.pushed_by_keyed_layout(level, &record, &parent) {
+        if self.holds_keyed_layout(level) || self.pushed_by_keyed_layout(&[level], &record, &parent)
+        {
             return None;
         }
         Some(self.world(&parent)? * local)
@@ -895,17 +896,33 @@ impl Resting {
     }
 
     /// Whether a sibling in flow that holds keyed layout can move `level`,
-    /// because `level` follows the flow.
+    /// because `level` follows the flow. `level` names the level as its
+    /// parent's layout lists it: itself, and the node it holds its place
+    /// with when that is another (a participant, a placed root).
     fn pushed_by_keyed_layout(
         &mut self,
-        level: &CoreHandle,
+        level: &[&CoreHandle],
         own: &CoreHandle,
         parent: &CoreHandle,
     ) -> bool {
         record::with_values(own, |css| css.follows_the_flow()).unwrap_or(false)
             && layout_children_in_flow(parent)
                 .iter()
-                .any(|sibling| sibling != level && self.holds_keyed_layout(sibling))
+                .any(|sibling| !level.contains(&sibling) && self.holds_keyed_layout(sibling))
+    }
+
+    /// Whether keyed layout can move or size `element`, which holds its
+    /// place with `node`, as `compose` asks of every level it reads: its own
+    /// record is keyed, or a box in flow inside it holds keyed layout, or a
+    /// sibling in flow that does can push it. Then it has no resting place,
+    /// and covering is the safe side. So it is with no record or parent.
+    fn moved_by_keyed_layout(&mut self, element: &CoreHandle, node: &CoreHandle) -> bool {
+        let parent = element.with(|o| o.component_parent_handle()).flatten();
+        let (Some(record), Some(parent)) = (css_record(element), parent) else {
+            return true;
+        };
+        self.holds_keyed_layout(element)
+            || self.pushed_by_keyed_layout(&[element, node], &record, &parent)
     }
 }
 
@@ -948,10 +965,16 @@ pub(super) fn lift_cover(
 /// not a box rests in its own box, not its nearest box's (in_place.rs,
 /// `Flying`).
 fn anchor_box(rest: &mut Resting, anchor: &CoreHandle) -> Option<Aabb> {
-    match super::in_place::Flying::read(anchor).and_then(|f| f.rest_anchor()) {
-        Some((level, inside, size)) => rest
-            .world(&level)
-            .map(|world| transformed_box(world * inside, size)),
+    let flying = super::in_place::Flying::read(anchor);
+    match flying.as_ref().and_then(|f| Some((f, f.rest_anchor()?))) {
+        Some((flying, (level, inside, size))) => {
+            // Its own place is a resting place only as a level's is.
+            if rest.moved_by_keyed_layout(anchor, flying.layout_node()) {
+                return None;
+            }
+            rest.world(&level)
+                .map(|world| transformed_box(world * inside, size))
+        }
         None => rest.drawable_box(&RuntimeDrawableOccurrence::Authored(anchor.clone())),
     }
 }

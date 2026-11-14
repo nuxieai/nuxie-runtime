@@ -155,13 +155,18 @@ fn validate_proto(
                         ));
                     }
                     let typeinfo = cursor.peek(type_size, "typeinfo bytes")?;
-                    let expected = 2usize + usize::from(num_params);
+                    // A u8 plus two cannot overflow.
+                    let expected = usize::from(num_params).saturating_add(2);
                     if type_size != expected {
                         return Err(BytecodeValidationError::new(format!(
                             "v1 typeinfo size {type_size} does not match numparams {num_params}"
                         )));
                     }
-                    if typeinfo[0] != tag::TYPE_FUNCTION || typeinfo[1] != num_params {
+                    let header_matches = matches!(
+                        typeinfo,
+                        [kind, params, ..] if *kind == tag::TYPE_FUNCTION && *params == num_params
+                    );
+                    if !header_matches {
                         return Err(BytecodeValidationError::new(
                             "v1 typeinfo function header mismatch",
                         ));
@@ -210,20 +215,20 @@ fn validate_proto(
     let lineinfo = cursor.read_u8("lineinfo flag")?;
     if lineinfo != 0 {
         let line_gap_log2 = cursor.read_u8("linegaplog2")?;
-        let intervals = if size_code == 0 {
-            0
-        } else {
-            if usize::from(line_gap_log2) >= usize::BITS as usize {
-                return Err(BytecodeValidationError::new(format!(
-                    "linegaplog2 {line_gap_log2} is too large"
-                )));
-            }
-            ((size_code - 1) >> usize::from(line_gap_log2)) + 1
+        // One interval per `2^linegaplog2` instructions, rounded up; none
+        // for an empty proto. A shift of the word size or more is rejected.
+        let intervals = match size_code.checked_sub(1) {
+            None => 0,
+            Some(last_pc) => last_pc
+                .checked_shr(u32::from(line_gap_log2))
+                .ok_or_else(|| {
+                    BytecodeValidationError::new(format!(
+                        "linegaplog2 {line_gap_log2} is too large"
+                    ))
+                })?
+                .checked_add(1)
+                .ok_or_else(|| BytecodeValidationError::new("abslineinfo size overflow"))?,
         };
-        let abs_offset = size_code
-            .checked_add(3)
-            .ok_or_else(|| BytecodeValidationError::new("lineinfo size overflow"))?
-            & !3;
         cursor.skip(size_code, "lineinfo byte deltas")?;
         cursor.skip(
             intervals
@@ -231,7 +236,6 @@ fn validate_proto(
                 .ok_or_else(|| BytecodeValidationError::new("abslineinfo size overflow"))?,
             "absolute lineinfo",
         )?;
-        let _ = abs_offset;
     }
 
     let debuginfo = cursor.read_u8("debuginfo flag")?;
@@ -318,12 +322,9 @@ fn validate_constant(
                 let key = cursor.read_count("table-with-constants key", 0)?;
                 validate_constant_index(key, size_k, "table-with-constants key")?;
                 let constant_idx = cursor.read_i32("table-with-constants value")?;
-                if constant_idx >= 0 {
-                    validate_constant_index(
-                        constant_idx as usize,
-                        size_k,
-                        "table-with-constants value",
-                    )?;
+                // A negative value index means "no value"; any other is checked.
+                if let Ok(constant_idx) = usize::try_from(constant_idx) {
+                    validate_constant_index(constant_idx, size_k, "table-with-constants value")?;
                 }
             }
             Ok(ConstantKind::Table)
@@ -371,35 +372,52 @@ fn validate_instruction_stream(
     code: &[u32],
     constants: &[ConstantKind],
 ) -> Result<(), BytecodeValidationError> {
+    // `rest` starts at instruction `pc`; each step splits one whole
+    // instruction (its opcode word and any operand words) off the front.
+    let mut rest = code;
     let mut pc = 0usize;
-    while pc < code.len() {
-        let opcode_byte = (code[pc] & 0xff) as u8;
+    while let Some(&word) = rest.first() {
+        let opcode_byte = (word & 0xff) as u8;
         let Some(opcode) = Opcode::new(opcode_byte) else {
             return Err(BytecodeValidationError::new(format!(
                 "invalid opcode {opcode_byte} at instruction {pc}"
             )));
         };
         let op_len = opcode.length();
-        if pc + op_len > code.len() {
+        let Some((instruction, after)) = rest.split_at_checked(op_len) else {
             return Err(BytecodeValidationError::new(format!(
                 "instruction {pc} ({opcode:?}) extends past code stream"
             )));
-        }
+        };
 
         if matches!(
             opcode.number(),
             op::GETTABLEKS | op::SETTABLEKS | op::NAMECALL
         ) {
-            let key = code[pc + 1] as usize;
-            validate_constant_index(key, constants.len(), "userdata direct-access key")?;
-            if constants[key] != ConstantKind::String {
-                return Err(BytecodeValidationError::new(format!(
-                    "userdata direct-access key constant {key} is not a string"
-                )));
+            // These opcodes are two words long: the key is the aux word.
+            if let [_, aux, ..] = instruction {
+                validate_string_constant_key(*aux as usize, constants)?;
             }
         }
 
-        pc += op_len;
+        rest = after;
+        // `op_len` words were in `code`, so the sum is at most its length.
+        pc = pc.saturating_add(op_len);
+    }
+    Ok(())
+}
+
+/// A direct-access key names an existing constant, and that constant is a
+/// string.
+fn validate_string_constant_key(
+    key: usize,
+    constants: &[ConstantKind],
+) -> Result<(), BytecodeValidationError> {
+    validate_constant_index(key, constants.len(), "userdata direct-access key")?;
+    if constants.get(key) != Some(&ConstantKind::String) {
+        return Err(BytecodeValidationError::new(format!(
+            "userdata direct-access key constant {key} is not a string"
+        )));
     }
     Ok(())
 }
@@ -454,76 +472,98 @@ fn validate_prior_proto(
     Ok(())
 }
 
+/// The one reader of the bytecode: every read takes a whole field off the
+/// front of the bytes not yet read, or fails with the field's name.
 struct Cursor<'a> {
     data: &'a [u8],
-    offset: usize,
+    rest: &'a [u8],
 }
+
+/// Shift of each 7-bit group of a LEB128 varint, lowest group first.
+const VAR_U32_SHIFTS: [u32; 5] = [0, 7, 14, 21, 28];
+const VAR_U64_SHIFTS: [u32; 10] = [0, 7, 14, 21, 28, 35, 42, 49, 56, 63];
 
 impl<'a> Cursor<'a> {
     fn new(data: &'a [u8]) -> Self {
-        Self { data, offset: 0 }
+        Self { data, rest: data }
+    }
+
+    /// Bytes read so far.
+    fn offset(&self) -> usize {
+        // `rest` is a suffix of `data`.
+        self.data.len().saturating_sub(self.rest.len())
     }
 
     fn remaining(&self) -> usize {
-        self.data.len().saturating_sub(self.offset)
+        self.rest.len()
+    }
+
+    fn read_array<const N: usize>(&mut self, what: &str) -> Result<[u8; N], BytecodeValidationError> {
+        let Some((bytes, rest)) = self.rest.split_first_chunk::<N>() else {
+            return Err(self.eof(N, what));
+        };
+        self.rest = rest;
+        Ok(*bytes)
     }
 
     fn read_u8(&mut self, what: &str) -> Result<u8, BytecodeValidationError> {
-        let bytes = self.read_exact(1, what)?;
-        Ok(bytes[0])
+        let [byte] = self.read_array(what)?;
+        Ok(byte)
     }
 
     fn read_u32(&mut self, what: &str) -> Result<u32, BytecodeValidationError> {
-        let bytes = self.read_exact(4, what)?;
-        Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+        Ok(u32::from_le_bytes(self.read_array(what)?))
     }
 
     fn read_i32(&mut self, what: &str) -> Result<i32, BytecodeValidationError> {
-        let bytes = self.read_exact(4, what)?;
-        Ok(i32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+        Ok(i32::from_le_bytes(self.read_array(what)?))
     }
 
     fn read_var_u32(&mut self, what: &str) -> Result<u32, BytecodeValidationError> {
         let mut result = 0u32;
-        for byte_index in 0..5 {
+        for (byte_index, shift) in VAR_U32_SHIFTS.into_iter().enumerate() {
             let byte = self.read_u8(what)?;
             let payload = u32::from(byte & 0x7f);
             if byte_index == 4 && payload > 0x0f {
                 return Err(BytecodeValidationError::new(format!(
                     "{what} varint overflows u32 at offset {}",
-                    self.offset
+                    self.offset()
                 )));
             }
-            result |= payload << (byte_index * 7);
+            // Every shift is below 32, and the last group's payload is at
+            // most four bits, so no bit is shifted out.
+            result |= payload.checked_shl(shift).unwrap_or(0);
             if byte & 0x80 == 0 {
                 return Ok(result);
             }
         }
         Err(BytecodeValidationError::new(format!(
             "{what} varint exceeds 5 bytes at offset {}",
-            self.offset
+            self.offset()
         )))
     }
 
     fn read_var_u64(&mut self, what: &str) -> Result<u64, BytecodeValidationError> {
         let mut result = 0u64;
-        for byte_index in 0..10 {
+        for (byte_index, shift) in VAR_U64_SHIFTS.into_iter().enumerate() {
             let byte = self.read_u8(what)?;
             let payload = u64::from(byte & 0x7f);
             if byte_index == 9 && payload > 0x01 {
                 return Err(BytecodeValidationError::new(format!(
                     "{what} varint overflows u64 at offset {}",
-                    self.offset
+                    self.offset()
                 )));
             }
-            result |= payload << (byte_index * 7);
+            // Every shift is below 64, and the last group's payload is at
+            // most one bit.
+            result |= payload.checked_shl(shift).unwrap_or(0);
             if byte & 0x80 == 0 {
                 return Ok(result);
             }
         }
         Err(BytecodeValidationError::new(format!(
             "{what} varint exceeds 10 bytes at offset {}",
-            self.offset
+            self.offset()
         )))
     }
 
@@ -580,28 +620,24 @@ impl<'a> Cursor<'a> {
         Ok(())
     }
 
+    fn eof(&self, len: usize, what: &str) -> BytecodeValidationError {
+        BytecodeValidationError::new(format!(
+            "unexpected EOF reading {what}: need {len} bytes at offset {}, only {} remain",
+            self.offset(),
+            self.remaining()
+        ))
+    }
+
     fn peek(&self, len: usize, what: &str) -> Result<&'a [u8], BytecodeValidationError> {
-        let end = self.offset.checked_add(len).ok_or_else(|| {
-            BytecodeValidationError::new(format!("{what} length overflows offset"))
-        })?;
-        self.data.get(self.offset..end).ok_or_else(|| {
-            BytecodeValidationError::new(format!(
-                "unexpected EOF reading {what}: need {len} bytes at offset {}, only {} remain",
-                self.offset,
-                self.remaining()
-            ))
-        })
+        self.rest.get(..len).ok_or_else(|| self.eof(len, what))
     }
 
     fn skip(&mut self, len: usize, what: &str) -> Result<(), BytecodeValidationError> {
-        self.read_exact(len, what)?;
+        let Some((_, rest)) = self.rest.split_at_checked(len) else {
+            return Err(self.eof(len, what));
+        };
+        self.rest = rest;
         Ok(())
-    }
-
-    fn read_exact(&mut self, len: usize, what: &str) -> Result<&'a [u8], BytecodeValidationError> {
-        let bytes = self.peek(len, what)?;
-        self.offset += len;
-        Ok(bytes)
     }
 }
 

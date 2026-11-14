@@ -307,6 +307,9 @@ pub fn control_size_handle(
         );
         return true;
     }
+    if crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout::control_size_occurrence(owner, size) {
+        return true;
+    }
     owner
         .with_mut(|owner| {
             let Some(sizeable) = owner.as_intrinsically_sizeable_mut() else {

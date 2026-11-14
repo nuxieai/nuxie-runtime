@@ -675,6 +675,9 @@ fn texture_and_gpu_canvas_sizes_are_capped() {
         refused(function() GPUTexture.new {width = 4096, height = 4096, layers = 2, format = 'r8unorm'} end,
             'GPUTexture.new: 4096x4096x2 is more than 16777216 pixels')
         assert(GPUTexture.new {width = 4096, height = 4096, format = 'r8unorm'})
+        -- Codex review: a cube's six faces count, whatever `layers` says.
+        refused(function() GPUTexture.new {width = 2048, height = 2048, type = 'cube', format = 'r8unorm'} end,
+            'GPUTexture.new: 2048x2048x6 is more than 16777216 pixels')
         assert(GPUTexture.new {width = 8192, height = 2, format = 'r8unorm'})
         refused(function() canvas:resize(8193, 1) end,
             'GPUCanvas:resize(): width and height must be at most 8192 (got 8193x1)')

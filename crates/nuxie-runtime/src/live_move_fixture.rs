@@ -4715,6 +4715,9 @@ pub enum PaintCase {
     /// `Corners`' versions, unkeyed, with "go" flying a's copy in Scale mode
     /// and b's in Layout mode.
     MixedModes,
+    /// `Corners`' versions, unkeyed, each a content box with 10 points of
+    /// padding a side, flown in Layout mode.
+    Padded,
     /// A box E holding a text that wraps, between N1 and N2 in a flex row
     /// on each Screen: `a` points wide on A, 300 on B, so the text refills
     /// its box as E flies.
@@ -5220,6 +5223,9 @@ struct PaintUnit {
     /// A text of these words, 20 points on 24, in its flow, filling its
     /// width, so it wraps to the unit's width.
     text: Option<&'static str>,
+    /// Padding on every side, with its box a content box: its CSS size is
+    /// inside the padding, its border box that plus twice this.
+    padding: f32,
 }
 /// What a unit's own timeline keys, from 0 to this many points.
 #[derive(Clone, Copy)]
@@ -5260,9 +5266,28 @@ fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
         child: false,
         shadow: None,
         text: None,
+        padding: 0.0,
     }
 }
 impl PaintUnit {
+    fn padded(mut self, padding: f32) -> Self {
+        self.padding = padding;
+        self
+    }
+    /// A content box with `padding` on every side, as a record's properties.
+    fn padding_css(&self) -> Css {
+        if self.padding == 0.0 {
+            return Vec::new();
+        }
+        let p = V::F(self.padding);
+        vec![
+            ("boxSizing", V::U(0)),
+            ("paddingTop", p),
+            ("paddingRight", p),
+            ("paddingBottom", p),
+            ("paddingLeft", p),
+        ]
+    }
     fn shadowed(mut self, shadow: Shadow, inset: bool) -> Self {
         self.shadow = Some((shadow, inset));
         self
@@ -5426,6 +5451,7 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
     if row {
         record.extend(css_size(u.size.0, u.size.1));
     }
+    record.extend(u.padding_css());
     obj(b, "LayoutCssStyle", &record); // 1
     let mut style = vec![("parentId", U(0))];
     if u.corner != 0.0 {
@@ -5936,6 +5962,7 @@ impl PaintArt<'_> {
         }
         self.add("LayoutComponentStyle", &style);
         let mut css = el.css.clone();
+        css.extend(u.padding_css());
         if key != 0 {
             css.push(("flightKey", U(key)));
         }
@@ -7940,13 +7967,17 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
         }
         PaintCase::Corners { .. }
         | PaintCase::Shadows(_)
-        | PaintCase::MixedModes => {
+        | PaintCase::MixedModes
+        | PaintCase::Padded => {
             let shadows = match case {
                 PaintCase::Shadows(shadows) => Some(shadows),
                 _ => None,
             };
             let mut a = unit("a", 80.0, 60.0).corner(4.0);
             let mut b = unit("b", 160.0, 120.0).corner(8.0);
+            if case == PaintCase::Padded {
+                (a, b) = (a.padded(10.0), b.padded(10.0));
+            }
             if let Some(shadows) = shadows {
                 a = a.shadowed(UNIT_A_SHADOW, shadows == ShadowCase::Inset);
                 b = b.shadowed(

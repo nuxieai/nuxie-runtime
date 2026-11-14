@@ -29,13 +29,12 @@ use crate::mechanical_port::source::{
     layout_component::{Layout, LayoutComponent},
 };
 use taffy::prelude::{NodeId, Size, Style, TaffyTree};
-use taffy::style::BoxSizing;
 use taffy::tree::{LayoutInput, LayoutOutput};
 
 #[derive(Clone, Debug)]
 pub(crate) struct FlightHold {
-    /// The element's CSS width and height while held, under its own
-    /// box-sizing, as the slot path sizes a unit's root.
+    /// The element's border box while held: what a flight's ends measure,
+    /// whatever the element's box-sizing.
     size: (f32, f32),
     /// The element's resting slot, relative to its layout parent, as the
     /// last solve published it: its own published layout, were it at rest.
@@ -43,7 +42,7 @@ pub(crate) struct FlightHold {
 }
 
 impl FlightHold {
-    /// The flight size: CSS width and height under the element's box-sizing.
+    /// The flight size: the element's border box.
     pub(crate) fn size(&self) -> (f32, f32) {
         self.size
     }
@@ -66,9 +65,9 @@ pub(crate) fn flight_layout(slot: &taffy::Layout, flight: &LayoutOutput) -> taff
     }
 }
 
-/// The flight pass of one held element: lay its inside out at `size` (CSS
-/// width and height under its box-sizing), as its parent last asked. None
-/// before the element's first full layout.
+/// The flight pass of one held element: lay its inside out with its border
+/// box at `size`, as its parent last asked. None before the element's first
+/// full layout.
 pub(crate) fn fly<T, M>(
     taffy: &mut TaffyTree<T>,
     node: NodeId,
@@ -78,20 +77,8 @@ pub(crate) fn fly<T, M>(
 where
     M: FnMut(LayoutInput, NodeId, Option<&mut T>, &Style) -> LayoutOutput,
 {
-    let slot = resting_slot(taffy, node)?;
-    let border_box = match taffy.style(node).ok()?.box_sizing {
-        BoxSizing::BorderBox => Size { width, height },
-        // Padding and border resolve against the parent, which the flight
-        // pass asks as the parent pass did: the slot's are the flight's.
-        BoxSizing::ContentBox => {
-            let inset = slot.padding + slot.border;
-            Size {
-                width: width + inset.left + inset.right,
-                height: height + inset.top + inset.bottom,
-            }
-        }
-    };
-    taffy.relayout_at_size(node, border_box, measure)
+    resting_slot(taffy, node)?;
+    taffy.relayout_at_size(node, Size { width, height }, measure)
 }
 
 /// Whether `begin` would hold `element`: it is laid out by a parent, has
@@ -113,8 +100,7 @@ pub(crate) fn can_begin(element: &CoreHandle) -> bool {
 }
 
 /// Starts holding `element`'s place in its parent's layout; from the next
-/// solve its inside is laid out at `size`, its CSS width and height under
-/// its own box-sizing. False, and nothing held, for an element that is not
+/// solve its inside is laid out with its border box at `size`. False, and nothing held, for an element that is not
 /// laid out by a parent, has not been laid out, or is already held.
 pub(crate) fn begin(element: &CoreHandle, size: (f32, f32)) -> bool {
     let begun = element

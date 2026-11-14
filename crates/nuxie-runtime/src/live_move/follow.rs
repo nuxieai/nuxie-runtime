@@ -105,9 +105,10 @@ pub fn slot_pose(host: &CoreHandle) -> Result<Pose> {
     })
 }
 
-/// The follower sizes the flight slot's own box, through the one route its
-/// host kind already sizes a unit by:
-/// - a CSS host: width and height in its item record, like a binding;
+/// The follower sizes the flight slot's own box to `size`, its border box,
+/// through the one route its host kind already sizes a unit by:
+/// - a CSS host: the CSS width and height giving that border box, in its
+///   item record, like a binding;
 /// - a native layout host: `instanceWidth` and `instanceHeight` in points,
 ///   which upstream's `StyleOverrider` pushes into the unit;
 /// - a plain host: the unit artboard's own size, as `NestedArtboardLeaf`
@@ -129,7 +130,12 @@ fn set_flight_box(flight: &CoreHandle, instance: &RuntimeArtboardInstanceHandle,
             .flatten(),
     );
     if let Some(record) = record {
-        for (kind, value) in [(WIDTH_KIND, width), (HEIGHT_KIND, height)] {
+        // `size` is the unit's border box, what the ends measure; its record
+        // holds the CSS size, under the root's own box-sizing.
+        let css = instance.with_artboard(|unit| {
+            unit.base.base.css_size_for_border_box(Vec2D::new(width, height))
+        });
+        for (kind, value) in [(WIDTH_KIND, css.x), (HEIGHT_KIND, css.y)] {
             // A length-percentage: the length, with no percentage part.
             CoreRegistry::set_uint_handle(&record, i32::from(kind), 1);
             CoreRegistry::set_double_handle(&record, i32::from(kind + 1), value);

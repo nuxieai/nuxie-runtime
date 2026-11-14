@@ -22,18 +22,15 @@ use nuxie_runtime::mechanical_port::source::{
 };
 
 use super::ProtectedScriptCall;
-use super::host_memory_budget::{HostMemoryCharge, bytes_of};
+use super::host_memory_budget::{HostMemoryCharge, grown_capacity};
 use super::lua_artboards::ScriptedNode as LuaScriptedNode;
 use super::lua_mat2d::{ScriptedMat2D, number_arg};
 
-/// Host bytes a path of `verbs` verbs and `points` points is charged: its
-/// two `RawPath` vectors at up to twice their length (they grow by doubling;
-/// `RawPath` does not report its capacity) plus the render path the
-/// renderer builds from the same commands at draw.
-fn path_bytes(verbs: usize, points: usize) -> usize {
-    bytes_of::<PathVerb>(verbs)
-        .saturating_add(bytes_of::<Vec2D>(points))
-        .saturating_mul(3)
+/// Host bytes a path is charged: its two `RawPath` buffers at `capacity`
+/// (verbs, points) plus the render path the renderer builds from the same
+/// commands at draw, counted as one copy of its `len` commands.
+fn path_bytes(capacity: (usize, usize), len: (usize, usize)) -> usize {
+    RawPath::bytes_for(capacity.0, capacity.1).saturating_add(RawPath::bytes_for(len.0, len.1))
 }
 
 pub(super) struct ScriptedPath {
@@ -78,24 +75,27 @@ impl ScriptedPath {
         (self.raw_path.verbs().len(), self.raw_path.points().len())
     }
 
-    /// Charges the path for `verbs` more verbs and `points` more points,
-    /// before it grows by them.
+    /// Makes room for `verbs` more verbs and `points` more points: charges
+    /// the buffers at the capacity they grow to (doubling, so pushes stay
+    /// amortized) before reserving exactly that, so the commands that
+    /// follow append without reallocating. Running out of memory is an
+    /// error, not an abort.
     fn reserve(&mut self, lua: &Lua, verbs: usize, points: usize) -> Result<()> {
         let (current_verbs, current_points) = self.verb_and_point_counts();
+        let (verb_capacity, point_capacity) = self.raw_path.capacity();
+        let capacity = (
+            grown_capacity(verb_capacity, current_verbs, verbs),
+            grown_capacity(point_capacity, current_points, points),
+        );
+        let len = (
+            current_verbs.saturating_add(verbs),
+            current_points.saturating_add(points),
+        );
         self.charge.attach(lua)?;
-        self.charge.reserve_to(path_bytes(
-            current_verbs.saturating_add(verbs),
-            current_points.saturating_add(points),
-        ))
-    }
-
-    /// Whether `verbs` more verbs and `points` more points would fit.
-    fn fits(&self, verbs: usize, points: usize) -> bool {
-        let (current_verbs, current_points) = self.verb_and_point_counts();
-        self.charge.fits(path_bytes(
-            current_verbs.saturating_add(verbs),
-            current_points.saturating_add(points),
-        ))
+        self.charge.reserve_to(path_bytes(capacity, len))?;
+        self.raw_path
+            .try_reserve(capacity.0, capacity.1)
+            .map_err(|_| Error::runtime("not enough memory"))
     }
 
     fn charge_current(&mut self, lua: &Lua) -> Result<()> {
@@ -361,6 +361,7 @@ impl UserData for ScriptedPath {
             // so then the charge stays as a high-water mark.
             this.raw_path.reset();
             if this.render_path.is_none() {
+                // Both buffers were released: nothing is left to charge.
                 this.charge.set(0)?;
             }
             this.mark_dirty();
@@ -395,34 +396,73 @@ impl UserData for ScriptedPath {
             Ok(())
         });
         methods.add_method("contours", |lua, this, ()| {
-            let iter = Rc::new(RefCell::new(RefCntContourMeasureIter::new(
-                &this.raw_path,
-                ContourMeasureIter::DEFAULT_TOLERANCE,
-            )));
-            let first = iter.borrow_mut().get().next();
+            // The iterator copies the path: charged before it does.
+            let charge =
+                HostMemoryCharge::for_lua(lua, ContourMeasureIter::copy_bytes(&this.raw_path))?;
+            let iter = Rc::new(RefCell::new(ChargedContourIter {
+                iter: RefCntContourMeasureIter::new(
+                    &this.raw_path,
+                    ContourMeasureIter::DEFAULT_TOLERANCE,
+                ),
+                _charge: charge,
+            }));
+            let first = next_contour(lua, &iter)?;
             Ok(match first {
                 None => Value::Nil,
-                Some(measure) => Value::UserData(lua.create_userdata(ScriptedContourMeasure {
-                    measure,
-                    iter,
-                    source_verbs: this.raw_path.verbs().len(),
-                })?),
+                Some((measure, charge)) => {
+                    Value::UserData(lua.create_userdata(ScriptedContourMeasure {
+                        measure,
+                        iter,
+                        _charge: charge,
+                    })?)
+                }
             })
         });
         methods.add_method("measure", |lua, this, ()| {
+            // Each contour is charged before its tables are built.
+            let mut charge = HostMemoryCharge::default();
+            charge.attach(lua)?;
+            let measure = PathMeasure::from_path_admitted(
+                &this.raw_path,
+                ContourMeasureIter::DEFAULT_TOLERANCE,
+                |bytes| charge.reserve_to(bytes),
+            )?;
+            charge.set(measure.heap_bytes())?;
             lua.create_userdata(ScriptedPathMeasure {
-                measure: PathMeasure::from_path_default(&this.raw_path),
-                source_verbs: this.raw_path.verbs().len(),
+                measure,
+                _charge: charge,
             })
         });
     }
 }
 
+/// A contour iterator, which holds a copy of the measured path, and its
+/// charge; shared by every contour measure it returned.
+struct ChargedContourIter {
+    iter: RefCntContourMeasureIter,
+    _charge: HostMemoryCharge,
+}
+
+/// The iterator's next contour and the charge for its tables, made before
+/// they are built.
+fn next_contour(
+    lua: &Lua,
+    iter: &RefCell<ChargedContourIter>,
+) -> Result<Option<(Rc<ContourMeasure>, HostMemoryCharge)>> {
+    let mut charge = None;
+    let next = iter.borrow_mut().iter.get().next_admitted(|bytes| {
+        // A contour of no length is built and skipped; its charge is
+        // replaced by the next one's.
+        charge = Some(HostMemoryCharge::for_lua(lua, bytes)?);
+        Ok::<(), Error>(())
+    })?;
+    Ok(next.map(|measure| (measure, charge.unwrap_or_default())))
+}
+
 struct ScriptedContourMeasure {
     measure: Rc<ContourMeasure>,
-    iter: Rc<RefCell<RefCntContourMeasureIter>>,
-    /// Verbs of the path measured, which bound what `extract` appends.
-    source_verbs: usize,
+    iter: Rc<RefCell<ChargedContourIter>>,
+    _charge: HostMemoryCharge,
 }
 
 impl ScriptedContourMeasure {
@@ -436,12 +476,12 @@ impl UserData for ScriptedContourMeasure {
         fields.add_field_method_get("length", |_, this| Ok(this.measure().length()));
         fields.add_field_method_get("isClosed", |_, this| Ok(this.measure().is_closed()));
         fields.add_field_method_get("next", |lua, this| {
-            let next = this.iter.borrow_mut().get().next();
+            let next = next_contour(lua, &this.iter)?;
             Ok(match next {
-                Some(measure) => Value::UserData(lua.create_userdata(Self {
+                Some((measure, charge)) => Value::UserData(lua.create_userdata(Self {
                     measure,
                     iter: Rc::clone(&this.iter),
-                    source_verbs: this.source_verbs,
+                    _charge: charge,
                 })?),
                 None => Value::Nil,
             })
@@ -464,11 +504,8 @@ impl UserData for ScriptedContourMeasure {
             let start = number_arg(args.front(), "startDistance")?;
             let end = number_arg(args.get(1), "endDistance")?;
             let start_with_move = bool_arg_or(args.get(3), true)?;
-            // The contour clamps the interval to [0, length] this way.
-            let length = this.measure().length();
-            let empty = !is_less(cpp_max(0.0, start), cpp_min(length, end));
-            let verbs = if empty { 0 } else { this.source_verbs };
-            extract_measure_segment(lua, args.get(2), verbs, |destination| {
+            let room = this.measure().segment_room(start, end);
+            extract_measure_segment(lua, args.get(2), room, |destination| {
                 this.measure()
                     .get_segment(start, end, destination, start_with_move);
             })
@@ -478,8 +515,7 @@ impl UserData for ScriptedContourMeasure {
 
 struct ScriptedPathMeasure {
     measure: PathMeasure,
-    /// Verbs of the path measured, which bound what `extract` appends.
-    source_verbs: usize,
+    _charge: HostMemoryCharge,
 }
 
 impl UserData for ScriptedPathMeasure {
@@ -508,12 +544,8 @@ impl UserData for ScriptedPathMeasure {
             let start = number_arg(args.front(), "startDistance")?;
             let end = number_arg(args.get(1), "endDistance")?;
             let start_with_move = bool_arg_or(args.get(3), true)?;
-            // The measure clamps the interval to [0, length] this way.
-            let length = this.measure.length();
-            let clamp = |distance: f32| cpp_max(0.0, cpp_min(distance, length));
-            let empty = !is_less(clamp(start), clamp(end));
-            let verbs = if empty { 0 } else { this.source_verbs };
-            extract_measure_segment(lua, args.get(2), verbs, |destination| {
+            let room = this.measure.segment_room(start, end);
+            extract_measure_segment(lua, args.get(2), room, |destination| {
                 this.measure
                     .get_segment(start, end, Some(destination), start_with_move);
             })
@@ -521,20 +553,14 @@ impl UserData for ScriptedPathMeasure {
     }
 }
 
-/// Appends a measured segment to the destination path, charged before it
-/// grows.
-///
-/// What a segment appends is bounded by the path that was measured, of
-/// `source_verbs` verbs: each contour emits one piece per curve it covers
-/// plus a partial piece at each end, so at most `source_verbs + contours`
-/// pieces, and contours are at most `source_verbs + 1`. A piece is at most
-/// two verbs (a move, then a curve) and four points. The bound is checked
-/// before appending and the exact size charged after. An empty interval
-/// appends nothing and passes `source_verbs` 0, so it needs no room.
+/// Appends a measured segment to the destination path, charged and
+/// reserved before it grows. `room` is the most verbs and points the
+/// interval appends (`segment_room`), bounded by the segments the interval
+/// covers, not the whole measured path; an empty interval needs none.
 fn extract_measure_segment(
     lua: &Lua,
     destination: Option<&Value>,
-    source_verbs: usize,
+    room: (usize, usize),
     append: impl FnOnce(&mut RawPath),
 ) -> Result<()> {
     let Some(Value::UserData(destination)) = destination else {
@@ -543,16 +569,7 @@ fn extract_measure_segment(
         ));
     };
     let mut destination = destination.borrow_mut::<ScriptedPath>()?;
-    let pieces = if source_verbs == 0 {
-        0
-    } else {
-        source_verbs.saturating_mul(2).saturating_add(2)
-    };
-    destination.charge.attach(lua)?;
-    if !destination.fits(pieces.saturating_mul(2), pieces.saturating_mul(4)) {
-        let limit = super::host_memory_budget::HostMemoryBudget::for_lua(lua)?.limit();
-        return Err(super::host_memory_budget::budget_exceeded(limit));
-    }
+    destination.reserve(lua, room.0, room.1)?;
     append(&mut destination.raw_path);
     destination.charge_current(lua)?;
     destination.mark_dirty();
@@ -612,8 +629,8 @@ pub(super) fn install_path_global(lua: &Lua) -> Result<()> {
 #[cfg(test)]
 mod upstream_scripted_path_tests {
     use super::*;
-    use crate::vm::ScriptVm;
     use crate::luau::FromLuaMulti;
+    use crate::vm::ScriptVm;
 
     #[test]
     fn lua_topathdata_accepts_path_and_path_data_and_rejects_the_rest() {
@@ -1148,16 +1165,165 @@ mod upstream_scripted_path_tests {
     }
 }
 
-/// The measures' `std::min`/`std::max` order, so NaN clamps as they do.
-fn cpp_min(a: f32, b: f32) -> f32 {
-    if b < a { b } else { a }
-}
+/// What paths and their measures are charged against the VM's host memory
+/// budget.
+#[cfg(all(test, feature = "compiler"))]
+mod budget_tests {
+    use super::super::host_memory_budget::HostMemoryBudget;
+    use super::ScriptedPath;
+    use crate::luau::AnyUserData;
+    use crate::vm::{ScriptExecutionLimits, ScriptVm};
+    use nuxie_render_api::{PersistentFactory, RecordingFactory};
+    use nuxie_runtime::mechanical_port::source::math::raw_path::RawPath;
 
-fn cpp_max(a: f32, b: f32) -> f32 {
-    if a < b { b } else { a }
-}
+    struct Vm {
+        vm: ScriptVm,
+        _factory: PersistentFactory<RecordingFactory>,
+    }
 
-/// `a < b`, false for NaN.
-fn is_less(a: f32, b: f32) -> bool {
-    matches!(a.partial_cmp(&b), Some(std::cmp::Ordering::Less))
+    impl Vm {
+        fn with_budget(bytes: usize) -> Self {
+            let vm = ScriptVm::new_with_execution_limits(
+                ScriptExecutionLimits::new()
+                    .with_max_host_memory_bytes(bytes)
+                    .with_max_interrupts_per_callback(10_000_000),
+            )
+            .unwrap();
+            let mut factory = PersistentFactory::new(RecordingFactory::new());
+            vm.install_render_factory(&mut factory).unwrap();
+            vm.install_rive_globals().unwrap();
+            Self {
+                vm,
+                _factory: factory,
+            }
+        }
+
+        fn used(&self) -> usize {
+            HostMemoryBudget::for_lua(self.vm.lua()).unwrap().used()
+        }
+
+        fn path_bytes(&self, name: &str) -> usize {
+            let path: AnyUserData = self.vm.lua().globals().get(name).unwrap();
+            let path = path.borrow::<ScriptedPath>().unwrap();
+            let raw = &path.raw_path;
+            // The capacity exactly, and one render copy of the commands: of
+            // what they held, or at most the one extra verb and point a
+            // command reserves for a move it may not have needed.
+            let exact = raw
+                .heap_bytes()
+                .saturating_add(RawPath::bytes_for(raw.verbs().len(), raw.points().len()));
+            let charged = path.charge.bytes();
+            assert!(
+                (exact..=exact + RawPath::bytes_for(1, 1)).contains(&charged),
+                "charged {charged}, holds {exact}"
+            );
+            charged
+        }
+
+        fn refused(&self, script: &str) -> String {
+            let (failed, error): (bool, String) = self.vm.eval(script).unwrap();
+            assert!(failed, "expected a refusal, got success");
+            assert!(error.contains("host memory budget"), "{error}");
+            error
+        }
+    }
+
+    /// A source of 200 cubic curves: its measure has about 50 segments per
+    /// curve.
+    const WAVY: &str = "source = Path.new() \
+         source:moveTo(Vector.xy(0, 0)) \
+         for i = 1, 200 do \
+           source:cubicTo(Vector.xy(i * 10 - 7, 300), Vector.xy(i * 10 - 3, -300), Vector.xy(i * 10, 0)) \
+         end ";
+
+    #[test]
+    fn a_path_is_charged_its_capacity_and_one_render_copy() {
+        let vm = Vm::with_budget(64 * 1024 * 1024);
+        vm.vm
+            .eval::<()>("p = Path.new() for i = 1, 1000 do p:lineTo(Vector.xy(i, i)) end")
+            .unwrap();
+        let bytes = vm.path_bytes("p");
+        assert_eq!(vm.used(), bytes);
+        let estimate = (1001 + 1001 * 8) * 3;
+        println!("1,000 lineTo: charged {bytes} bytes (estimate was {estimate})");
+    }
+
+    #[test]
+    fn a_measure_is_charged_its_tables_and_refunds_when_collected() {
+        let vm = Vm::with_budget(64 * 1024 * 1024);
+        vm.vm.eval::<()>(WAVY).unwrap();
+        let source = vm.used();
+        vm.vm.eval::<()>("m = source:measure()").unwrap();
+        let measure = vm.used() - source;
+        println!("measure of 200 cubics: charged {measure} bytes (was 0)");
+        assert!(measure > 50_000, "{measure}");
+        vm.vm.eval::<()>("m = nil").unwrap();
+        vm.vm.lua().gc_collect().unwrap();
+        assert_eq!(vm.used(), source);
+    }
+
+    #[test]
+    fn contours_charge_the_iterator_copy_and_each_contour() {
+        let vm = Vm::with_budget(64 * 1024 * 1024);
+        vm.vm
+            .eval::<()>(&format!(
+                "{WAVY} source:moveTo(Vector.xy(0, 500)) source:lineTo(Vector.xy(10, 500))"
+            ))
+            .unwrap();
+        let source = vm.used();
+        vm.vm.eval::<()>("c = source:contours()").unwrap();
+        let first = vm.used() - source;
+        vm.vm.eval::<()>("d = c.next").unwrap();
+        let second = vm.used() - source - first;
+        println!("contours: iterator and first contour {first} bytes, second {second} (was 0)");
+        assert!(first > 50_000, "{first}");
+        assert!(second > 0 && second < 1_000, "{second}");
+        // Keeping the measures after resetting the source keeps their charge.
+        vm.vm.eval::<()>("source:reset()").unwrap();
+        vm.vm.lua().gc_collect().unwrap();
+        assert_eq!(vm.used(), first + second);
+        vm.vm.eval::<()>("c = nil d = nil").unwrap();
+        vm.vm.lua().gc_collect().unwrap();
+        assert_eq!(vm.used(), 0);
+    }
+
+    #[test]
+    fn a_measure_over_the_budget_is_refused_before_it_is_built() {
+        let vm = Vm::with_budget(40_000);
+        vm.vm.eval::<()>(WAVY).unwrap();
+        vm.refused(
+            "local ok, err = pcall(function() return source:measure() end) \
+             return not ok, tostring(err)",
+        );
+        vm.refused(
+            "local ok, err = pcall(function() return source:contours() end) \
+             return not ok, tostring(err)",
+        );
+        vm.vm.lua().gc_collect().unwrap();
+        assert_eq!(vm.used(), vm.path_bytes("source"));
+    }
+
+    // Lane E2b admitted an extract on a bound of the whole measured source,
+    // so a short extract from a large source could be refused.
+    #[test]
+    fn an_extract_is_bounded_by_its_interval_not_the_source() {
+        let vm = Vm::with_budget(2 * 1024 * 1024);
+        vm.vm
+            .eval::<()>(
+                "source = Path.new() source:moveTo(Vector.xy(0, 0)) \
+                 for i = 1, 20000 do source:lineTo(Vector.xy(i, i % 2)) end \
+                 m = source:measure() \
+                 dest = Path.new()",
+            )
+            .unwrap();
+        vm.vm.eval::<()>("m:extract(0, 3, dest)").unwrap();
+        assert_eq!(vm.vm.eval::<usize>("return #dest").unwrap(), 4);
+        // The whole source still does not fit.
+        vm.refused(
+            "local ok, err = pcall(function() \
+               for i = 1, 10 do m:extract(0, 1000000, dest) end \
+             end) \
+             return not ok, tostring(err)",
+        );
+    }
 }

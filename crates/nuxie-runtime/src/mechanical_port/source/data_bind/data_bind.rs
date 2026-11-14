@@ -33,7 +33,7 @@ use crate::mechanical_port::source::{
     status_code::StatusCode,
 };
 use std::{
-    cell::{Cell, RefCell, RefMut},
+    cell::{Cell, RefCell},
     rc::Rc,
 };
 
@@ -101,9 +101,15 @@ pub trait BindContextValue {
     );
 }
 
+/// A bind's context value. It is lent by moving it out of its cell for the
+/// length of one operation, so no borrow is open while that operation runs
+/// converters, writes the target or source, or notifies listeners (which may
+/// run scripts that reach this same bind). An operation that arrives while
+/// the value is out (a listener re-entering its own bind, which would have
+/// been a `RefCell` panic) finds nothing to apply and does nothing.
 #[derive(Clone)]
 struct RuntimeBindContextValue {
-    value: Rc<RefCell<Box<dyn BindContextValue>>>,
+    value: Rc<RefCell<Option<Box<dyn BindContextValue>>>>,
     valid: Rc<Cell<bool>>,
 }
 
@@ -111,43 +117,33 @@ impl RuntimeBindContextValue {
     fn new(value: Box<dyn BindContextValue>) -> Self {
         let valid = value.invalidation_handle();
         Self {
-            value: Rc::new(RefCell::new(value)),
+            value: Rc::new(RefCell::new(Some(value))),
             valid,
         }
     }
-    #[cfg_attr(feature = "test-support", track_caller)]
-    fn borrow_mut(&self) -> LentContextValue<'_> {
-        let lent = crate::script_borrow_check::Lent::new(
-            crate::script_borrow_check::Lending::Mutable,
-            std::panic::Location::caller(),
-        );
-        LentContextValue {
-            value: self.value.borrow_mut(),
-            _lent: lent,
+    /// Runs `use_value` on the value, out of its cell; `None` while it is
+    /// already out. It goes back when `use_value` returns or unwinds.
+    fn lend<R>(&self, use_value: impl FnOnce(&mut Box<dyn BindContextValue>) -> R) -> Option<R> {
+        struct Return<'a> {
+            cell: &'a RefCell<Option<Box<dyn BindContextValue>>>,
+            value: Option<Box<dyn BindContextValue>>,
         }
+        impl Drop for Return<'_> {
+            fn drop(&mut self) {
+                if let Ok(mut cell) = self.cell.try_borrow_mut() {
+                    *cell = self.value.take();
+                }
+            }
+        }
+        let value = self.value.try_borrow_mut().ok()?.take()?;
+        let mut lent = Return {
+            cell: &self.value,
+            value: Some(value),
+        };
+        lent.value.as_mut().map(use_value)
     }
     fn invalidate(&self) {
         self.valid.set(false);
-    }
-}
-
-/// A bind context's value, mutably lent; counted while it is out
-/// (`script_borrow_check`). Fields drop in order: the borrow, then its record.
-struct LentContextValue<'a> {
-    value: RefMut<'a, Box<dyn BindContextValue>>,
-    _lent: crate::script_borrow_check::Lent,
-}
-
-impl std::ops::Deref for LentContextValue<'_> {
-    type Target = Box<dyn BindContextValue>;
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-
-impl std::ops::DerefMut for LentContextValue<'_> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.value
     }
 }
 
@@ -496,10 +492,10 @@ impl DataBind {
         let Some((context, target, key, is_main)) = state else {
             return;
         };
-        context
-            .borrow_mut()
-            .apply(target, key, is_main, owner.clone());
-        context.borrow_mut().refresh_target_value(owner.clone());
+        context.lend(|context| {
+            context.apply(target, key, is_main, owner.clone());
+            context.refresh_target_value(owner.clone());
+        });
         owner.with_mut(|owner| {
             let bind = owner.as_data_bind_mut().unwrap();
             bind.set_flag(SUPPRESS_DIRT, false);
@@ -535,7 +531,7 @@ impl DataBind {
         };
         if invalidate {
             context.invalidate();
-            context.borrow_mut().request_source_write();
+            context.lend(|context| context.request_source_write());
         }
         #[cfg(feature = "tools")]
         let _write_source = super::super::viewmodel::write_attribution::WriteAttributionScope::new(
@@ -543,9 +539,7 @@ impl DataBind {
             owner.slot_address(),
             None,
         );
-        context
-            .borrow_mut()
-            .apply_to_source(target, key, is_main, owner.clone());
+        context.lend(|context| context.apply_to_source(target, key, is_main, owner.clone()));
     }
 
     pub fn advance_handle(owner: &CoreHandle, elapsed: f32) -> bool {
@@ -857,10 +851,11 @@ impl DataBind {
                 self.set_flag(SUPPRESS_DIRT, false);
                 return;
             };
-            let mut context = self.context_value.as_ref().unwrap().borrow_mut();
-            context.apply(target, self.base.property_key(), is_main, bind.clone());
-            context.refresh_target_value(bind);
-            drop(context);
+            let key = self.base.property_key();
+            self.context_value.as_ref().unwrap().lend(|context| {
+                context.apply(target, key, is_main, bind.clone());
+                context.refresh_target_value(bind);
+            });
             self.set_flag(SUPPRESS_DIRT, false);
             if self.live_move_blend.upgrade().is_none() {
                 self.set_flag(SOURCE_ADOPTION_PENDING, false);
@@ -888,13 +883,13 @@ impl DataBind {
                 return;
             };
             let is_main = self.is_main_to_source();
+            let key = self.base.property_key();
             if let (Some(target), Some(context)) =
-                (self.target.clone(), self.context_value.as_mut())
+                (self.target.clone(), self.context_value.as_ref())
             {
-                let mut context = context.borrow_mut();
                 if invalidate {
                     context.invalidate();
-                    context.request_source_write();
+                    context.lend(|context| context.request_source_write());
                 }
                 #[cfg(feature = "tools")]
                 let _write_source =
@@ -903,7 +898,7 @@ impl DataBind {
                         bind.slot_address(),
                         None,
                     );
-                context.apply_to_source(target, self.base.property_key(), is_main, bind);
+                context.lend(|context| context.apply_to_source(target, key, is_main, bind));
             }
         }
     }
@@ -2037,5 +2032,91 @@ mod observer_tests {
         assert!(ViewModelInstanceNumber::set_value_handle(&source, 4.0));
         // Inner write, then the outer write's live post-dependency callback.
         assert_eq!(events(), [1, 7, 7]);
+    }
+}
+
+#[cfg(test)]
+mod context_loan_tests {
+    use super::*;
+
+    /// A context whose apply runs `during_apply`: the place a converter or a
+    /// source listener (a script) runs inside a bind's apply.
+    struct Reentrant {
+        valid: Rc<Cell<bool>>,
+        applies: Rc<Cell<u32>>,
+        during_apply: Option<Box<dyn FnOnce()>>,
+    }
+
+    impl BindContextValue for Reentrant {
+        fn invalidation_handle(&self) -> Rc<Cell<bool>> {
+            Rc::clone(&self.valid)
+        }
+        fn apply(&mut self, _: Option<CoreHandle>, _: u32, _: bool, _: CoreHandle) {
+            self.applies.set(self.applies.get() + 1);
+            if let Some(during_apply) = self.during_apply.take() {
+                during_apply();
+            }
+        }
+        fn refresh_target_value(&mut self, _: CoreHandle) {}
+        fn invalidate(&mut self) {}
+        fn request_source_write(&mut self) {}
+        fn apply_to_source(&mut self, _: CoreHandle, _: u32, _: bool, _: CoreHandle) {}
+    }
+
+    #[test]
+    fn a_listener_reentering_its_own_bind_during_apply_does_not_panic() {
+        let arena = CoreArena::default();
+        let bind = arena.insert(crate::source::node::Node::default());
+        let applies = Rc::new(Cell::new(0));
+        let slot: Rc<RefCell<Option<RuntimeBindContextValue>>> = Rc::default();
+        let reentry = Rc::clone(&slot);
+        let reentry_bind = bind.clone();
+        let context = RuntimeBindContextValue::new(Box::new(Reentrant {
+            valid: Rc::default(),
+            applies: Rc::clone(&applies),
+            during_apply: Some(Box::new(move || {
+                // What a listener that writes its own bind's source again does
+                // (`update_handle` on the same bind): with the value borrowed
+                // for the outer apply, this was `already mutably borrowed`.
+                let context = reentry.borrow().clone().expect("installed");
+                assert!(
+                    context
+                        .lend(|context| context.apply(None, 0, true, reentry_bind.clone()))
+                        .is_none(),
+                    "a re-entered context has nothing to apply"
+                );
+            })),
+        }));
+        *slot.borrow_mut() = Some(context.clone());
+        assert_eq!(
+            context.lend(|context| context.apply(None, 0, true, bind.clone())),
+            Some(())
+        );
+        assert_eq!(applies.get(), 1, "only the outer apply ran");
+        assert_eq!(
+            context.lend(|context| context.apply(None, 0, true, bind.clone())),
+            Some(()),
+            "the value is back in its cell after the apply"
+        );
+        assert_eq!(applies.get(), 2);
+    }
+
+    #[test]
+    fn a_context_value_returns_to_its_cell_when_its_apply_unwinds() {
+        let arena = CoreArena::default();
+        let bind = arena.insert(crate::source::node::Node::default());
+        let context = RuntimeBindContextValue::new(Box::new(Reentrant {
+            valid: Rc::default(),
+            applies: Rc::default(),
+            during_apply: Some(Box::new(|| panic!("converter failed"))),
+        }));
+        let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            context.lend(|context| context.apply(None, 0, true, bind.clone()))
+        }));
+        assert!(unwound.is_err());
+        assert_eq!(
+            context.lend(|context| context.apply(None, 0, true, bind.clone())),
+            Some(())
+        );
     }
 }

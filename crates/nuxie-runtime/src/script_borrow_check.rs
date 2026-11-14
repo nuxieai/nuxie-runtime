@@ -1,9 +1,10 @@
 //! No script runs while a Core receiver on its thread is mutably lent.
 //!
 //! A script can reach any object in its scene. If one of them is lent out by
-//! `CoreHandle::with_mut` (or a runtime artboard's or a data bind context's
-//! `borrow_mut`) when a script call starts, the script's first touch of it is
-//! a `RefCell` panic. Each such borrow holds a [`Lent`] while its receiver is
+//! `CoreHandle::with_mut` (or a runtime artboard's `borrow_mut`) when a
+//! script call starts, the script's first touch of it is a `RefCell` panic.
+//! (A data bind's context value is lent by moving it out of its cell, so it
+//! holds no borrow to count.) Each such borrow holds a [`Lent`] while its receiver is
 //! out, and the scripting facade calls [`script_entered`] before it runs Lua.
 //!
 //! In builds with `test-support` (test harnesses only), an entry while any

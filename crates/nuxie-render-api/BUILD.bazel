@@ -28,7 +28,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default", "tools"],
-    deps = ["//crates/nuxie-audio:nuxie-audio", "//crates/nuxie-binary:nuxie-binary", "//crates/nuxie-ore-metal:nuxie-ore-metal"] + crate_deps(["bytemuck", "harfrust"], package_name = "bazel/cargo/nuxie-render-api"),
+    deps = ["//crates/nuxie-audio:nuxie-audio", "//crates/nuxie-binary:nuxie-binary", "//crates/nuxie-ore-metal:nuxie-ore-metal"] + crate_deps(["bytemuck", "harfrust", "sha2"], package_name = "bazel/cargo/nuxie-render-api"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/nuxie-render-api"),
     rustc_env = dict({"CARGO_PKG_NAME": "nuxie-render-api"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -42,7 +42,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default", "tools"],
-    deps = ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test"] + crate_deps(["bytemuck", "harfrust"], package_name = "bazel/cargo/nuxie-render-api"),
+    deps = ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test"] + crate_deps(["bytemuck", "harfrust", "sha2"], package_name = "bazel/cargo/nuxie-render-api"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/nuxie-render-api"),
     rustc_env = dict({"CARGO_PKG_NAME": "nuxie-render-api"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -66,7 +66,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default", "tools"],
-    deps = [":nuxie-render-api__test"] + ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test"] + crate_deps(["bytemuck", "harfrust"], package_name = "bazel/cargo/nuxie-render-api"),
+    deps = [":nuxie-render-api__test"] + ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test"] + crate_deps(["bytemuck", "harfrust", "sha2"], package_name = "bazel/cargo/nuxie-render-api"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/nuxie-render-api"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "nuxie-render-api"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + []),
 )
@@ -81,7 +81,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default", "tools"],
-    deps = [":nuxie-render-api__test"] + ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test"] + crate_deps(["bytemuck", "harfrust"], package_name = "bazel/cargo/nuxie-render-api"),
+    deps = [":nuxie-render-api__test"] + ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test"] + crate_deps(["bytemuck", "harfrust", "sha2"], package_name = "bazel/cargo/nuxie-render-api"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/nuxie-render-api"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "nuxie-render-api"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + []),
 )
@@ -96,7 +96,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default", "tools"],
-    deps = [":nuxie-render-api__test"] + ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test"] + crate_deps(["bytemuck", "harfrust"], package_name = "bazel/cargo/nuxie-render-api"),
+    deps = [":nuxie-render-api__test"] + ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test"] + crate_deps(["bytemuck", "harfrust", "sha2"], package_name = "bazel/cargo/nuxie-render-api"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/nuxie-render-api"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "nuxie-render-api"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + []),
 )
@@ -111,7 +111,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default", "tools"],
-    deps = [":nuxie-render-api__test"] + ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test"] + crate_deps(["bytemuck", "harfrust"], package_name = "bazel/cargo/nuxie-render-api"),
+    deps = [":nuxie-render-api__test"] + ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test"] + crate_deps(["bytemuck", "harfrust", "sha2"], package_name = "bazel/cargo/nuxie-render-api"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/nuxie-render-api"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "nuxie-render-api"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + []),
 )
@@ -126,7 +126,7 @@ rust_test(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default", "tools"],
-    deps = [":nuxie-render-api__test"] + ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test"] + crate_deps(["bytemuck", "harfrust"], package_name = "bazel/cargo/nuxie-render-api"),
+    deps = [":nuxie-render-api__test"] + ["//crates/nuxie-audio:nuxie-audio__test", "//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test"] + crate_deps(["bytemuck", "harfrust", "sha2"], package_name = "bazel/cargo/nuxie-render-api"),
     proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/nuxie-render-api"),
     rustc_env = dict(dict({"CARGO_PKG_NAME": "nuxie-render-api"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + []),
 )
@@ -140,7 +140,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-audio:nuxie-audio__host", "//crates/nuxie-binary:nuxie-binary__host", "//crates/nuxie-ore-metal:nuxie-ore-metal__host"] + crate_deps(["bytemuck", "harfrust"], package_name = "bazel/cargo/nuxie-render-api"),
+    deps = ["//crates/nuxie-audio:nuxie-audio__host", "//crates/nuxie-binary:nuxie-binary__host", "//crates/nuxie-ore-metal:nuxie-ore-metal__host"] + crate_deps(["bytemuck", "harfrust", "sha2"], package_name = "bazel/cargo/nuxie-render-api"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/nuxie-render-api"),
     rustc_env = dict({"CARGO_PKG_NAME": "nuxie-render-api"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -154,7 +154,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-audio:nuxie-audio__editor", "//crates/nuxie-binary:nuxie-binary__editor", "//crates/nuxie-ore-metal:nuxie-ore-metal__editor"] + crate_deps(["bytemuck", "harfrust"], package_name = "bazel/cargo/nuxie-render-api"),
+    deps = ["//crates/nuxie-audio:nuxie-audio__editor", "//crates/nuxie-binary:nuxie-binary__editor", "//crates/nuxie-ore-metal:nuxie-ore-metal__editor"] + crate_deps(["bytemuck", "harfrust", "sha2"], package_name = "bazel/cargo/nuxie-render-api"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/nuxie-render-api"),
     rustc_env = dict({"CARGO_PKG_NAME": "nuxie-render-api"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -168,7 +168,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-audio:nuxie-audio__publisher", "//crates/nuxie-binary:nuxie-binary__publisher", "//crates/nuxie-ore-metal:nuxie-ore-metal__publisher"] + crate_deps(["bytemuck", "harfrust"], package_name = "bazel/cargo/nuxie-render-api"),
+    deps = ["//crates/nuxie-audio:nuxie-audio__publisher", "//crates/nuxie-binary:nuxie-binary__publisher", "//crates/nuxie-ore-metal:nuxie-ore-metal__publisher"] + crate_deps(["bytemuck", "harfrust", "sha2"], package_name = "bazel/cargo/nuxie-render-api"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/nuxie-render-api"),
     rustc_env = dict({"CARGO_PKG_NAME": "nuxie-render-api"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -182,7 +182,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-audio:nuxie-audio__webgpu", "//crates/nuxie-binary:nuxie-binary__webgpu", "//crates/nuxie-ore-metal:nuxie-ore-metal__webgpu"] + crate_deps(["bytemuck", "harfrust"], package_name = "bazel/cargo/nuxie-render-api"),
+    deps = ["//crates/nuxie-audio:nuxie-audio__webgpu", "//crates/nuxie-binary:nuxie-binary__webgpu", "//crates/nuxie-ore-metal:nuxie-ore-metal__webgpu"] + crate_deps(["bytemuck", "harfrust", "sha2"], package_name = "bazel/cargo/nuxie-render-api"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/nuxie-render-api"),
     rustc_env = dict({"CARGO_PKG_NAME": "nuxie-render-api"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -196,7 +196,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-audio:nuxie-audio__webgl2", "//crates/nuxie-binary:nuxie-binary__webgl2", "//crates/nuxie-ore-metal:nuxie-ore-metal__webgl2"] + crate_deps(["bytemuck", "harfrust"], package_name = "bazel/cargo/nuxie-render-api"),
+    deps = ["//crates/nuxie-audio:nuxie-audio__webgl2", "//crates/nuxie-binary:nuxie-binary__webgl2", "//crates/nuxie-ore-metal:nuxie-ore-metal__webgl2"] + crate_deps(["bytemuck", "harfrust", "sha2"], package_name = "bazel/cargo/nuxie-render-api"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/nuxie-render-api"),
     rustc_env = dict({"CARGO_PKG_NAME": "nuxie-render-api"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -210,7 +210,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-audio:nuxie-audio__apple", "//crates/nuxie-binary:nuxie-binary__apple", "//crates/nuxie-ore-metal:nuxie-ore-metal__apple"] + crate_deps(["bytemuck", "harfrust"], package_name = "bazel/cargo/nuxie-render-api"),
+    deps = ["//crates/nuxie-audio:nuxie-audio__apple", "//crates/nuxie-binary:nuxie-binary__apple", "//crates/nuxie-ore-metal:nuxie-ore-metal__apple"] + crate_deps(["bytemuck", "harfrust", "sha2"], package_name = "bazel/cargo/nuxie-render-api"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/nuxie-render-api"),
     rustc_env = dict({"CARGO_PKG_NAME": "nuxie-render-api"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -224,7 +224,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-audio:nuxie-audio__android", "//crates/nuxie-binary:nuxie-binary__android", "//crates/nuxie-ore-metal:nuxie-ore-metal__android"] + crate_deps(["bytemuck", "harfrust"], package_name = "bazel/cargo/nuxie-render-api"),
+    deps = ["//crates/nuxie-audio:nuxie-audio__android", "//crates/nuxie-binary:nuxie-binary__android", "//crates/nuxie-ore-metal:nuxie-ore-metal__android"] + crate_deps(["bytemuck", "harfrust", "sha2"], package_name = "bazel/cargo/nuxie-render-api"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/nuxie-render-api"),
     rustc_env = dict({"CARGO_PKG_NAME": "nuxie-render-api"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )

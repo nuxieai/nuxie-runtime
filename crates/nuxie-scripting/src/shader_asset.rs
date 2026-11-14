@@ -9,74 +9,35 @@
 #[cfg(any(feature = "android-authored-wgsl", test))]
 use nuxie_render_api::GpuCanvasVulkanSpirVShader;
 #[cfg(any(feature = "apple-authored-msl", test))]
-use nuxie_render_api::{
-    GpuCanvasAppleMetalShader, GpuCanvasShaderBindingReflection, GpuCanvasShaderBuiltin,
-    GpuCanvasShaderEntryReflection, GpuCanvasShaderInterfaceBinding, GpuCanvasShaderInterfaceType,
-    GpuCanvasShaderInterfaceVariable, GpuCanvasShaderInterpolation, GpuCanvasShaderSampling,
+use nuxie_render_api::GpuCanvasAppleMetalShader;
+use nuxie_render_api::shader_asset::{
+    MAX_RSTB_BYTES, WEBGL2_BINDING_MAP_TARGET, WEBGL2_FRAGMENT_FIXUP_TARGET,
+    WEBGL2_SOURCE_TARGET, WEBGL2_VERTEX_FIXUP_TARGET, WGSL_BINDING_MAP_TARGET,
+    WGSL_SOURCE_TARGET, decode_binding_map, decode_per_entry_glsl, decode_whole_module_wgsl,
+    validate_gl_fixup,
+};
+#[cfg(test)]
+use nuxie_render_api::shader_asset::{
+    APPLE_METAL_BINDING_MAP_TARGET, APPLE_METAL_SOURCE_TARGET, SUPPLEMENTAL_REFLECTION_SECTION,
+    SUPPLEMENTAL_REFLECTION_VERSION, TEXTURE_SAMPLER_PAIR_SECTION,
+    VULKAN_SPIRV_BINDING_MAP_TARGET, VULKAN_SPIRV_SOURCE_TARGET,
 };
 use nuxie_render_api::{
-    GpuCanvasShader, GpuCanvasShaderArtifact, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
-    GpuCanvasShaderProfile, GpuCanvasShaderProvenance, GpuCanvasShaderResourceKind,
-    GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureSamplerPair,
-    GpuCanvasShaderTextureViewDimension, GpuCanvasWebGl2Shader,
+    GpuCanvasShader, GpuCanvasShaderArtifact, GpuCanvasShaderProfile, GpuCanvasShaderProvenance,
+    GpuCanvasShaderTextureSamplerPair, GpuCanvasWebGl2Shader, ShaderAssetError,
 };
-#[cfg(any(
-    feature = "apple-authored-msl",
-    feature = "android-authored-wgsl",
-    test
-))]
-use sha2::{Digest, Sha256};
 
-use crate::envelope::SignedContent;
 use crate::vm::{Error, Result};
 
-const RSTB_MAGIC: u32 = 0x5253_5442;
-const RSTB_VERSION: u16 = 4;
-const WGSL_SOURCE_TARGET: u8 = 0;
-const WGSL_BINDING_MAP_TARGET: u8 = 16;
-const WEBGL2_SOURCE_TARGET: u8 = 1;
-const WEBGL2_BINDING_MAP_TARGET: u8 = 11;
-const WEBGL2_VERTEX_FIXUP_TARGET: u8 = 14;
-const WEBGL2_FRAGMENT_FIXUP_TARGET: u8 = 15;
-#[cfg(any(feature = "android-authored-wgsl", test))]
-const VULKAN_SPIRV_SOURCE_TARGET: u8 = 5;
-#[cfg(any(feature = "android-authored-wgsl", test))]
-const VULKAN_SPIRV_BINDING_MAP_TARGET: u8 = 13;
-const TEXTURE_SAMPLER_PAIR_SECTION: u8 = 1;
-#[cfg(any(feature = "apple-authored-msl", test))]
-const APPLE_METAL_SOURCE_TARGET: u8 = 2;
-#[cfg(any(feature = "apple-authored-msl", test))]
-const APPLE_METAL_BINDING_MAP_TARGET: u8 = 10;
-#[cfg(any(feature = "apple-authored-msl", test))]
-const SUPPLEMENTAL_REFLECTION_SECTION: u8 = 128;
-#[cfg(any(feature = "apple-authored-msl", test))]
-const SUPPLEMENTAL_REFLECTION_VERSION: u8 = 1;
-const MAX_RSTB_BYTES: usize = 4 * 1024 * 1024;
-const MAX_SHADER_MODULE_BYTES: usize = 1024 * 1024;
-const BINDING_MAP_BLOB_VERSION: u8 = 3;
-const BINDING_MAP_ALLOCATOR_VERSION: u8 = 2;
-const BINDING_MAP_ENTRY_WIRE_SIZE: usize = 18;
-const BINDING_MAP_LEGACY_ENTRY_WIRE_SIZE: usize = 14;
-const BINDING_MAP_ABSENT: u16 = u16::MAX;
+/// The render API's decode errors keep their text as Lua errors.
+fn shader_error(error: ShaderAssetError) -> Error {
+    Error::runtime(error.to_string())
+}
 
 /// Backend target selection over the actual translated ShaderAsset owner.
 pub(crate) struct ShaderAsset {
     asset: nuxie_runtime::mechanical_port::source::core::CoreHandle,
     _standalone_arena: Option<nuxie_runtime::mechanical_port::source::core::CoreArena>,
-    #[cfg(any(feature = "apple-authored-msl", test))]
-    supplemental_reflection: Option<Vec<u8>>,
-    #[cfg(any(
-        feature = "apple-authored-msl",
-        feature = "android-authored-wgsl",
-        test
-    ))]
-    artifact_size: u64,
-    #[cfg(any(
-        feature = "apple-authored-msl",
-        feature = "android-authored-wgsl",
-        test
-    ))]
-    artifact_sha256: [u8; 32],
 }
 impl std::fmt::Debug for ShaderAsset {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -124,9 +85,6 @@ impl ShaderAsset {
         {
             return Err(Error::runtime("ShaderAsset is unavailable"));
         }
-        let payload = asset
-            .with_downcast::<NativeShaderAsset, _>(|asset| asset.encoded_payload().to_vec())
-            .ok_or_else(|| Error::runtime("missing native ShaderAsset"))?;
         if asset
             .with_downcast::<NativeShaderAsset, _>(|asset| asset.rstb().len())
             .unwrap_or(0)
@@ -134,52 +92,19 @@ impl ShaderAsset {
         {
             return Err(Error::runtime("ShaderAsset exceeds the host byte limit"));
         }
+        // Supplemental reflection is a host-only authenticated MSL extension;
+        // a second one is malformed for every profile of an MSL-capable host.
         #[cfg(any(feature = "apple-authored-msl", test))]
-        let supplemental_reflection = {
-            // Supplemental reflection is a host-only authenticated MSL extension.
-            // Do not rebuild the native owner's target index or pair table.
-            let content = SignedContent::parse(&payload)
-                .map_err(|e| Error::runtime(e.to_string()))?
-                .content;
-            let mut cursor = Cursor::new(content);
-            cursor.read_bytes(6, "header")?;
-            let variants = cursor.read_u8("variant count")?;
-            let sections = cursor.read_u8("section count")?;
-            for _ in 0..variants {
-                cursor.read_array::<9>("variant descriptors")?;
-            }
-            let mut reflection = None;
-            for _ in 0..sections {
-                let tag = cursor.read_u8("section tag")?;
-                let length = usize::from(cursor.read_u16("section length")?);
-                let data = cursor.read_bytes(length, "section payload")?;
-                if tag == SUPPLEMENTAL_REFLECTION_SECTION {
-                    if reflection.is_some() {
-                        return Err(Error::runtime("duplicate supplemental reflection sections"));
-                    }
-                    reflection = Some(data.to_vec());
-                }
-            }
-            reflection
-        };
+        asset
+            .with_downcast::<NativeShaderAsset, _>(|asset| {
+                nuxie_render_api::shader_asset::RstbIndex::parse(asset.encoded_payload())
+                    .map(drop)
+            })
+            .ok_or_else(|| Error::runtime("missing native ShaderAsset"))?
+            .map_err(shader_error)?;
         Ok(Self {
             asset,
             _standalone_arena: None,
-            #[cfg(any(feature = "apple-authored-msl", test))]
-            supplemental_reflection,
-            #[cfg(any(
-                feature = "apple-authored-msl",
-                feature = "android-authored-wgsl",
-                test
-            ))]
-            artifact_size: u64::try_from(payload.len())
-                .map_err(|_| Error::runtime("ShaderAsset length does not fit in u64"))?,
-            #[cfg(any(
-                feature = "apple-authored-msl",
-                feature = "android-authored-wgsl",
-                test
-            ))]
-            artifact_sha256: Sha256::digest(payload).into(),
         })
     }
     pub(crate) fn decode_webgpu(&self, name: &str) -> Result<GpuCanvasShader> {
@@ -203,6 +128,7 @@ impl ShaderAsset {
             self.texture_sampler_pairs(),
             self.entry_bindings()?,
         )
+        .map_err(shader_error)
     }
 
     pub(crate) fn decode_webgl2(&self, name: &str) -> Result<GpuCanvasWebGl2Shader> {
@@ -226,13 +152,13 @@ impl ShaderAsset {
                 "ShaderAsset '{name}' has no mandatory WebGL2 target-15 fragment fixup"
             ))
         })?;
-        let (entries, sources) = decode_per_entry_glsl(name, &source)?;
-        validate_gl_fixup(name, "vertex", &vertex_fixup)?;
-        validate_gl_fixup(name, "fragment", &fragment_fixup)?;
+        let (entries, sources) = decode_per_entry_glsl(name, &source).map_err(shader_error)?;
+        validate_gl_fixup(name, "vertex", &vertex_fixup).map_err(shader_error)?;
+        validate_gl_fixup(name, "fragment", &fragment_fixup).map_err(shader_error)?;
         Ok(GpuCanvasWebGl2Shader {
             entries,
             sources,
-            bindings: decode_binding_map(name, &binding_map)?,
+            bindings: decode_binding_map(name, &binding_map).map_err(shader_error)?,
             binding_map_bytes: std::sync::Arc::from(binding_map),
             entry_binding_bytes: self.entry_bindings()?,
             vertex_gl_fixup_bytes: std::sync::Arc::from(vertex_fixup),
@@ -304,7 +230,13 @@ impl ShaderAsset {
                 "ShaderAsset '{name}' has no verified provenance for Android WGSL"
             ))
         })?;
-        if !provenance.authorizes_digest(self.artifact_size, &self.artifact_sha256) {
+        let authorized = self
+            .asset
+            .with_downcast::<NativeShaderAsset, _>(|asset| {
+                provenance.authorizes_artifact(asset.encoded_payload())
+            })
+            .ok_or_else(|| Error::runtime("missing native ShaderAsset"))?;
+        if !authorized {
             return Err(Error::runtime(format!(
                 "ShaderAsset '{name}' Android WGSL provenance does not authorize this artifact"
             )));
@@ -312,8 +244,9 @@ impl ShaderAsset {
         self.decode_webgpu(name)
     }
 
+    /// The render API decodes native code itself, from the exact envelope
+    /// bytes the provenance authorizes; nothing decoded here reaches it.
     #[cfg(any(feature = "android-authored-wgsl", test))]
-    #[allow(unsafe_code)]
     fn decode_vulkan_spirv(
         &self,
         name: &str,
@@ -324,56 +257,20 @@ impl ShaderAsset {
                 "ShaderAsset '{name}' has no verified provenance for Vulkan SPIR-V"
             ))
         })?;
-        if !provenance.authorizes_digest(self.artifact_size, &self.artifact_sha256) {
-            return Err(Error::runtime(format!(
-                "ShaderAsset '{name}' Vulkan SPIR-V provenance does not authorize this artifact"
-            )));
-        }
-        let source_container = self.variant(VULKAN_SPIRV_SOURCE_TARGET).ok_or_else(|| {
-            Error::runtime(format!(
-                "ShaderAsset '{name}' has no Vulkan RSTB target-5 SPIR-V source"
-            ))
-        })?;
-        let binding_map = self
-            .variant(VULKAN_SPIRV_BINDING_MAP_TARGET)
-            .ok_or_else(|| {
-                Error::runtime(format!(
-                    "ShaderAsset '{name}' has no mandatory Vulkan RSTB target-13 binding map"
-                ))
-            })?;
-        let (code, entries) = decode_whole_module_bytes(name, "SPIR-V", &source_container)?;
-        let bindings = decode_binding_map(name, &binding_map)?;
-        let shader_asset_id = self
-            .asset
-            .with_downcast::<NativeShaderAsset, _>(|asset| asset.base.asset_id())
-            .ok_or_else(|| Error::runtime("missing native ShaderAsset"))?;
-        let entry_bindings = self.entry_bindings()?;
-        // SAFETY: the selected target-5 module, ordered entry records, target-13
-        // sidecar, asset id, and texture/sampler pairs all come directly from
-        // this exact authenticated ShaderAsset. No source translation occurs.
-        unsafe {
-            GpuCanvasVulkanSpirVShader::from_verified_parts(
-                provenance,
-                self.artifact_size,
-                self.artifact_sha256,
-                std::sync::Arc::from(code),
-                entries,
-                bindings,
-                std::sync::Arc::from(binding_map),
-                entry_bindings,
-                shader_asset_id,
-                self.texture_sampler_pairs(),
-            )
-        }
-        .ok_or_else(|| {
-            Error::runtime(format!(
-                "ShaderAsset '{name}' Vulkan SPIR-V provenance was rejected"
-            ))
-        })
+        self.asset
+            .with_downcast::<NativeShaderAsset, _>(|asset| {
+                GpuCanvasVulkanSpirVShader::decode(
+                    name,
+                    asset.encoded_payload(),
+                    provenance,
+                    asset.base.asset_id(),
+                )
+            })
+            .ok_or_else(|| Error::runtime("missing native ShaderAsset"))?
+            .map_err(shader_error)
     }
 
     #[cfg(any(feature = "apple-authored-msl", test))]
-    #[allow(unsafe_code)]
     fn decode_apple_metal(
         &self,
         name: &str,
@@ -384,67 +281,31 @@ impl ShaderAsset {
                 "ShaderAsset '{name}' has no verified provenance for Apple Metal"
             ))
         })?;
-        if !provenance.authorizes_digest(self.artifact_size, &self.artifact_sha256) {
-            return Err(Error::runtime(format!(
-                "ShaderAsset '{name}' Apple Metal provenance does not authorize this artifact"
-            )));
-        }
-        let source_container = self.variant(APPLE_METAL_SOURCE_TARGET).ok_or_else(|| {
-            Error::runtime(format!(
-                "ShaderAsset '{name}' has no Apple Metal RSTB target-2 MSL source"
-            ))
-        })?;
-        let binding_map = self
-            .variant(APPLE_METAL_BINDING_MAP_TARGET)
-            .ok_or_else(|| {
-                Error::runtime(format!(
-                    "ShaderAsset '{name}' has no mandatory Apple Metal RSTB target-10 binding map"
-                ))
-            })?;
-        let reflection = self.supplemental_reflection.as_deref().ok_or_else(|| {
-            Error::runtime(format!(
-                "ShaderAsset '{name}' has no supplemental reflection section tag 2"
-            ))
-        })?;
-        let (source, entries) = decode_whole_module_source(name, "MSL", &source_container)?;
-        let bindings = decode_binding_map(name, &binding_map)?;
-        let (entry_reflection, binding_reflection) = decode_supplemental_reflection(
-            name,
-            reflection,
-            &source_container,
-            &binding_map,
-            &entries,
-            &bindings,
-        )?;
-        let entry_bindings = self.entry_bindings()?;
-        // SAFETY: all native code, entry/map data, and supplemental reflection
-        // above were decoded from this exact authenticated ShaderAsset. The
-        // reflection carries and passed digests for the selected target-2 and
-        // target-10 byte ranges, and its tables were cross-checked against
-        // both decoded variants before construction.
-        unsafe {
-            GpuCanvasAppleMetalShader::from_verified_parts(
-                provenance,
-                self.artifact_size,
-                self.artifact_sha256,
-                source,
-                entries,
-                bindings,
-                std::sync::Arc::from(binding_map),
-                entry_bindings,
-                entry_reflection,
-                binding_reflection,
-                self.asset
-                    .with_downcast::<NativeShaderAsset, _>(|asset| asset.base.asset_id())
-                    .unwrap_or(0),
-                self.texture_sampler_pairs(),
-            )
-        }
-        .ok_or_else(|| {
-            Error::runtime(format!(
-                "ShaderAsset '{name}' Apple Metal provenance was rejected"
-            ))
-        })
+        self.asset
+            .with_downcast::<NativeShaderAsset, _>(|asset| {
+                GpuCanvasAppleMetalShader::decode(
+                    name,
+                    asset.encoded_payload(),
+                    provenance,
+                    asset.base.asset_id(),
+                )
+            })
+            .ok_or_else(|| Error::runtime("missing native ShaderAsset"))?
+            .map_err(shader_error)
+    }
+
+    /// The supplemental reflection section of the envelope, as the render
+    /// API reads it.
+    #[cfg(test)]
+    fn supplemental_reflection(&self) -> Option<Vec<u8>> {
+        self.asset
+            .with_downcast::<NativeShaderAsset, _>(|asset| {
+                nuxie_render_api::shader_asset::RstbIndex::parse(asset.encoded_payload())
+                    .ok()?
+                    .supplemental_reflection()
+                    .map(<[u8]>::to_vec)
+            })
+            .flatten()
     }
 
     fn variant(&self, target: u8) -> Option<Vec<u8>> {
@@ -559,649 +420,19 @@ pub fn decode_trusted_shader_asset(
     ShaderAsset::decode(name, payload)?.decode_for_profile(name, profile, Some(provenance))
 }
 
-/// Reads an RSTB byte sequence front to back. Every read either returns the
-/// bytes it asked for or a truncation error; nothing indexes the input.
-struct Cursor<'a> {
-    rest: &'a [u8],
-}
-
-impl<'a> Cursor<'a> {
-    fn new(bytes: &'a [u8]) -> Self {
-        Self { rest: bytes }
-    }
-
-    fn remaining(&self) -> usize {
-        self.rest.len()
-    }
-
-    fn truncated(label: &str) -> Error {
-        Error::runtime(format!("RSTB is truncated in {label}"))
-    }
-
-    fn read_bytes(&mut self, length: usize, label: &str) -> Result<&'a [u8]> {
-        let (value, rest) = self
-            .rest
-            .split_at_checked(length)
-            .ok_or_else(|| Self::truncated(label))?;
-        self.rest = rest;
-        Ok(value)
-    }
-
-    fn read_array<const N: usize>(&mut self, label: &str) -> Result<[u8; N]> {
-        let (value, rest) = self
-            .rest
-            .split_first_chunk::<N>()
-            .ok_or_else(|| Self::truncated(label))?;
-        self.rest = rest;
-        Ok(*value)
-    }
-
-    fn read_u8(&mut self, label: &str) -> Result<u8> {
-        let [value] = self.read_array(label)?;
-        Ok(value)
-    }
-
-    fn read_u16(&mut self, label: &str) -> Result<u16> {
-        self.read_array(label).map(u16::from_le_bytes)
-    }
-
-    fn read_u32(&mut self, label: &str) -> Result<u32> {
-        self.read_array(label).map(u32::from_le_bytes)
-    }
-
-    #[cfg(any(feature = "apple-authored-msl", test))]
-    fn read_u64(&mut self, label: &str) -> Result<u64> {
-        self.read_array(label).map(u64::from_le_bytes)
-    }
-
-    fn read_string(&mut self, label: &str) -> Result<String> {
-        let length = usize::from(self.read_u16(label)?);
-        let bytes = self.read_bytes(length, label)?;
-        std::str::from_utf8(bytes)
-            .map(str::to_owned)
-            .map_err(|_| Error::runtime(format!("RSTB {label} is not UTF-8")))
-    }
-}
-
 #[cfg(test)]
 pub(crate) fn decode_shader_asset(name: &str, payload: &[u8]) -> Result<GpuCanvasShader> {
     ShaderAsset::decode(name, payload)?.decode_webgpu(name)
 }
 
-fn decode_whole_module_wgsl(
-    name: &str,
-    source_container: &[u8],
-    binding_map: &[u8],
-    shader_asset_id: u32,
-    texture_sampler_pairs: Vec<GpuCanvasShaderTextureSamplerPair>,
-    entry_binding_bytes: std::sync::Arc<[u8]>,
-) -> Result<GpuCanvasShader> {
-    let (source, entries) = decode_whole_module_source(name, "WGSL", source_container)?;
-    Ok(GpuCanvasShader {
-        source,
-        entries,
-        bindings: decode_binding_map(name, &binding_map)?,
-        binding_map_bytes: std::sync::Arc::from(binding_map),
-        entry_binding_bytes,
-        shader_asset_id,
-        texture_sampler_pairs,
-    })
-}
-
-fn decode_per_entry_glsl(
-    name: &str,
-    source_container: &[u8],
-) -> Result<(Vec<GpuCanvasShaderEntry>, Vec<String>)> {
-    let mut cursor = Cursor::new(source_container);
-    let entry_count = usize::from(cursor.read_u8("GLSL entry count")?);
-    if entry_count == 0 {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' GLSL entry table is empty"
-        )));
-    }
-    let mut entries = Vec::with_capacity(entry_count);
-    let mut sources = Vec::with_capacity(entry_count);
-    for _ in 0..entry_count {
-        let stage = match cursor.read_u8("GLSL shader stage")? {
-            0 => GpuCanvasShaderStage::Vertex,
-            1 => GpuCanvasShaderStage::Fragment,
-            2 => GpuCanvasShaderStage::Compute,
-            other => {
-                return Err(Error::runtime(format!(
-                    "ShaderAsset '{name}' WebGL2 stage {other} is unsupported"
-                )));
-            }
-        };
-        let logical_entry_point = cursor.read_string("GLSL logical entry point")?;
-        let physical_entry_point = cursor.read_string("GLSL physical entry point")?;
-        let source_length = usize::try_from(cursor.read_u32("GLSL source length")?)
-            .map_err(|_| Error::runtime("GLSL source length is not addressable"))?;
-        let source_bytes = cursor.read_bytes(source_length, "GLSL source")?;
-        // visitShaderAssetModules parses the whole per-entry container, but
-        // only vertex/fragment entries create GLSL modules.
-        if stage == GpuCanvasShaderStage::Compute {
-            continue;
-        }
-        if logical_entry_point.is_empty() || physical_entry_point != "main" {
-            return Err(Error::runtime(format!(
-                "ShaderAsset '{name}' WebGL2 entries require a logical name and physical entry 'main'"
-            )));
-        }
-        if source_length == 0 || source_length > MAX_SHADER_MODULE_BYTES {
-            return Err(Error::runtime(format!(
-                "ShaderAsset '{name}' GLSL module size must be between 1 and {MAX_SHADER_MODULE_BYTES} bytes"
-            )));
-        }
-        let source = std::str::from_utf8(source_bytes)
-            .map_err(|_| Error::runtime(format!("ShaderAsset '{name}' GLSL source is not UTF-8")))?
-            .to_owned();
-        if !source.starts_with("#version 300 es") {
-            return Err(Error::runtime(format!(
-                "ShaderAsset '{name}' WebGL2 source is not GLSL ES 3.00"
-            )));
-        }
-        entries.push(GpuCanvasShaderEntry {
-            stage,
-            logical_entry_point,
-            physical_entry_point,
-        });
-        sources.push(source);
-    }
-    if cursor.remaining() != 0 {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' GLSL entry container has trailing bytes"
-        )));
-    }
-    Ok((entries, sources))
-}
-
-fn validate_gl_fixup(name: &str, stage: &str, bytes: &[u8]) -> Result<()> {
-    let mut cursor = Cursor::new(bytes);
-    if cursor.read_u8("GL fixup version")? != 1 {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' {stage} GL fixup has unsupported version"
-        )));
-    }
-    let count = usize::from(cursor.read_u16("GL fixup count")?);
-    for _ in 0..count {
-        let kind = cursor.read_u8("GL fixup kind")?;
-        if kind > 1 {
-            return Err(Error::runtime(format!(
-                "ShaderAsset '{name}' {stage} GL fixup has unknown kind {kind}"
-            )));
-        }
-        let _slot = cursor.read_u8("GL fixup slot")?;
-        let entry_name = cursor.read_string("GL fixup name")?;
-        if entry_name.is_empty() {
-            return Err(Error::runtime(format!(
-                "ShaderAsset '{name}' {stage} GL fixup has an empty name"
-            )));
-        }
-    }
-    if cursor.remaining() != 0 {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' {stage} GL fixup has trailing bytes"
-        )));
-    }
-    Ok(())
-}
-
-fn decode_whole_module_source(
-    name: &str,
-    language: &str,
-    source_container: &[u8],
-) -> Result<(String, Vec<GpuCanvasShaderEntry>)> {
-    let mut cursor = Cursor::new(source_container);
-    let entry_count = usize::from(cursor.read_u8("shader entry count")?);
-    if entry_count == 0 {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' {language} entry table is empty"
-        )));
-    }
-    let mut entries = Vec::with_capacity(entry_count);
-    for _ in 0..entry_count {
-        let stage = match cursor.read_u8("shader stage")? {
-            0 => GpuCanvasShaderStage::Vertex,
-            1 => GpuCanvasShaderStage::Fragment,
-            2 => GpuCanvasShaderStage::Compute,
-            other => {
-                return Err(Error::runtime(format!(
-                    "ShaderAsset '{name}' {language} stage {other} is unsupported"
-                )));
-            }
-        };
-        entries.push(GpuCanvasShaderEntry {
-            stage,
-            logical_entry_point: cursor.read_string("shader logical entry point")?,
-            physical_entry_point: cursor.read_string("shader physical entry point")?,
-        });
-    }
-
-    let source_length = usize::try_from(cursor.read_u32("shader source length")?)
-        .map_err(|_| Error::runtime("shader source length is not addressable"))?;
-    if source_length == 0 || source_length > MAX_SHADER_MODULE_BYTES {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' {language} module size must be between 1 and {MAX_SHADER_MODULE_BYTES} bytes"
-        )));
-    }
-    let source = std::str::from_utf8(cursor.read_bytes(source_length, "shader source")?)
-        .map_err(|_| {
-            Error::runtime(format!(
-                "ShaderAsset '{name}' {language} source is not UTF-8"
-            ))
-        })?
-        .to_owned();
-    Ok((source, entries))
-}
-
-#[cfg(any(feature = "android-authored-wgsl", test))]
-fn decode_whole_module_bytes(
-    name: &str,
-    language: &str,
-    source_container: &[u8],
-) -> Result<(Vec<u8>, Vec<GpuCanvasShaderEntry>)> {
-    let mut cursor = Cursor::new(source_container);
-    let entry_count = usize::from(cursor.read_u8("shader entry count")?);
-    if entry_count == 0 {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' {language} entry table is empty"
-        )));
-    }
-    let mut entries = Vec::with_capacity(entry_count);
-    for _ in 0..entry_count {
-        let stage = match cursor.read_u8("shader stage")? {
-            0 => GpuCanvasShaderStage::Vertex,
-            1 => GpuCanvasShaderStage::Fragment,
-            2 => GpuCanvasShaderStage::Compute,
-            other => {
-                return Err(Error::runtime(format!(
-                    "ShaderAsset '{name}' {language} stage {other} is unsupported"
-                )));
-            }
-        };
-        entries.push(GpuCanvasShaderEntry {
-            stage,
-            logical_entry_point: cursor.read_string("shader logical entry point")?,
-            physical_entry_point: cursor.read_string("shader physical entry point")?,
-        });
-    }
-
-    let source_length = usize::try_from(cursor.read_u32("shader source length")?)
-        .map_err(|_| Error::runtime("shader source length is not addressable"))?;
-    let source = cursor.read_bytes(source_length, "shader source")?.to_vec();
-    Ok((source, entries))
-}
-
-fn decode_binding_map(name: &str, bytes: &[u8]) -> Result<Vec<GpuCanvasShaderBinding>> {
-    let mut cursor = Cursor::new(bytes);
-    if cursor.read_u8("binding-map blob version")? != BINDING_MAP_BLOB_VERSION {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' has unsupported WGSL binding-map blob version"
-        )));
-    }
-    if cursor.read_u8("binding-map allocator version")? != BINDING_MAP_ALLOCATOR_VERSION {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' has unsupported WGSL binding-map allocator version"
-        )));
-    }
-    let entry_size = usize::from(cursor.read_u16("binding-map entry size")?);
-    if entry_size < BINDING_MAP_LEGACY_ENTRY_WIRE_SIZE {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' WGSL binding-map entries are too small"
-        )));
-    }
-    let entry_count = usize::try_from(cursor.read_u32("binding-map entry count")?)
-        .map_err(|_| Error::runtime("binding-map entry count is not addressable"))?;
-    let group_size = usize::from(cursor.read_u16("binding-map group size")?);
-    let group_count = usize::from(cursor.read_u16("binding-map group count")?);
-    if group_count != 0 && group_size < 9 {
-        return Err(Error::runtime("binding-map group rows are too small"));
-    }
-    let required_bytes = entry_count
-        .checked_mul(entry_size)
-        .and_then(|entries| group_count.checked_mul(group_size)?.checked_add(entries))
-        .ok_or_else(|| Error::runtime("binding-map byte length overflow"))?;
-    if cursor.remaining() < required_bytes {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' WGSL binding map is truncated"
-        )));
-    }
-
-    let mut bindings = Vec::with_capacity(entry_count);
-    let slot = |raw: u16| (raw != BINDING_MAP_ABSENT).then_some(raw);
-    for _ in 0..entry_count {
-        // A row is at least the legacy 14 bytes (checked above); bytes past the
-        // fields this reader knows are append-only extensions and are skipped.
-        let mut row = Cursor::new(cursor.read_bytes(entry_size, "binding-map entry")?);
-        bindings.push(GpuCanvasShaderBinding {
-            group: row.read_u8("binding-map entry")?,
-            binding: row.read_u8("binding-map entry")?,
-            kind: decode_resource_kind(name, row.read_u8("binding-map entry")?)?,
-            stage_mask: row.read_u8("binding-map entry")?,
-            backend_space: row.read_u8("binding-map entry")?,
-            backend_slots: [
-                slot(row.read_u16("binding-map entry")?),
-                slot(row.read_u16("binding-map entry")?),
-                slot(row.read_u16("binding-map entry")?),
-            ],
-            texture_view_dimension: decode_texture_view_dimension(
-                name,
-                row.read_u8("binding-map entry")?,
-            )?,
-            texture_sample_type: decode_texture_sample_type(
-                name,
-                row.read_u8("binding-map entry")?,
-            )?,
-            texture_multisampled: row.read_u8("binding-map entry")? != 0,
-            min_binding_size: if entry_size >= BINDING_MAP_ENTRY_WIRE_SIZE {
-                row.read_u32("binding-map entry")?
-            } else {
-                0
-            },
-        });
-    }
-    Ok(bindings)
-}
-
-#[cfg(any(feature = "apple-authored-msl", test))]
-fn decode_supplemental_reflection(
-    name: &str,
-    bytes: &[u8],
-    source_container: &[u8],
-    binding_map: &[u8],
-    entries: &[GpuCanvasShaderEntry],
-    bindings: &[GpuCanvasShaderBinding],
-) -> Result<(
-    Vec<GpuCanvasShaderEntryReflection>,
-    Vec<GpuCanvasShaderBindingReflection>,
-)> {
-    let mut cursor = Cursor::new(bytes);
-    if cursor.read_u8("reflection version")? != SUPPLEMENTAL_REFLECTION_VERSION {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' has unsupported supplemental reflection version"
-        )));
-    }
-    let expected_source: [u8; 32] = cursor.read_array("reflection source digest")?;
-    let expected_map: [u8; 32] = cursor.read_array("reflection binding-map digest")?;
-    if expected_source != <[u8; 32]>::from(Sha256::digest(source_container))
-        || expected_map != <[u8; 32]>::from(Sha256::digest(binding_map))
-    {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' supplemental reflection does not match target 2/10 bytes"
-        )));
-    }
-
-    let entry_count = usize::from(cursor.read_u8("reflection entry count")?);
-    if entry_count != entries.len() {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' supplemental reflection entry count does not match MSL"
-        )));
-    }
-    let mut entry_reflection = Vec::with_capacity(entry_count);
-    for expected in entries {
-        let stage = decode_stage(
-            name,
-            cursor.read_u8("reflection entry stage")?,
-            "reflection",
-        )?;
-        let logical_entry_point = cursor.read_string("reflection logical entry point")?;
-        let physical_entry_point = cursor.read_string("reflection physical entry point")?;
-        if stage != expected.stage
-            || logical_entry_point != expected.logical_entry_point
-            || physical_entry_point != expected.physical_entry_point
-        {
-            return Err(Error::runtime(format!(
-                "ShaderAsset '{name}' supplemental reflection entry does not match MSL entry table"
-            )));
-        }
-        let workgroup_size = [
-            cursor.read_u32("reflection workgroup x")?,
-            cursor.read_u32("reflection workgroup y")?,
-            cursor.read_u32("reflection workgroup z")?,
-        ];
-        if workgroup_size.contains(&0)
-            || (stage != GpuCanvasShaderStage::Compute && workgroup_size != [1, 1, 1])
-        {
-            return Err(Error::runtime(format!(
-                "ShaderAsset '{name}' has invalid reflected workgroup size"
-            )));
-        }
-        let input_count = usize::from(cursor.read_u8("reflection input count")?);
-        let output_count = usize::from(cursor.read_u8("reflection output count")?);
-        let inputs = decode_interface_variables(name, &mut cursor, input_count)?;
-        let outputs = decode_interface_variables(name, &mut cursor, output_count)?;
-        entry_reflection.push(GpuCanvasShaderEntryReflection {
-            stage,
-            logical_entry_point,
-            physical_entry_point,
-            workgroup_size,
-            inputs,
-            outputs,
-        });
-    }
-
-    let binding_count = usize::from(cursor.read_u16("reflection binding count")?);
-    if binding_count != bindings.len() {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' supplemental reflection binding count does not match target 10"
-        )));
-    }
-    let mut binding_reflection = Vec::with_capacity(binding_count);
-    for expected in bindings {
-        let group = cursor.read_u8("reflection binding group")?;
-        let binding = cursor.read_u8("reflection binding index")?;
-        let array_count = cursor.read_u16("reflection binding array count")?;
-        let min_buffer_size = cursor.read_u64("reflection minimum buffer size")?;
-        if (group, binding) != (expected.group, expected.binding) || array_count == 0 {
-            return Err(Error::runtime(format!(
-                "ShaderAsset '{name}' supplemental reflection binding does not match target 10"
-            )));
-        }
-        let is_buffer = matches!(
-            expected.kind,
-            GpuCanvasShaderResourceKind::UniformBuffer
-                | GpuCanvasShaderResourceKind::StorageBufferReadOnly
-                | GpuCanvasShaderResourceKind::StorageBufferReadWrite
-        );
-        if is_buffer == (min_buffer_size == 0) {
-            return Err(Error::runtime(format!(
-                "ShaderAsset '{name}' supplemental reflection has invalid minimum buffer size"
-            )));
-        }
-        binding_reflection.push(GpuCanvasShaderBindingReflection {
-            group,
-            binding,
-            array_count,
-            min_buffer_size,
-        });
-    }
-    if cursor.remaining() != 0 {
-        return Err(Error::runtime(format!(
-            "ShaderAsset '{name}' supplemental reflection has trailing bytes"
-        )));
-    }
-    Ok((entry_reflection, binding_reflection))
-}
-
-#[cfg(any(feature = "apple-authored-msl", test))]
-fn decode_interface_variables(
-    name: &str,
-    cursor: &mut Cursor<'_>,
-    count: usize,
-) -> Result<Vec<GpuCanvasShaderInterfaceVariable>> {
-    let mut result = Vec::with_capacity(count);
-    for _ in 0..count {
-        let binding_kind = cursor.read_u8("interface binding kind")?;
-        let value = cursor.read_u16("interface binding value")?;
-        let interface_type = decode_interface_type(name, cursor.read_u8("interface type")?)?;
-        let interpolation = cursor.read_u8("interface interpolation")?;
-        let sampling = cursor.read_u8("interface sampling")?;
-        let binding = match binding_kind {
-            0 => GpuCanvasShaderInterfaceBinding::Location {
-                location: value,
-                interpolation: decode_optional_interpolation(name, interpolation)?,
-                sampling: decode_optional_sampling(name, sampling)?,
-            },
-            1 if interpolation == u8::MAX && sampling == u8::MAX => {
-                GpuCanvasShaderInterfaceBinding::Builtin(decode_builtin(name, value)?)
-            }
-            _ => {
-                return Err(Error::runtime(format!(
-                    "ShaderAsset '{name}' has invalid reflected interface binding"
-                )));
-            }
-        };
-        if result
-            .iter()
-            .any(|variable: &GpuCanvasShaderInterfaceVariable| variable.binding == binding)
-        {
-            return Err(Error::runtime(format!(
-                "ShaderAsset '{name}' has duplicate reflected interface binding"
-            )));
-        }
-        result.push(GpuCanvasShaderInterfaceVariable {
-            binding,
-            interface_type,
-        });
-    }
-    Ok(result)
-}
-
-#[cfg(any(feature = "apple-authored-msl", test))]
-fn decode_stage(name: &str, value: u8, label: &str) -> Result<GpuCanvasShaderStage> {
-    match value {
-        0 => Ok(GpuCanvasShaderStage::Vertex),
-        1 => Ok(GpuCanvasShaderStage::Fragment),
-        2 => Ok(GpuCanvasShaderStage::Compute),
-        other => Err(Error::runtime(format!(
-            "ShaderAsset '{name}' {label} stage {other} is unsupported"
-        ))),
-    }
-}
-
-#[cfg(any(feature = "apple-authored-msl", test))]
-fn decode_interface_type(name: &str, value: u8) -> Result<GpuCanvasShaderInterfaceType> {
-    use GpuCanvasShaderInterfaceType::*;
-    [
-        Float, Float2, Float3, Float4, Sint, Sint2, Sint3, Sint4, Uint, Uint2, Uint3, Uint4, Bool,
-    ]
-    .get(usize::from(value))
-    .copied()
-    .ok_or_else(|| {
-        Error::runtime(format!(
-            "ShaderAsset '{name}' has invalid reflected interface type"
-        ))
-    })
-}
-
-#[cfg(any(feature = "apple-authored-msl", test))]
-fn decode_optional_interpolation(
-    name: &str,
-    value: u8,
-) -> Result<Option<GpuCanvasShaderInterpolation>> {
-    use GpuCanvasShaderInterpolation::*;
-    if value == u8::MAX {
-        return Ok(None);
-    }
-    [Perspective, Linear, Flat]
-        .get(usize::from(value))
-        .copied()
-        .map(Some)
-        .ok_or_else(|| {
-            Error::runtime(format!(
-                "ShaderAsset '{name}' has invalid reflected interpolation"
-            ))
-        })
-}
-
-#[cfg(any(feature = "apple-authored-msl", test))]
-fn decode_optional_sampling(name: &str, value: u8) -> Result<Option<GpuCanvasShaderSampling>> {
-    use GpuCanvasShaderSampling::*;
-    if value == u8::MAX {
-        return Ok(None);
-    }
-    [Center, Centroid, Sample, First, Either]
-        .get(usize::from(value))
-        .copied()
-        .map(Some)
-        .ok_or_else(|| {
-            Error::runtime(format!(
-                "ShaderAsset '{name}' has invalid reflected sampling"
-            ))
-        })
-}
-
-#[cfg(any(feature = "apple-authored-msl", test))]
-fn decode_builtin(name: &str, value: u16) -> Result<GpuCanvasShaderBuiltin> {
-    use GpuCanvasShaderBuiltin::*;
-    [
-        VertexIndex,
-        InstanceIndex,
-        Position,
-        FrontFacing,
-        FragDepth,
-        SampleIndex,
-        SampleMask,
-    ]
-    .get(usize::from(value))
-    .copied()
-    .ok_or_else(|| {
-        Error::runtime(format!(
-            "ShaderAsset '{name}' has invalid reflected builtin"
-        ))
-    })
-}
-
-fn decode_resource_kind(name: &str, value: u8) -> Result<GpuCanvasShaderResourceKind> {
-    match value {
-        0 => Ok(GpuCanvasShaderResourceKind::UniformBuffer),
-        1 => Ok(GpuCanvasShaderResourceKind::StorageBufferReadOnly),
-        2 => Ok(GpuCanvasShaderResourceKind::StorageBufferReadWrite),
-        3 => Ok(GpuCanvasShaderResourceKind::SampledTexture),
-        4 => Ok(GpuCanvasShaderResourceKind::StorageTexture),
-        5 => Ok(GpuCanvasShaderResourceKind::Sampler),
-        6 => Ok(GpuCanvasShaderResourceKind::ComparisonSampler),
-        other => Err(Error::runtime(format!(
-            "ShaderAsset '{name}' WGSL binding map has unknown resource kind {other}"
-        ))),
-    }
-}
-
-fn decode_texture_view_dimension(
-    name: &str,
-    value: u8,
-) -> Result<GpuCanvasShaderTextureViewDimension> {
-    match value {
-        0 => Ok(GpuCanvasShaderTextureViewDimension::Undefined),
-        1 => Ok(GpuCanvasShaderTextureViewDimension::D1),
-        2 => Ok(GpuCanvasShaderTextureViewDimension::D2),
-        3 => Ok(GpuCanvasShaderTextureViewDimension::D2Array),
-        4 => Ok(GpuCanvasShaderTextureViewDimension::Cube),
-        5 => Ok(GpuCanvasShaderTextureViewDimension::CubeArray),
-        6 => Ok(GpuCanvasShaderTextureViewDimension::D3),
-        other => Err(Error::runtime(format!(
-            "ShaderAsset '{name}' WGSL binding map has unknown texture view dimension {other}"
-        ))),
-    }
-}
-
-fn decode_texture_sample_type(name: &str, value: u8) -> Result<GpuCanvasShaderTextureSampleType> {
-    match value {
-        0 => Ok(GpuCanvasShaderTextureSampleType::Undefined),
-        1 => Ok(GpuCanvasShaderTextureSampleType::Float),
-        2 => Ok(GpuCanvasShaderTextureSampleType::UnfilterableFloat),
-        3 => Ok(GpuCanvasShaderTextureSampleType::Depth),
-        4 => Ok(GpuCanvasShaderTextureSampleType::Sint),
-        5 => Ok(GpuCanvasShaderTextureSampleType::Uint),
-        other => Err(Error::runtime(format!(
-            "ShaderAsset '{name}' WGSL binding map has unknown texture sample type {other}"
-        ))),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nuxie_render_api::shader_asset::{RSTB_MAGIC, RSTB_VERSION};
+    use nuxie_render_api::{
+        GpuCanvasShaderBuiltin, GpuCanvasShaderInterfaceBinding, GpuCanvasShaderInterpolation,
+        GpuCanvasShaderResourceKind, GpuCanvasShaderSampling, GpuCanvasShaderStage,
+    };
     use sha2::{Digest, Sha256};
 
     const IMPORTED_GPU_CANVAS_UBO_WGSL: &str =
@@ -1932,6 +1163,64 @@ mod tests {
         assert_eq!(shader.bindings.len(), 1);
     }
 
+    // Lane H3: native code is now decoded by the render API from the
+    // envelope bytes, through its own RSTB index. It must select exactly the
+    // bytes the runtime's index selects for the profiles that use it.
+    #[test]
+    fn the_render_api_index_selects_what_the_runtime_index_selects() {
+        use nuxie_render_api::shader_asset::RstbIndex;
+        let source = imported_gpu_canvas_source_container();
+        let mut blob_data = b"gap".to_vec();
+        blob_data.extend_from_slice(&source);
+        blob_data.extend_from_slice(IMPORTED_GPU_CANVAS_BINDING_MAP);
+        blob_data.extend_from_slice(b"trailing");
+        let map_offset = 3 + source.len();
+        let pairs = vec![2, 0, 1, 0, 2, 3, 4, 5, 6];
+        let short_pairs = vec![3, 9, 9];
+        let payloads = [
+            native_payload(),
+            imported_gpu_canvas_webgpu_payload(),
+            rstb_payload_with_blob(
+                &[
+                    (WGSL_SOURCE_TARGET, u32::MAX as usize, 1),
+                    (1, 3, source.len()),
+                    (WGSL_SOURCE_TARGET, 3, source.len()),
+                    (WGSL_BINDING_MAP_TARGET, map_offset, IMPORTED_GPU_CANVAS_BINDING_MAP.len()),
+                    (VULKAN_SPIRV_SOURCE_TARGET, 0, 0),
+                ],
+                &blob_data,
+            ),
+            rstb_payload_with_sections(
+                &[(WGSL_SOURCE_TARGET, source.clone())],
+                &[
+                    (TEXTURE_SAMPLER_PAIR_SECTION, pairs.clone()),
+                    (2, vec![7, 7]),
+                    (TEXTURE_SAMPLER_PAIR_SECTION, short_pairs),
+                    (TEXTURE_SAMPLER_PAIR_SECTION, pairs),
+                    (2, vec![8]),
+                    (2, vec![]),
+                ],
+            ),
+        ];
+        for payload in payloads {
+            let asset = ShaderAsset::decode("index", &payload).unwrap();
+            let index = RstbIndex::parse(&payload).unwrap();
+            for target in 0..=u8::MAX {
+                assert_eq!(
+                    asset.variant(target).as_deref(),
+                    index.variant(target),
+                    "target {target}"
+                );
+            }
+            assert_eq!(asset.texture_sampler_pairs(), index.texture_sampler_pairs());
+            assert_eq!(&*asset.entry_bindings().unwrap(), index.entry_bindings());
+        }
+        let out_of_range =
+            rstb_payload_with_blob(&[(WGSL_SOURCE_TARGET, 4, 1)], &[0, 0, 0, 0]);
+        assert!(ShaderAsset::decode("index", &out_of_range).is_err());
+        assert!(RstbIndex::parse(&out_of_range).is_err());
+    }
+
     #[test]
     fn preserves_arbitrary_logical_and_physical_entry_names_in_declaration_order() {
         let source = source_container(
@@ -2139,7 +1428,7 @@ mod tests {
         let original = ShaderAsset::decode("native", &native_payload()).unwrap();
         let source = original.variant(APPLE_METAL_SOURCE_TARGET).unwrap();
         let map = original.variant(APPLE_METAL_BINDING_MAP_TARGET).unwrap();
-        let reflection = original.supplemental_reflection.clone().unwrap();
+        let reflection = original.supplemental_reflection().unwrap();
         let entries = vec![1, 1, 2, 0, b'f', b's', 1, 0, 1];
         let payload = rstb_payload_with_sections(
             &[
@@ -2163,7 +1452,7 @@ mod tests {
             &[(2, reflection)],
         );
         let asset = ShaderAsset::decode("old", &old).unwrap();
-        assert!(asset.supplemental_reflection.is_none());
+        assert!(asset.supplemental_reflection().is_none());
         assert!(
             asset
                 .decode_apple_metal("old", Some(provenance(&old)))
@@ -2341,7 +1630,7 @@ mod tests {
     fn apple_metal_fails_closed_at_every_reflection_boundary() {
         let valid = native_payload();
         let decoded = ShaderAsset::decode("native", &valid).unwrap();
-        let reflection = decoded.supplemental_reflection.clone().unwrap();
+        let reflection = decoded.supplemental_reflection().unwrap();
         let source = decoded.variant(APPLE_METAL_SOURCE_TARGET).unwrap().to_vec();
         let map = decoded
             .variant(APPLE_METAL_BINDING_MAP_TARGET)
@@ -2449,7 +1738,7 @@ mod tests {
             .variant(APPLE_METAL_BINDING_MAP_TARGET)
             .unwrap()
             .to_vec();
-        let reflection = decoded.supplemental_reflection.clone().unwrap();
+        let reflection = decoded.supplemental_reflection().unwrap();
         // Locate the binding table structurally rather than pinning an offset.
         let marker = [3, 0, 0, 0, 1, 0, 64, 0, 0, 0, 0, 0, 0, 0];
         let at = reflection
@@ -2502,7 +1791,7 @@ mod tests {
             .variant(APPLE_METAL_BINDING_MAP_TARGET)
             .unwrap()
             .to_vec();
-        let reflection = decoded.supplemental_reflection.clone().unwrap();
+        let reflection = decoded.supplemental_reflection().unwrap();
         let marker = [3, 0, 0, 0, 1, 0, 64, 0, 0, 0, 0, 0, 0, 0];
         let at = reflection
             .windows(marker.len())
@@ -2551,7 +1840,7 @@ mod tests {
     fn duplicate_supplemental_reflection_sections_are_malformed() {
         let valid = native_payload();
         let decoded = ShaderAsset::decode("native", &valid).unwrap();
-        let reflection = decoded.supplemental_reflection.clone().unwrap();
+        let reflection = decoded.supplemental_reflection().unwrap();
         let source = decoded.variant(APPLE_METAL_SOURCE_TARGET).unwrap().to_vec();
         let map = decoded
             .variant(APPLE_METAL_BINDING_MAP_TARGET)

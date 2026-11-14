@@ -29,8 +29,8 @@ compiler = [
     "dep:luaur-compiler",
 ]
 js-host-seed = ["nuxie-runtime/js-host-seed"]
-apple-authored-msl = ["luau", "dep:sha2"]
-android-authored-wgsl = ["luau", "dep:sha2"]
+apple-authored-msl = ["luau"]
+android-authored-wgsl = ["luau"]
 # Cross-crate access to otherwise private observables needed by literal ports
 # of upstream unit tests. Shipping runtime consumers do not enable this.
 upstream-test-seams = ["luau"]
@@ -64,7 +64,6 @@ luaur-ast = { version = "=0.1.8", optional = true }
 luaur-bytecode = { version = "=0.1.8", optional = true }
 luaur-compiler = { version = "=0.1.8", optional = true }
 nuxie-image-codec = { path = "../nuxie-image-codec", optional = true }
-sha2 = { version = "0.10", optional = true }
 
 [dev-dependencies]
 nuxie-ore-metal = { path = "../nuxie-ore-metal", default-features = false }

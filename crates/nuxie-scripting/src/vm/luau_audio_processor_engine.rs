@@ -748,6 +748,89 @@ mod tests {
         drop(vm);
         assert_eq!(descriptor.reader_count().unwrap(), 0);
     }
+    fn large_chunk_descriptor() -> super::super::luau_audio_samples::PcmStreamDescriptor {
+        // One record is 2 channels x 65,536 frames x 4 bytes plus the header:
+        // 512 KiB, so about 31 readers fill a 16 MiB processor budget.
+        super::super::luau_audio_samples::PcmStreamDescriptor::new(
+            (512 << 10) + 64,
+            48_000,
+            2,
+            65_536,
+            Arc::new(super::super::luau_audio_shared::SharedBudget::default()),
+        )
+        .unwrap()
+    }
+    #[test]
+    fn processor_stream_readers_are_charged_to_the_processor_budget() {
+        let descriptor = large_chunk_descriptor();
+        let mut vm = processor(
+            r#"return {
+            init=function(self,rate,maxFrames,channels,input)
+                self.readers = {}
+                for i = 1, 64 do
+                    local ok, reader = pcall(Audio.streamReader, input)
+                    if not ok then self.error = reader; break end
+                    self.readers[i] = reader
+                end
+                assert(self.error, "64 readers of 512 KiB were all accepted")
+                assert(string.find(self.error, "16777216-byte host memory budget", 1, true), self.error)
+                assert(#self.readers >= 30 and #self.readers < 32, #self.readers)
+            end,
+            process=function(self,out,frames,startFrame) end
+        }"#,
+            descriptor.shared_value(),
+        );
+        let held = descriptor.reader_count().unwrap();
+        assert!((30..32).contains(&held), "{held}");
+        assert!(vm.host_memory_used() > 15 << 20);
+        // Blocks of 1,024 frames get a 42 ms deadline (two blocks' worth).
+        let mut output = vec![0.0f32; 2048];
+        vm.render(&mut output, 1024, 0);
+        assert_eq!(vm.shared().state.load(Ordering::Acquire), RUNNING);
+    }
+    #[test]
+    fn processor_stream_readers_are_released_when_collected() {
+        let descriptor = large_chunk_descriptor();
+        // Each block makes a reader and drops it; 100 blocks of 512 KiB
+        // readers would hold 50 MiB if none were freed.
+        let mut vm = processor(
+            r#"return {
+            init=function(self,rate,maxFrames,channels,input) self.input = input end,
+            process=function(self,out,frames,startFrame)
+                local reader = Audio.streamReader(self.input)
+                assert(reader.channels == 2)
+            end
+        }"#,
+            descriptor.shared_value(),
+        );
+        // Blocks of 1,024 frames get a 42 ms deadline (two blocks' worth).
+        let mut output = vec![0.0f32; 2048];
+        for _ in 0..100 {
+            vm.render(&mut output, 1024, 0);
+            assert_eq!(
+                vm.shared().state.load(Ordering::Acquire),
+                RUNNING,
+                "{:?}",
+                vm.shared().error.get()
+            );
+        }
+        vm.collect_garbage();
+        assert_eq!(descriptor.reader_count().unwrap(), 0);
+        assert_eq!(vm.host_memory_used(), 0);
+        // A reader the script still holds is kept, readable, and charged.
+        let mut vm = processor(
+            r#"return {
+            init=function(self,rate,maxFrames,channels,input) self.reader = Audio.streamReader(input) end,
+            process=function(self,out,frames,startFrame) assert(self.reader.channels == 2) end
+        }"#,
+            descriptor.shared_value(),
+        );
+        vm.collect_garbage();
+        vm.render(&mut output, 1024, 0);
+        assert_eq!(vm.shared().state.load(Ordering::Acquire), RUNNING);
+        assert_eq!(descriptor.reader_count().unwrap(), 1);
+        assert!(vm.host_memory_used() > 512 << 10);
+    }
     #[test]
     fn authored_pcm_and_shared_controls_survive_callback_thread_migration() {
         let messages = Arc::new(SharedRing::new(4096).unwrap());

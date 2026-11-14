@@ -4754,9 +4754,12 @@ impl LayoutComponent {
         held.sort_by_cached_key(|&(id, _)| depth(&tree.taffy, id));
         let mut flights = Vec::with_capacity(held.len());
         for (id, size) in held {
-            if let Some(flight) =
-                crate::css_layout::flight_hold::fly(&mut tree.taffy, id, size, Self::measure_tree_node)
-            {
+            if let Some(flight) = crate::css_layout::flight_hold::fly(
+                &mut tree.taffy,
+                id,
+                size,
+                Self::measure_tree_node,
+            ) {
                 touched.push(id);
                 flights.push((id, flight));
             }
@@ -5045,47 +5048,47 @@ impl LayoutComponent {
                        _node: NodeId,
                        context: Option<&mut Context>,
                        style: &Style| {
-                    if let Some(output) = context
-                        .as_ref()
-                        .and_then(|context| Self::measure_picture_node(&context.0, inputs, style))
-                    {
-                        return output;
-                    }
-                    let measured = context
-                        .filter(|context| context.2)
-                        .map(|context| (context.0.clone(), context.1));
-                    // PerformLayout omits known dimensions in the leaf callback,
-                    // even when the solver has already fixed the inline slot.
-                    let intrinsic_width = inputs.known_dimensions.width.is_none()
-                        && (style.size.width.is_auto() || style.size.width.is_sizing_keyword());
-                    let width_limits =
-                        crate::mechanical_port::source::layout::layout_tree::content_width_limits(
-                            style,
-                            inputs.parent_size,
-                        );
-                    let height_limits =
-                        crate::mechanical_port::source::layout::layout_tree::content_height_limits(
-                            style,
-                            inputs.parent_size,
-                        );
-                    taffy::compute_leaf_layout(
-                        inputs,
-                        style,
-                        |_, _| 0.0,
-                        |known, space| match &measured {
-                            Some((owner, kind)) => Self::measure_layout_node(
-                                owner,
-                                *kind,
-                                known,
-                                space,
-                                intrinsic_width,
-                                width_limits,
-                                height_limits,
-                            ),
-                            None => Size::ZERO,
-                        },
-                    )
-                };
+            if let Some(output) = context
+                .as_ref()
+                .and_then(|context| Self::measure_picture_node(&context.0, inputs, style))
+            {
+                return output;
+            }
+            let measured = context
+                .filter(|context| context.2)
+                .map(|context| (context.0.clone(), context.1));
+            // PerformLayout omits known dimensions in the leaf callback,
+            // even when the solver has already fixed the inline slot.
+            let intrinsic_width = inputs.known_dimensions.width.is_none()
+                && (style.size.width.is_auto() || style.size.width.is_sizing_keyword());
+            let width_limits =
+                crate::mechanical_port::source::layout::layout_tree::content_width_limits(
+                    style,
+                    inputs.parent_size,
+                );
+            let height_limits =
+                crate::mechanical_port::source::layout::layout_tree::content_height_limits(
+                    style,
+                    inputs.parent_size,
+                );
+            taffy::compute_leaf_layout(
+                inputs,
+                style,
+                |_, _| 0.0,
+                |known, space| match &measured {
+                    Some((owner, kind)) => Self::measure_layout_node(
+                        owner,
+                        *kind,
+                        known,
+                        space,
+                        intrinsic_width,
+                        width_limits,
+                        height_limits,
+                    ),
+                    None => Size::ZERO,
+                },
+            )
+        };
         taffy
             .compute_layout_with_measure(
                 root,
@@ -5116,7 +5119,8 @@ impl LayoutComponent {
             }
         }
         for (node_owner, id) in nodes {
-            let slot = crate::css_layout::flight_hold::resting_slot(&taffy, id).expect("fresh node");
+            let slot =
+                crate::css_layout::flight_hold::resting_slot(&taffy, id).expect("fresh node");
             let flight = flights
                 .iter()
                 .find(|(node, _)| *node == id)
@@ -6415,7 +6419,9 @@ impl LayoutComponent {
                         let changed = padding_changed || layout.layout_data.solved_layout != next;
                         layout.layout_data.has_new_layout |= touched || changed;
                         layout.layout_data.solved_layout = next;
-                        if let (Some(hold), Some(rest)) = (&mut layout.layout_data.flight_hold, rest) {
+                        if let (Some(hold), Some(rest)) =
+                            (&mut layout.layout_data.flight_hold, rest)
+                        {
                             hold.rest = rest;
                         }
                         changed

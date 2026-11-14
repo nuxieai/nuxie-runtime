@@ -5,6 +5,8 @@ use super::*;
 pub(super) struct Buffer {
     pub resource: AnyResourceHandle,
     pub immutable: bool,
+    /// `size` bytes.
+    pub charge: GpuCharge,
 }
 impl UserData for Buffer {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
@@ -29,6 +31,8 @@ impl UserData for Buffer {
 pub(super) struct Texture {
     pub resource: AnyResourceHandle,
     pub desc: TextureDesc<'static>,
+    /// [`texture_bytes`] of `desc`.
+    pub charge: GpuCharge,
 }
 #[derive(Clone)]
 pub(crate) struct TextureView {
@@ -37,6 +41,9 @@ pub(crate) struct TextureView {
     /// A view of a video's picture follows the video: the picture's userdata
     /// and the frame this view was made from.
     pub follows: Option<(AnyUserData, usize)>,
+    /// The charge of the texture or canvas viewed, when the script made it:
+    /// a view keeps its texture alive.
+    pub charge: Option<GpuCharge>,
 }
 impl TextureView {
     /// Move a view of a video's picture to the frame on show. True when it moved.
@@ -157,6 +164,7 @@ impl UserData for Texture {
                 resource,
                 retained_image: None,
                 follows: None,
+                charge: Some(Rc::clone(&this.charge)),
             })
         });
         methods.add_method("upload", |_, this, table: Table| {
@@ -253,6 +261,7 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             immutable,
             label: label.as_deref(),
         };
+        let charge = charge_gpu_bytes(lua, u64::from(desc.size))?;
         let mut ctx = context.borrow_mut();
         ctx.clearLastError();
         let value = ctx.makeBuffer(&desc);
@@ -263,6 +272,7 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         lua.create_userdata(Buffer {
             resource,
             immutable,
+            charge,
         })
     })?;
     constructor(lua, "GPUTexture", |lua, table| {
@@ -298,6 +308,7 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         desc.numMipmaps = number(&table, "mipmaps", 1.0)? as u32;
         desc.depthOrArrayLayers = number(&table, "layers", 1.0)? as u32;
         check_gpu_size("GPUTexture.new", desc.width, desc.height, desc.depthOrArrayLayers)?;
+        let charge = charge_gpu_bytes(lua, texture_bytes(&desc))?;
         // Lua field access can invoke __index, including another ORE call.
         // Borrow the selected context only after those source field reads.
         let mut ctx = context.borrow_mut();
@@ -331,7 +342,11 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         // Release the context before allocating in the VM: a collection step there
         // can drop other GPU userdata, which must find the context free.
         drop(ctx);
-        lua.create_userdata(Texture { resource, desc })
+        lua.create_userdata(Texture {
+            resource,
+            desc,
+            charge,
+        })
     })?;
     let sampler = lua.create_table();
     sampler.set(

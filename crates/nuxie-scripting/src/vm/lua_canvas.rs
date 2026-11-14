@@ -12,7 +12,7 @@ use nuxie_render_api::{
 };
 
 use super::lua_image::ScriptedImage;
-use crate::gpu_canvas::ore::check_gpu_size;
+use crate::gpu_canvas::ore::{GpuCharge, canvas_bytes, charge_gpu_bytes, check_gpu_size};
 use super::lua_renderer::ScriptedRenderer;
 use super::lua_renderer_library::RendererBindings;
 
@@ -23,6 +23,8 @@ pub(super) struct ScriptedCanvas {
     pending_width: u32,
     pending_height: u32,
     image: Option<AnyUserData>,
+    /// [`canvas_bytes`] of the backing, shared with its image.
+    charge: Option<GpuCharge>,
     frame: Option<OpenFrame>,
     renderer: Option<AnyUserData>,
 }
@@ -71,7 +73,8 @@ impl OpenFrame {
     }
 }
 
-/// A new backing canvas and the `Image` userdata that shows it.
+/// A new backing canvas, the `Image` userdata that shows it, and its
+/// charge, made before the canvas is allocated.
 fn new_backing(
     lua: &Lua,
     bindings: &RendererBindings,
@@ -79,12 +82,16 @@ fn new_backing(
     width: u32,
     height: u32,
     caller: &str,
-) -> Result<(RenderCanvasHandle, AnyUserData)> {
+) -> Result<(RenderCanvasHandle, AnyUserData, GpuCharge)> {
+    let charge = charge_gpu_bytes(lua, canvas_bytes(width, height))?;
     let canvas = allocate_script_render_canvas(bindings, context, width, height).map_err(|_| {
         crate::luau::Error::runtime(format!("{caller} failed to create RenderCanvas"))
     })?;
-    let image = lua.create_userdata(ScriptedImage::from_render_canvas(Rc::clone(&canvas)))?;
-    Ok((canvas, image))
+    let image = lua.create_userdata(ScriptedImage::from_render_canvas(
+        Rc::clone(&canvas),
+        Some(Rc::clone(&charge)),
+    ))?;
+    Ok((canvas, image, charge))
 }
 
 impl ScriptedCanvas {
@@ -102,6 +109,7 @@ impl ScriptedCanvas {
             pending_width: 0,
             pending_height: 0,
             image: None,
+            charge: None,
             frame: None,
             renderer: None,
         };
@@ -130,8 +138,9 @@ impl ScriptedCanvas {
         lua.create_userdata(canvas)
     }
 
-    fn set_backing(&mut self, (canvas, image): (RenderCanvasHandle, AnyUserData)) {
+    fn set_backing(&mut self, (canvas, image, charge): (RenderCanvasHandle, AnyUserData, GpuCharge)) {
         self.image = Some(image);
+        self.charge = Some(charge);
         self.canvas = Some(canvas);
         self.pending_width = 0;
         self.pending_height = 0;
@@ -416,6 +425,7 @@ impl UserData for ScriptedCanvas {
             if width == 0 || height == 0 {
                 this.image = None;
                 this.canvas = None;
+                this.charge = None;
                 this.pending_width = 0;
                 this.pending_height = 0;
                 return Ok(());
@@ -1095,6 +1105,66 @@ mod tests {
             &*events.borrow(),
             &["allocate:4x3".to_owned(), "allocate:8192x2".to_owned()],
             "refused sizes never reach the factory"
+        );
+    }
+
+    fn host_bytes_used(vm: &ScriptVm) -> usize {
+        crate::vm::host_memory_budget::HostMemoryBudget::for_lua(vm.lua())
+            .unwrap()
+            .used()
+    }
+
+    // Inventory (lane E1) section 5 row 6: a canvas's backing was charged to
+    // nothing; its image keeps the backing past a resize.
+    #[test]
+    fn canvas_backings_are_charged_while_the_canvas_or_its_image_holds_them() {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let vm = ScriptVm::new();
+        let mut factory = PersistentFactory::new(TestCanvasFactory::new(events.clone()));
+        vm.install_render_factory(&mut factory).unwrap();
+        vm.install_rive_globals().unwrap();
+        let base = host_bytes_used(&vm);
+        let canvas = ScriptedCanvas::create(vm.lua(), vm.renderer_bindings.clone(), 100, 50).unwrap();
+        vm.lua().globals().set("canvas", canvas).unwrap();
+        assert_eq!(host_bytes_used(&vm) - base, 100 * 50 * 4);
+        vm.lua()
+            .load("image = canvas.image canvas:resize(10, 10)")
+            .exec()
+            .unwrap();
+        vm.lua().gc_collect().unwrap();
+        assert_eq!(
+            host_bytes_used(&vm) - base,
+            100 * 50 * 4 + 10 * 10 * 4,
+            "the old image keeps the old backing"
+        );
+        vm.lua().load("image = nil canvas:resize(0, 0)").exec().unwrap();
+        vm.lua().gc_collect().unwrap();
+        assert_eq!(host_bytes_used(&vm), base);
+
+        crate::vm::host_memory_budget::HostMemoryBudget::install(vm.lua(), 1000).unwrap();
+        factory.borrow_mut().ore = Some(Rc::new(RefCell::new(
+            nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::fromReal(None),
+        )));
+        let (_gpu_instance, gpu_context) = crate::gpu_canvas::ImportedGpuCanvasInstance::new(
+            Default::default(),
+            vm.renderer_bindings.clone(),
+        );
+        let gpu = gpu_context.canvas_userdata(vm.lua()).unwrap();
+        vm.lua().globals().set("gpu", gpu).unwrap();
+        for resize in ["canvas:resize(16, 16)", "gpu:resize(16, 16)"] {
+            let (failed, message): (bool, String) = vm
+                .lua()
+                .load(format!(
+                    "local ok, err = pcall(function() {resize} end) return not ok, tostring(err)"
+                ))
+                .eval()
+                .unwrap();
+            assert!(failed && message.contains("host memory budget"), "{resize}: {message}");
+        }
+        assert_eq!(
+            events.borrow().iter().filter(|event| event.starts_with("allocate")).count(),
+            2,
+            "a refused charge never reaches the factory"
         );
     }
 }

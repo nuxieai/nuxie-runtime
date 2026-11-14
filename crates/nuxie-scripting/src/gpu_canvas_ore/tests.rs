@@ -687,3 +687,130 @@ fn texture_and_gpu_canvas_sizes_are_capped() {
         "{error}"
     );
 }
+
+fn host_bytes_used(vm: &ScriptVm) -> usize {
+    crate::vm::host_memory_budget::HostMemoryBudget::for_lua(vm.lua())
+        .unwrap()
+        .used()
+}
+
+// Inventory (lane E1) section 5 row 5: GPU buffers and textures were not
+// charged to any budget; a view or bind group keeps the allocation alive.
+#[test]
+fn gpu_buffers_and_textures_are_charged_while_anything_holds_them() {
+    let vm = recording_vm();
+    let base = host_bytes_used(&vm);
+    vm.lua()
+        .load("b = GPUBuffer.new {size = 1000, usage = 'uniform'}")
+        .exec()
+        .unwrap();
+    assert_eq!(host_bytes_used(&vm) - base, 1000);
+    // 64x64 RGBA8 with seven levels: (4096 + 1024 + 256 + 64 + 16 + 4 + 1) x 4.
+    vm.lua()
+        .load("t = GPUTexture.new {width = 64, height = 64, mipmaps = 7}")
+        .exec()
+        .unwrap();
+    assert_eq!(host_bytes_used(&vm) - base, 1000 + 21_844);
+    // One uniform buffer at @group(0) @binding(0) in the vertex stage (the
+    // binding-map wire format of `split_stage_fragment_bindings_...`).
+    let map = [
+        3, 2, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0,
+    ];
+    let module = context(vm.lua())
+        .unwrap()
+        .borrow_mut()
+        .makeShaderModule(&ShaderModuleDesc {
+            code: Some(b"uniform test module"),
+            codeSize: 19,
+            bindingMapBytes: Some(&map),
+            bindingMapSize: map.len() as u32,
+            ..ShaderModuleDesc::default()
+        })
+        .unwrap();
+    let ubo_shader = vm
+        .lua()
+        .create_userdata(Shader {
+            entries: vec![ShaderEntry {
+                stage: 0,
+                logical: "vertex".into(),
+                physical: "vertex".into(),
+                module,
+            }],
+        })
+        .unwrap();
+    vm.lua().globals().set("uboShader", ubo_shader).unwrap();
+    vm.lua()
+        .load(
+            "v = t:view() t = nil \
+             layout = GPUBindGroupLayout.new {shader = uboShader} \
+             g = GPUBindGroup.new {layout = layout, ubos = {{slot = 0, buffer = b}}} \
+             b = nil",
+        )
+        .exec()
+        .unwrap();
+    vm.lua().gc_collect().unwrap();
+    assert_eq!(
+        host_bytes_used(&vm) - base,
+        1000 + 21_844,
+        "the view keeps the texture's charge and the group the buffer's"
+    );
+    vm.lua().load("v = nil g = nil").exec().unwrap();
+    vm.lua().gc_collect().unwrap();
+    assert_eq!(host_bytes_used(&vm), base);
+}
+
+#[test]
+fn gpu_texture_charges_cover_formats_layers_and_samples() {
+    let desc = |format, width, height| TextureDesc {
+        width,
+        height,
+        format,
+        ..TextureDesc::default()
+    };
+    assert_eq!(texture_bytes(&desc(TextureFormat::rgba8unorm, 10, 3)), 120);
+    assert_eq!(texture_bytes(&desc(TextureFormat::rgba32float, 2, 2)), 64);
+    // Block formats: 4x4 blocks of 8 (BC1) or 16 bytes, 6x6 and 8x8 ASTC.
+    assert_eq!(texture_bytes(&desc(TextureFormat::bc1unorm, 5, 4)), 16);
+    assert_eq!(texture_bytes(&desc(TextureFormat::bc7unorm, 8, 8)), 64);
+    assert_eq!(texture_bytes(&desc(TextureFormat::astc6x6, 7, 6)), 32);
+    assert_eq!(texture_bytes(&desc(TextureFormat::astc8x8, 8, 8)), 16);
+    let mut cube = desc(TextureFormat::r8unorm, 4, 4);
+    cube.r#type = TextureType::cube;
+    assert_eq!(texture_bytes(&cube), 6 * 16, "a cube has six faces");
+    let mut msaa = desc(TextureFormat::rgba8unorm, 4, 4);
+    msaa.sampleCount = 4;
+    msaa.depthOrArrayLayers = 3;
+    assert_eq!(texture_bytes(&msaa), 4 * 4 * 4 * 4 * 3);
+    // Levels past 1x1 are one block each, and a huge count does not loop.
+    let mut mips = desc(TextureFormat::rgba8unorm, 2, 2);
+    mips.numMipmaps = u32::MAX;
+    assert_eq!(texture_bytes(&mips), 16 + 4 * u64::from(u32::MAX - 1));
+}
+
+// The charge is made before the backend is asked, and a refused charge is an
+// ordinary Lua error.
+#[test]
+fn gpu_allocations_past_the_budget_are_refused_before_the_backend() {
+    let vm = recording_vm();
+    crate::vm::host_memory_budget::HostMemoryBudget::install(vm.lua(), 1024 * 1024).unwrap();
+    let base = host_bytes_used(&vm);
+    vm.lua()
+        .load(
+            r#"
+        local function refused(f)
+            local ok, message = pcall(f)
+            assert(not ok, 'expected a refusal')
+            assert(string.find(tostring(message), 'host memory budget', 1, true), tostring(message))
+        end
+        refused(function() GPUBuffer.new {size = 1024 * 1024 + 1, usage = 'vertex'} end)
+        refused(function() GPUBuffer.new {size = 4294967295, usage = 'vertex'} end)
+        refused(function() GPUTexture.new {width = 1024, height = 1024} end)
+        refused(function() GPUTexture.new {width = 512, height = 512, mipmaps = 2} end)
+        keep = GPUTexture.new {width = 512, height = 512}
+        refused(function() GPUBuffer.new {size = 1, usage = 'uniform'} end)
+    "#,
+        )
+        .exec()
+        .unwrap();
+    assert_eq!(host_bytes_used(&vm) - base, 1024 * 1024);
+}

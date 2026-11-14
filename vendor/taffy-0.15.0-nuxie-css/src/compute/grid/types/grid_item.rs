@@ -1018,7 +1018,10 @@ impl GridItem {
                     // relevant axis, the size suggestion is capped by those sizes; for this purpose, any indefinite percentages
                     // in these sizes are resolved against zero (and considered definite).
                     // nuxie-css: the caps are border-box sizes, as the contribution is.
-                    if self.is_compressible_replaced {
+                    // Chrome compresses a picture's width this way and not its height: in a
+                    // 40 tall grid, under an 80 tall box, a 120 by 60 picture with
+                    // `height: 100%` keeps a 60 tall row and is 120 by 60.
+                    if self.is_compressible_replaced && axis == AbstractAxis::Inline {
                         let size = self
                             .size
                             .get(axis)

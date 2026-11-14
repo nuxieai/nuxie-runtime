@@ -1557,3 +1557,22 @@ size for such an item.
 
 Of the 29,914 layouts, 8 more match and none that matched differ. Of 44
 new Chrome probes of the shape, 5 differed before and all match now.
+
+## A picture's height is not compressed in a grid row
+
+A grid item that is a picture with a percentage width or `max-width` has
+its automatic minimum capped by that size resolved against zero (CSS
+Sizing 3 §5.2.2, a compressible replaced element). The fork applied the
+same cap to a percentage height, so in a grid with a height of its own
+the picture's row shrank to whatever space was left. Chrome compresses
+the width only: in a 40 tall grid, under an 80 tall box, a 120 by 60
+picture with `height: 100%` keeps a 60 tall row and is 120 by 60. The
+fork made it 0 by 0. In a grid with no height the row already grew to
+the picture's height, and that did not change.
+
+`GridItem::minimum_contribution` now applies the cap in the inline axis
+only.
+
+Of the 29,914 layouts, 32 more match and none that matched differ. Of
+26 new Chrome probes of the outer contexts, 15 differed before and all
+match now.

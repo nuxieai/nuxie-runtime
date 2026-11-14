@@ -16,7 +16,7 @@ mod bytecode;
 mod command_server;
 mod embedded_chunk;
 mod host_dispatch;
-mod host_memory_budget;
+pub(crate) mod host_memory_budget;
 mod listener_invocation;
 mod logging_scripting_context;
 mod lua_audio_samples;

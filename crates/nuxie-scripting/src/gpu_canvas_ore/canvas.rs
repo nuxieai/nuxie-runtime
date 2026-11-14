@@ -12,6 +12,8 @@ pub(crate) struct Canvas {
     render_context: Option<PersistentFactoryContext>,
     color_view: Option<AnyResourceHandle>,
     image: Option<AnyUserData>,
+    /// [`canvas_bytes`] of the backing, shared with its image and views.
+    charge: Option<GpuCharge>,
     pending_width: u32,
     pending_height: u32,
 }
@@ -28,6 +30,7 @@ impl Canvas {
             canvas: None,
             color_view: None,
             image: None,
+            charge: None,
             pending_width: 0,
             pending_height: 0,
         };
@@ -57,6 +60,7 @@ impl Canvas {
             .render_context
             .as_mut()
             .ok_or_else(|| Error::runtime(format!("{caller} requires a RenderContext")))?;
+        let charge = charge_gpu_bytes(lua, canvas_bytes(width, height))?;
         let canvas = allocate_script_render_canvas(&self.bindings, context, width, height)
             .map_err(|_| Error::runtime(format!("{caller} failed to create RenderCanvas")))?;
         let info = nuxie_render_api::canvas_texture_info(&canvas);
@@ -67,8 +71,12 @@ impl Canvas {
         #[allow(unsafe_code)]
         let color_view = unsafe { ore.borrow_mut().wrapCanvasTextureInfo(info) }
             .ok_or_else(|| Error::runtime(format!("{caller} failed to wrap canvas texture")))?;
-        let image = lua.create_userdata(ScriptedImage::from_render_canvas(Rc::clone(&canvas)))?;
+        let image = lua.create_userdata(ScriptedImage::from_render_canvas(
+            Rc::clone(&canvas),
+            Some(Rc::clone(&charge)),
+        ))?;
         self.canvas = Some(canvas);
+        self.charge = Some(charge);
         self.color_view = Some(color_view);
         self.image = Some(image);
         self.pending_width = 0;
@@ -152,6 +160,7 @@ impl UserData for Canvas {
                         resource,
                         retained_image: None,
                         follows: None,
+                        charge: this.charge.clone(),
                     })
                 })
                 .transpose()
@@ -163,6 +172,7 @@ impl UserData for Canvas {
                 this.canvas = None;
                 this.color_view = None;
                 this.image = None;
+                this.charge = None;
                 this.pending_width = 0;
                 this.pending_height = 0;
                 return Ok(());
@@ -179,7 +189,7 @@ impl UserData for Canvas {
         });
         methods.add_method_mut("colorView",|lua,this,()| {
             this.satisfy_pending(lua)?;let resource=this.color_view.clone().ok_or_else(||Error::runtime("GPUCanvas:colorView() has no backing texture. Call resize(w, h) with non-zero dimensions first."))?;
-            lua.create_userdata(TextureView {resource, retained_image:None, follows:None})
+            lua.create_userdata(TextureView {resource, retained_image:None, follows:None, charge: this.charge.clone()})
         });
         methods.add_method("beginRenderPass", |lua, this, descriptor: Value| {
             check_begin_pass(lua, "GPUCanvas")?;
@@ -254,6 +264,7 @@ pub(super) fn begin_pass(
                         resource: resource.clone(),
                         retained_image: None,
                         follows: None,
+                        charge: None,
                     }),
                     None if host_target => {
                         dropped = true;

@@ -60,6 +60,7 @@ impl UserData for Target {
                         resource,
                         retained_image: None,
                         follows: None,
+                        charge: None,
                     })
                 })
                 .transpose()

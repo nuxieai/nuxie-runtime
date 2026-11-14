@@ -44,6 +44,8 @@ pub(crate) struct ScriptedImage {
     // Set when this image is a canvas's backing, so Image:view() imports
     // through the backend's canvas sampling wrap rather than the raw texture.
     source_canvas: Option<RenderCanvasHandle>,
+    /// A canvas backing's GPU memory charge: the image keeps the backing.
+    canvas_charge: Option<crate::gpu_canvas::ore::GpuCharge>,
     cached_gpu_view: RefCell<Option<nuxie_ore_metal::gpu_resource::AnyResourceHandle>>,
     // The frame the cached view was made from, for a video's picture.
     cached_frame: Cell<Option<usize>>,
@@ -72,15 +74,20 @@ impl ScriptedImage {
         Self {
             source: ImageSource::Fixed(image),
             source_canvas: None,
+            canvas_charge: None,
             cached_gpu_view: RefCell::new(None),
             cached_frame: Cell::new(None),
         }
     }
 
-    pub(crate) fn from_render_canvas(canvas: RenderCanvasHandle) -> Self {
+    pub(crate) fn from_render_canvas(
+        canvas: RenderCanvasHandle,
+        charge: Option<crate::gpu_canvas::ore::GpuCharge>,
+    ) -> Self {
         let image = canvas.borrow().render_image();
         Self {
             source_canvas: Some(canvas),
+            canvas_charge: charge,
             ..Self::from_render_image_rc(image)
         }
     }
@@ -90,6 +97,7 @@ impl ScriptedImage {
         Self {
             source: ImageSource::Video(video),
             source_canvas: None,
+            canvas_charge: None,
             cached_gpu_view: RefCell::new(None),
             cached_frame: Cell::new(None),
         }
@@ -173,6 +181,7 @@ impl UserData for ScriptedImage {
                 this.render_image()?,
                 this.source_canvas.as_ref(),
                 &this.cached_gpu_view,
+                this.canvas_charge.clone(),
             )
         });
     }

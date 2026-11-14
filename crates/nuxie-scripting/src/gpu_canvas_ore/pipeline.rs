@@ -20,6 +20,9 @@ pub(super) struct BindGroup {
     /// Kept only when a texture follows a video, to make the group again when
     /// the video's frame moves on.
     remake: Option<BindGroupInputs>,
+    /// The charges of the buffers and views the group holds, which it keeps
+    /// alive past their own userdata.
+    _charges: Vec<GpuCharge>,
 }
 struct BindGroupInputs {
     layout: AnyResourceHandle,
@@ -167,6 +170,7 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         let layout_data: AnyUserData = table.get("layout")?;
         let layout = layout_data.borrow::<Layout>()?;
         let mut ubos = Vec::new();
+        let mut charges = Vec::new();
         for entry in tables(&table, "ubos", 8)? {
             let slot = number(&entry, "slot", 0.0)? as u32;
             if slot > 7 {
@@ -175,9 +179,14 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
                 )));
             }
             let buffer: AnyUserData = entry.get("buffer")?;
+            let resource = {
+                let buffer = buffer.borrow::<Buffer>()?;
+                charges.push(Rc::clone(&buffer.charge));
+                buffer.resource.clone()
+            };
             ubos.push((
                 slot,
-                buffer.borrow::<Buffer>()?.resource.clone(),
+                resource,
                 number(&entry, "offset", 0.0)? as u32,
                 number(&entry, "size", 0.0)? as u32,
             ));
@@ -194,6 +203,7 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             let view: AnyUserData = entry.get("view")?;
             let (resource, follows) = {
                 let view = view.borrow::<TextureView>()?;
+                charges.extend(view.charge.clone());
                 (view.resource.clone(), view.follows.is_some())
             };
             textures.push((slot, resource));
@@ -223,7 +233,11 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
                     .collect(),
                 samplers,
             });
-        lua.create_userdata(BindGroup { resource, remake })
+        lua.create_userdata(BindGroup {
+            resource,
+            remake,
+            _charges: charges,
+        })
     })?;
     constructor(lua, "GPUPipeline", |lua, table| {
         let context = context(lua)?;

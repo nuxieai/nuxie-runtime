@@ -2,6 +2,7 @@
 //! These userdata issue ORE operations; the separate direct-host plan collector
 //! is not used to execute imported script GPU work.
 use crate::vm::RendererBindings;
+use crate::vm::host_memory_budget::HostMemoryCharge;
 use crate::luau::{
     AnyUserData, Buffer as LuaBuffer, Error, Lua, Result, Table, UserData, UserDataFields,
     UserDataMethods, Value,
@@ -71,6 +72,66 @@ pub(crate) fn check_gpu_size(caller: &str, width: u32, height: u32, layers: u32)
         )));
     }
     Ok(())
+}
+
+/// The VM's host-memory charge for one GPU allocation. GPU memory and host
+/// memory share the VM's one budget. Every script-visible owner of the
+/// allocation (its userdata, the views and bind groups made from it, a
+/// canvas's image) holds a clone, so the bytes are refunded when the last of
+/// them is collected.
+pub(crate) type GpuCharge = Rc<HostMemoryCharge>;
+
+/// Charges `bytes` of GPU memory to the VM's budget, before the backend is
+/// asked for them.
+pub(crate) fn charge_gpu_bytes(lua: &Lua, bytes: u64) -> Result<GpuCharge> {
+    let bytes = usize::try_from(bytes).unwrap_or(usize::MAX);
+    HostMemoryCharge::for_lua(lua, bytes).map(Rc::new)
+}
+
+/// Bytes a canvas's backing takes: one RGBA8 colour texture.
+pub(crate) fn canvas_bytes(width: u32, height: u32) -> u64 {
+    u64::from(width)
+        .saturating_mul(u64::from(height))
+        .saturating_mul(4)
+}
+
+/// An upper bound of the bytes the backend allocates for `desc`: every mip
+/// level of every layer and sample. A 3D texture's depth is charged at every
+/// level as if it did not shrink.
+pub(super) fn texture_bytes(desc: &TextureDesc<'_>) -> u64 {
+    // (block width, block height, bytes per block)
+    let (block_width, block_height, block_bytes) = match desc.format {
+        TextureFormat::bc1unorm | TextureFormat::etc2rgb8 => (4, 4, 8),
+        TextureFormat::bc3unorm
+        | TextureFormat::bc7unorm
+        | TextureFormat::etc2rgba8
+        | TextureFormat::astc4x4 => (4, 4, 16),
+        TextureFormat::astc6x6 => (6, 6, 16),
+        TextureFormat::astc8x8 => (8, 8, 16),
+        format => (1, 1, u64::from(textureFormatBytesPerTexel(format))),
+    };
+    let layers = match desc.r#type {
+        TextureType::cube => desc.depthOrArrayLayers.max(6),
+        _ => desc.depthOrArrayLayers.max(1),
+    };
+    let levels = desc.numMipmaps.max(1);
+    let mut level_bytes_sum: u64 = 0;
+    for level in 0..levels {
+        let width = (desc.width >> level.min(31)).max(1);
+        let height = (desc.height >> level.min(31)).max(1);
+        let blocks = u64::from(width.div_ceil(block_width))
+            .saturating_mul(u64::from(height.div_ceil(block_height)));
+        level_bytes_sum = level_bytes_sum.saturating_add(blocks.saturating_mul(block_bytes));
+        if width == 1 && height == 1 {
+            // Every later level is one block too.
+            let rest = u64::from(levels.saturating_sub(level).saturating_sub(1));
+            level_bytes_sum = level_bytes_sum.saturating_add(rest.saturating_mul(block_bytes));
+            break;
+        }
+    }
+    level_bytes_sum
+        .saturating_mul(u64::from(layers))
+        .saturating_mul(u64::from(desc.sampleCount.max(1)))
 }
 
 fn context(lua: &Lua) -> Result<OreContextHandle> {
@@ -202,8 +263,10 @@ pub(crate) fn image_view(
     image: Rc<dyn nuxie_render_api::RenderImage>,
     source_canvas: Option<&nuxie_render_api::RenderCanvasHandle>,
     cached: &RefCell<Option<AnyResourceHandle>>,
+    charge: Option<GpuCharge>,
 ) -> Result<AnyUserData> {
-    let view = image_texture_view(lua, image, source_canvas, cached)?;
+    let mut view = image_texture_view(lua, image, source_canvas, cached)?;
+    view.charge = charge;
     lua.create_userdata(view)
 }
 
@@ -261,6 +324,7 @@ pub(crate) fn image_texture_view(
         resource,
         retained_image: Some(image),
         follows: None,
+        charge: None,
     })
 }
 

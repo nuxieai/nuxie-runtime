@@ -132,11 +132,22 @@ pub struct ViewModelInstance {
     dependents: LazyVector<DataBindContainerDependent>,
     property_symbols: Vec<(SymbolType, CoreHandle)>,
     view_model: Option<CoreHandle>,
+    /// What the host that made this instance keeps alive with it (a script's
+    /// charge for it); dropped with the instance, never copied by a clone.
+    host_owner: Option<crate::host_viewmodel::HostOwnerToken>,
 }
 
 impl ViewModelInstance {
     pub(crate) fn handle(&self) -> Option<CoreHandle> {
         self.base.base.base.base.base.base.handle()
+    }
+
+    pub(crate) fn set_host_owner(&mut self, owner: crate::host_viewmodel::HostOwnerToken) {
+        self.host_owner = Some(owner);
+    }
+
+    pub(crate) fn host_owner(&self) -> Option<&crate::host_viewmodel::HostOwnerToken> {
+        self.host_owner.as_ref()
     }
 
     pub fn pointer_key(instance: Option<&CoreHandle>) -> u32 {

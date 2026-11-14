@@ -11,6 +11,10 @@ pub struct ViewModelInstanceString {
     pub base: ViewModelInstanceStringBase,
     #[cfg(feature = "tools")]
     changed_callback: Option<fn(&mut Self, &str)>,
+    /// What the host that set the current value keeps alive with it (a
+    /// script's charge for the string); dropped on the next change of value,
+    /// whoever makes it, and with the property.
+    host_owner: Option<crate::host_viewmodel::HostOwnerToken>,
 }
 
 impl ViewModelInstanceString {
@@ -31,7 +35,23 @@ impl ViewModelInstanceString {
         }
     }
 
+    /// Sets the value and keeps `owner` for as long as the property holds it.
+    pub(crate) fn set_value_owned(
+        &mut self,
+        value: impl Into<String>,
+        owner: crate::host_viewmodel::HostOwnerToken,
+    ) {
+        self.set_value(value);
+        self.host_owner = Some(owner);
+    }
+
+    pub(crate) fn host_owner(&self) -> Option<&crate::host_viewmodel::HostOwnerToken> {
+        self.host_owner.as_ref()
+    }
+
     pub fn property_value_changed(&mut self) {
+        // The value the owner paid for is gone, whichever path replaced it.
+        self.host_owner = None;
         if let Some(owner) = crate::mechanical_port::source::core::CoreObject::core(self).handle() {
             crate::host_viewmodel::capture_native_change(
                 owner,

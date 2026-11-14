@@ -12,6 +12,9 @@ pub struct ViewModelInstanceListItem {
     pub base: ViewModelInstanceListItemBase,
     view_model_instance: Option<CoreHandle>,
     artboard: Option<CoreHandle>,
+    /// What the host that added this item keeps alive with it (a script's
+    /// charge for it); dropped with the item.
+    host_owner: Option<crate::host_viewmodel::HostOwnerToken>,
 }
 
 impl ViewModelInstanceListItem {
@@ -39,6 +42,14 @@ impl ViewModelInstanceListItem {
     }
     pub fn set_view_model_instance(&mut self, value: Option<CoreHandle>) {
         self.view_model_instance = value;
+    }
+
+    pub(crate) fn set_host_owner(&mut self, owner: Option<crate::host_viewmodel::HostOwnerToken>) {
+        self.host_owner = owner;
+    }
+
+    pub(crate) fn host_owner(&self) -> Option<&crate::host_viewmodel::HostOwnerToken> {
+        self.host_owner.as_ref()
     }
 
     pub fn view_model_instance(&self) -> Option<CoreHandle> {

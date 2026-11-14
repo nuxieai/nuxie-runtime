@@ -392,6 +392,10 @@ pub struct HbFont {
     axis_values: HashMap<u32, f32>,
     color_layer_cache: Mutex<HashMap<GlyphId, Vec<ColorGlyphLayer>>>,
     glyph_path_cache: Mutex<HashMap<GlyphId, Arc<RawPath>>>,
+    /// What the host that made this font keeps alive with it (a script's
+    /// charge for the bytes it decoded); dropped with the font. A variant
+    /// `with_options` makes keeps its source's, as it keeps its bytes.
+    host_owner: Option<crate::host_viewmodel::HostOwnerToken>,
 }
 
 /// What a font face's variants share: its shaper data, the shape plans built
@@ -472,6 +476,54 @@ impl HbFont {
     }
     pub fn decode(bytes: &[u8]) -> Option<FontRef> {
         Self::decode_face(bytes, 0)
+    }
+
+    /// [`Self::decode`], keeping `owner` for as long as the font (or any
+    /// variant of it) lives.
+    pub fn decode_with_owner(
+        bytes: &[u8],
+        owner: crate::host_viewmodel::HostOwnerToken,
+    ) -> Option<FontRef> {
+        let shaping = ShapingFont::from_index(bytes, 0).ok()?;
+        let outline = OutlineFont::from_index(bytes, 0).ok()?;
+        let _ = (shaping, outline);
+        let mut font = Self::with_stored_options(
+            FontBytes::Owned(Arc::from(bytes)),
+            0,
+            HashMap::new(),
+            HashMap::new(),
+        );
+        font.host_owner = Some(owner);
+        Some(Arc::new(font))
+    }
+
+    /// The font `with_options` makes, before it is shared.
+    fn variant(&self, coords: &[Coord], features: &[Feature]) -> Self {
+        let mut axes = self.axis_values.clone();
+        for coord in coords {
+            axes.insert(coord.axis, coord.value);
+        }
+        let mut values = self.feature_values.clone();
+        for feature in features {
+            values.insert(feature.tag, feature.value);
+        }
+        let mut font = Self::with_face_options(
+            self.bytes.clone(),
+            self.face_index,
+            Some(Arc::clone(&self.face)),
+            axes,
+            values,
+        );
+        // Keep upstream's plain-HB outline variant policy. Pictures are our
+        // opt-in host extension and survive derived shaping variants.
+        font.host_pictures = self.host_pictures.clone();
+        font.host_picture_scope = self.host_picture_scope;
+        font
+    }
+
+    /// What the host that made this font keeps alive with it.
+    pub fn host_owner(&self) -> Option<&crate::host_viewmodel::HostOwnerToken> {
+        self.host_owner.as_ref()
     }
 
     pub fn decode_face(bytes: &[u8], face_index: u32) -> Option<FontRef> {
@@ -671,6 +723,7 @@ impl HbFont {
             axis_values,
             color_layer_cache: Mutex::new(HashMap::new()),
             glyph_path_cache: Mutex::new(HashMap::new()),
+            host_owner: None,
         }
     }
 
@@ -689,6 +742,7 @@ impl HbFont {
         font.host_outline = Some(outline);
         font.host_pictures = self.host_pictures.clone();
         font.host_picture_scope = self.host_picture_scope;
+        font.host_owner = self.host_owner.clone();
         Arc::new(font)
     }
 
@@ -864,25 +918,9 @@ impl Font for HbFont {
         nominal_codepoints(&self.outline_font())
     }
     fn with_options(&self, coords: &[Coord], features: &[Feature]) -> FontRef {
-        let mut axes = self.axis_values.clone();
-        for coord in coords {
-            axes.insert(coord.axis, coord.value);
-        }
-        let mut values = self.feature_values.clone();
-        for feature in features {
-            values.insert(feature.tag, feature.value);
-        }
-        let mut font = Self::with_face_options(
-            self.bytes.clone(),
-            self.face_index,
-            Some(Arc::clone(&self.face)),
-            axes,
-            values,
-        );
-        // Keep upstream's plain-HB outline variant policy. Pictures are our
-        // opt-in host extension and survive derived shaping variants.
-        font.host_pictures = self.host_pictures.clone();
-        font.host_picture_scope = self.host_picture_scope;
+        let mut font = self.variant(coords, features);
+        // The variant keeps this font's bytes, so it keeps its host owner.
+        font.host_owner = self.host_owner.clone();
         Arc::new(font)
     }
     fn get_path(&self, glyph: GlyphId) -> RawPath {
@@ -2392,6 +2430,21 @@ mod tests {
             let font = font_with_cmaps(&[(3, 10, cmap_long(format, &groups))]);
             assert_eq!(font.codepoints(), [0x41, 0x42]);
         }
+    }
+
+    #[test]
+    fn a_host_owner_lives_as_long_as_the_font_and_its_variants() {
+        let owner = Arc::new(());
+        let font = HbFont::decode_with_owner(
+            &decode_hex(include_str!("testdata/legacy_kern_he.hex")),
+            crate::host_viewmodel::HostOwnerToken::from_arc(Arc::clone(&owner)),
+        )
+        .expect("fixture font decodes");
+        let variant = font.with_options(&[], &[Feature { tag: KERN_TAG, value: 0 }]);
+        drop(font);
+        assert_eq!(Arc::strong_count(&owner), 2, "the variant keeps the owner");
+        drop(variant);
+        assert_eq!(Arc::strong_count(&owner), 1, "the last variant let it go");
     }
 
     #[test]

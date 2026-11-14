@@ -753,6 +753,29 @@ mod binding_tests {
         assert_eq!(vm.used(), decoded, "a collected variant gives its charge back");
     }
 
+    // Codex review (lane H2): each variant kept its source's whole owner, so
+    // a font replaced by its own variant over and over kept every charge in
+    // the chain (and dropping the last dropped the chain recursively).
+    #[test]
+    fn a_chain_of_variants_keeps_one_charge_each() {
+        let vm = font_vm(1024 * 1024);
+        vm.vm.eval::<()>("f = Font.decode(fontBytes)").unwrap();
+        let decoded = vm.used();
+        vm.vm.eval::<()>("first = f:withOptions({}, {})").unwrap();
+        let variant = vm.used() - decoded;
+        for _ in 0..200 {
+            vm.vm
+                .eval::<()>("for i = 1, 100 do f = f:withOptions({}, {}) end")
+                .unwrap();
+            vm.vm.lua().gc_collect().unwrap();
+        }
+        // The face (kept by every variant), `first` and the last variant.
+        assert_eq!(vm.used(), decoded + 2 * variant);
+        vm.vm.eval::<()>("f = nil first = nil").unwrap();
+        vm.vm.lua().gc_collect().unwrap();
+        assert_eq!(vm.used(), 0);
+    }
+
     // Lane H2: `Text:append` keeps the paint's render paint, whose shader is
     // the gradient's; the gradient's charge went when the script let go of
     // the paint and the gradient, while the Text kept the shader.

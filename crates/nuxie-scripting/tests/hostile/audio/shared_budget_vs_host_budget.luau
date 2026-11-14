@@ -10,6 +10,8 @@ local function grow()
     local ok, region = pcall(Audio.Region.create, 32 * 1024 * 1024)
     if not ok then refused = region return end
     table.insert(kept, region)
+    -- Past the 64 MiB host budget plus one region: stop, and say so.
+    assert(#kept * 32 <= 96, "holding " .. (#kept * 32) .. " MiB of shared regions")
   end
 end
 return function()
@@ -19,7 +21,6 @@ return function()
     advance = function(self, dt) grow() return true end,
     update = function(self)
       grow()
-      assert(#kept * 32 <= 128, "holding " .. (#kept * 32) .. " MiB of shared regions")
     end,
   }
 end

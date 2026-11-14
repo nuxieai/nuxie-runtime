@@ -1,6 +1,8 @@
 --! attacks: one 16 MiB VM string assigned to the string property of many instances (each keeps a host copy); expect: ok; within: 30s; harness: instance; viewmodels: script_create_viewmodel_instance.riv
 -- The script holds one 16 MiB string; each assignment copies it into the
--- model. 48 instances would keep 768 MiB on the host: the budget must refuse.
+-- model. The 64 MiB host budget must refuse by the fifth copy; the case
+-- stops at the sixth (96 MiB held) so the outcome, not the memory ceiling,
+-- reports a missing charge.
 local big = string.rep("s", 16 * 1024 * 1024)
 local kept = {}
 local refused = false
@@ -11,6 +13,7 @@ local function assign(n)
     local ok = pcall(function() inst:getString("str").value = big end)
     if not ok then refused = true return end
     table.insert(kept, inst)
+    assert(#kept <= 5, "kept " .. #kept .. " instances holding 16 MiB strings each")
   end
 end
 return function()
@@ -20,7 +23,6 @@ return function()
     advance = function(self, dt) assign(8) return true end,
     update = function(self)
       assign(8)
-      assert(#kept <= 4, "kept " .. #kept .. " instances holding 16 MiB strings each")
     end,
   }
 end

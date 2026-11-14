@@ -314,6 +314,18 @@ LUAU_VM_DIFF_FLAGS ?=
 luau-vm-diff:
 	$(RUST_BUILD) run --quiet --release -p luau-vm-diff --bin luau-vm-diff -- --corpus "$(CURDIR)/tests/luau-vm-diff" $(LUAU_VM_DIFF_FLAGS)
 
+# --- Luau client path without unwinding (docs/luaur-client-path-safe.md 8) ---
+# Builds the nuxie-luau-vm and nuxie-scripting test suites with -Cpanic=abort
+# (.bazelrc config panic-abort; its own output tree) and runs them minus
+# tools/luau-abort-gate/excluded-tests.txt, then the hostile corpus
+# (crates/nuxie-scripting/tests/hostile, one child process per case) under
+# abort and under unwind. Fails on any unexpected corpus failure and on any
+# line of tests/hostile/expected-failures.txt that now passes.
+# NUXIE_HOSTILE_FILTER=<path part> runs a subset of the corpus.
+.PHONY: luau-abort-gate
+luau-abort-gate:
+	python3 "$(CURDIR)/tools/luau-abort-gate/gate.py"
+
 # --- Clippy lint gate (panic-freedom discipline) ------------------------------
 # The runtime crates opt into the panic-freedom clippy lints
 # (clippy::unwrap_used / indexing_slicing / arithmetic_side_effects):

@@ -1175,19 +1175,18 @@ impl StateMachineLayerInstance {
                 })
                 .expect("live authored transition");
             if let Some(allowed) = allowed {
-                transition
-                    .with_mut(|transition| {
-                        if allowed == AllowTransition::Yes {
-                            let weight = transition
-                                .state_transition_random_weight()
-                                .expect("an authored StateTransition must expose random weight");
-                            transition.state_transition_set_evaluated_random_weight(weight);
-                            transition.state_transition_use_layer(machine, occurrence.clone());
-                        } else {
-                            transition.state_transition_set_evaluated_random_weight(0);
-                        }
-                    })
-                    .expect("live authored transition");
+                // Live: it was read just above.
+                transition.with_mut(|transition| {
+                    if allowed == AllowTransition::Yes {
+                        let weight = transition
+                            .state_transition_random_weight()
+                            .expect("an authored StateTransition must expose random weight");
+                        transition.state_transition_set_evaluated_random_weight(weight);
+                        transition.state_transition_use_layer(machine, occurrence.clone());
+                    } else {
+                        transition.state_transition_set_evaluated_random_weight(0);
+                    }
+                });
             }
             match allowed {
                 None => continue,

@@ -265,10 +265,11 @@ impl ScriptedPathEffect {
         let Some(update) = update else {
             return true;
         };
-        let node = paint
+        // The paint is live while its effects update; were it gone, the
+        // effect only leaves its update phase.
+        let requested = paint
             .with(crate::scripting::ScriptNode::from_path_effect)
-            .expect("a path effect's paint is live while it updates");
-        let requested = update.run(source, node);
+            .is_some_and(|node| update.run(source, node));
         effect.with_downcast_mut::<Self, _>(|effect| effect.finish_update(requested));
         true
     }

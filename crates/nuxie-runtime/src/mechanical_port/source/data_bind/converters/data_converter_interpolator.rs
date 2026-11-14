@@ -340,12 +340,12 @@ impl DataConverterInterpolator {
         if !self.advancer.initialized {
             return None;
         }
+        // An initialized advancer always has a target.
         let current_to_matches = self
             .advancer
             .current()
             .to
-            .as_ref()
-            .unwrap()
+            .as_ref()?
             .compare(self.advancer.current_value.as_deref());
         if current_to_matches || elapsed == 0.0 {
             return None;

@@ -245,10 +245,9 @@ impl ShapePaint {
     pub(crate) fn update_effects_occurrence(paint: &CoreHandle, pass: EffectPass) {
         let source = pass.run(&EffectPaint::Handle(paint));
         paint.with_mut(|paint| {
-            paint
-                .as_shape_paint_mut()
-                .expect("a Fill or Stroke is a ShapePaint")
-                .end_effect_pass(source)
+            if let Some(paint) = paint.as_shape_paint_mut() {
+                paint.end_effect_pass(source);
+            }
         });
     }
 
@@ -264,20 +263,18 @@ impl ShapePaint {
         if !has_dirt(value, ComponentDirt::PATH) || self.effects_container.effects().is_empty() {
             return None;
         }
-        let parent = self.base.parent_handle().expect("ShapePaint container");
+        let parent = self.base.parent_handle()?;
         // Hidden paints are invalidated again when shown (see
         // set_render_opacity). Clip sources still consume their effect
         // geometry while hidden. Paints without a color or gradient never show.
         if (self.paint_mutator.is_none() || self.render_opacity() == 0.0)
-            && parent
+            && !parent
                 .with(|container| {
-                    let flags = container
-                        .as_shape_paint_container()
-                        .expect("ShapePaint container")
-                        .path_flags();
-                    (flags & PathFlags::CLIPPING).is_empty()
+                    container.as_shape_paint_container().is_some_and(|container| {
+                        !(container.path_flags() & PathFlags::CLIPPING).is_empty()
+                    })
                 })
-                .expect("live ShapePaint container")
+                .unwrap_or(false)
         {
             self.effects_deferred = true;
             return None;

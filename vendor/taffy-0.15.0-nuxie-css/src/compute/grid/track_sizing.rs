@@ -282,7 +282,7 @@ pub(super) fn track_sizing_algorithm<Tree: LayoutPartialTree>(
 
     // 11.5.1 Shim item baselines
     if has_baseline_aligned_item {
-        resolve_item_baselines(tree, axis, items, inner_node_size);
+        resolve_item_baselines(tree, axis, axis_tracks, other_axis_tracks, items, inner_node_size, &get_track_size_estimate);
     }
 
     // If all tracks have a fixed min track sizing function and base_size = growth_limit,
@@ -449,11 +449,14 @@ fn initialize_track_sizes(
 }
 
 /// 11.5.1 Shim baseline-aligned items so their intrinsic size contributions reflect their baseline alignment.
-fn resolve_item_baselines(
-    tree: &mut impl LayoutPartialTree,
+fn resolve_item_baselines<Tree: LayoutPartialTree>(
+    tree: &mut Tree,
     axis: AbstractAxis,
+    axis_tracks: &[GridTrack],
+    other_axis_tracks: &[GridTrack],
     items: &mut [GridItem],
     inner_node_size: Size<Option<f32>>,
+    get_track_size_estimate: &impl Fn(&GridTrack, Option<f32>, &Tree) -> Option<f32>,
 ) {
     // Sort items by track in the other axis (row) start position so that we can iterate items in groups which
     // are in the same track in the other axis (row)
@@ -499,25 +502,20 @@ fn resolve_item_baselines(
                 continue;
             }
 
-            // nuxie-css: a ratio item stretched in neither axis is measured at its content
-            // width, so the height its ratio gives is the height its baseline comes from
-            // (`GridItem::ratio_follows_content_width`).
-            let known_dimensions = if item.ratio_follows_content_width() {
-                let available_width =
-                    inner_node_size.width.map(AvailableSpace::Definite).unwrap_or(AvailableSpace::MaxContent);
-                let width = tree.measure_child_size(
-                    item.node,
-                    Size::NONE,
-                    inner_node_size,
-                    Size { width: available_width, height: AvailableSpace::MinContent },
-                    SizingMode::InherentSize,
-                    crate::AbsoluteAxis::Horizontal,
-                    Line::FALSE,
-                );
-                Size { width: Some(width), height: None }
-            } else {
-                Size::NONE
-            };
+            // nuxie-css: a ratio item stretched in neither axis is measured at the width its
+            // content has in its grid area, so the height its ratio gives is the height its
+            // baseline comes from (`GridItem::baseline_known_dimensions`).
+            // This pass runs before the columns are sized: the area's width is known only
+            // under fixed columns, and the grid's own width stands in for it otherwise.
+            let grid_area_size = item.grid_area_size(
+                axis,
+                axis_tracks,
+                other_axis_tracks,
+                inner_node_size,
+                |track, basis| get_track_size_estimate(track, basis, tree),
+                &|val, basis| tree.calc(val, basis),
+            );
+            let known_dimensions = item.baseline_known_dimensions(tree, grid_area_size, inner_node_size.width);
             let measured_size_and_baselines = tree.perform_child_layout(
                 item.node,
                 known_dimensions,

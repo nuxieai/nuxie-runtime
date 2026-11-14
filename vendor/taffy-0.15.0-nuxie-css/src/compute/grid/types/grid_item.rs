@@ -364,7 +364,7 @@ impl GridItem {
     /// its height: a ratio item with an automatic height that is stretched in neither axis
     /// (Chrome: `aspect-ratio: 2; align-self: start; justify-self: start` around a 300-wide
     /// child is 300 by 150). Stock sized it from its content in both axes.
-    pub(in crate::compute::grid) fn ratio_follows_content_width(&self) -> bool {
+    fn ratio_follows_content_width(&self) -> bool {
         let stretched_in_block = matches!(self.align_self.keyword, AlignItemsKeyword::Normal | AlignItemsKeyword::Stretch)
             && !self.margin.top.is_auto()
             && !self.margin.bottom.is_auto();
@@ -417,6 +417,35 @@ impl GridItem {
             Line::FALSE,
         );
         Size { width: Some(width), height: None }
+    }
+
+    /// nuxie-css: the known dimensions the baseline pass measures the item with. A ratio item
+    /// stretched in neither axis has the width its content has in its grid area, as in its
+    /// row contributions and its final layout, so its baseline comes from the height the
+    /// ratio gives.
+    pub(in crate::compute::grid) fn baseline_known_dimensions(
+        &self,
+        tree: &mut impl LayoutPartialTree,
+        grid_area_size: Size<Option<f32>>,
+        container_width: Option<f32>,
+    ) -> Size<Option<f32>> {
+        if !self.ratio_follows_content_width() {
+            return Size::NONE;
+        }
+        let space = self.available_space_minus_margins(
+            grid_area_size,
+            Size { width: grid_area_size.width.or(container_width), height: None },
+            tree,
+        );
+        let available_space = self.keyword_adjusted_available_space(
+            grid_area_size,
+            Size {
+                width: space.width.map_or(AvailableSpace::MaxContent, AvailableSpace::Definite),
+                height: AvailableSpace::MaxContent,
+            },
+            tree,
+        );
+        self.block_contribution_known_dimensions(AbstractAxis::Block, tree, Size::NONE, grid_area_size, available_space)
     }
 
     /// nuxie-css: the least width of a ratio item with a height and no width, for its inline

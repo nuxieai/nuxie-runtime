@@ -152,13 +152,16 @@ impl ScopedAssetReference {
         if !self.label.is_empty() {
             return u8::from(self.matches_library(registered_name));
         }
-        if !self.scope_prefix.is_empty()
-            && registered_name
-                .strip_prefix(&self.scope_prefix)
-                .is_some_and(|rest| rest.starts_with('/'))
+        if let Some(relative) = registered_name
+            .strip_prefix(&self.scope_prefix)
+            .and_then(|rest| rest.strip_prefix('/'))
+            .filter(|_| !self.scope_prefix.is_empty())
         {
-            let relative = &registered_name[self.scope_prefix.len() + 1..];
-            return u8::from(relative == self.bare || short_name == self.bare) * 2;
+            return if relative == self.bare || short_name == self.bare {
+                2
+            } else {
+                0
+            };
         }
         let first_segment = registered_name.split('/').next().unwrap_or(registered_name);
         if first_segment.find('@').is_some_and(|at| at > 0) {

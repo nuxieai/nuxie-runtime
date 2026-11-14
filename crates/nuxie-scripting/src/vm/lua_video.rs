@@ -41,6 +41,12 @@ impl ScriptVideo {
             .with_downcast_mut::<Video, _>(operation)
             .ok_or_else(|| Error::RuntimeError("video occurrence is unavailable".into()))
     }
+    /// A numeric property. Every key this binding reads is numeric, so
+    /// `None` is not reached; if it were, it is a script error.
+    fn number(&self, key: u16) -> Result<f64, Error> {
+        self.with(|v| v.property_number(key))?
+            .ok_or_else(|| Error::RuntimeError("video property is unavailable".into()))
+    }
     fn write(&self, value: Write) -> Result<(), Error> {
         self.with(|v| v.write_property(value))?
             .map_err(|error| Error::RuntimeError(format!("video command: {error:?}")))?;
@@ -139,9 +145,7 @@ fn state_name(state: PlaybackState) -> &'static str {
 }
 impl UserData for ScriptVideo {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("duration", |_, this, ()| {
-            this.with(|v| v.property_number(properties::DURATION).unwrap())
-        });
+        methods.add_method("duration", |_, this, ()| this.number(properties::DURATION));
         methods.add_method("play", |_, this, ()| {
             this.write(Write::Bool(properties::PAUSED, false))
         });
@@ -175,12 +179,8 @@ impl UserData for ScriptVideo {
             ))
         });
         methods.add_method("caption", |_, this, ()| this.with(|v| v.caption_text()));
-        methods.add_method("position", |_, this, ()| {
-            this.with(|v| v.property_number(properties::POSITION).unwrap())
-        });
-        methods.add_method("state", |_, this, ()| {
-            this.with(|v| v.property_number(properties::STATE).unwrap())
-        });
+        methods.add_method("position", |_, this, ()| this.number(properties::POSITION));
+        methods.add_method("state", |_, this, ()| this.number(properties::STATE));
         methods.add_method("isResourceLimited", |_, this, ()| {
             this.with(|v| v.playback.is_suspended(SuspensionReason::Resources))
         });

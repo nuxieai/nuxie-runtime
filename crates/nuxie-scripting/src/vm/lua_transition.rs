@@ -15,7 +15,12 @@ struct TransitionChild(Rc<RefCell<Option<ScriptTransitionChildRef>>>);
 struct ChildScope(Rc<RefCell<Option<ScriptTransitionChildRef>>>);
 impl Drop for ChildScope {
     fn drop(&mut self) {
-        self.0.borrow_mut().take();
+        // Every other borrow of the child is a statement's temporary, so
+        // this one does not fail; if it did, the child stays reachable
+        // rather than the drop panicking.
+        if let Ok(mut child) = self.0.try_borrow_mut() {
+            child.take();
+        }
     }
 }
 

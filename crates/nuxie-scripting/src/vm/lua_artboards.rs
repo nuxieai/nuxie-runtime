@@ -491,9 +491,9 @@ impl UserData for ScriptedNode {
         fields.add_field_method_get("children", |lua, this| {
             let children = this.node.children();
             let table = lua.create_table();
-            for (index, child) in children.into_iter().enumerate() {
+            for (index, child) in (1_usize..).zip(children) {
                 table.raw_set(
-                    index + 1,
+                    index,
                     lua.create_userdata(Self {
                         node: child,
                         owner: this.owner.clone(),

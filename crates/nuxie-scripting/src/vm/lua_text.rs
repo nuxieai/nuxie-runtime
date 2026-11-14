@@ -62,6 +62,9 @@ struct TextLayout {
     charge: HostMemoryCharge,
     /// Bytes the content appended since the last clear needs.
     content_bytes: usize,
+    /// The charges of decoded fonts the content was shaped with, which the
+    /// runs keep alive; one entry per change of font between appends.
+    fonts: Vec<Rc<HostMemoryCharge>>,
 }
 
 impl TextLayout {
@@ -72,6 +75,7 @@ impl TextLayout {
             epoch: 0,
             charge: HostMemoryCharge::default(),
             content_bytes: 0,
+            fonts: Vec::new(),
         }
     }
 
@@ -353,7 +357,10 @@ impl UserData for ScriptedText {
                 let bytes = chars.as_bytes();
                 let font: Option<AnyUserData> = style.raw_get("font")?;
                 let font = font.ok_or_else(|| Error::runtime("Text:append needs a font."))?;
-                let font = font.borrow::<ScriptedFont>()?.native()?;
+                let (font, font_charge) = {
+                    let font = font.borrow::<ScriptedFont>()?;
+                    (font.native()?, font.charge())
+                };
                 let paint: Option<AnyUserData> = style.raw_get("paint")?;
                 let paint = paint
                     .map(|p| p.borrow::<ScriptedPaint>().map(|p| p.render_paint.clone()))
@@ -395,6 +402,17 @@ impl UserData for ScriptedText {
                     letter_spacing,
                     foreground,
                 );
+                if !layout
+                    .fonts
+                    .last()
+                    .is_some_and(|last| Rc::ptr_eq(last, &font_charge))
+                {
+                    // Within the run's charge; a failed reservation only
+                    // leaves the font uncounted here, it stays alive anyway.
+                    if layout.fonts.try_reserve(1).is_ok() {
+                        layout.fonts.push(font_charge);
+                    }
+                }
                 let new_style = if layout.text.style_count() > styles {
                     TEXT_STYLE_BYTES
                 } else {
@@ -411,6 +429,7 @@ impl UserData for ScriptedText {
             let mut layout = t.layout.borrow_mut();
             layout.text().clear();
             layout.content_bytes = 0;
+            layout.fonts.clear();
             Ok(())
         });
         methods.add_method_lent(

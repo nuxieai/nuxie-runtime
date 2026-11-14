@@ -245,7 +245,7 @@ fn require_registered_module(
         let Some(frame) = ctx.inspect_stack(level) else {
             return Err(ctx.error("require is not supported in this context"));
         };
-        level += 1;
+        level = level.saturating_add(1);
         if !frame.is_native {
             break frame.source;
         }
@@ -291,6 +291,7 @@ const SCRIPT_SAFEPOINTS_PER_CYCLE: usize = 100_000;
 // Direct port of the compile-time atom table in
 // `src/lua/lua_atoms.cpp`. The numeric values are the corresponding
 // `LuaAtoms` discriminants from `rive_lua_libs.hpp`.
+#[cfg(test)]
 const RIVE_LUA_ATOMS: &[(&[u8], i16)] = &[
     (b"length", 0),
     (b"lengthSquared", 1),
@@ -658,6 +659,7 @@ const RIVE_LUA_ATOMS: &[(&[u8], i16)] = &[
     (b"pointerScroll", 363),
 ];
 
+#[cfg(test)]
 const fn has_rive_lua_atom_range(first: i16, last: i16) -> bool {
     let mut atom = first;
     while atom <= last {
@@ -678,13 +680,16 @@ const fn has_rive_lua_atom_range(first: i16, last: i16) -> bool {
     true
 }
 
+#[cfg(test)]
 const _: () = assert!(
     has_rive_lua_atom_range(283, 363),
     "text and scroll atoms must register in every build"
 );
 
+#[cfg(test)]
 const RIVE_LUA_ATOM_SLOT_COUNT: usize = 1024;
 
+#[cfg(test)]
 const fn hash_rive_lua_atom(name: &[u8]) -> u32 {
     let mut hash = 2_166_136_261_u32;
     let mut index = 0;
@@ -695,6 +700,7 @@ const fn hash_rive_lua_atom(name: &[u8]) -> u32 {
     hash
 }
 
+#[cfg(test)]
 const fn rive_lua_atom_names_equal(left: &[u8], right: &[u8]) -> bool {
     if left.len() != right.len() {
         return false;
@@ -709,6 +715,7 @@ const fn rive_lua_atom_names_equal(left: &[u8], right: &[u8]) -> bool {
     true
 }
 
+#[cfg(test)]
 const fn longest_rive_lua_atom_name() -> usize {
     let mut longest = 0;
     let mut index = 0;
@@ -722,8 +729,10 @@ const fn longest_rive_lua_atom_name() -> usize {
     longest
 }
 
+#[cfg(test)]
 const RIVE_LUA_MAX_ATOM_NAME_LENGTH: usize = longest_rive_lua_atom_name();
 
+#[cfg(test)]
 const fn build_rive_lua_atom_slots() -> [u16; RIVE_LUA_ATOM_SLOT_COUNT] {
     let mut slots = [0; RIVE_LUA_ATOM_SLOT_COUNT];
     let mut index = 0;
@@ -743,11 +752,13 @@ const fn build_rive_lua_atom_slots() -> [u16; RIVE_LUA_ATOM_SLOT_COUNT] {
     slots
 }
 
+#[cfg(test)]
 const RIVE_LUA_ATOM_SLOTS: [u16; RIVE_LUA_ATOM_SLOT_COUNT] = build_rive_lua_atom_slots();
 
 // The safe VM has no atom hook (seam row R4); the lookup the vendored VM's
-// hook used stays with its test, which pins the table's slots.
-#[allow(dead_code)]
+// hook used stays with its test, which pins the table's slots. Nothing in a
+// shipped build reads the table, so it and its lookup exist in tests only.
+#[cfg(test)]
 fn find_rive_lua_atom(name: &[u8]) -> i16 {
     if name.len() > RIVE_LUA_MAX_ATOM_NAME_LENGTH {
         return -1;
@@ -932,6 +943,37 @@ impl ScriptExecutionBudget {
     fn reset(&self) {
         self.remaining.set(self.maximum);
     }
+
+    /// Spend one interrupt safepoint of this host callback's budget, or fail
+    /// once it is spent.
+    fn spend(&self, resources: &resource_limits::ResourceLimitTracker) -> Result<()> {
+        let Some(remaining) = self.remaining.get().checked_sub(1) else {
+            return Err(resources.fail_with_message(
+                ScriptResourceLimit::Safepoints,
+                format!(
+                    "trusted Luau callback exceeded {} interrupt safepoints",
+                    self.maximum
+                ),
+            ));
+        };
+        self.remaining.set(remaining);
+        Ok(())
+    }
+}
+
+/// Count one script safepoint of the cycle, or fail once the cycle has used
+/// [`SCRIPT_SAFEPOINTS_PER_CYCLE`].
+fn count_script_safepoint(
+    safepoints: &Cell<usize>,
+    resources: &resource_limits::ResourceLimitTracker,
+) -> Result<()> {
+    let used = safepoints.get();
+    if used >= SCRIPT_SAFEPOINTS_PER_CYCLE {
+        return Err(resources.fail(ScriptResourceLimit::Safepoints));
+    }
+    // Below the cap, so the sum is exact.
+    safepoints.set(used.saturating_add(1));
+    Ok(())
 }
 
 /// Device pixels per artboard unit for `context:pixelRatio()`; see
@@ -1419,7 +1461,7 @@ impl LuaScriptInstance {
         };
 
         let lua = table.lua();
-        let mut call_args = MultiValue::with_capacity(args.len() + 1);
+        let mut call_args = MultiValue::with_capacity(args.len().saturating_add(1));
         call_args.push_back(Value::Table(table));
         for arg in args {
             call_args.push_back(script_value_to_lua(&lua, arg));
@@ -1451,7 +1493,7 @@ impl LuaScriptInstance {
             return Ok(false);
         };
         let lua = table.lua();
-        let mut call_args = MultiValue::with_capacity(args.len() + 1);
+        let mut call_args = MultiValue::with_capacity(args.len().saturating_add(1));
         call_args.push_back(Value::Table(table.clone()));
         for arg in args {
             call_args.push_back(script_value_to_lua(&lua, arg));
@@ -2159,11 +2201,7 @@ impl ScriptVm {
         let interrupt_resource_limits = resource_limits.clone();
         lua.set_interrupt(move |_| {
             interrupt_timing.check()?;
-            let used = interrupt_safepoints.get();
-            if used >= SCRIPT_SAFEPOINTS_PER_CYCLE {
-                return Err(interrupt_resource_limits.fail(ScriptResourceLimit::Safepoints));
-            }
-            interrupt_safepoints.set(used + 1);
+            count_script_safepoint(&interrupt_safepoints, &interrupt_resource_limits)?;
             Ok(crate::luau::VmState::Continue)
         });
         Self {
@@ -2236,7 +2274,7 @@ impl ScriptVm {
         let timeout = timeout_before.max(MODULE_EXECUTION_TIMEOUT_MS);
         // Obtain the clock before changing state: import-free Wasm embedders
         // must install their existing engine clock before executing modules.
-        let deadline = engine_now_micros().saturating_add(i64::from(timeout) * 1_000);
+        let deadline = engine_now_micros().saturating_add(i64::from(timeout).saturating_mul(1_000));
         self.module_execution_timing.timeout_ms.set(timeout);
         let deadline_before = self
             .module_execution_timing
@@ -2248,23 +2286,9 @@ impl ScriptVm {
         let budget = self.execution_budget.clone();
         let interrupt = self.lua.scoped_interrupt(move |_| {
             timing.check()?;
-            let used = safepoints.get();
-            if used >= SCRIPT_SAFEPOINTS_PER_CYCLE {
-                return Err(resources.fail(ScriptResourceLimit::Safepoints));
-            }
-            safepoints.set(used + 1);
+            count_script_safepoint(&safepoints, &resources)?;
             if let Some(budget) = &budget {
-                let remaining = budget.remaining.get();
-                if remaining == 0 {
-                    return Err(resources.fail_with_message(
-                        ScriptResourceLimit::Safepoints,
-                        format!(
-                            "trusted Luau callback exceeded {} interrupt safepoints",
-                            budget.maximum
-                        ),
-                    ));
-                }
-                budget.remaining.set(remaining - 1);
+                budget.spend(&resources)?;
             }
             Ok(VmState::Continue)
         });
@@ -2293,22 +2317,8 @@ impl ScriptVm {
         let interrupt_timing = vm.module_execution_timing.clone();
         vm.lua.set_interrupt(move |_| {
             interrupt_timing.check()?;
-            let used = interrupt_safepoints.get();
-            if used >= SCRIPT_SAFEPOINTS_PER_CYCLE {
-                return Err(interrupt_resource_limits.fail(ScriptResourceLimit::Safepoints));
-            }
-            interrupt_safepoints.set(used + 1);
-            let remaining = interrupt_budget.remaining.get();
-            if remaining == 0 {
-                return Err(interrupt_resource_limits.fail_with_message(
-                    ScriptResourceLimit::Safepoints,
-                    format!(
-                        "trusted Luau callback exceeded {} interrupt safepoints",
-                        interrupt_budget.maximum
-                    ),
-                ));
-            }
-            interrupt_budget.remaining.set(remaining - 1);
+            count_script_safepoint(&interrupt_safepoints, &interrupt_resource_limits)?;
+            interrupt_budget.spend(&interrupt_resource_limits)?;
             Ok(VmState::Continue)
         });
         vm.execution_budget = Some(budget);
@@ -3549,7 +3559,7 @@ impl ScriptInstance for LuaScriptInstance {
             return Ok(ScriptOptionalMethodResult::Missing);
         };
         let lua = table.lua();
-        let mut call_args = MultiValue::with_capacity(args.len() + 1);
+        let mut call_args = MultiValue::with_capacity(args.len().saturating_add(1));
         call_args.push_back(Value::Table(table));
         for arg in args {
             call_args.push_back(script_value_to_lua(&lua, arg));
@@ -3580,7 +3590,7 @@ impl ScriptInstance for LuaScriptInstance {
             return Ok(ScriptOptionalNumberResult::Missing);
         };
         let lua = table.lua();
-        let mut call_args = MultiValue::with_capacity(args.len() + 1);
+        let mut call_args = MultiValue::with_capacity(args.len().saturating_add(1));
         call_args.push_back(Value::Table(table));
         for value in args {
             call_args.push_back(Value::Number(f64::from(*value)));

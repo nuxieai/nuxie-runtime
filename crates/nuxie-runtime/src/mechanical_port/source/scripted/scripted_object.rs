@@ -436,7 +436,9 @@ impl ScriptedObject {
             }
         }
         for property in properties {
-            if with_script_input(property, |input| input.hydrate_script_input()) == Some(false) {
+            let hydrated = crate::mechanical_port::source::script_input_artboard::ScriptInputArtboard::hydrate_occurrence(property)
+                .or_else(|| with_script_input(property, |input| input.hydrate_script_input()));
+            if hydrated == Some(false) {
                 return false;
             }
         }

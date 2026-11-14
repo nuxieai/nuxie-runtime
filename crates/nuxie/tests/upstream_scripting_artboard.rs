@@ -322,3 +322,20 @@ fn an_artboard_input_that_leads_back_to_its_own_artboard_instances() {
         artboard.draw(&mut renderer);
     }
 }
+
+/// Giving a script its artboard input (which initializes the input's own
+/// scripted instance) runs with no Core receiver mutably lent (before: under
+/// the input's borrow).
+#[test]
+fn artboard_inputs_hydrate_with_no_core_receiver_lent() {
+    let ((), reports) = nuxie_runtime::script_borrow_check::record_script_borrow_reports(|| {
+        script_instances_artboard_input();
+        script_instances_artboard_input_with_proper_origin();
+        script_node_advance_affects_did_change_via_dirt();
+        script_instance_linear_animations();
+        script_instances_artboard_with_opacity_applied();
+        view_model_source_cache_is_cleared_when_instance_changes();
+        an_artboard_input_that_leads_back_to_its_own_artboard_instances();
+    });
+    assert!(reports.is_empty(), "{}", reports.join("\n"));
+}

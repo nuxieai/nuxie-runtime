@@ -65,13 +65,37 @@ impl ScriptInputArtboard {
     }
 
     fn sync_referenced_artboard(&mut self) {
-        let Some(referenced_artboard) = self.artboard_referencer.referenced_artboard() else {
-            return;
-        };
-        let name = self.name().to_owned();
-        if let Some(object) = self.script_input.scripted_object() {
-            crate::mechanical_port::source::scripted::scripted_object::ScriptedObject::set_artboard_input_occurrence(&object, name, referenced_artboard);
+        if let Some(sync) = self.referenced_artboard_sync() {
+            sync.apply();
         }
+    }
+
+    /// What giving the referenced artboard to the script needs, read out so
+    /// the script can be called with no borrow of this input open.
+    fn referenced_artboard_sync(&self) -> Option<ReferencedArtboardSync> {
+        let artboard = self.artboard_referencer.referenced_artboard()?;
+        Some(ReferencedArtboardSync {
+            object: self.script_input.scripted_object()?,
+            name: self.name().to_owned(),
+            artboard,
+        })
+    }
+
+    /// Pinned hydrateScriptInput at handle level: the input is only read
+    /// while its artboard is given to the script, whose initialization runs
+    /// user code that may reach this input. `None` when `property` is not a
+    /// ScriptInputArtboard.
+    pub(crate) fn hydrate_occurrence(property: &CoreHandle) -> Option<bool> {
+        let (sync, referenced) = property.with_downcast::<Self, _>(|input| {
+            (
+                input.referenced_artboard_sync(),
+                input.artboard_referencer.referenced_artboard().is_some(),
+            )
+        })?;
+        if let Some(sync) = sync {
+            sync.apply();
+        }
+        Some(referenced)
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
@@ -260,5 +284,21 @@ impl std::ops::Deref for ScriptInputArtboard {
 impl std::ops::DerefMut for ScriptInputArtboard {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.base
+    }
+}
+
+struct ReferencedArtboardSync {
+    object: CoreHandle,
+    name: String,
+    artboard: CoreHandle,
+}
+
+impl ReferencedArtboardSync {
+    fn apply(self) {
+        crate::mechanical_port::source::scripted::scripted_object::ScriptedObject::set_artboard_input_occurrence(
+            &self.object,
+            self.name,
+            self.artboard,
+        );
     }
 }

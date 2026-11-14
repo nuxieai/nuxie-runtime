@@ -89,6 +89,31 @@ pub(crate) fn vec_bytes<T>(values: &Vec<T>) -> usize {
     std::mem::size_of::<T>().saturating_mul(values.capacity())
 }
 
+/// Heap bytes a copy of a vector occupies: a clone holds exactly its
+/// elements.
+fn copied_vec_bytes<T>(values: &Vec<T>) -> usize {
+    std::mem::size_of::<T>().saturating_mul(values.len())
+}
+
+/// The capacity a vector reaches when `count` values are pushed into an
+/// empty one, one at a time: it doubles from the standard library's
+/// smallest non-zero capacity (8 for one-byte elements, 4 up to 1 KiB,
+/// else 1).
+fn pushed_capacity<T>(count: usize) -> usize {
+    if count == 0 {
+        return 0;
+    }
+    let smallest = match std::mem::size_of::<T>() {
+        1 => 8,
+        size if size <= 1024 => 4,
+        _ => 1,
+    };
+    count
+        .checked_next_power_of_two()
+        .unwrap_or(usize::MAX)
+        .max(smallest)
+}
+
 /// The most heap bytes a vector's buffer can occupy after `additional`
 /// more pushes, one at a time: growth doubles, so its capacity stays under
 /// twice what it needs (and at least the 4 `Vec` starts with).
@@ -876,6 +901,30 @@ impl GlyphRun {
         .fold(0, usize::saturating_add)
     }
 
+    /// What [`Self::heap_bytes`] reads for a copy of this run: each cloned
+    /// vector holds exactly its elements.
+    pub fn copied_heap_bytes(&self) -> usize {
+        let clusters = self.cluster_texts.iter().fold(0usize, |bytes, text| {
+            bytes.saturating_add(std::mem::size_of_val::<[Unichar]>(text))
+        });
+        [
+            copied_vec_bytes(&self.glyphs),
+            copied_vec_bytes(&self.text_indices),
+            copied_vec_bytes(&self.cluster_texts),
+            clusters,
+            copied_vec_bytes(&self.cluster_leaders),
+            copied_vec_bytes(&self.cluster_leader_flags),
+            copied_vec_bytes(&self.advances),
+            copied_vec_bytes(&self.xpos),
+            copied_vec_bytes(&self.offsets),
+            copied_vec_bytes(&self.breaks),
+            copied_vec_bytes(&self.joiners),
+            copied_vec_bytes(&self.css_tabs),
+        ]
+        .into_iter()
+        .fold(0, usize::saturating_add)
+    }
+
     pub fn cluster_text(&self, glyph_index: usize) -> &[Unichar] {
         self.cluster_texts
             .get(glyph_index)
@@ -965,17 +1014,18 @@ impl OrderedLine {
     }
     /// The most [`Self::heap_bytes`] the line [`Self::new`] builds for
     /// `line` of `paragraph` holds, known before it is built: a copy of each
-    /// run the line touches (a copy holds no more than its source), in a
-    /// vector of at most twice as many. An ellipsis line also builds the
-    /// ellipsis run, which this does not count.
+    /// run the line touches, in the vector those copies are pushed into.
+    /// An ellipsis line also builds the ellipsis run, which this does not
+    /// count.
     pub fn heap_bytes_bound(paragraph: &Paragraph, line: &GlyphLine) -> usize {
         let runs = paragraph
             .runs
             .get(line.start_run_index as usize..=line.end_run_index as usize)
             .unwrap_or_default();
         runs.iter().fold(
-            std::mem::size_of::<OrderedRun>().saturating_mul(runs.len().saturating_mul(2).max(4)),
-            |bytes, run| bytes.saturating_add(run.heap_bytes()),
+            std::mem::size_of::<OrderedRun>()
+                .saturating_mul(pushed_capacity::<OrderedRun>(runs.len())),
+            |bytes, run| bytes.saturating_add(run.copied_heap_bytes()),
         )
     }
     pub fn new(

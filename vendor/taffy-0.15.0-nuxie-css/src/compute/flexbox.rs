@@ -1581,8 +1581,18 @@ fn determine_flex_base_size(
             // A container sized through its own ratio is measured before that size is
             // known, and its ratio's content floor comes from that measurement: as before.
             && !constants.has_own_ratio;
+        // nuxie-css: a wrapping column finds its width the same way while that width is
+        // unknown: each line is as wide as its pictures are at their own heights, and the
+        // pictures then take the width of their flexed heights in the second pass (Chrome).
+        // A `height: stretch` picture whose height only follows from the column's content
+        // height keeps the width of that height.
+        let stretch_height_is_own = constants.has_definite_main_size
+            && constants.height_is_percentage_basis
+            && !constants.height_is_stretch_only;
+        let wrapped_line_awaits_width = cross_axis_parent_size.is_none()
+            && (!child.size_style.height.is_stretch() || stretch_height_is_own);
         child.replaced_stretch_awaits_width =
-            replaced_without_definite_stretch && !constants.is_row && !constants.is_wrap;
+            replaced_without_definite_stretch && !constants.is_row && (!constants.is_wrap || wrapped_line_awaits_width);
         let probe_known_dimensions = if (child.ratio.is_some() && !child_cross_size_is_definite)
             || replaced_without_definite_stretch
         {
@@ -2951,7 +2961,6 @@ fn determine_hypothetical_cross_size(
                 .maybe_clamp(child.min_size.height, child.max_size.height)
         });
         let flexed_height_awaits_width = !constants.is_row
-            && !constants.is_wrap
             && constants.node_inner_size.width.is_none()
             && child_cross.is_none()
             && !child.cross_size_is_cyclic_percentage

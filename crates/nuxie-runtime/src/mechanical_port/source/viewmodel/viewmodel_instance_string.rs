@@ -49,6 +49,11 @@ impl ViewModelInstanceString {
         self.host_owner.as_ref()
     }
 
+    /// Puts back the owner a rolled-back value was kept with.
+    pub(crate) fn restore_host_owner(&mut self, owner: Option<crate::host_viewmodel::HostOwnerToken>) {
+        self.host_owner = owner;
+    }
+
     pub fn property_value_changed(&mut self) {
         // The value the owner paid for is gone, whichever path replaced it.
         self.host_owner = None;

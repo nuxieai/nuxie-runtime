@@ -45,7 +45,8 @@ pub enum RuntimeViewModelLinkError {
 enum Payload {
     Number(f32),
     Boolean(bool),
-    String(String),
+    /// The value, and the owner the property kept for it.
+    String(String, Option<HostOwnerToken>),
     Color(i32),
     Enum(u32),
     Index(u32),
@@ -121,7 +122,7 @@ impl Snapshot {
         } else if let Some(v) = value.downcast_ref::<ViewModelInstanceBoolean>() {
             Payload::Boolean(v.value())
         } else if let Some(v) = value.downcast_ref::<ViewModelInstanceString>() {
-            Payload::String(v.value())
+            Payload::String(v.value(), v.host_owner().cloned())
         } else if let Some(v) = value.downcast_ref::<ViewModelInstanceColor>() {
             Payload::Color(v.value())
         } else if let Some(v) = value.downcast_ref::<ViewModelInstanceEnum>() {
@@ -190,12 +191,11 @@ impl Snapshot {
                             .base
                             .set_property_value_value(v);
                     }
-                    Payload::String(v) => {
-                        value
-                            .downcast_mut::<ViewModelInstanceString>()
-                            .unwrap()
-                            .base
-                            .set_property_value_value(v);
+                    Payload::String(v, host_owner) => {
+                        let string = value.downcast_mut::<ViewModelInstanceString>().unwrap();
+                        string.base.set_property_value_value(v);
+                        // The restored value is the one its owner paid for.
+                        string.restore_host_owner(host_owner);
                     }
                     Payload::Color(v) => {
                         value
@@ -961,5 +961,56 @@ pub(crate) fn checkpoint_live_value(
         crate::hosted_scene::record_walk(crate::hosted_scene::Walk::Checkpoint);
     } else {
         journal.overflowed = true;
+    }
+}
+
+#[cfg(test)]
+mod owner_tests {
+    use super::*;
+    use crate::mechanical_port::source::viewmodel::viewmodel_instance::ViewModelInstance;
+    use nuxie_render_api::{PersistentFactory, RecordingFactory};
+    use std::sync::Arc;
+
+    // Codex review (lane H2): a rolled-back overwrite restored a script's
+    // string without the owner that kept its charge, so memory the property
+    // still held was refunded.
+    #[test]
+    fn a_rolled_back_string_keeps_its_owner() {
+        let root = std::path::PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR").expect("pinned upstream checkout"),
+        );
+        let bytes = std::fs::read(
+            root.join("tests/unit_tests/assets/script_create_viewmodel_instance.riv"),
+        )
+        .expect("fixture");
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let factory = crate::RuntimeFactoryHandle::from_factory(&mut factory).expect("factory");
+        let file = crate::File::import(&bytes, factory, None, None, None).expect("import");
+        let property = file
+            .with_file(|file| {
+                let model = file.view_model_named("SubChild")?;
+                let instance = file.create_view_model_instance(model)?;
+                instance
+                    .with_downcast::<ViewModelInstance, _>(|instance| {
+                        instance.property_value_named("str")
+                    })
+                    .flatten()
+            })
+            .expect("SubChild.str");
+        let owner = Arc::new(());
+        property.with_downcast_mut::<ViewModelInstanceString, _>(|string| {
+            string.set_value_owned("kept", HostOwnerToken::from_arc(owner.clone()))
+        });
+        let snapshot = Snapshot::capture(property.clone()).expect("snapshot");
+        property.with_downcast_mut::<ViewModelInstanceString, _>(|string| string.set_value("other"));
+        snapshot.restore();
+        let (value, kept) = property
+            .with_downcast::<ViewModelInstanceString, _>(|string| {
+                (string.value(), string.host_owner().is_some())
+            })
+            .expect("string");
+        assert_eq!(value, "kept");
+        assert!(kept, "the restored value keeps its owner");
+        assert_eq!(Arc::strong_count(&owner), 2);
     }
 }

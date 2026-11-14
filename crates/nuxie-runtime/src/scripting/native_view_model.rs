@@ -273,6 +273,18 @@ impl NativeScriptViewModel {
             changed
         })
     }
+    fn set_string_owned(
+        &self,
+        name: &str,
+        value: &str,
+        host_owner: crate::host_viewmodel::HostOwnerToken,
+    ) -> bool {
+        self.mutate::<ViewModelInstanceString>(name, |owner| {
+            let changed = owner.value() != value;
+            owner.set_value_owned(value, host_owner);
+            changed
+        })
+    }
     pub fn boolean(&self, name: &str) -> Option<bool> {
         self.property(name)?
             .with_downcast::<ViewModelInstanceBoolean, _>(ViewModelInstanceBoolean::value)
@@ -628,11 +640,23 @@ impl NativeScriptViewModel {
         index: Option<usize>,
         value: &ScriptViewModel,
     ) -> bool {
+        self.insert_owned_list_item(name, index, value, None)
+    }
+    fn insert_owned_list_item(
+        &self,
+        name: &str,
+        index: Option<usize>,
+        value: &ScriptViewModel,
+        owner: Option<crate::host_viewmodel::HostOwnerToken>,
+    ) -> bool {
         let (Some(list), Some(instance)) = (self.property(name), value.native_instance()) else {
             return false;
         };
         let mut item = ViewModelInstanceListItem::default();
         item.set_view_model_instance(Some(instance));
+        // The item lives in the list's arena from here, whether or not the
+        // list takes it, so it keeps the owner from here.
+        item.set_host_owner(owner);
         let Some(item) = list.insert_sibling(item) else {
             return false;
         };
@@ -715,5 +739,88 @@ impl NativeScriptViewModel {
             }
             true
         })
+    }
+}
+
+/// Host-owned values: what a host made the runtime hold, kept alive (through
+/// a [`crate::host_viewmodel::HostOwnerToken`]) for exactly as long as the
+/// runtime keeps the value.
+impl ScriptViewModel {
+    /// Keeps `owner` with this view model's instance for as long as the
+    /// instance lives (an instance lives as long as its File's arena).
+    /// `false` when there is no instance.
+    pub fn set_host_owner(&self, owner: crate::host_viewmodel::HostOwnerToken) -> bool {
+        self.native()
+            .instance
+            .as_ref()
+            .and_then(|instance| {
+                instance.with_downcast_mut::<ViewModelInstance, _>(|instance| {
+                    instance.set_host_owner(owner)
+                })
+            })
+            .is_some()
+    }
+
+    /// The owner [`Self::set_host_owner`] gave the instance.
+    pub fn host_owner(&self) -> Option<crate::host_viewmodel::HostOwnerToken> {
+        self.native()
+            .instance
+            .as_ref()?
+            .with_downcast::<ViewModelInstance, _>(|instance| instance.host_owner().cloned())
+            .flatten()
+    }
+
+    /// `set_string`, keeping `owner` for as long as the property holds this
+    /// value: any later change of value, whoever makes it, drops it.
+    pub fn set_string_owned(
+        &self,
+        name: &str,
+        value: &str,
+        owner: crate::host_viewmodel::HostOwnerToken,
+    ) -> bool {
+        let native = self.native();
+        let changed = native.set_string_owned(name, value, owner);
+        self.finish_property_change(&native.property_path(name).unwrap_or_default(), changed)
+    }
+
+    /// The owner the property's current value keeps.
+    pub fn string_host_owner(&self, name: &str) -> Option<crate::host_viewmodel::HostOwnerToken> {
+        self.native()
+            .property(name)?
+            .with_downcast::<ViewModelInstanceString, _>(|value| value.host_owner().cloned())
+            .flatten()
+    }
+
+    /// `push_list_item` (no `index`) or `insert_list_item`, with `owner` kept
+    /// by the new list item for as long as it lives: a removed item stays in
+    /// the list's arena, so it keeps the owner.
+    pub fn insert_list_item_owned(
+        &self,
+        name: &str,
+        index: Option<usize>,
+        item: &ScriptViewModel,
+        owner: crate::host_viewmodel::HostOwnerToken,
+    ) -> bool {
+        let native = self.native();
+        let changed = native.insert_owned_list_item(name, index, item, Some(owner));
+        self.finish_property_change(&native.property_path(name).unwrap_or_default(), changed)
+    }
+
+    /// The owners the list's items keep, in order.
+    pub fn list_item_host_owners(
+        &self,
+        name: &str,
+    ) -> Vec<Option<crate::host_viewmodel::HostOwnerToken>> {
+        let Some(list) = self.native().property(name) else {
+            return Vec::new();
+        };
+        list.with_downcast::<ViewModelInstanceList, _>(|list| list.list_items().to_vec())
+            .unwrap_or_default()
+            .iter()
+            .map(|item| {
+                item.with_downcast::<ViewModelInstanceListItem, _>(|item| item.host_owner().cloned())
+                    .flatten()
+            })
+            .collect()
     }
 }

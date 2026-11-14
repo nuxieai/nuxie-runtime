@@ -14,6 +14,10 @@ pub const FILE_EXTENSION: &str = "blob";
 pub struct RuntimeBlobAsset {
     name: Arc<str>,
     bytes: Arc<[u8]>,
+    /// What the host that made this blob keeps alive with it (a script's
+    /// charge for its bytes); dropped with the blob, wherever the runtime's
+    /// graph has carried it.
+    host_owner: Option<crate::host_viewmodel::HostOwnerToken>,
 }
 
 impl RuntimeBlobAsset {
@@ -21,7 +25,18 @@ impl RuntimeBlobAsset {
         Self {
             name: Arc::from(name.into()),
             bytes,
+            host_owner: None,
         }
+    }
+
+    /// This blob, keeping `owner` for as long as it lives.
+    pub fn with_host_owner(mut self, owner: crate::host_viewmodel::HostOwnerToken) -> Self {
+        self.host_owner = Some(owner);
+        self
+    }
+
+    pub fn host_owner(&self) -> Option<&crate::host_viewmodel::HostOwnerToken> {
+        self.host_owner.as_ref()
     }
 
     pub fn name(&self) -> &str {

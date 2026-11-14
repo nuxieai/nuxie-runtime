@@ -1878,11 +1878,12 @@ definite space (an item of a column with `align-items: flex-start`, a grid item 
 even when the space was narrower.
 
 Now, when the first column pass comes out wider than the space and the grid has a
-flexible column, the grid takes the space as its width (or its own minimum width) and
-the columns are sized again inside it (`compute_grid_layout`, after the first inline
-pass). Columns that cannot shrink that far keep the grid as wide as they are. Chrome lays
-a shrink-to-fit grid out at its fit-content width, so its flexible columns share that
-width. The second pass runs only for a grid that overflows its space.
+flexible column, the grid's width is its fit-content width: the space (or the grid's own
+minimum width), or its min-content width when that is wider. The min-content width is
+found by one column pass under a min-content request, with percentage columns still
+automatic; the columns are then sized inside the settled width (`compute_grid_layout`,
+after the first inline pass). Chrome lays a shrink-to-fit grid out at its fit-content
+width. The two extra passes run only for a grid that overflows its space.
 
 Examples, in a 90 wide column with `align-items: flex-start`:
 
@@ -1890,12 +1891,15 @@ Examples, in a 90 wide column with `align-items: flex-start`:
   picture 90 wide. Before: 120 wide.
 - one `minmax(0, 0.5fr)` column around a 240 wide box: Chrome has the grid 90 wide and
   the column 45. Before: grid 120 wide.
+- `100% 1fr` columns around a 120 and a 100 wide box: Chrome has the grid 220 wide (its
+  min-content width), the second box starting at 220. Unchanged.
 
-The 32,600 compared layouts do not contain the case (440 differ, unchanged). Probes: the
-20 left from the nested-grid set now match (882 of 882); of 1,080 new probes of
-shrink-to-fit grids with flexible columns (six column lists, gaps, padding, minimum and
-maximum widths, five kinds of content, six containers), 200 more match and the 15 that
-differ are sub-pixel; 180 absolutely positioned ones all match; of 96 probes with flex
-factors below one, 26 more match and the 30 that differ did before (a grid whose flex
-factors sum below one, also when it is not shrinking to fit: left for later). Guard
-rows: 45.
+The 32,600 compared layouts do not contain the case (440 differ, unchanged). Of 2,473
+probes of shrink-to-fit grids (pictures with percentage widths in nested grids; six
+flexible column lists with gaps, padding, minimum and maximum widths; absolutely
+positioned grids; flex factors below one; percentage columns beside flexible ones), 92
+differ where 390 did, and no probe moves away from Chrome. Of the 92, 15 are sub-pixel
+and the rest differed before for causes left for later: flex factors that sum below one
+(30), a `minmax(50%, 1fr)` column (18), and the row height under a picture beside a
+percentage column (18). The test harness's column lists now accept percentages. Guard
+rows: 53.

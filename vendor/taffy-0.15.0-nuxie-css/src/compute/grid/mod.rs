@@ -477,7 +477,15 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     // If only the container's width has been requested then we can skip sizing the rows entirely (which avoids
     // measuring the height of every item), as column sizing is not re-run when only computing the container's size.
     // Note: the short-circuit above has already handled the case where the container's width is known.
-    if run_mode == RunMode::ComputeSize && inputs.axis == RequestedAxis::Horizontal {
+    // nuxie-css: a grid measured for its width still sizes its rows and reruns its columns
+    // when an item's width can follow its row's height through a ratio, so the measured
+    // width is the width the laid out grid needs (Chrome: a `height: 100px` grid in a flex
+    // row, around one `aspect-ratio: 4` item, is 400 wide; stock measured it 0 wide and the
+    // item then overflowed it).
+    let columns_follow_rows = outer_node_size.width.is_none()
+        && tree.get_grid_container_style(node).aspect_ratio().is_none()
+        && items.iter().any(|item| item.aspect_ratio.is_some());
+    if run_mode == RunMode::ComputeSize && inputs.axis == RequestedAxis::Horizontal && !columns_follow_rows {
         let width = (initial_column_sum + content_box_inset.horizontal_axis_sum())
             .maybe_clamp(min_size.width, max_size.width)
             .max(padding_border_size.width);
@@ -539,7 +547,7 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     };
 
     // If only the container's size has been requested
-    if run_mode == RunMode::ComputeSize {
+    if run_mode == RunMode::ComputeSize && !columns_follow_rows {
         return LayoutOutput::from_outer_size(container_border_box);
     }
 

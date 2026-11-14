@@ -97,6 +97,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_nan_distance_measures_from_the_start() {
+        let measure = ContourMeasure::new(
+            vec![Segment::new(10.0, 0, MAX_DOT30, SegmentType::Line)],
+            vec![Vec2D::new(0.0, 0.0), Vec2D::new(10.0, 0.0)],
+            10.0,
+            false,
+        );
+        let start = measure.get_pos_tan(0.0);
+        let nan = measure.get_pos_tan(f32::NAN);
+        assert_eq!((nan.pos.x, nan.pos.y), (start.pos.x, start.pos.y));
+        assert_eq!((nan.tan.x, nan.tan.y), (start.tan.x, start.tan.y));
+        let warped = measure.warp(Vec2D::new(f32::NAN, 1.0));
+        assert!(warped.x.is_finite() && warped.y.is_finite());
+    }
+
+    #[test]
     fn segment_packs_the_source_t_value_and_type_in_twelve_bytes() {
         assert_eq!(std::mem::size_of::<Segment>(), 12);
         for kind in [SegmentType::Line, SegmentType::Quad, SegmentType::Cubic] {
@@ -414,7 +430,9 @@ impl ContourMeasure {
         if distance > self.length {
             distance = self.length;
         }
-        if distance < 0.0 {
+        // A NaN distance (a script's 0/0) passes both comparisons and would
+        // trip find_segment's range assert: it measures from the start.
+        if distance < 0.0 || distance.is_nan() {
             distance = 0.0;
         }
         let index = self.find_segment(distance);

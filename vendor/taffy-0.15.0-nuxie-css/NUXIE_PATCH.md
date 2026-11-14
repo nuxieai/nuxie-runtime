@@ -1594,3 +1594,21 @@ Chrome counts it at its natural width.
 
 Of the 29,914 layouts, 14 more match and none that matched differ. Of
 48 new Chrome probes of the shape, 7 differed before and all match now.
+
+## A grid as wide as its content follows a picture's percentage height
+
+A grid measured for its width sizes its rows and reruns its columns when
+an item's width can follow its row's height. The fork did that for items
+with an aspect ratio. A picture whose height or `max-height` is a
+percentage follows its row the same way, and the grid kept the picture's
+natural width. Chrome: a grid in an `align-items: flex-start` column,
+around a 120 by 60 picture with `max-height: 50%`, is 60 wide (the
+picture is 60 by 30). The fork made the grid 120 wide.
+
+`compute_grid_layout` now counts such a picture in `columns_follow_rows`.
+The column rerun for it runs without the first-pass width: held to that
+width, an automatic column stretched back to the natural width.
+
+Of the 29,914 layouts, 8 more match and none that matched differ. Of 80
+new Chrome probes of the shape, 36 differed before and 16 still do: the
+ones whose outer box is a block or a flex column.

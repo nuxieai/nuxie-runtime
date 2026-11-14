@@ -99,6 +99,13 @@ fn recording_vm() -> ScriptVm {
 }
 
 fn recording_vm_with(recorder: DeferredOreContext) -> ScriptVm {
+    recording_vm_and_factory(recorder).0
+}
+
+type TestFactory =
+    nuxie_render_api::PersistentFactory<RoutedTestFactory<nuxie_render_api::RecordingFactory>>;
+
+fn recording_vm_and_factory(recorder: DeferredOreContext) -> (ScriptVm, TestFactory) {
     let vm = ScriptVm::new();
     let ore: OreContextHandle = Rc::new(RefCell::new(recorder));
     let module = ore
@@ -143,7 +150,7 @@ fn recording_vm_with(recorder: DeferredOreContext) -> ScriptVm {
     let canvas =
         Canvas::create(vm.lua(), RendererBindings::for_lua(vm.lua()).unwrap(), 0, 0).unwrap();
     vm.lua().globals().set("canvas", canvas).unwrap();
-    vm
+    (vm, factory)
 }
 
 // cd04cd33: bindings made before the first pipeline wait at the Lua owner,
@@ -305,20 +312,20 @@ fn integer_and_lua_numeric_string_descriptor_values_are_preserved() {
         desc.get::<Value>("integer").unwrap(),
         Value::Integer(16)
     ));
-    assert_eq!(number(&desc, "integer", 99.0).unwrap(), 16.0);
-    assert_eq!(number(&desc, "decimal", 99.0).unwrap(), 1.5);
-    assert_eq!(number(&desc, "numericString", 99.0).unwrap(), 16.0);
-    assert_eq!(number(&desc, "invalid", 99.0).unwrap(), 99.0);
-    assert_eq!(string(&desc, "integer").unwrap().as_deref(), Some("16"));
+    assert_eq!(number(&desc, &mut None, "integer", 99.0).unwrap(), 16.0);
+    assert_eq!(number(&desc, &mut None, "decimal", 99.0).unwrap(), 1.5);
+    assert_eq!(number(&desc, &mut None, "numericString", 99.0).unwrap(), 16.0);
+    assert_eq!(number(&desc, &mut None, "invalid", 99.0).unwrap(), 99.0);
+    assert_eq!(string(&desc, &mut None, "integer").unwrap().as_deref(), Some("16"));
     desc.set("large", 1e30).unwrap();
     let formatted: String = vm.lua().load("return tostring(1e30)").eval().unwrap();
-    assert_eq!(string(&desc, "large").unwrap(), Some(formatted));
+    assert_eq!(string(&desc, &mut None, "large").unwrap(), Some(formatted));
     desc.set("terminated", "rgba8unorm\0ignored").unwrap();
     assert_eq!(
-        string(&desc, "terminated").unwrap().as_deref(),
+        string(&desc, &mut None, "terminated").unwrap().as_deref(),
         Some("rgba8unorm")
     );
-    assert_eq!(dynamic_ubo_bindings(&desc).unwrap(), [0, 2, 3]);
+    assert_eq!(dynamic_ubo_bindings(&desc, &mut None).unwrap(), [0, 2, 3]);
     vm.lua().load(r#"
         local b = GPUBuffer.new { size = 16, usage = 'vertex' }
         assert(b.size == 16)
@@ -813,4 +820,58 @@ fn gpu_allocations_past_the_budget_are_refused_before_the_backend() {
         .exec()
         .unwrap();
     assert_eq!(host_bytes_used(&vm) - base, 1024 * 1024);
+}
+
+// Lane C.1 left the GPU descriptor reads without the draw call's renderer
+// loan: an `__index` that drew with the draw's renderer got "Renderer is no
+// longer valid." Every descriptor read now passes the loan on.
+#[test]
+fn gpu_descriptor_metamethods_reach_the_draw_renderer() {
+    use nuxie_runtime::{NoopScriptHost, ScriptInstance};
+    let (vm, mut factory) = recording_vm_and_factory(DeferredOreContext::fromReal(None));
+    let table: Table = vm
+        .lua()
+        .load(
+            r#"
+        return { draw = function(self, renderer)
+            drawn = {}
+            local function d(name, fields)
+                return setmetatable(fields, {__index = function(_, key)
+                    renderer:save()
+                    renderer:restore()
+                    drawn[name] = true
+                end})
+            end
+            GPUBuffer.new(d('buffer', {size = 4, usage = 'uniform'}))
+            local texture = GPUTexture.new(d('texture', {width = 2, height = 2, renderTarget = true}))
+            local view = texture:view(d('view', {}))
+            local ok, message = pcall(function()
+                texture:upload(d('upload', {data = buffer.create(16), width = 2, height = 2}))
+            end)
+            assert(ok or not string.find(tostring(message), 'no longer valid', 1, true), tostring(message))
+            GPUSampler.new(d('sampler', {}))
+            local layout = GPUBindGroupLayout.new(d('layout', {shader = shader}))
+            GPUBindGroup.new(d('group', {layout = layout}))
+            GPUPipeline.new(d('pipeline', {vertex = shader, vertexLayout = {}}))
+            local pass = canvas:beginRenderPass(d('pass', {
+                color = {d('color', {view = view, storeOp = 'store'})},
+            }))
+            pass:finish()
+        end }
+    "#,
+        )
+        .eval()
+        .unwrap();
+    let mut instance = vm.script_instance_from_table(table);
+    let mut renderer = factory.borrow().inner.make_renderer();
+    instance
+        .call_draw(&mut factory, &mut renderer, &mut NoopScriptHost)
+        .unwrap();
+    let drawn: Table = vm.lua().globals().get("drawn").unwrap();
+    for name in [
+        "buffer", "texture", "view", "upload", "sampler", "layout", "group", "pipeline", "pass",
+        "color",
+    ] {
+        assert!(drawn.raw_get::<bool>(name).unwrap_or(false), "{name} did not draw");
+    }
 }

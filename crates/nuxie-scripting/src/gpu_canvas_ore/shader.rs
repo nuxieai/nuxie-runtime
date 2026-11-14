@@ -111,15 +111,16 @@ pub(super) fn resolve_shader_entry(
 
 pub(super) fn resolve_stage_entry(
     table: &Table,
+    loan: &mut Loan<'_>,
     key: &str,
     stage: ShaderStage,
 ) -> Result<Option<(Shader, ShaderEntry)>> {
-    let value = table.get::<Value>(key)?;
+    let value = table.get_with::<Value>(reborrow_loan(loan), key)?;
     if matches!(value, Value::Nil) {
         return Ok(None);
     }
     let (module, requested) = match value {
-        Value::Table(desc) => (desc.get::<Value>("module")?, string(&desc, "entryPoint")?),
+        Value::Table(desc) => (desc.get_with::<Value>(reborrow_loan(loan), "module")?, string(&desc, loan, "entryPoint")?),
         value => (value, None),
     };
     let shader = match module {
@@ -183,9 +184,9 @@ pub(super) fn auto_layouts(
     Ok(layouts)
 }
 
-pub(super) fn dynamic_ubo_bindings(desc: &Table) -> Result<Vec<u32>> {
+pub(super) fn dynamic_ubo_bindings(desc: &Table, loan: &mut Loan<'_>) -> Result<Vec<u32>> {
     let mut dynamic = Vec::new();
-    if let Some(table) = optional_table(desc, "dynamicUBOs")? {
+    if let Some(table) = optional_table(desc, loan, "dynamicUBOs")? {
         for index in 1..=table.raw_len() {
             if dynamic.len() == 16 {
                 break;
@@ -199,15 +200,15 @@ pub(super) fn dynamic_ubo_bindings(desc: &Table) -> Result<Vec<u32>> {
 }
 
 pub(super) fn install(lua: &Lua) -> Result<()> {
-    constructor(lua, "GPUBindGroupLayout", |lua, desc| {
+    constructor(lua, "GPUBindGroupLayout", |lua, loan, desc| {
         let context = context(lua)?;
-        let group = number(&desc, "groupIndex", 0.0)? as u32;
+        let group = number(&desc, loan, "groupIndex", 0.0)? as u32;
         if group >= kMaxBindGroups {
             return Err(Error::runtime(format!(
                 "GPUBindGroupLayout.new: groupIndex must be in [0, {kMaxBindGroups})"
             )));
         }
-        let shader = match desc.get::<Value>("shader")? {
+        let shader = match desc.get_with::<Value>(reborrow_loan(loan), "shader")? {
             Value::UserData(value) if value.is::<Shader>() => {
                 Some(value.borrow::<Shader>()?.clone())
             }
@@ -217,8 +218,8 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         .ok_or_else(|| {
             Error::runtime("GPUBindGroupLayout.new: 'shader' must be a Shader with a loaded module")
         })?;
-        let dynamic = dynamic_ubo_bindings(&desc)?;
-        let fragment = match desc.get::<Value>("fragment")? {
+        let dynamic = dynamic_ubo_bindings(&desc, loan)?;
+        let fragment = match desc.get_with::<Value>(reborrow_loan(loan), "fragment")? {
             Value::Nil => None,
             Value::UserData(value) if value.is::<Shader>() => {
                 Some(value.borrow::<Shader>()?.clone())

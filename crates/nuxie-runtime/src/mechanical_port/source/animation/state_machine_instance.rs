@@ -579,9 +579,7 @@ impl StateMachineLayerInstance {
                 .with(|transition| transition.state_transition_interpolator())
                 .flatten()
         }) {
-            if interpolator
-                .with_mut(|interpolator| interpolator.keyframe_interpolator_transform(1.0))
-                .flatten()
+            if crate::mechanical_port::source::animation::keyframe_interpolator::transform_occurrence(&interpolator, 1.0)
                 .expect("transition interpolator")
                 != 1.0
             {
@@ -1465,11 +1463,7 @@ impl StateMachineLayerInstance {
             let mix = interpolator
                 .as_ref()
                 .and_then(|interpolator| {
-                    interpolator
-                        .with_mut(|interpolator| {
-                            interpolator.keyframe_interpolator_transform(self.mix_from)
-                        })
-                        .flatten()
+                    crate::mechanical_port::source::animation::keyframe_interpolator::transform_occurrence(interpolator, self.mix_from)
                 })
                 .unwrap_or(self.mix_from);
             state_from.with_state_mut(|state| state.apply(&machine.artboard_instance, mix));
@@ -1478,11 +1472,7 @@ impl StateMachineLayerInstance {
             let mix = interpolator
                 .as_ref()
                 .and_then(|interpolator| {
-                    interpolator
-                        .with_mut(|interpolator| {
-                            interpolator.keyframe_interpolator_transform(self.mix)
-                        })
-                        .flatten()
+                    crate::mechanical_port::source::animation::keyframe_interpolator::transform_occurrence(interpolator, self.mix)
                 })
                 .unwrap_or(self.mix);
             current_state.with_state_mut(|state| state.apply(&machine.artboard_instance, mix));

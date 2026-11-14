@@ -84,11 +84,10 @@ impl InterpolatingKeyFrame {
         }) {
             return Some(value);
         }
-        shared
-            .with_mut(|interpolator| {
-                interpolator.keyframe_interpolator_transform_value(from, to, factor)
-            })
-            .flatten()
+        // A scripted interpolator's script runs with no borrow of it.
+        crate::mechanical_port::source::animation::keyframe_interpolator::transform_value_occurrence(
+            shared, from, to, factor,
+        )
     }
 
     pub fn transform(
@@ -117,9 +116,10 @@ impl InterpolatingKeyFrame {
         }) {
             return Some(value);
         }
-        shared
-            .with_mut(|interpolator| interpolator.keyframe_interpolator_transform(factor))
-            .flatten()
+        // A scripted interpolator's script runs with no borrow of it.
+        crate::mechanical_port::source::animation::keyframe_interpolator::transform_occurrence(
+            shared, factor,
+        )
     }
 }
 impl std::ops::Deref for InterpolatingKeyFrame {

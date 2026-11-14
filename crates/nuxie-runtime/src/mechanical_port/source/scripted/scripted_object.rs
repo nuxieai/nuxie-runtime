@@ -277,11 +277,25 @@ impl ScriptedObject {
         method: crate::scripting::ScriptInterpolatorMethod,
         args: &[f32],
     ) -> Option<f32> {
-        use crate::scripting::ScriptOptionalNumberResult;
+        Self::call_interpolator_instance(self.interpolator_instance()?, method, args)
+    }
+
+    /// The instance an interpolator call runs on; `None` before the script's
+    /// `self` exists. Read under a borrow that ends before the call.
+    pub(crate) fn interpolator_instance(&self) -> Option<RuntimeScriptInstanceHandle> {
         if self.self_ref == 0 {
             return None;
         }
-        let instance = self.runtime_instance.as_ref()?;
+        self.runtime_instance.clone()
+    }
+
+    /// Runs an interpolator method on `instance`, with no Core receiver lent.
+    pub(crate) fn call_interpolator_instance(
+        instance: RuntimeScriptInstanceHandle,
+        method: crate::scripting::ScriptInterpolatorMethod,
+        args: &[f32],
+    ) -> Option<f32> {
+        use crate::scripting::ScriptOptionalNumberResult;
         // ScriptedInterpolator inherits the empty markNeedsUpdate; retain the
         // real callback request without inventing a component dirt effect.
         let mut host = ScriptUpdateRequestHost::default();

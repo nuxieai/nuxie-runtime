@@ -1258,12 +1258,11 @@ impl LayoutParticipant {
             .min(1.0);
             if animation.interpolation != LayoutStyleInterpolation::Linear {
                 if let Some(interpolator) = animation.interpolator.as_ref() {
-                    fraction = interpolator
-                        .with_mut(|interpolator| {
-                            interpolator.keyframe_interpolator_transform(fraction)
-                        })
-                        .flatten()
-                        .unwrap_or(fraction);
+                    fraction = crate::mechanical_port::source::animation::keyframe_interpolator::transform_occurrence(
+                        interpolator,
+                        fraction,
+                    )
+                    .unwrap_or(fraction);
                 }
             }
             animation.b.from = animation.a.interpolate(fraction);
@@ -1293,9 +1292,7 @@ impl LayoutParticipant {
         let mut fraction = (if time > 0.0 { elapsed / time } else { 1.0 }).min(1.0);
         if self.interpolation() != LayoutStyleInterpolation::Linear {
             if let Some(interpolator) = self.interpolator() {
-                fraction = interpolator
-                    .with_mut(|interpolator| interpolator.keyframe_interpolator_transform(fraction))
-                    .flatten()
+                fraction = crate::mechanical_port::source::animation::keyframe_interpolator::transform_occurrence(&interpolator, fraction)
                     .unwrap_or(fraction);
             }
         }

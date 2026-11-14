@@ -486,8 +486,17 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     // (a min-content measurement) follows the rows, and only with a single row (Chrome:
     // `height: 100px; aspect-ratio: 2` around that item is 400 wide in a flex row; with two
     // automatic rows it stays 200 wide).
+    // A picture whose height or `max-height` is a percentage follows its row the same way
+    // (Chrome: a grid in an `align-items: flex-start` column, around a 120 by 60 picture
+    // with `max-height: 50%`, is 60 wide; the picture is 60 by 30).
+    let picture_follows_rows = outer_node_size.width.is_none()
+        && items.iter().any(|item| {
+            item.is_compressible_replaced
+                && (item.size.height.into_raw().uses_percentage()
+                    || item.max_size.height.into_raw().uses_percentage())
+        });
     let columns_follow_rows = outer_node_size.width.is_none()
-        && items.iter().any(|item| item.aspect_ratio.is_some())
+        && (picture_follows_rows || items.iter().any(|item| item.aspect_ratio.is_some()))
         && (tree.get_grid_container_style(node).aspect_ratio().is_none()
             || (available_grid_space.width == AvailableSpace::MinContent
                 && rows.iter().filter(|track| track.kind == GridTrackKind::Track).count() == 1));
@@ -636,6 +645,14 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     }
 
     if rerun_column_sizing {
+        // nuxie-css: a grid as wide as its content, around a picture that follows its row,
+        // finds its columns again without the first width: held to it, an automatic
+        // column would stretch back to the picture's natural width.
+        let rerun_node_size = if picture_follows_rows && !has_percentage_column {
+            Size { width: None, ..inner_node_size }
+        } else {
+            inner_node_size
+        };
         // Re-run track sizing algorithm for Inline axis
         track_sizing_algorithm(
             tree,
@@ -645,7 +662,7 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
             justify_content,
             align_content,
             available_grid_space,
-            inner_node_size,
+            rerun_node_size,
             &mut columns,
             &mut rows,
             &mut items,

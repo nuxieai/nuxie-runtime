@@ -9281,7 +9281,7 @@ mod paint_order {
     fn element_cases() -> Vec<PaintCase> {
         use fixture::{ElementCase::*, ElementKind};
         let mut cases = Vec::new();
-        for kind in [ElementKind::Text, ElementKind::Image] {
+        for kind in [ElementKind::Text, ElementKind::Image, ElementKind::Video] {
             for case in [
                 Layout,
                 Scale,
@@ -13533,8 +13533,8 @@ fn in_place_a_flight_key_on_an_image_flies() {
 }
 
 #[test]
-fn in_place_a_flight_key_on_a_video_is_refused() {
-    refuses_a_keyed(fixture::KeyedKind::Video, "a video");
+fn in_place_a_flight_key_on_a_video_flies() {
+    flies_keyed(fixture::KeyedKind::Video);
 }
 
 /// Inventory rows 20 and 22: nothing is remounted or moved. Every object

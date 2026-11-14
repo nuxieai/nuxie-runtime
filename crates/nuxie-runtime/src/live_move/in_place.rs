@@ -396,7 +396,7 @@ impl Flying {
 /// element.
 const ADMITS_PLACEMENTS: bool = false;
 const ADMITS_IMAGES: bool = true;
-const ADMITS_VIDEOS: bool = false;
+const ADMITS_VIDEOS: bool = true;
 
 /// A component's world; an artboard's is its own space.
 fn world_of(component: &CoreHandle) -> Option<Mat2D> {

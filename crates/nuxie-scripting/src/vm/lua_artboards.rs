@@ -17,12 +17,38 @@ use nuxie_runtime::{
     ScriptAnimation, ScriptAnimationTime, ScriptArtboard, ScriptMethod, ScriptNode,
 };
 
+use nuxie_runtime::mechanical_port::source::math::{path_types::PathVerb, vec2d::Vec2D};
+
+use super::host_memory_budget::{HostMemoryCharge, bytes_of};
 use super::lua_mat2d::ScriptedMat2D;
 use super::lua_paint::ScriptedPaintData;
 use super::lua_path::{ScriptedPath, create_scripted_path};
 use super::lua_renderer::ScriptedRenderer;
 use super::lua_renderer_library::RendererBindings;
 use super::view_model::{create_scripted_view_model, model_from_table};
+
+/// Host bytes `lua_path.rs` charges a path of `verbs` verbs and `points`
+/// points (its private `path_bytes`; kept in step with it): two vectors at up
+/// to twice their length plus the render path built from them.
+fn scripted_path_bytes(verbs: usize, points: usize) -> usize {
+    bytes_of::<PathVerb>(verbs)
+        .saturating_add(bytes_of::<Vec2D>(points))
+        .saturating_mul(3)
+}
+
+/// Refuses growth of `path` by `verbs` verbs and `points` points unless the
+/// whole grown path would fit what the budget has free.
+///
+/// The path's own charge is private to `lua_path.rs`, which charges the
+/// growth at the path's next operation; this check, made as if the path held
+/// no charge yet, bounds what the path can reach before that.
+fn check_path_growth(lua: &Lua, path: &ScriptedPath, verbs: usize, points: usize) -> Result<()> {
+    let bytes = scripted_path_bytes(
+        path.raw_path.verbs().len().saturating_add(verbs),
+        path.raw_path.points().len().saturating_add(points),
+    );
+    HostMemoryCharge::for_lua(lua, bytes).map(drop)
+}
 
 impl RendererBindings {
     pub(crate) fn create_scripted_artboard(
@@ -135,12 +161,21 @@ impl UserData for ScriptedArtboard {
         });
         methods.add_method(
             "addToPath",
-            |_, this, (path, transform): (AnyUserData, Option<AnyUserData>)| {
+            |lua, this, (path, transform): (AnyUserData, Option<AnyUserData>)| {
                 let transform = transform
                     .as_ref()
                     .map(|transform| transform.borrow::<ScriptedMat2D>().map(|value| value.0))
                     .transpose()?;
                 let mut path = path.borrow_mut::<ScriptedPath>()?;
+                // What the artboard adds, measured on an empty path: the
+                // grown path must fit the budget before it grows.
+                let mut added = nuxie_render_api::RawPath::default();
+                this.owner
+                    .artboard
+                    .retained_handle()
+                    .add_to_path(&mut added, transform)
+                    .map_err(|error| Error::runtime(error.to_string()))?;
+                check_path_growth(lua, &path, added.verbs().len(), added.points().len())?;
                 path.with_render_raw_path_mut(|raw_path| {
                     this.owner
                         .artboard
@@ -1068,5 +1103,38 @@ end
         )
         .exec()
         .expect("pinned addToPath overloads");
+    }
+
+    // Lane E2b: addToPath grew the path through a closure that could not
+    // fail, charged only at the path's next operation, so adding to one path
+    // in a loop grew without limit.
+    #[test]
+    fn add_to_path_stops_at_the_budget() {
+        let lua = Lua::new();
+        crate::vm::host_memory_budget::HostMemoryBudget::install(&lua, 256 * 1024).unwrap();
+        lua.globals()
+            .set(
+                "artboard",
+                fixture_userdata(&lua, "joel_v3.riv", Some("Character")),
+            )
+            .unwrap();
+        let (ok, error, verbs_once): (bool, String, usize) = lua
+            .load(
+                r#"
+                artboard:advance(0)
+                local once = Path.new()
+                artboard:addToPath(once)
+                local path = Path.new()
+                local ok, err = pcall(function()
+                  for i = 1, 100000 do artboard:addToPath(path) end
+                end)
+                return ok, tostring(err), #once
+                "#,
+            )
+            .eval()
+            .unwrap();
+        assert!(verbs_once > 0);
+        assert!(!ok, "expected a refusal");
+        assert!(error.contains("host memory budget"), "{error}");
     }
 }

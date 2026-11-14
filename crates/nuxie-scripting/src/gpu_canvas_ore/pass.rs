@@ -18,17 +18,29 @@ pub(super) struct Pass {
     pub pipeline_set: bool,
     pub draw_call_count: u32,
     pub label: String,
+    pub held: HeldCharges,
 }
+
+/// The charges of everything a pass has captured: its attachments and every
+/// buffer and bind group it was ever bound to. The pass itself keeps some of
+/// them (its draw bindings, and bind groups deferred until a pipeline is
+/// set) for as long as the script holds it, so it holds each charge, once
+/// per allocation, until the pass is collected.
+#[derive(Default)]
+pub(super) struct HeldCharges(std::collections::BTreeMap<usize, GpuCharge>);
 
 impl Pass {
     /// The pass's recording keeps everything it captures (a rebound slot's
-    /// old resource too) until the frame's recording is reset, so it keeps
-    /// the charge of each as well, whether or not the script still holds
-    /// the pass or the resource.
+    /// old resource too) until the frame's recording is reset, and the pass
+    /// keeps some of it while the script holds the pass, so both keep the
+    /// charge of each: it lasts until the later of the two lets go.
     pub(super) fn hold(&mut self, charge: &GpuCharge) {
         if let Some(pass) = self.pass.as_deref_mut() {
             pass.keepWithRecording(Rc::clone(charge) as Rc<dyn std::any::Any>);
         }
+        // The address identifies the allocation while this map holds it.
+        let key = Rc::as_ptr(charge) as usize;
+        self.held.0.entry(key).or_insert_with(|| Rc::clone(charge));
     }
     fn hold_group(&mut self, bind_group: &BindGroup) {
         for charge in bind_group.charges.iter() {

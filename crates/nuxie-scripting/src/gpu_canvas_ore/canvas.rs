@@ -365,6 +365,7 @@ pub(super) fn begin_pass(
             pipeline_set: false,
             draw_call_count: 0,
             label: String::new(),
+            held: Default::default(),
         });
     }
     depth_desc.view = depth.as_ref().map(|view| &view.resource);
@@ -407,6 +408,7 @@ pub(super) fn begin_pass(
         pipeline_set: false,
         draw_call_count: 0,
         label: label.unwrap_or_default(),
+        held: Default::default(),
     };
     // The recording keeps its attachments, and so their charges.
     let attachments = colors

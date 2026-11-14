@@ -1978,11 +1978,13 @@ impl ScriptedPropertyBlob {
     }
 
     /// The charge of the assigned blob if the model still holds it; drops it
-    /// once the model holds another.
-    fn charge_for(&self, asset: &Arc<RuntimeBlobAsset>) -> Rc<HostMemoryCharge> {
+    /// once the model holds another blob or none.
+    fn charge_for(&self, asset: Option<&Arc<RuntimeBlobAsset>>) -> Rc<HostMemoryCharge> {
         let mut assigned = self.assigned.borrow_mut();
-        let held = match assigned.as_ref() {
-            Some((held, charge)) if Arc::ptr_eq(held, asset) => Some(Rc::clone(charge)),
+        let held = match (assigned.as_ref(), asset) {
+            (Some((held, charge)), Some(asset)) if Arc::ptr_eq(held, asset) => {
+                Some(Rc::clone(charge))
+            }
             _ => None,
         };
         if held.is_none() {
@@ -2008,10 +2010,11 @@ impl UserData for ScriptedPropertyBlob {
             if let Some(cached) = this.cached_value.borrow().as_ref() {
                 return cached.get::<AnyUserData>(lua).map(Value::UserData);
             }
-            let Some(asset) = this.model.blob_asset(&this.name) else {
+            let asset = this.model.blob_asset(&this.name);
+            let charge = this.charge_for(asset.as_ref());
+            let Some(asset) = asset else {
                 return Ok(Value::Nil);
             };
-            let charge = this.charge_for(&asset);
             let value = lua.create_userdata(ScriptedBlob::charged(asset, charge))?;
             *this.cached_value.borrow_mut() = Some(MainThreadRef::new(lua, value.clone())?);
             Ok(Value::UserData(value))
@@ -2303,10 +2306,10 @@ impl ScriptedPropertyFont {
     }
 
     /// The charge of the assigned face if the model still holds it; drops it
-    /// once the model holds another face.
-    fn charge_for(&self, font: &ScriptFont) -> Rc<HostMemoryCharge> {
+    /// once the model holds another face or none.
+    fn charge_for(&self, font: Option<&ScriptFont>) -> Rc<HostMemoryCharge> {
         let mut assigned = self.assigned.borrow_mut();
-        let held = match (assigned.as_ref(), font.native_font()) {
+        let held = match (assigned.as_ref(), font.and_then(ScriptFont::native_font)) {
             (Some((face, charge)), Some(native)) if Arc::ptr_eq(face, &native) => {
                 Some(Rc::clone(charge))
             }
@@ -2325,13 +2328,10 @@ impl UserData for ScriptedPropertyFont {
             if let Some(cached) = this.cached_value.borrow().as_ref() {
                 return cached.get::<AnyUserData>(lua).map(Value::UserData);
             }
-            let value = this
-                .model
-                .font(&this.name)
-                .map(|font| {
-                    let charge = this.charge_for(&font);
-                    create_charged_asset_font(lua, font, charge)
-                })
+            let font = this.model.font(&this.name);
+            let charge = this.charge_for(font.as_ref());
+            let value = font
+                .map(|font| create_charged_asset_font(lua, font, charge))
                 .transpose()?
                 .flatten();
             let Some(value) = value else {
@@ -5650,6 +5650,18 @@ mod tests {
         lua.load("kept = nil").exec().unwrap();
         lua.gc_collect().unwrap();
         assert_eq!(budget_used(&lua), 0);
+
+        // Codex review (lane G3): a blob cleared by the host stayed charged
+        // on the wrapper that had assigned it, even once read back as nil.
+        lua.load("blobProperty = model[propertyName] blobProperty.value = buffer.create(1000)")
+            .exec()
+            .unwrap();
+        assert_eq!(budget_used(&lua), 1000);
+        model.set_blob(&name, None);
+        let cleared: Value = lua.load("return blobProperty.value").eval().unwrap();
+        assert!(cleared.is_nil());
+        lua.gc_collect().unwrap();
+        assert_eq!(budget_used(&lua), 0, "a cleared blob is refunded once read back");
     }
 
     fn font_property_fixture() -> (nuxie_runtime::RuntimeFileHandle, ScriptViewModel, String) {
@@ -5690,9 +5702,10 @@ mod tests {
         lua.globals()
             .set("fontBytes", lua.create_buffer(bytes).unwrap())
             .unwrap();
+        let native = model.clone();
         let table = create_scripted_view_model(&lua, model).expect("scripted model");
         lua.globals().set("model", table).unwrap();
-        lua.globals().set("propertyName", name).unwrap();
+        lua.globals().set("propertyName", name.clone()).unwrap();
         let used = || HostMemoryBudget::for_lua(&lua).unwrap().used();
         lua.load(
             "fontProperty = model[propertyName]\n\
@@ -5710,6 +5723,17 @@ mod tests {
         lua.load("kept = nil").exec().unwrap();
         lua.gc_collect().unwrap();
         assert_eq!(used(), 0);
+
+        // Codex review (lane G3): a face cleared by the host stayed charged
+        // on the wrapper that had assigned it, even once read back as nil.
+        lua.load("fontProperty.value = Font.decode(fontBytes)").exec().unwrap();
+        lua.gc_collect().unwrap();
+        assert_eq!(used(), 226_004);
+        native.set_font(&name, None);
+        let cleared: Value = lua.load("return fontProperty.value").eval().unwrap();
+        assert!(cleared.is_nil());
+        lua.gc_collect().unwrap();
+        assert_eq!(used(), 0, "a cleared face is refunded once read back");
     }
 
     fn positive_blob_lookup_surface() -> String {

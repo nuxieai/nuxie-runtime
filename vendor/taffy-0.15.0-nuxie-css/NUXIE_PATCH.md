@@ -1469,3 +1469,20 @@ On plain Taffy, in the runtime's `layout_flight_hold_tests.rs`:
   parent pass lays the inside out at rest again.
 - `taffy_relayout_at_size_needs_a_full_layout_first`: a node never laid out gives
   `None`.
+
+## A row item's contribution includes the minimum its ratio transfers
+
+A flex row sized from its content (`fit-content`, a wrapping row, a row in
+an automatic grid column) sums its items' contributions, each clamped by
+the item's `min-width` and `max-width`. A minimum width the ratio transfers
+from `min-height` was left out, though the item's hypothetical size holds
+it. Chrome counts it: a `fit-content` row around `aspect-ratio: 1;
+min-height: 30px; flex-grow: 1` and a 40 wide picture is 70 wide, and the
+two sit on one line. The fork made the row 40 wide and wrapped the picture.
+
+`intrinsic_line_item_sum` now floors a measured row item's contribution by
+the transferred minimum when the item has no `min-width` of its own.
+
+Of the 29,914 layouts, 115 more match and one that matched differs: a
+`width: max-content` ratio grid around a wrapping row whose item grows
+through the same ratio item (Chrome 440 wide, 400 here).

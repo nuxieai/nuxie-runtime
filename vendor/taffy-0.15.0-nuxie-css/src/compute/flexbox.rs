@@ -2447,7 +2447,14 @@ fn intrinsic_line_item_sum(
                 // Ultimately, this was not found by reading the spec, but by trial and error fixing tests to align with Webkit/Firefox output.
                 // (see the `flex_basis_unconstraint_row` and `flex_basis_uncontraint_column` generated tests which demonstrate this)
                 if constants.is_row {
-                    inner_main_size.maybe_clamp(style_min, style_max)
+                    // nuxie-css: a minimum width the ratio transfers from `min-height` is
+                    // part of the item's contribution, as an authored `min-width` is
+                    // (Chrome: a `fit-content` row around `aspect-ratio: 1; min-height:
+                    // 30px` and a 40 wide box is 70 wide).
+                    let sized = item.size_style.map(|d| !d.is_auto());
+                    let transferred_min =
+                        transfer_into_unsized(item.min_size, item.ratio, sized, false).main(dir);
+                    inner_main_size.maybe_clamp(style_min.or(transferred_min), style_max)
                 } else {
                     inner_main_size.max(item.flex_basis).maybe_clamp(style_min, style_max)
                 }

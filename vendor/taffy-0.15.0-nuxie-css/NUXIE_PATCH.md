@@ -1842,3 +1842,29 @@ regressed. 480 new probes of a picture under `width`, `min-width` and `max-width
 percentages in columns, rows, grids and fit-content blocks all match (40 differed
 before). Guard rows: the 14 fixed rows and 8 of the probes.
 
+## A grid asked for its min-content width uses every item's minimum contribution
+
+For a track with an automatic minimum, stock Taffy follows the spec sentence "if the grid
+container is being sized under a min- or max-content constraint, use the items' limited
+min-content contributions in place of their minimum contributions", except for scroll
+containers. The fork had added a second exception: an item with a ratio under a
+min-content constraint.
+
+Under a min-content constraint the substitution is now never made. Chrome asks an
+automatic minimum track for the item's minimum contribution whatever the constraint
+(`GridItemContributionType::kForIntrinsicMinimums` in `ContributionSizeForGridItem`, with
+the automatic minimum from `CalculateIntrinsicMinimumContribution`), so an item with a
+`min-width` gives that width, and a picture whose `width` or `max-width` is a percentage
+gives its compressed minimum. The ratio exception is a case of this rule and is gone.
+
+Example: a `width: min-content` grid around a 120 by 60 picture with `min-width: 50%`.
+Chrome: grid 0 wide, picture 120 wide. Before: grid 120 wide.
+
+Under a max-content constraint the substitution stays: taking it out too moves eight
+ratio-in-grid rows away from Chrome.
+
+Of the 32,600 compared layouts, 440 differ from Chrome (460 before): 20 fixed, none
+regressed. Of 882 new probes (a picture with percentage widths in a grid inside a row,
+column, grid or block), 20 differ (352 before); the 20 are a grid with one `1fr` column
+that shrinks to fit, left for later. Guard rows: the 20 fixed rows and 24 of the probes.
+

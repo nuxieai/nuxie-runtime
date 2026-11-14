@@ -646,14 +646,16 @@ fn resolve_intrinsic_track_sizes<Tree: LayoutPartialTree>(
                             // However, in practice browsers only seem to apply this rule if the item is not a scroll container
                             // (note that overflow:hidden counts as a scroll container), giving the automatic minimum size of scroll
                             // containers (zero) precedence over the min-content contributions.
-                            // nuxie-css: under a min-content constraint Chrome takes the minimum
-                            // contribution of an item with a ratio (a `width: min-content` grid
-                            // with a set height around an `aspect-ratio: 4; min-width: 0` item
-                            // is 0 wide, 400 wide without the `min-width`).
-                            AvailableSpace::MinContent | AvailableSpace::MaxContent
-                                if !item.overflow.get(axis).is_scroll_container()
-                                    && !(axis_available_grid_space == AvailableSpace::MinContent
-                                        && item.aspect_ratio.is_some()) =>
+                            // nuxie-css: under a min-content constraint Chrome takes every item's
+                            // minimum contribution (`kForIntrinsicMinimums` in
+                            // `ContributionSizeForGridItem`; the constraint does not change which
+                            // contribution an automatic minimum track asks for). A `width:
+                            // min-content` grid around a 120 wide picture with `min-width: 50%`
+                            // or `max-width: 50%` is 0 wide, and 120 wide without them; around an
+                            // `aspect-ratio: 4; min-width: 0` item with a set height it is 0
+                            // wide, 400 wide without the `min-width`.
+                            AvailableSpace::MaxContent
+                                if !item.overflow.get(axis).is_scroll_container() =>
                             {
                                 let axis_minimum_size = item_sizer.minimum_contribution(item, axis_tracks);
                                 let axis_min_content_size = item_sizer.min_content_contribution(item, axis_tracks);
@@ -748,11 +750,10 @@ fn resolve_intrinsic_track_sizes<Tree: LayoutPartialTree>(
             // However, in practice browsers only seem to apply this rule if the item is not a scroll container (note that overflow:hidden counts as
             // a scroll container), giving the automatic minimum size of scroll containers (zero) precedence over the min-content contributions.
             let space = match axis_available_grid_space {
-                // nuxie-css: as above, an item with a ratio keeps its minimum contribution under
-                // a min-content constraint.
-                AvailableSpace::MinContent | AvailableSpace::MaxContent
-                    if !item.overflow.get(axis).is_scroll_container()
-                        && !(axis_available_grid_space == AvailableSpace::MinContent && item.aspect_ratio.is_some()) =>
+                // nuxie-css: as above, every item keeps its minimum contribution under a
+                // min-content constraint.
+                AvailableSpace::MaxContent
+                    if !item.overflow.get(axis).is_scroll_container() =>
                 {
                     let axis_minimum_size = item_sizer.minimum_contribution(item, axis_tracks);
                     let axis_min_content_size = item_sizer.min_content_contribution(item, axis_tracks);

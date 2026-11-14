@@ -1346,3 +1346,26 @@ Of the 29,914 layouts, 30 more match and none that matched differ. Of the
 152 layouts (min-content, max-content and automatic widths, with and
 without the grid's own ratio), 12 differed and all match now. Of 1,920
 nested ratio grid layouts, 130 differed and 111 differ now.
+
+## A wrapping column's lines are as wide as their pictures' own heights
+
+A column with no width of its own is as wide as its items are at their own
+heights, not at the heights flexing gives them (see "the second pass" in
+`compute_preliminary`). That rule was limited to columns on one line.
+Chrome applies it to each line of a wrapping column too: inside a 100 tall
+flex row, `flex-direction: column; flex-wrap: wrap` around a 120x60 picture
+with `flex-basis: 100px` is 120 wide while the picture itself is 200 wide,
+and with a second line holding a 30 wide box the column is 150 wide.
+
+`replaced_stretch_awaits_width` and `flexed_height_awaits_width` now cover
+wrapping columns while the column's width is unknown. In the second pass
+the width is known, a wrapping column's stretch is still not a definite
+one, and the pictures take the width of their flexed heights. A
+`height: stretch` picture whose height only follows from the column's
+content height keeps the width of that height, as before.
+
+Of the 29,914 layouts, 18 more match and none that matched differ. Of 420
+Chrome 152 layouts of a column in a flex row holding a picture that flexes
+or stretches in height, 76 differed and 4 differ now (a tall picture with
+`min-height: 0` and a flex basis, where the column's height should follow
+the basis).

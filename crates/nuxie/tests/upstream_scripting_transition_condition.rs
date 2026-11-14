@@ -82,3 +82,13 @@ fn scripted_transition_condition() {
     compare_sriv(&expected, &actual)
         .unwrap_or_else(|difference| panic!("scripted_transition_condition differs: {difference}"));
 }
+
+/// A scripted transition condition runs with no Core receiver mutably lent
+/// (before: under the transition's and the condition's own borrows).
+#[test]
+fn scripted_transition_conditions_run_with_no_core_receiver_lent() {
+    let ((), reports) = nuxie_runtime::script_borrow_check::record_script_borrow_reports(|| {
+        scripted_transition_condition();
+    });
+    assert!(reports.is_empty(), "{}", reports.join("\n"));
+}

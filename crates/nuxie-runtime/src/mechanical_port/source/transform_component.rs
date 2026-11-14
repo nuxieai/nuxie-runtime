@@ -21,6 +21,9 @@ pub struct TransformComponent {
     parent_cells: Option<Rc<TransformCells>>,
     // The parent is a TransformComponent, whose childOpacity its cells hold.
     parent_is_transform: bool,
+    // Our layer: where a copy flying in place starts its render opacity
+    // (css_layout/lift.rs). Set and cleared by its lift.
+    pub(crate) opacity_root: crate::css_layout::lift::OpacityRoot,
     constraints: Vec<CoreHandle>,
 }
 
@@ -209,6 +212,7 @@ impl Default for TransformComponent {
             parent_transform_component: None,
             parent_cells: None,
             parent_is_transform: false,
+            opacity_root: Default::default(),
             constraints: Vec::new(),
         }
     }
@@ -496,6 +500,14 @@ impl TransformComponent {
         parent_child_opacity: Option<f32>,
         holds_fade: bool,
     ) {
+        use crate::css_layout::lift::OpacityRoot;
+        // A lifted copy leaves its ancestors' opacity out, and in a zoom its
+        // own too: its lift applies the flight's.
+        let (parent_child_opacity, holds_fade) = match self.opacity_root {
+            OpacityRoot::None => (parent_child_opacity, holds_fade),
+            OpacityRoot::Own => (None, holds_fade),
+            OpacityRoot::Nothing => (None, true),
+        };
         let mut opacity = if holds_fade {
             1.0
         } else {

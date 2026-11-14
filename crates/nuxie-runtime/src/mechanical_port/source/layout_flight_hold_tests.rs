@@ -778,15 +778,13 @@ fn in_place_hold_sizes_a_content_box_element_as_the_slot_path_does() {
     });
 }
 
-/// The contract between the file and the hold (pr-a-brief.md section 9,
-/// finding 1, and the coordinator's ruling): a matched element is the
-/// containing block of its absolutely placed descendants, at rest and in
-/// flight. The file makes a keyed element positioned at rest; given that,
-/// its absolute child follows the flight, in its corner at every flight
-/// size, and nothing moves at take-off or landing. A file that leaves the
-/// element static breaks the contract: its absolute child is placed against
-/// a farther ancestor (here the Screen) at rest and stays there while held,
-/// so it does not follow the flight.
+/// An absolutely placed descendant of a held element is placed as CSS
+/// places it, and the hold keeps that. A positioned element is its
+/// containing block: the child follows the flight, in its corner at every
+/// flight size, and nothing moves at take-off or landing. A static element
+/// is not: the child is placed against a farther ancestor (here the Screen)
+/// at rest and stays placed there while held, as the published file places
+/// it at rest.
 #[test]
 fn in_place_a_static_element_with_an_absolute_child_is_placed_as_documented() {
     let pinned = |position: u64| {
@@ -828,7 +826,7 @@ fn in_place_a_static_element_with_an_absolute_child_is_placed_as_documented() {
             (rest, held, flying, world(&scene, "E"))
         })
     };
-    // Kept: E relative, as the file makes a keyed element.
+    // E positioned: it contains Pin.
     let (rest, held, flying, e) = around(1);
     assert_eq!(held, rest, "nothing moves at take-off");
     assert_eq!(
@@ -841,7 +839,7 @@ fn in_place_a_static_element_with_an_absolute_child_is_placed_as_documented() {
         (e.0 + LOWER_SIZE.0 - 26.0, e.1 + LOWER_SIZE.1 - 14.0),
         "Pin follows E's flight"
     );
-    // Broken: E static, so Pin is placed against the Screen, held too.
+    // E static: Pin is placed against the Screen, held too.
     let (rest, held, flying, _) = around(0);
     assert_eq!(
         rest,

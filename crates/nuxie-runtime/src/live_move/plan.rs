@@ -40,9 +40,12 @@ struct Screen {
     board: CoreHandle,
     slots: Vec<Slot>,
     /// The Screen holds flight records: the file flies in place
-    /// (docs/live-moves.md, Flying in place), which this runtime reads but
-    /// does not play yet.
+    /// (docs/live-moves.md, Flying in place).
     in_place: bool,
+    /// In an in-place file: the Screen's elements by flight key, and its
+    /// flight records by key, in file order.
+    elements: Vec<(u32, CoreHandle)>,
+    records: Vec<(u32, CoreHandle)>,
 }
 /// One thing a step flies: a flight, or a zoomed pair's two.
 pub enum Entry {
@@ -90,6 +93,10 @@ pub(crate) struct Plan {
     departures: Vec<CoreHandle>,
     active: Option<(String, Option<String>)>,
     pub index: crate::hosted_scene::HostedIndex,
+    /// The active in-place step's flying copies (live_move/in_place.rs),
+    /// and its zoomed pairs of them.
+    pub lifted: Vec<super::in_place::InPlaceFlight>,
+    pairs: Vec<super::in_place::InPlacePair>,
     projection: Option<(u64, Vec<CoreHandle>, std::rc::Rc<super::frame::Projection>)>,
 }
 impl Plan {
@@ -146,7 +153,15 @@ impl Plan {
         let lost_flight = self
             .all_flights()
             .any(|flight| !mounted.contains(&flight.flight) || !mounted.contains(&flight.landing));
-        if incoming_left || lost_flight {
+        // In place, a step cancels when a Screen, a copy or a record it
+        // flies is gone.
+        let rows = self
+            .rows
+            .values()
+            .map(|row| row.board.clone())
+            .collect::<HashSet<_>>();
+        let lost_copy = self.lifted.iter().any(|flight| !flight.is_whole(&rows));
+        if incoming_left || lost_flight || lost_copy {
             self.settle(&mounted)?;
         }
         let mut first = HashMap::new();
@@ -217,6 +232,11 @@ impl Plan {
     /// row went. Then every mounted slot the step emptied that is still empty
     /// gets a copy of its own (decision 297), and the step ends.
     fn settle(&mut self, mounted: &HashSet<CoreHandle>) -> Result<()> {
+        // In place nothing is away: the cancel is the landing's clear.
+        for flight in std::mem::take(&mut self.lifted) {
+            flight.clear();
+        }
+        self.pairs.clear();
         let entries = std::mem::take(&mut self.flights);
         for f in entries.iter().flat_map(Entry::flights) {
             if !mounted.contains(&f.flight) || child(&f.flight)?.is_none() {
@@ -254,10 +274,9 @@ impl Plan {
     ) -> Result<()> {
         ensure!(self.active.is_none(), "step already active");
         self.prepare(root)?;
-        ensure!(
-            step_name.is_none() || !self.in_place(),
-            "this runtime does not play in-place steps yet"
-        );
+        if let Some(name) = step_name.filter(|_| self.in_place()) {
+            return self.step_begin_in_place(root, incoming, name);
+        }
         let incoming_row = self
             .rows
             .get(incoming)
@@ -487,6 +506,20 @@ impl Plan {
     /// it. Both SDKs end a step and retire the leaving row in one batch, so
     /// that copy is first drawn when that Screen is shown again.
     fn land(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<()> {
+        // In place: each Screen draws its own copy as authored in the same
+        // frame.
+        let lifted = std::mem::take(&mut self.lifted);
+        self.pairs.clear();
+        let landed_rows = lifted
+            .iter()
+            .flat_map(|flight| [flight.row.clone(), flight.board.clone()])
+            .collect::<HashSet<_>>();
+        for flight in &lifted {
+            flight.clear();
+        }
+        for row in &landed_rows {
+            settle_row(row);
+        }
         for f in self.all_flights() {
             validate_move(&f.flight, &f.landing)?;
             ensure!(child(&f.flight)?.is_some(), "flight lost its instance");
@@ -514,6 +547,9 @@ impl Plan {
     }
     pub fn after_advance(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<bool> {
         self.prepare(root)?;
+        if !self.lifted.is_empty() {
+            return self.follow_in_place(root);
+        }
         if self.flights.is_empty() {
             return Ok(false);
         }
@@ -604,6 +640,251 @@ impl Plan {
         settle_frame(&settle_order);
         Ok(!flown.is_empty())
     }
+    /// Begins a step of an in-place file (live_move/in_place.rs): every
+    /// check before any mark, then each copy's marks, the flight timeline's
+    /// first frame on the flight records, and one follow. A refusal marks
+    /// nothing.
+    fn step_begin_in_place(
+        &mut self,
+        root: &RuntimeArtboardInstanceHandle,
+        incoming: &str,
+        name: &str,
+    ) -> Result<()> {
+        use super::in_place::{InPlaceFlight, InPlacePair, is_inside};
+        let step = self
+            .steps
+            .iter()
+            .find(|s| s.name == name)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("published step not found"))?;
+        validate_step_units(&step.units)?;
+        ensure!(step.to == incoming, "step destination mismatch");
+        let outgoing = self
+            .rows
+            .get(&step.from)
+            .ok_or_else(|| anyhow::anyhow!("outgoing Screen not mounted"))?;
+        let arriving = self
+            .rows
+            .get(incoming)
+            .ok_or_else(|| anyhow::anyhow!("incoming Screen not found"))?;
+        for row in [outgoing, arriving] {
+            ensure!(
+                crate::hosted_scene::is_active_artboard(&row.board),
+                "a Screen of an in-place step is collapsed"
+            );
+        }
+        let element = |row: &Screen, key: u32| {
+            row.elements
+                .iter()
+                .find(|(k, _)| *k == key)
+                .map(|(_, element)| element.clone())
+                .ok_or_else(|| anyhow::anyhow!("no element with flight key {key}"))
+        };
+        let record = |key: u32| {
+            outgoing
+                .records
+                .iter()
+                .map(|record| (outgoing, record))
+                .chain(arriving.records.iter().map(|record| (arriving, record)))
+                .find(|(_, (k, _))| *k == key)
+                .map(|(row, (_, record))| (row.board.clone(), record.clone()))
+                .ok_or_else(|| anyhow::anyhow!("unknown flight record {key} on step Screens"))
+        };
+        let mut flights = Vec::new();
+        let mut zoomed = Vec::new();
+        let mut used = HashSet::new();
+        let mut boards = HashSet::new();
+        for unit in &step.units {
+            let from = element(outgoing, unit.outgoing_unit_key)?;
+            let to = element(arriving, unit.incoming_unit_key)?;
+            ensure!(
+                used.insert(from.clone()) && used.insert(to.clone()),
+                "overlapping flight owners"
+            );
+            let rule = zoom::Rule::of(unit.read_zoom());
+            if let Some(rule) = rule {
+                zoomed.push((rule, flights.len()));
+            }
+            for (key, copy, row) in [
+                (unit.outgoing_flight_key, &from, &outgoing.board),
+                (unit.incoming_flight_key, &to, &arriving.board),
+            ] {
+                let (board, record) = record(key)?;
+                boards.insert(board.clone());
+                flights.push(InPlaceFlight::new(
+                    record,
+                    copy.clone(),
+                    row.clone(),
+                    (from.clone(), outgoing.board.clone()),
+                    (to.clone(), arriving.board.clone()),
+                    board,
+                    rule.is_some(),
+                )?);
+            }
+        }
+        ensure!(
+            boards.len() <= 1,
+            "a step's flight records need to be on one Screen"
+        );
+        // A matched element inside another of the same step does not fly
+        // on its own.
+        for a in &used {
+            ensure!(
+                !used.iter().any(|b| is_inside(a, b)),
+                "a flight inside another flight"
+            );
+        }
+        for flight in flights.iter().filter(|flight| !flight.zoomed) {
+            flight.project(&flight.size_frame(None)?, None)?;
+        }
+        // The point a zoom's tracker follows on Back: the center of the
+        // page's drawing space.
+        let center = root.with_artboard(|b| b.bounds().center());
+        let pairs = zoomed
+            .into_iter()
+            .map(|(rule, at)| InPlacePair::take_off(rule, [&flights[at], &flights[at + 1]], center))
+            .collect::<Result<Vec<_>>>()?;
+        let timeline = match (step.flight_animation, boards.iter().next()) {
+            (u32::MAX, _) | (_, None) => None,
+            (index, Some(board)) => Some((
+                board.clone(),
+                board
+                    .with_downcast::<Artboard, _>(|b| b.animation_handle_at(index as usize))
+                    .flatten()
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("flightAnimationId names no animation on its Screen")
+                    })?,
+            )),
+        };
+        // Every check has passed: mark. Lifts that share an anchor draw by
+        // their records' order, a later record on top, so a later record is
+        // placed first.
+        let order = |flight: &InPlaceFlight| {
+            flight
+                .board
+                .with_downcast::<Artboard, _>(|board| {
+                    board.objects().iter().position(|o| o.as_ref() == Some(&flight.record))
+                })
+                .flatten()
+                .unwrap_or(0)
+        };
+        flights.sort_by_key(|flight| std::cmp::Reverse(order(flight)));
+        for flight in &flights {
+            flight.mark(if flight.zoomed {
+                crate::css_layout::lift::OpacityRoot::Nothing
+            } else {
+                crate::css_layout::lift::OpacityRoot::Own
+            });
+        }
+        if let Some((board, animation)) = timeline {
+            let controls = flights.iter().map(|f| f.record.clone()).collect();
+            apply_first_frame(&board, &animation, &controls);
+        }
+        self.lifted = flights;
+        self.pairs = pairs;
+        self.active = Some((incoming.to_owned(), Some(name.to_owned())));
+        self.after_advance(root)?;
+        Ok(())
+    }
+
+    /// One frame of an in-place step, through the slot path's four
+    /// barriers. Size: every copy's controls and its ends' resting sizes,
+    /// then its flight size, corners and shadow. Layout: both Screens of
+    /// every copy settle, inner trees first. Pose: every lift's transform and
+    /// opacity from the settled layout, then where each paints. Settle.
+    fn follow_in_place(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<bool> {
+        let active = self
+            .index
+            .active(root)
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>();
+        // A zoomed version is laid out where it rests: it has no Size.
+        let frames = self
+            .lifted
+            .iter()
+            .map(|flight| {
+                (!flight.zoomed)
+                    .then(|| flight.size_frame(Some(&active)))
+                    .transpose()
+            })
+            .collect::<Result<Vec<_>>>()?;
+        for (flight, frame) in self.lifted.iter().zip(&frames) {
+            if let Some(frame) = frame {
+                flight.apply_size(frame);
+            }
+        }
+        let rows = self
+            .lifted
+            .iter()
+            .flat_map(|flight| flight.rows().into_iter().cloned())
+            .filter(|row| active.contains(row))
+            .collect::<HashSet<_>>();
+        let mut settle_order = rows
+            .iter()
+            .map(|row| layout_root(row.clone()))
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        settle_order.sort_by_key(|board| std::cmp::Reverse(artboard_depth(board)));
+        let rest = rows
+            .iter()
+            .filter(|row| !settle_order.contains(row))
+            .cloned()
+            .collect::<Vec<_>>();
+        settle_order.extend(rest);
+        settle_frame(&settle_order);
+        let poses = self
+            .lifted
+            .iter()
+            .zip(&frames)
+            .map(|(flight, frame)| {
+                frame
+                    .as_ref()
+                    .map(|frame| flight.project(frame, Some(&active)))
+                    .transpose()
+            })
+            .collect::<Result<Vec<_>>>()?;
+        for (flight, pose) in self.lifted.iter().zip(poses) {
+            if let Some(pose) = pose {
+                flight.apply_pose(pose);
+            }
+        }
+        for pair in &self.pairs {
+            let version = |copy: &CoreHandle| {
+                self.lifted
+                    .iter()
+                    .find(|flight| flight.element == *copy)
+                    .ok_or_else(|| anyhow::anyhow!("a zoomed version left its step"))
+            };
+            pair.pose([version(&pair.copies[0])?, version(&pair.copies[1])?], &active)?;
+        }
+        let mut covers_changed = HashSet::new();
+        for flight in &self.lifted {
+            if flight.read_cover() {
+                covers_changed.insert(flight.board.clone());
+            }
+        }
+        for board in &covers_changed {
+            if let Some(dirty) = board.artboard_dirty_handle() {
+                dirty.mark_css_draw_order_dirty();
+            }
+        }
+        // What every lift draws moved: the upper Screens draw again.
+        for board in self
+            .lifted
+            .iter()
+            .map(|flight| &flight.board)
+            .collect::<HashSet<_>>()
+        {
+            if let Some(dirty) = board.artboard_dirty_handle() {
+                dirty.changed();
+            }
+        }
+        settle_frame(&settle_order);
+        Ok(true)
+    }
+
     pub fn frame_scope(
         &mut self,
         root: &RuntimeArtboardInstanceHandle,
@@ -786,7 +1067,7 @@ fn screen_rows(root: &RuntimeArtboardInstanceHandle) -> Result<HashMap<String, S
         } else {
             Vec::new()
         };
-        for object in objects {
+        for object in &objects {
             in_place |= object.is_type_of(
                 <super::records::LiveFlight as crate::source::core::CoreType>::TYPE_KEY,
             );
@@ -808,14 +1089,37 @@ fn screen_rows(root: &RuntimeArtboardInstanceHandle) -> Result<HashMap<String, S
                 slots.push(Slot { node, values });
             }
         }
+        // Only a Screen holding flight records reads them here; its file's
+        // other Screens read their elements' keys below.
+        let (elements, records) = if in_place {
+            (
+                super::in_place::keyed_elements(&objects),
+                super::in_place::flight_records(&objects),
+            )
+        } else {
+            (Vec::new(), Vec::new())
+        };
         result.insert(
             name,
             Screen {
                 board: board.core_handle(),
                 slots,
                 in_place,
+                elements,
+                records,
             },
         );
+    }
+    // An in-place file flies elements of every Screen, records or not. A
+    // file without flight records reads nothing more.
+    if result.values().any(|row| row.in_place) {
+        for row in result.values_mut().filter(|row| !row.in_place) {
+            let objects = row
+                .board
+                .with_downcast::<Artboard, _>(|b| b.objects().iter().flatten().cloned().collect::<Vec<_>>())
+                .unwrap_or_default();
+            row.elements = super::in_place::keyed_elements(&objects);
+        }
     }
     Ok(result)
 }
@@ -843,6 +1147,16 @@ pub fn screens(
         Ok(rows)
     })
     .unwrap()
+}
+
+/// Settles a Screen after an in-place step lands, as a frame's Layout and
+/// Settle do: the layout tree that holds it first, then the Screen.
+fn settle_row(row: &CoreHandle) {
+    let owner = layout_root(row.clone());
+    if owner != *row {
+        Artboard::update_pass_handle(&owner, false);
+    }
+    Artboard::update_pass_handle(row, false);
 }
 
 /// Settles a slot's row after transport, as a frame's Layout and Settle do:
@@ -939,6 +1253,32 @@ impl LiveMoves {
     pub fn flights(&self, root: &RuntimeArtboardInstanceHandle) -> Vec<Flight> {
         crate::hosted_scene::root_scene(root).map_or_else(Vec::new, |s| {
             s.plan.borrow().all_flights().cloned().collect()
+        })
+    }
+    /// The controls of every flight of the active step: each slot flight's
+    /// values and each in-place flight's record, in placing order.
+    pub fn flight_controls(&self, root: &RuntimeArtboardInstanceHandle) -> Vec<CoreHandle> {
+        crate::hosted_scene::root_scene(root).map_or_else(Vec::new, |s| {
+            let plan = s.plan.borrow();
+            plan.all_flights()
+                .map(Flight::controls)
+                .chain(plan.lifted.iter().map(|flight| flight.record.clone()))
+                .collect()
+        })
+    }
+    /// The elements flying in place in the active step, each with its
+    /// Screen.
+    pub fn lifted_elements(
+        &self,
+        root: &RuntimeArtboardInstanceHandle,
+    ) -> Vec<(CoreHandle, CoreHandle)> {
+        crate::hosted_scene::root_scene(root).map_or_else(Vec::new, |s| {
+            s.plan
+                .borrow()
+                .lifted
+                .iter()
+                .map(|flight| (flight.element.clone(), flight.row.clone()))
+                .collect()
         })
     }
     #[cfg(feature = "test-support")]

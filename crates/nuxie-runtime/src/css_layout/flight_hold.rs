@@ -94,6 +94,24 @@ where
     taffy.relayout_at_size(node, border_box, measure)
 }
 
+/// Whether `begin` would hold `element`: it is laid out by a parent, has
+/// been laid out at a finite size, and is not held. Reads only.
+pub(crate) fn can_begin(element: &CoreHandle) -> bool {
+    element
+        .with_mut(|object| {
+            LayoutComponent::layout_parent_of(object).filter(|parent| parent != element)?;
+            let data = LayoutComponent::layout_data_of(object)?;
+            let rest = data.solved_layout;
+            (data.flight_hold.is_none()
+                && data.node().is_some()
+                && rest.width().is_finite()
+                && rest.height().is_finite())
+            .then_some(())
+        })
+        .flatten()
+        .is_some()
+}
+
 /// Starts holding `element`'s place in its parent's layout; from the next
 /// solve its inside is laid out at `size`, its CSS width and height under
 /// its own box-sizing. False, and nothing held, for an element that is not
@@ -177,6 +195,17 @@ pub(crate) fn resting_box(element: &CoreHandle) -> Option<Layout> {
                     .as_ref()
                     .map_or(data.solved_layout, |hold| hold.rest),
             )
+        })
+        .flatten()
+}
+
+/// Where a held `element` rests, relative to its layout parent; None while
+/// it isn't held, when its own layout is its rest.
+pub(crate) fn held_rest(element: &CoreHandle) -> Option<Layout> {
+    element
+        .with_mut(|object| {
+            let data = LayoutComponent::layout_data_of(object)?;
+            data.flight_hold.as_ref().map(|hold| hold.rest)
         })
         .flatten()
 }

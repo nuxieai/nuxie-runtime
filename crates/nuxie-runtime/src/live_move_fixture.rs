@@ -5408,6 +5408,9 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
             next: 5,
             names: [("frame".to_owned(), 0), ("frame.css".to_owned(), 1)].into(),
             masks: Vec::new(),
+            in_place: false,
+            unit_tracks: Vec::new(),
+            unexpressible: None,
         };
         let tracks = match keyed {
             UnitKey::Child(to) => {
@@ -5431,6 +5434,7 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
 /// A track of B's entrance timeline, on a named object of B: an element,
 /// "`name`.css" (its record), "`name`.track`n`" (its nth grid track) or
 /// "`name`.place" (its grid placement).
+#[derive(Clone)]
 struct PaintTrack {
     target: String,
     key: u64,
@@ -5544,7 +5548,93 @@ impl PaintSpec {
         self.numbers = numbers.to_vec();
         self
     }
+    /// The same page with each unit that transfers flying as two copies, as
+    /// an in-place page must (PR A refuses `transfers` in place): its flight
+    /// slot carries the leaving copy and gains a twin just after it,
+    /// "`name` arriving" with flight key `COPY_FLIGHT` more, for the arriving
+    /// copy, with the slot's tracks. The leaving copy is held at fade 0, so
+    /// one copy shows, as one instance did.
+    fn two_copies(mut self) -> Self {
+        let mut moved = std::collections::HashSet::new();
+        for (_, _, _, units) in &mut self.steps {
+            for unit in units.iter_mut().filter(|unit| unit[4] == 1) {
+                let flight = unit[2];
+                moved.insert(flight);
+                *unit = [unit[0], unit[1], flight + COPY_FLIGHT, flight, 0];
+            }
+        }
+        if moved.is_empty() {
+            return self;
+        }
+        fn twin(els: &mut Vec<PaintEl>, moved: &std::collections::HashSet<u64>, names: &mut Vec<String>) {
+            let mut out = Vec::new();
+            for mut el in std::mem::take(els) {
+                twin(&mut el.kids, moved, names);
+                let arriving = match el.kind {
+                    PaintKind::Flight { unit, key, flight, mode } if moved.contains(&flight) => {
+                        Some(PaintKind::Flight { unit, key, flight: flight + COPY_FLIGHT, mode })
+                    }
+                    PaintKind::Native { unit, key, flight, mode } if moved.contains(&flight) => {
+                        Some(PaintKind::Native { unit, key, flight: flight + COPY_FLIGHT, mode })
+                    }
+                    _ => None,
+                };
+                let twin = arriving.map(|kind| {
+                    names.push(el.name.clone());
+                    PaintEl {
+                        name: format!("{} arriving", el.name),
+                        kind,
+                        ..el.clone()
+                    }
+                });
+                out.push(el);
+                out.extend(twin);
+            }
+            *els = out;
+        }
+        let mut names = Vec::new();
+        twin(&mut self.a, &moved, &mut names);
+        twin(&mut self.b, &moved, &mut names);
+        for tracks in [&mut self.tracks, &mut self.a_tracks] {
+            let mut added = Vec::new();
+            for name in &names {
+                let live = format!("{name}.live");
+                for t in tracks.iter().filter(|t| t.target == live) {
+                    added.push(PaintTrack {
+                        target: format!("{name} arriving.live"),
+                        ..t.clone()
+                    });
+                }
+            }
+            tracks.extend(added);
+        }
+        for name in &names {
+            let live = format!("{name}.live");
+            if !self.tracks.iter().any(|t| t.target == live && t.key == 62014) {
+                self.tracks.push(hold(&live, 62014, &[(0, 0.0)]));
+            }
+        }
+        self
+    }
+    /// Each track on a flight slot's values keys the same control of a
+    /// flight record, as an in-place page carries it.
+    fn record_keys(mut self) -> Self {
+        for t in self.tracks.iter_mut().chain(self.a_tracks.iter_mut()) {
+            if t.target.ends_with(".live") {
+                t.key = match t.key {
+                    62003..=62005 => t.key + 30,
+                    62014..=62025 => t.key + 22,
+                    other => other,
+                };
+            }
+        }
+        self
+    }
 }
+
+/// How much a transferring unit's arriving flight key is above its own, in
+/// `PaintSpec::two_copies`.
+const COPY_FLIGHT: u64 = 50;
 
 struct PaintArt<'a> {
     b: &'a mut Vec<u8>,
@@ -5553,6 +5643,15 @@ struct PaintArt<'a> {
     next: u64,
     names: std::collections::HashMap<String, u64>,
     masks: Vec<(u64, &'static str)>,
+    /// Writes the in-place shape: each resting slot's unit inline as a box
+    /// with the slot's unit key as its flight key, and each flight slot as
+    /// a `LiveFlight` record.
+    in_place: bool,
+    /// The keyed units' own tracks, on their inline boxes, for the Screen's
+    /// timeline (in place).
+    unit_tracks: Vec<PaintTrack>,
+    /// Why this page has no in-place shape, when it has none.
+    unexpressible: Option<&'static str>,
 }
 impl PaintArt<'_> {
     fn add(&mut self, kind: &str, props: &[(&str, V<'_>)]) -> u64 {
@@ -5625,6 +5724,144 @@ impl PaintArt<'_> {
             );
         }
     }
+    /// A resting slot in place: its unit's content inline as a box with the
+    /// slot's name, record and own properties, the unit's own transform,
+    /// opacity, corner, fill and children, and `key` as its flight key. A
+    /// keyed unit's own tracks go to the Screen's timeline.
+    fn inline_unit(&mut self, el: &PaintEl, parent: u64, unit: &str, key: u64) {
+        use V::*;
+        let id = self.next;
+        let (_, u) = self.unit(unit);
+        if u.cached {
+            self.unexpressible = Some("a bitmap cache is an artboard's");
+        }
+        if matches!(u.keyed, Some(UnitKey::RowHeight(_))) {
+            self.unexpressible = Some("a list row is a hosted artboard");
+        }
+        let unit_origin = u
+            .origin
+            .or((u.turn != 0.0 || u.scaled).then_some((0.5, 0.5)));
+        let origin = match (el.origin, unit_origin) {
+            (Some(slot), Some(own)) if (slot, slot) != own => {
+                self.unexpressible = Some("a slot and its unit with two origins");
+                None
+            }
+            (Some(slot), _) => Some((slot, slot)),
+            (None, own) => own,
+        };
+        let mut props = vec![
+            ("name", S(&el.name)),
+            ("parentId", U(parent)),
+            ("styleId", U(id + 1)),
+            ("clip", B(false)),
+        ];
+        if u.turn != 0.0 {
+            props.push(("rotation", F(u.turn)));
+        }
+        if u.opacity != 1.0 {
+            props.push(("opacity", F(u.opacity)));
+        }
+        if let Some((x, y)) = u.own_scale {
+            props.extend([("scaleX", F(x)), ("scaleY", F(y))]);
+        }
+        if u.scaled {
+            props.extend([("scaleX", F(u.scale)), ("scaleY", F(u.scale))]);
+        }
+        if u.bound_x {
+            props.push(("x", F(u.scale)));
+        }
+        props.extend_from_slice(&el.props);
+        self.add("LayoutComponent", &props);
+        self.binds(&el.binds);
+        let mut style = vec![("parentId", U(id))];
+        if u.corner != 0.0 {
+            style.push(("cornerRadiusTL", F(u.corner)));
+        }
+        self.add("LayoutComponentStyle", &style);
+        let mut css = el.css.clone();
+        if key != 0 {
+            css.push(("flightKey", U(key)));
+        }
+        self.record(el, id, &css);
+        if let Some((x, y)) = origin {
+            self.add(
+                "ComponentOrigin",
+                &[("parentId", U(id)), ("originX", F(x)), ("originY", F(y))],
+            );
+        }
+        let fill = self.add("Fill", &[("parentId", U(id))]);
+        self.add(
+            "SolidColor",
+            &[
+                ("parentId", U(fill)),
+                (
+                    "colorValue",
+                    Color(u.color.unwrap_or_else(|| paint_color(u.name))),
+                ),
+            ],
+        );
+        if u.child {
+            let mut css = vec![
+                ("position", U(2)),
+                ("insetRightKind", U(1)),
+                ("insetRight", F(10.0)),
+                ("insetBottomKind", U(1)),
+                ("insetBottom", F(10.0)),
+            ];
+            css.extend(css_size(30.0, 20.0));
+            self.emit(
+                &bx("child", css).color(paint_color(&format!("{} child", u.name))),
+                id,
+            );
+        }
+        if let Some(artboard) = u.hosts {
+            self.add(
+                "NestedArtboardLeaf",
+                &[
+                    ("parentId", U(id)),
+                    ("artboardId", U(artboard)),
+                    ("fit", U(1)),
+                ],
+            );
+        }
+        if u.tappable {
+            let shape = self.add(
+                "Shape",
+                &[
+                    ("parentId", U(id)),
+                    ("x", F(u.size.0 / 2.0)),
+                    ("y", F(u.size.1 / 2.0)),
+                    ("drawableFlags", U(PAINT_OPAQUE)),
+                ],
+            );
+            self.add(
+                "Rectangle",
+                &[
+                    ("parentId", U(shape)),
+                    ("width", F(u.size.0)),
+                    ("height", F(u.size.1)),
+                ],
+            );
+        }
+        if let Some(keyed) = u.keyed {
+            let own = el.name.clone();
+            let record = format!("{own}.css");
+            let tracks = match keyed {
+                UnitKey::Child(to) => {
+                    self.emit(&bx("S", css_size(300.0, 0.0)).paintless(), id);
+                    vec![track("S.css", 61025, &[(0, 0.0), (60, to)])]
+                }
+                UnitKey::Padding(to) => vec![track(&record, 61063, &[(0, 0.0), (60, to)])],
+                UnitKey::RowHeight(to) => vec![track(&record, 61025, &[(0, 0.0), (60, to)])],
+                UnitKey::Turn(from) => vec![track(&own, 15, &[(0, from), (60, 0.0)])],
+                UnitKey::Own(keys) => keys
+                    .iter()
+                    .map(|&(key, from, to)| track(&own, key, &[(0, from), (60, to)]))
+                    .collect(),
+            };
+            self.unit_tracks.extend(tracks);
+        }
+    }
     fn emit(&mut self, el: &PaintEl, parent: u64) {
         use V::*;
         let id = self.next;
@@ -5675,6 +5912,24 @@ impl PaintArt<'_> {
                 for kid in &el.kids {
                     self.emit(kid, id);
                 }
+            }
+            PaintKind::Slot { unit, key } if self.in_place => self.inline_unit(el, parent, unit, key),
+            PaintKind::Flight { flight, mode, .. } if self.in_place => {
+                self.add(
+                    "LiveFlight",
+                    &[
+                        ("parentId", U(0)),
+                        ("key", U(flight)),
+                        ("sizeMode", U(mode)),
+                    ],
+                );
+                self.names.insert(format!("{}.live", el.name), id);
+            }
+            PaintKind::Plain { .. } | PaintKind::Native { .. } if self.in_place => {
+                self.unexpressible = Some("a plain or native host has no in-place shape");
+            }
+            PaintKind::List if self.in_place => {
+                self.unexpressible = Some("a list's rows are hosted artboards");
             }
             PaintKind::Slot { unit, key } | PaintKind::Plain { unit, key, .. } => {
                 let (artboard, u) = self.unit(unit);
@@ -5953,7 +6208,12 @@ fn paint_entrance(
 
 /// A Screen artboard: its root (0), root record (1) and style (2), then its
 /// elements. The upper Screen also gets its timeline, machine and listener.
-fn paint_screen(b: &mut Vec<u8>, spec: &PaintSpec, upper: bool) {
+fn paint_screen(
+    b: &mut Vec<u8>,
+    spec: &PaintSpec,
+    upper: bool,
+    in_place: bool,
+) -> Result<(), &'static str> {
     use V::*;
     let (name, model, els) = if upper {
         ("B", PAINT_B_VM, &spec.b)
@@ -5969,7 +6229,9 @@ fn paint_screen(b: &mut Vec<u8>, spec: &PaintSpec, upper: bool) {
         ("clip", B(false)),
     ];
     let tracks = if upper { &spec.tracks } else { &spec.a_tracks };
-    if upper || !tracks.is_empty() {
+    // In place a keyed unit's own tracks play on its Screen's timeline.
+    let keyed_inline = in_place && keys_a_unit(els, &spec.units);
+    if upper || !tracks.is_empty() || keyed_inline {
         props.push(("defaultStateMachineId", U(0)));
     }
     obj(b, "Artboard", &props); // 0
@@ -5992,6 +6254,9 @@ fn paint_screen(b: &mut Vec<u8>, spec: &PaintSpec, upper: bool) {
         next: 3,
         names: [("root".to_owned(), 0)].into(),
         masks: Vec::new(),
+        in_place,
+        unit_tracks: Vec::new(),
+        unexpressible: None,
     };
     if let (true, Some(color)) = (upper, spec.backing) {
         let fill = art.add("Fill", &[("parentId", U(0))]);
@@ -6029,18 +6294,34 @@ fn paint_screen(b: &mut Vec<u8>, spec: &PaintSpec, upper: bool) {
         );
         art.names.insert("ease".to_owned(), ease);
     }
+    if let Some(reason) = art.unexpressible {
+        return Err(reason);
+    }
     let names = art.names;
+    let mut tracks = tracks.clone();
+    tracks.extend(art.unit_tracks);
     if !upper && tracks.is_empty() {
-        return;
+        return Ok(());
     }
     let animated = !tracks.is_empty();
     if animated {
-        paint_entrance(b, tracks, &names);
+        paint_entrance(b, &tracks, &names);
     }
     machine(b, animated);
     if let (true, Some(target)) = (upper, spec.listener) {
         hit_listener(b, names[target]);
     }
+    Ok(())
+}
+
+/// Whether any resting slot among `els` holds a unit that plays its own
+/// timeline.
+fn keys_a_unit(els: &[PaintEl], units: &[PaintUnit]) -> bool {
+    els.iter().any(|el| {
+        let keyed = matches!(el.kind, PaintKind::Slot { unit, .. }
+            if units.iter().any(|u| u.name == unit && u.keyed.is_some()));
+        keyed || keys_a_unit(&el.kids, units)
+    })
 }
 
 /// One transform kind on unit E, `PaintCase::Reader`.
@@ -6456,6 +6737,12 @@ pub(crate) fn paint_header() -> Vec<u8> {
 }
 
 fn paint_file(spec: &PaintSpec) -> Vec<u8> {
+    paint_file_shaped(spec, false).expect("a slot page")
+}
+
+/// The page of `spec` in the slot shape, or in place: there, each track on
+/// a flight slot's values keys its flight record's control instead.
+fn paint_file_shaped(spec: &PaintSpec, in_place: bool) -> Result<Vec<u8>, &'static str> {
     use V::*;
     let mut b = paint_header();
     obj(&mut b, "Backboard", &[]);
@@ -6581,8 +6868,8 @@ fn paint_file(spec: &PaintSpec) -> Vec<u8> {
             &[("viewModelId", U(model)), ("viewModelInstanceId", U(0))],
         );
     }
-    paint_screen(&mut b, spec, false);
-    paint_screen(&mut b, spec, true);
+    paint_screen(&mut b, spec, false, in_place)?;
+    paint_screen(&mut b, spec, true, in_place)?;
     for u in &spec.units {
         paint_unit(&mut b, u);
     }
@@ -6644,13 +6931,46 @@ fn paint_file(spec: &PaintSpec) -> Vec<u8> {
         }
     }
     machine(&mut b, false);
-    b
+    Ok(b)
 }
 
 /// The page for one paint order case (UNIV-5635). The geometry of each is
 /// stated where the test reads it, in `tests/live_moves.rs`.
 pub fn css_paint_fixture(case: PaintCase) -> Vec<u8> {
     paint_file(&paint_spec(case))
+}
+
+/// The shapes a paint case's page is written in (docs/live-moves.md,
+/// Flying in place).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PaintShape {
+    /// Slots, as `css_paint_fixture` writes it.
+    Slots,
+    /// Slots, with each unit that transfers flying as two copies instead
+    /// (`PaintSpec::two_copies`), the page an in-place one is compared with.
+    SlotCopies,
+    /// In place: `SlotCopies`' page with each resting slot's unit written
+    /// inline as a box keyed with the slot's unit key, no flight slots, and
+    /// a `LiveFlight` record on the Screen for each, in the flight slots'
+    /// order. Tracks on a flight slot's values key its record.
+    InPlace,
+}
+
+/// The page for one paint case in `shape`, or why the case has no such
+/// page: a plain or native host, a list row and a bitmap-cached unit are
+/// hosted artboards, which have no in-place shape.
+pub fn css_paint_fixture_shaped(case: PaintCase, shape: PaintShape) -> Result<Vec<u8>, &'static str> {
+    let spec = paint_spec(case);
+    match shape {
+        PaintShape::Slots => Ok(paint_file(&spec)),
+        PaintShape::SlotCopies => Ok(paint_file(&spec.two_copies())),
+        PaintShape::InPlace => paint_file_shaped(&spec.two_copies().record_keys(), true),
+    }
+}
+
+/// The page for one paint case in place, `PaintShape::InPlace`.
+pub fn css_paint_fixture_in_place(case: PaintCase) -> Result<Vec<u8>, &'static str> {
+    css_paint_fixture_shaped(case, PaintShape::InPlace)
 }
 
 fn paint_spec(case: PaintCase) -> PaintSpec {

@@ -7763,7 +7763,7 @@ fn a_refill_does_not_restore_destroyed_listener_snapshots() {
 /// progress going forward and rests on the way back.
 mod paint_order {
     use super::*;
-    use fixture::PaintCase;
+    use fixture::{PaintCase, PaintShape};
     use nuxie_runtime::source::{
         drawable::RuntimeDrawableOccurrence,
         layout_component::LayoutComponent,
@@ -7772,6 +7772,25 @@ mod paint_order {
     };
 
     const PROGRESS: [f32; 5] = [0.0, 0.25, 0.5, 0.75, 1.0];
+
+    thread_local! {
+        /// The shape every `PaintScene::new` of this thread writes its page
+        /// in: an in-place twin runs a slot test's own assertions in place.
+        static SHAPE: std::cell::Cell<PaintShape> = const { std::cell::Cell::new(PaintShape::Slots) };
+    }
+
+    /// The progress control of a flight's controls: a flight slot's, or a
+    /// flight record's.
+    fn progress_key(controls: &CoreHandle) -> i32 {
+        if controls
+            .with_downcast::<live_move::records::LiveFlight, _>(|_| ())
+            .is_some()
+        {
+            62033
+        } else {
+            62003
+        }
+    }
 
     #[derive(Clone, Copy, Debug, PartialEq)]
     enum Way {
@@ -8030,9 +8049,14 @@ mod paint_order {
         /// The page mounted as a host mounts a published page. Preparing
         /// empties the fresh flight slots.
         fn new(case: PaintCase) -> Self {
+            Self::shaped(case, SHAPE.get())
+        }
+        fn shaped(case: PaintCase, shape: PaintShape) -> Self {
             let mut factory = PersistentFactory::new(RecordingFactory::new());
+            let bytes = fixture::css_paint_fixture_shaped(case, shape)
+                .unwrap_or_else(|why| panic!("{case:?} has no {shape:?} page: {why}"));
             let file = File::import(
-                &fixture::css_paint_fixture(case),
+                &bytes,
                 RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
                 None,
                 None,
@@ -8108,8 +8132,8 @@ mod paint_order {
         /// One frame at `p`: every flight's progress, and B's timeline
         /// advanced by the progress made.
         fn to(&mut self, p: f32) {
-            for flight in self.moves.flights(&self.root) {
-                set(&flight.controls(), 62003, p);
+            for controls in self.moves.flight_controls(&self.root) {
+                set(&controls, progress_key(&controls), p);
             }
             let dt = p - self.progress;
             self.progress = p;
@@ -9198,6 +9222,317 @@ mod paint_order {
             }
             sorts = Some(now);
         });
+    }
+
+    /// The paint cases that fly in place, for the equivalence test. Every
+    /// other case says why it has none (`css_paint_fixture_shaped`).
+    fn in_place_cases() -> Vec<PaintCase> {
+        use PaintCase::*;
+        let mut cases = vec![
+            AppStoreCard,
+            Match { red_above: false },
+            Match { red_above: true },
+            Calmly,
+            ListToGrid { grid_above: false },
+            ListToGrid { grid_above: true },
+            Catzy,
+            ClippingHolder,
+            BadgeInCard,
+            OverlayInWrapper,
+            DisplayWrite,
+            ThreeAnchors,
+            BoundZIndex,
+            Hinge { flex: false },
+            Hinge { flex: true },
+            Sizes,
+            TwoVersions,
+            TurnedFrame,
+            FadeWrite,
+            FadeAtRest { native: false },
+            MaskedGroup,
+            // `Cancel`'s steps are its own (go2, back2), driven by
+            // `paint_order_19b_*` and its in-place twin.
+            // `CanvasAfterFlight { mask: false }` caches its unit's bitmap,
+            // which only an artboard does: no in-place page.
+            CanvasAfterFlight { mask: true },
+            AboveBar { badge: false },
+            AboveBar { badge: true },
+            MarkedVideos,
+            EasedScale,
+            BoundSubtitle,
+            OwnOpacity(0.5),
+            BoundBesideKey,
+            TurnedInClippingHolder,
+            EmptiedCover { copies: false },
+            EmptiedCover { copies: true },
+        ];
+        // The eleventh resting case turns its slot and its unit about two
+        // origins, which one box can't; `L` flies a list's row, a hosted
+        // artboard. Neither has an in-place page.
+        cases.extend((1..=10).map(Resting));
+        cases.extend("CDFGHKMNOPQRTUVWXY".chars().map(KeyedLayout));
+        {
+            use fixture::ZoomCase::*;
+            cases.extend(
+                [
+                    Plain,
+                    CardsKeyed,
+                    SlotTurn,
+                    FrameKeyedScale,
+                    FrameRunningScale,
+                    FrameBoundScale,
+                    FrameTurn,
+                    FrameOffset,
+                    Sizes { a: (80.0, 60.0), b: (40.0, 120.0) },
+                    UnequalScale,
+                    RootKeyed,
+                    OffCenterCard,
+                    InnerCard,
+                    CardHeld,
+                    FadeHeld,
+                    AncestorFades { a_keyed: false },
+                    AncestorFades { a_keyed: true },
+                    OwnOpacity(0.5),
+                    OwnOpacityKeyed,
+                    OneUnit,
+                    OneKeyCopies,
+                    ZoomOutOfRange,
+                    Skewed,
+                    Mirrored,
+                    ZeroHeight { mode: 1 },
+                    ZeroBox { mode: 1 },
+                    CardsThroughZero,
+                    // `LayerFromZero` keys a box between the Screen and its
+                    // flight slots. No file can carry that: the compiler
+                    // writes each Screen's flight layer itself, a View with
+                    // a fixed style and an id no author can key. It is a
+                    // hand-built slot page with no in-place counterpart; an
+                    // element inside a box scaled from 0 is `CardFromZero`.
+                    CardFromZero { on_a: false },
+                    CardFromZero { on_a: true },
+                    BoundSubtitle,
+                    FadingScreen,
+                    Page { own_opacity: 1.0 },
+                ]
+                .map(Zoom),
+            );
+        }
+        cases
+    }
+
+    /// The page's draws as the renderer got them.
+    fn page_draws(s: &PaintScene) -> Vec<nuxie_render_stream::FrameDraw> {
+        s.factory.borrow_mut().clear();
+        let mut renderer = s.factory.borrow().make_renderer();
+        s.root.draw(&mut renderer);
+        let stream = s.factory.borrow().stream();
+        nuxie_render_stream::frame_draws(&nuxie_render_stream::stream_ops(&stream).unwrap(), &[])
+    }
+
+    /// What one draw shows: its color, its outline on the page, its alpha
+    /// and the box its clips leave.
+    #[derive(Debug)]
+    struct Shown {
+        rgb: Option<u32>,
+        points: Vec<Vec2D>,
+        opacity: f32,
+        clip: Option<Rect>,
+    }
+    /// A drawn path's outline: its points, without one that repeats the
+    /// point before it or closes it onto its first. An artboard's root and a
+    /// box write the same rectangle with and without them.
+    fn outline(points: &[nuxie_render_api::Vec2D]) -> Vec<Vec2D> {
+        let same = |a: Vec2D, b: Vec2D| (a.x - b.x).abs() <= 1e-3 && (a.y - b.y).abs() <= 1e-3;
+        let mut outline: Vec<Vec2D> = Vec::new();
+        for point in points.iter().map(|p| Vec2D::new(p.x, p.y)) {
+            // A box drops a corner that repeats the last, as a flat one does.
+            if outline.last().is_none_or(|last| !same(*last, point)) {
+                outline.push(point);
+            }
+        }
+        if outline.len() > 1 && same(outline[0], outline[outline.len() - 1]) {
+            outline.pop();
+        }
+        outline
+    }
+    /// What a page shows: each draw that covers some area. A draw whose
+    /// outline has no area paints nothing; the slot path still sends one for
+    /// a copy under a box scaled to 0, where a lift under that scale sends
+    /// none.
+    fn shown(draws: &[nuxie_render_stream::FrameDraw]) -> Vec<Shown> {
+        draws
+            .iter()
+            .filter(|draw| {
+                draw.points.is_empty() || {
+                    let points = outline(&draw.points);
+                    let (lo, hi) = drawn_rect(&points);
+                    hi.x - lo.x > 1e-6 && hi.y - lo.y > 1e-6
+                }
+            })
+            .map(|draw| Shown {
+                rgb: draw.rgb(),
+                points: outline(&draw.points),
+                opacity: draw.opacity(),
+                clip: draw.clips.iter().fold(None, |open: Option<Rect>, clip| {
+                    let points: Vec<Vec2D> = clip.points.iter().map(|p| Vec2D::new(p.x, p.y)).collect();
+                    let rect = drawn_rect(&points);
+                    Some(match open {
+                        None => rect,
+                        Some(o) => (
+                            Vec2D::new(o.0.x.max(rect.0.x), o.0.y.max(rect.0.y)),
+                            Vec2D::new(o.1.x.min(rect.1.x), o.1.y.min(rect.1.y)),
+                        ),
+                    })
+                }),
+            })
+            .collect()
+    }
+    /// Both pages show the same draws in the same order, to 1e-3; with
+    /// `near_zero`, to 1e-3 and a part in 1e4 of the coordinate.
+    fn same_draws(label: &str, slots: &[Shown], in_place: &[Shown], near_zero: bool) {
+        let colors = |shown: &[Shown]| shown.iter().map(|s| s.rgb).collect::<Vec<_>>();
+        assert_eq!(colors(slots), colors(in_place), "{label}: draw order");
+        // Only where a copy flies inside a box scaled near zero: in place it
+        // inverts that box's matrix, where its flight slot inverts none, so
+        // f32 loses digits as the scale nears 0 (7e-3 at a coordinate of 190
+        // at 0.45, a part in 2.7e4). Exact to 1e-3 elsewhere.
+        let slack = if near_zero { 1e-4 } else { 0.0 };
+        let near = |a: f32, b: f32| (a - b).abs() <= 1e-3 + slack * a.abs().max(b.abs());
+        for (n, (a, b)) in slots.iter().zip(in_place).enumerate() {
+            let same_points = a.points.len() == b.points.len()
+                && a.points
+                    .iter()
+                    .zip(&b.points)
+                    .all(|(p, q)| near(p.x, q.x) && near(p.y, q.y));
+            assert!(
+                same_points,
+                "{label}: draw {n} ({:06x?}) outline {:?} against {:?}",
+                a.rgb, a.points, b.points
+            );
+            // An artboard's opacity is a scope; a box's is its paint's alpha,
+            // in 8 bits.
+            assert!(
+                (a.opacity - b.opacity).abs() <= 1.0 / 255.0,
+                "{label}: draw {n} ({:06x?}) alpha {} against {}",
+                a.rgb,
+                a.opacity,
+                b.opacity
+            );
+            let same_clip = match (a.clip, b.clip) {
+                (None, None) => true,
+                (Some(p), Some(q)) => {
+                    near(p.0.x, q.0.x) && near(p.0.y, q.0.y) && near(p.1.x, q.1.x) && near(p.1.y, q.1.y)
+                }
+                _ => false,
+            };
+            assert!(
+                same_clip,
+                "{label}: draw {n} ({:06x?}) clip {:?} against {:?}",
+                a.rgb, a.clip, b.clip
+            );
+        }
+    }
+
+    /// 4.3 of the in-place plan: each paint case, flown in place, draws
+    /// what its slot page draws when each unit that transfers flies as two
+    /// copies. Both pages go and come back, in 21 frames each way, then go
+    /// again and are cancelled half way by removing B. Every frame, and
+    /// each page at rest after a landing and after the cancel, draws the
+    /// same on both, and each page home draws what it draws never having
+    /// stepped.
+    #[test]
+    fn in_place_matches_the_slot_path() {
+        let frames: Vec<f32> = (0..=20).map(|n| n as f32 * 0.05).collect();
+        let mut failed = Vec::new();
+        for case in in_place_cases() {
+            let run = std::panic::catch_unwind(|| equivalent(case, &frames));
+            if let Err(err) = run {
+                let why = err
+                    .downcast_ref::<String>()
+                    .cloned()
+                    .or_else(|| err.downcast_ref::<&str>().map(|s| (*s).to_owned()))
+                    .unwrap_or_default();
+                failed.push(format!("{case:?}: {why}"));
+            }
+        }
+        assert!(failed.is_empty(), "{} cases differ:\n{}", failed.len(), failed.join("\n"));
+    }
+
+    fn equivalent(case: PaintCase, frames: &[f32]) {
+        let mut slots = PaintScene::shaped(case, PaintShape::SlotCopies);
+        let mut in_place = PaintScene::shaped(case, PaintShape::InPlace);
+        // The one case whose cards scale through zero.
+        let near_zero = matches!(case, PaintCase::Zoom(fixture::ZoomCase::CardsThroughZero));
+        // The third known difference (docs/live-moves.md, Flying in place):
+        // b is static, so its absolutely placed child rests against the
+        // Screen. Its slot flies in an absolute flight slot, which carries the
+        // child inside b, jumping in at take-off and out at landing; in place
+        // it stays placed against the Screen. Only mid-step frames differ.
+        let mid_step_differs = matches!(case, PaintCase::Zoom(fixture::ZoomCase::BoundSubtitle));
+        let both = |slots: &PaintScene, in_place: &PaintScene, label: &str| {
+            same_draws(
+                &format!("{case:?} {label}"),
+                &shown(&page_draws(slots)),
+                &shown(&page_draws(in_place)),
+                near_zero,
+            );
+        };
+        both(&slots, &in_place, "at rest");
+        for (to, step) in [("B", "go"), ("A", "back")] {
+            for s in [&mut slots, &mut in_place] {
+                s.begin(to, step);
+            }
+            for &p in frames {
+                for s in [&mut slots, &mut in_place] {
+                    s.to(p);
+                }
+                if !mid_step_differs {
+                    both(&slots, &in_place, &format!("{step} at {p}"));
+                }
+            }
+            for s in [&mut slots, &mut in_place] {
+                s.end(to, step);
+            }
+            both(&slots, &in_place, &format!("after {step}"));
+        }
+        // Home: each page draws what the same page draws that never
+        // stepped, after the same time (its timelines keep playing).
+        for (s, shape) in [(&slots, PaintShape::SlotCopies), (&in_place, PaintShape::InPlace)] {
+            let mut still = PaintScene::shaped(case, shape);
+            still.advance(2.0);
+            same_draws(
+                &format!("{case:?} {shape:?} home"),
+                &shown(&page_draws(&still)),
+                &shown(&page_draws(s)),
+                near_zero,
+            );
+        }
+        // Go again, and cancel half way by removing B.
+        for s in [&mut slots, &mut in_place] {
+            let page = RuntimeOwnedViewModelHandle::from_native(
+                s._file.clone(),
+                s.root
+                    .data_context()
+                    .unwrap()
+                    .with_context(|c| c.main_view_model_instance())
+                    .unwrap(),
+            )
+            .unwrap();
+            let incoming = page.list_item_by_property_name_path("screens", 1).unwrap();
+            s.begin("B", "go");
+            for p in [0.0, 0.25, 0.5] {
+                s.to(p);
+            }
+            assert!(page.remove_list_item_by_property_name_path("screens", 1));
+            s.advance(0.0);
+            assert!(
+                s.moves.flight_controls(&s.root).is_empty(),
+                "{case:?}: removing B cancels"
+            );
+            assert!(page.insert_list_item_by_property_name_path("screens", 1, &incoming));
+            s.advance(0.0);
+        }
+        both(&slots, &in_place, "after the cancel");
     }
 }
 
@@ -11739,11 +12074,12 @@ impl InPlacePage {
     }
 }
 
-/// An in-place file imports and does nothing: its Screens draw as the same
-/// file without keys or flight records, and its step is refused, changing
-/// nothing.
+/// An in-place file imports and draws at rest as the same file without
+/// keys or flight records. Its step flies the two copies in place, one
+/// flight record each and no slot flight, and landing leaves the page as it
+/// was.
 #[test]
-fn in_place_a_file_imports_and_does_nothing() {
+fn in_place_a_file_imports_and_draws_as_without_keys() {
     use fixture::InPlaceFixture::*;
     assert!(imports(&fixture::in_place_fixture(Plain)));
     let (page, stripped) = (InPlacePage::load(Plain), InPlacePage::load(Stripped));
@@ -11753,16 +12089,16 @@ fn in_place_a_file_imports_and_does_nothing() {
     let holds = nuxie_runtime::in_place_holds_begun();
     let mut moves = LiveMoves::default();
     moves.prepare(&page.root).unwrap();
-    let refused = moves
-        .step_begin(&page.root, "B", Some("t1"))
-        .unwrap_err()
-        .to_string();
-    assert!(refused.contains("in-place"), "{refused}");
-    assert!(moves.flights(&page.root).is_empty());
+    moves.step_begin(&page.root, "B", Some("t1")).unwrap();
+    assert!(moves.flights(&page.root).is_empty(), "no slot flight");
+    assert_eq!(moves.flight_controls(&page.root).len(), 2, "two copies fly");
+    assert_eq!(nuxie_runtime::in_place_holds_begun(), holds + 2, "both are held");
     page.machine.advance_and_apply(0.1);
+    assert!(moves.after_advance(&page.root).unwrap());
+    moves.step_end(&page.root, "B", Some("t1")).unwrap();
+    page.machine.advance_and_apply(0.0);
     assert!(!moves.after_advance(&page.root).unwrap());
-    assert_eq!(page.draw(), before, "nothing moved");
-    assert_eq!(nuxie_runtime::in_place_holds_begun(), holds);
+    assert_eq!(page.draw(), before, "landing leaves the page as it was");
 }
 
 /// In an in-place file a step unit flies two copies: `transfers` is

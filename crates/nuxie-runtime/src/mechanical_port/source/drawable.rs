@@ -488,6 +488,11 @@ pub trait ProxyDrawing {
     fn will_clip(&self) -> bool {
         false
     }
+    /// Nuxie: the lift this entry draws, when it is a lift entry
+    /// (css_layout/lift.rs).
+    fn lift(&self) -> Option<crate::css_layout::lift::Lift> {
+        None
+    }
 }
 
 #[derive(Clone)]

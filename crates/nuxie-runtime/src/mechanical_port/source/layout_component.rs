@@ -1909,12 +1909,43 @@ impl LayoutComponent {
             scale_y: self.scale_y(),
         }
     }
+    /// Nuxie: while this box flies in place, how far its hold moves it from
+    /// where it rests, and its resting size. None while it isn't held.
+    pub(crate) fn flight_rest(&self) -> Option<(Vec2D, Vec2D)> {
+        let rest = self.layout_data.flight_hold.as_ref()?.rest;
+        Some((
+            Vec2D::new(rest.left() - self.layout.left(), rest.top() - self.layout.top()),
+            Vec2D::new(rest.width(), rest.height()),
+        ))
+    }
+    /// Nuxie: `own_transform_at_rest` for this box laid out at `size`, its
+    /// pivot taken from that size. A box flying in place reads where it
+    /// rests at its resting size while its hold lays it out at another.
+    pub(crate) fn own_transform_at_rest_sized(&self, size: Vec2D) -> Mat2D {
+        self.build_own_transform_sized(
+            self.rest_values(),
+            self.composes_layout_offset(),
+            Vec2D::new(self.pivot_origin_x() * size.x, self.pivot_origin_y() * size.y),
+        )
+    }
     fn build_own_transform_with(
         &self,
         values: OwnTransformValues,
         composes_layout_offset: bool,
         origin_x: f32,
         origin_y: f32,
+    ) -> Mat2D {
+        self.build_own_transform_sized(
+            values,
+            composes_layout_offset,
+            self.origin_offset_with(origin_x, origin_y),
+        )
+    }
+    fn build_own_transform_sized(
+        &self,
+        values: OwnTransformValues,
+        composes_layout_offset: bool,
+        pivot: Vec2D,
     ) -> Mat2D {
         // Outermost, matching TransformComponent's T * R * S, so the offset is
         // not rotated or scaled by our own transform.
@@ -1935,7 +1966,6 @@ impl LayoutComponent {
                 Mat2D::identity()
             };
             local.scale_by_values(values.scale_x, values.scale_y);
-            let pivot = self.origin_offset_with(origin_x, origin_y);
             if pivot.x != 0.0 || pivot.y != 0.0 {
                 local = Mat2D::from_translate(pivot.x, pivot.y)
                     * local

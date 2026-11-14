@@ -4715,6 +4715,8 @@ pub enum PaintCase {
     /// `Corners`' versions, unkeyed, with "go" flying a's copy in Scale mode
     /// and b's in Layout mode.
     MixedModes,
+    /// `MixedModes` with a's layout interpolating over a second.
+    MixedModesInterpolated,
     /// `Corners`' versions, unkeyed, each a content box with 10 points of
     /// padding a side, flown in Layout mode.
     Padded,
@@ -5226,6 +5228,9 @@ struct PaintUnit {
     /// Padding on every side, with its box a content box: its CSS size is
     /// inside the padding, its border box that plus twice this.
     padding: f32,
+    /// Its layout interpolates linearly over a second, as a Custom
+    /// animation style.
+    interpolated: bool,
 }
 /// What a unit's own timeline keys, from 0 to this many points.
 #[derive(Clone, Copy)]
@@ -5267,9 +5272,29 @@ fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
         shadow: None,
         text: None,
         padding: 0.0,
+        interpolated: false,
     }
 }
 impl PaintUnit {
+    fn interpolated(mut self) -> Self {
+        self.interpolated = true;
+        self
+    }
+    /// Its `LayoutComponentStyle`'s properties, under `parent`.
+    fn style(&self, parent: u64) -> Vec<(&'static str, V)> {
+        let mut style = vec![("parentId", V::U(parent))];
+        if self.corner != 0.0 {
+            style.push(("cornerRadiusTL", V::F(self.corner)));
+        }
+        if self.interpolated {
+            style.extend([
+                ("animationStyleType", V::U(2)),
+                ("interpolationType", V::U(1)),
+                ("interpolationTime", V::F(1.0)),
+            ]);
+        }
+        style
+    }
     fn padded(mut self, padding: f32) -> Self {
         self.padding = padding;
         self
@@ -5453,11 +5478,7 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
     }
     record.extend(u.padding_css());
     obj(b, "LayoutCssStyle", &record); // 1
-    let mut style = vec![("parentId", U(0))];
-    if u.corner != 0.0 {
-        style.push(("cornerRadiusTL", F(u.corner)));
-    }
-    obj(b, "LayoutComponentStyle", &style); // 2
+    obj(b, "LayoutComponentStyle", &u.style(0)); // 2
     assert!(
         (u.shadow.is_none() && u.text.is_none()) || !u.holds_more(),
         "a unit with a shadow or a text holds nothing else"
@@ -5956,11 +5977,7 @@ impl PaintArt<'_> {
         props.extend_from_slice(&el.props);
         self.add("LayoutComponent", &props);
         self.binds(&el.binds);
-        let mut style = vec![("parentId", U(id))];
-        if u.corner != 0.0 {
-            style.push(("cornerRadiusTL", F(u.corner)));
-        }
-        self.add("LayoutComponentStyle", &style);
+        self.add("LayoutComponentStyle", &u.style(id));
         let mut css = el.css.clone();
         css.extend(u.padding_css());
         if key != 0 {
@@ -7968,6 +7985,7 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
         PaintCase::Corners { .. }
         | PaintCase::Shadows(_)
         | PaintCase::MixedModes
+        | PaintCase::MixedModesInterpolated
         | PaintCase::Padded => {
             let shadows = match case {
                 PaintCase::Shadows(shadows) => Some(shadows),
@@ -7977,6 +7995,9 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
             let mut b = unit("b", 160.0, 120.0).corner(8.0);
             if case == PaintCase::Padded {
                 (a, b) = (a.padded(10.0), b.padded(10.0));
+            }
+            if case == PaintCase::MixedModesInterpolated {
+                a = a.interpolated();
             }
             if let Some(shadows) = shadows {
                 a = a.shadowed(UNIT_A_SHADOW, shadows == ShadowCase::Inset);
@@ -7988,7 +8009,10 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                     false,
                 );
             }
-            let a_mode = if case == PaintCase::MixedModes { 0 } else { 1 };
+            let a_mode = match case {
+                PaintCase::MixedModes | PaintCase::MixedModesInterpolated => 0,
+                _ => 1,
+            };
             let mut spec = PaintSpec::new(
                 vec![a, b],
                 vec![rest_as("v", "a", 1, css_at(20.0, 36.0, 80.0, 60.0))],

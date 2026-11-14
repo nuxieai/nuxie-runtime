@@ -9703,6 +9703,30 @@ mod paint_order {
         s.end("B", "go");
     }
 
+    /// `in_place_a_scale_mode_copy_resized_mid_step_draws_at_the_blend` with
+    /// a's layout interpolating over a second: while it moves from 80 to 100
+    /// points, the copy still draws at the blend of the ends' rests, each
+    /// frame.
+    #[test]
+    fn in_place_a_scale_mode_copy_draws_at_the_blend_while_its_layout_interpolates() {
+        let mut s = PaintScene::shaped(PaintCase::MixedModesInterpolated, PaintShape::InPlace);
+        let width = |s: &PaintScene| {
+            let draws = color_draws(s, "a");
+            assert_eq!(draws.len(), 1, "a's copy draws once");
+            let (lo, hi) = draws[0].0;
+            hi.x - lo.x
+        };
+        s.begin("B", "go");
+        s.to(0.5);
+        close(width(&s), 120.0);
+        set(&record_of(&s.layout("A", "v")), 61022, 100.0);
+        for (p, want) in [(0.5, 130.0), (0.6, 136.0), (0.7, 142.0)] {
+            s.to(p);
+            close(width(&s), want);
+        }
+        s.end("B", "go");
+    }
+
     /// A copy inside a box scaled to 0 mid-step draws nothing and the step
     /// goes on: the other copy keeps flying, and once the box scales back
     /// the copy is solved again. EndOpacities holds each Screen's version

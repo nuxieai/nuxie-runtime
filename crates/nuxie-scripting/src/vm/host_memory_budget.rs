@@ -658,6 +658,25 @@ mod binding_tests {
         assert_eq!(vm.used(), 0);
     }
 
+    // Codex review (lane G3): a stop's `__index` added stops after the
+    // table's length was charged, and the loop read them uncharged.
+    #[test]
+    fn gradient_stops_added_while_reading_are_charged() {
+        let vm = Vm::with_budget(1000);
+        vm.refused(
+            "local stops = {} \
+             local stop = setmetatable({}, {__index = function(_, key) \
+               if key == 'position' and #stops < 1000 then stops[#stops + 1] = stops[1] end \
+               return if key == 'position' then 0 else Color.rgba(0, 0, 0, 255) \
+             end}) \
+             stops[1] = stop \
+             local ok, err = pcall(function() \
+               return Gradient.linear(Vector.xy(0, 0), Vector.xy(1, 0), stops) end) \
+             return not ok, tostring(err)",
+        );
+        assert_eq!(vm.used(), 0);
+    }
+
     // Codex review: alternating fonts across clears grew the Text's font
     // list without a charge.
     #[test]

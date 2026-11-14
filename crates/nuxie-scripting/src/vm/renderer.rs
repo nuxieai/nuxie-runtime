@@ -5,7 +5,7 @@ use std::rc::Rc;
 use crate::luau::{Lua, Result, Table, UserData, Value, Vector as LuaVector};
 use nuxie_render_api::{ColorInt, RenderShader};
 
-use super::host_memory_budget::{HostMemoryCharge, bytes_of};
+use super::host_memory_budget::{HostMemoryCharge, bytes_of, grown_capacity};
 
 pub(super) use super::lua_path::call_path_effect_update;
 pub(crate) use super::lua_renderer_library::RendererBindings;
@@ -91,13 +91,20 @@ fn gradient_stops(
     stops: Table,
 ) -> Result<(Vec<ColorInt>, Vec<f32>, HostMemoryCharge)> {
     let capacity = stops.raw_len();
-    let charge = HostMemoryCharge::for_lua(lua, gradient_bytes(capacity))?;
+    let mut charge = HostMemoryCharge::for_lua(lua, gradient_bytes(capacity))?;
     let mut colors = Vec::with_capacity(capacity);
     let mut positions = Vec::with_capacity(capacity);
     for index in 1_i64.. {
         let Value::Table(stop) = stops.raw_get::<Value>(index)? else {
             break;
         };
+        // A stop's `__index` may have added stops past the length read
+        // above: what the vectors grow to is charged before they grow.
+        charge.reserve_to(gradient_bytes(grown_capacity(
+            colors.capacity(),
+            colors.len(),
+            1,
+        )))?;
         positions.push(stop.get_with(crate::luau::reborrow_loan(&mut loan), "position")?);
         let color = stop.get_with::<Value>(crate::luau::reborrow_loan(&mut loan), "color")?;
         colors.push(super::lua_color::required_unsigned(

@@ -1291,11 +1291,14 @@ a content keyword or automatic with `justify-self` other than stretch or
 with an auto inline margin. The `normal` block alignment case keeps the
 existing rule (the width follows the area's height).
 
-The baseline pass (`resolve_item_baselines`) measures such an item at its
-content width too, so the height its ratio gives is the height its
-baseline comes from. Of 1,620 Chrome 152 layouts with two baseline-aligned
-items in a row, 1,002 differed and 378 differ now; the 378 are ratio items
-with a stretched width, which the baseline pass still measures unstretched.
+The baseline pass (`resolve_item_baselines`) measures such an item the same
+way (`GridItem::baseline_known_dimensions`), so the height its ratio gives
+is the height its baseline comes from. That pass runs before the columns
+are sized: the width is measured in the item's area under fixed columns
+and in the grid's own width otherwise, with a keyword width applied. Of
+1,876 Chrome 152 layouts with two baseline-aligned items in a row, 1,130
+differed and 378 differ now; the 378 are ratio items with a stretched
+width, which the baseline pass still measures unstretched.
 
 Of the 29,914 layouts, 21 more match and none that matched differ. Of
 5,376 Chrome 152 layouts measured for this change (start, center, end and

@@ -248,6 +248,17 @@ fn same_paint(a: Option<&RuntimeRenderPaintHandle>, b: Option<&RuntimeRenderPain
 /// Refuses an append that would add a style past the `u16` a glyph run
 /// names it with. `RawText::append` reuses a style with the same paint and
 /// colour, so only a full Text is searched, and only for a new style.
+/// Whether `text` has the style an append with `paint` and `foreground`
+/// would use (`RawText::append` reuses it rather than adding one).
+fn has_style(text: &RawText, paint: Option<&RuntimeRenderPaintHandle>, foreground: u32) -> bool {
+    (0..text.style_count())
+        .filter_map(|style| u16::try_from(style).ok())
+        .any(|style| {
+            text.style_foreground_color(style) == foreground
+                && same_paint(text.style_paint(style).as_ref(), paint)
+        })
+}
+
 fn check_style_room(
     text: &RawText,
     paint: Option<&RuntimeRenderPaintHandle>,
@@ -256,11 +267,7 @@ fn check_style_room(
     if text.style_count() < MAX_TEXT_STYLES {
         return Ok(());
     }
-    let existing = (0..=u16::MAX).any(|style| {
-        text.style_foreground_color(style) == foreground
-            && same_paint(text.style_paint(style).as_ref(), paint)
-    });
-    if existing {
+    if has_style(text, paint, foreground) {
         Ok(())
     } else {
         Err(Error::runtime(format!(
@@ -447,7 +454,9 @@ impl UserData for ScriptedText {
                 let mut layout = t.layout.borrow_mut();
                 let layout = &mut *layout;
                 check_style_room(layout.text(), paint.as_ref(), foreground)?;
-                if gradient.is_some() {
+                // Room for the paint's slot only where the style is new: a
+                // reused style keeps the slot it has.
+                if gradient.is_some() && !has_style(layout.text(), paint.as_ref(), foreground) {
                     layout.reserve_paint()?;
                 }
                 let styles = layout.text.style_count();
@@ -1171,6 +1180,44 @@ mod budget_tests {
         let text = vm.text_bytes();
         println!("3,000 one-character runs: the layout holds {text} bytes");
         assert_eq!(vm.used(), FONT_BYTES + text);
+    }
+
+    // Codex review (lane H2): an append that reused a style still made room
+    // for another paint slot, so a full slot vector doubled (and was
+    // charged) for a slot that was never filled.
+    #[test]
+    fn an_append_reusing_a_style_reserves_no_paint_slot() {
+        let vm = Vm::with_budget(FONT_BYTES + 1024 * 1024);
+        vm.vm
+            .eval::<()>(
+                "font = Font.decode(fontBytes) text = Text.new() paint = Paint.new() \
+                 paint.gradient = Gradient.linear(Vector.xy(0, 0), Vector.xy(1, 0), \
+                   {{position = 0, color = Color.rgba(255, 0, 0, 255)}, \
+                    {position = 1, color = Color.rgba(0, 0, 255, 255)}})",
+            )
+            .unwrap();
+        let slots = || {
+            let text: crate::luau::AnyUserData = vm.vm.lua().globals().get("text").unwrap();
+            let text = text.borrow::<super::ScriptedText>().unwrap();
+            let layout = text.layout.borrow();
+            (layout.paints.len(), layout.paints.capacity())
+        };
+        // New styles until the slots are full.
+        let mut color = 0;
+        while color == 0 || slots().0 < slots().1 {
+            color += 1;
+            vm.vm
+                .eval::<()>(&format!(
+                    "text:append('a', {{font = font, paint = paint, foregroundColor = {}}})",
+                    0xff000000_u32 + color
+                ))
+                .unwrap();
+        }
+        let full = slots();
+        vm.vm
+            .eval::<()>("text:append('b', {font = font, paint = paint, foregroundColor = 0xff000001})")
+            .unwrap();
+        assert_eq!(slots(), full, "the reused style takes no slot");
     }
 
     // Lane H2: a layout that does not fit is refused while it is built: one

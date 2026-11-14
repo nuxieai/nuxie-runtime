@@ -1413,3 +1413,15 @@ basis of its own.
 Of the 29,914 layouts, 10 more match and none that matched differ. Of the
 693 layouts of the section above, 20 differed and 2 differ now (a
 `display: flex; width: fit-content` item around a narrow box).
+
+## A `stretch` height is definite in a wrapping row with a height
+
+A stretched item's cross size is definite only in a single-line container
+with a definite cross size (CSS Flexbox 1 §9.8). A `stretch` keyword on the
+cross size is not that alignment stretch: it resolves against the
+container's definite cross size on any number of lines. Chrome: in a 100
+tall `flex-wrap: wrap` row, `aspect-ratio: 1; height: stretch` is 100 wide.
+The fork left the size indefinite in a wrapping row, so the item's flex
+base size did not come from its ratio and it was 0 wide.
+
+Of the 29,914 layouts, 39 more match and none that matched differ.

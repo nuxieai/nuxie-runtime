@@ -1619,7 +1619,7 @@ fn perform_final_layout_on_in_flow_children(
             let keyword_height = known_dimensions.height.filter(|_| item.size_style.height.is_stretch());
             let ratio_parent_size =
                 parent_size.map_height(|height| height.filter(|_| item.size.height.is_some() || keyword_height.is_some()));
-            let ratio_min = crate::compute::ratio::minimum_ratio_width(tree, item.node_id, ratio_parent_size, keyword_height);
+            let ratio_min = crate::compute::ratio::minimum_ratio_width_with_keywords(tree, item.node_id, ratio_parent_size, keyword_height);
             let known_dimensions = known_dimensions.map_width(|width| width.maybe_max(ratio_min));
 
             let inputs = LayoutInput {

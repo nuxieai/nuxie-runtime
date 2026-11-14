@@ -252,11 +252,41 @@ pub(crate) fn minimum_ratio_width_at(
     stretch_height: Option<f32>,
     used_height: Option<f32>,
 ) -> Option<f32> {
+    minimum_ratio_width_in(tree, node, parent, stretch_height, used_height, None, false)
+}
+
+/// [`minimum_ratio_width`] for a block-level box or a grid item, where a `min-content`,
+/// `max-content` or `fit-content` width has the minimum too (Chrome: in a block or a grid,
+/// `width: max-content; height: 40px; aspect-ratio: 2` around a 120 wide box is 120 wide,
+/// and 80 wide around a 30 wide one; as a flex row's item it is 80 wide around both).
+pub(crate) fn minimum_ratio_width_with_keywords(
+    tree: &mut impl crate::LayoutPartialTree,
+    node: crate::NodeId,
+    parent: Size<Option<f32>>,
+    stretch_height: Option<f32>,
+) -> Option<f32> {
+    minimum_ratio_width_in(tree, node, parent, stretch_height, None, None, true)
+}
+
+/// [`minimum_ratio_width_at`] for a grid item. `area_height` is the border-box height an
+/// automatic height stretches to in its grid area, where that is known: it transfers as a
+/// height of the item's own does. `keyword_width` is as in
+/// [`minimum_ratio_width_with_keywords`].
+pub(crate) fn minimum_ratio_width_in(
+    tree: &mut impl crate::LayoutPartialTree,
+    node: crate::NodeId,
+    parent: Size<Option<f32>>,
+    stretch_height: Option<f32>,
+    used_height: Option<f32>,
+    area_height: Option<f32>,
+    keyword_width: bool,
+) -> Option<f32> {
     use crate::{LayoutPartialTreeExt, MaybeResolve, ResolveOrZero};
     let style = tree.get_core_container_style(node);
     let overflow = style.overflow();
     if style.aspect_ratio().is_none()
-        || !style.size().width.is_auto()
+        || !(style.size().width.is_auto()
+            || (keyword_width && style.size().width.is_sizing_keyword() && !style.size().width.is_stretch()))
         || !style.min_size().width.is_auto()
         || style.is_compressible_replaced()
         || overflow.x.is_scroll_container()
@@ -279,6 +309,7 @@ pub(crate) fn minimum_ratio_width_at(
         .maybe_resolve(parent.height, |v, b| tree.calc(v, b))
         .map(|height| height + adjustment.height)
         .or(stretch_height.filter(|_| style.size().height.is_stretch()))
+        .or(area_height.filter(|_| style.size().height.is_auto()))
         .map(|height| used_height.unwrap_or_else(|| height.maybe_clamp(min_height, max.height)))?;
     let transferred = ratio.width(height);
     let max_width = max.width;

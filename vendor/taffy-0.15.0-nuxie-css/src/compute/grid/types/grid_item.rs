@@ -459,7 +459,19 @@ impl GridItem {
         if axis != AbstractAxis::Inline || self.aspect_ratio.is_none() {
             return None;
         }
-        crate::compute::ratio::minimum_ratio_width(tree, self.node, grid_area_size, None)
+        // nuxie-css: an automatic height that stretches to a known row height transfers
+        // as a height of the item's own does: the column is at least as wide as the
+        // item's content (Chrome: in a 40 tall row, `aspect-ratio: 2` around a 120 wide
+        // box gives a 120 wide column, and an 80 wide one with `min-width: 0`).
+        let area_height = (!self.margin.top.is_auto()
+            && !self.margin.bottom.is_auto()
+            && self.is_stretch_aligned(self.align_self))
+        .then(|| {
+            let margins = self.margins_axis_sums_with_baseline_shims(grid_area_size.width, tree);
+            grid_area_size.height.map(|height| (height - margins.height).max(0.0))
+        })
+        .flatten();
+        crate::compute::ratio::minimum_ratio_width_in(tree, self.node, grid_area_size, None, None, area_height, true)
     }
 
     /// Compute the known_dimensions to be passed to the child sizing functions

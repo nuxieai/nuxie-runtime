@@ -1369,3 +1369,27 @@ Chrome 152 layouts of a column in a flex row holding a picture that flexes
 or stretches in height, 76 differed and 4 differ now (a tall picture with
 `min-height: 0` and a flex basis, where the column's height should follow
 the basis).
+
+## A ratio grid item's column is at least as wide as its content
+
+A ratio box with a height and no width is at least as wide as its content
+(`ratio::minimum_ratio_width`). In a grid that only held for a height of
+the item's own. Chrome applies it to a height the item gets by stretching
+to its row as well, for the column's size: in a 40 tall row,
+`aspect-ratio: 2` around a 120 wide box gives a 120 wide column, and an 80
+wide one with `min-width: 0`. `GridItem::ratio_minimum` now passes the
+stretched area height (`minimum_ratio_width_in`). The item's own final
+width is unchanged: with `justify-self: start` it is still 80 wide in its
+120 wide column, as in Chrome.
+
+A `min-content`, `max-content` or `fit-content` width has the minimum too
+in a block and in a grid (`minimum_ratio_width_with_keywords`): `width:
+max-content; height: 40px; aspect-ratio: 2` around a 120 wide box is 120
+wide, and 80 wide around a 30 wide one. As a flex row's item it is 80 wide
+around both, so the flex callers keep the automatic-width rule.
+
+Of the 29,914 layouts, 53 more match and none that matched differ. Of 693
+Chrome 152 layouts of keyword-width and automatic-width ratio boxes in
+grids, flex containers and blocks, 115 differed and 20 differ now (ratio
+boxes with a content-sized width in a column flex container, whose height
+should follow that width).

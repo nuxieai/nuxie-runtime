@@ -17,7 +17,9 @@ co = nil
 -- an erroring __index
 assert(not pcall(GPUBindGroup.new, setmetatable({}, {__index = function() error("descriptor trap") end})))
 -- non-layout values in `layout`
-for _, layout in ipairs({nil, 1, "x", {}, Audio.Ring.create(8), Path.new(), buffer.create(4)}) do
+-- table.pack keeps the nil that ipairs would stop at.
+local args1 = table.pack(nil, 1, "x", {}, Audio.Ring.create(8), Path.new(), buffer.create(4))
+for i1 = 1, args1.n do local layout = args1[i1]
   assert(not pcall(GPUBindGroup.new, {layout = layout, ubos = {{slot = 2 ^ 32, buffer = layout}}, textures = {}, samplers = {}}))
 end
 assert(not pcall(GPUBindGroup.new))

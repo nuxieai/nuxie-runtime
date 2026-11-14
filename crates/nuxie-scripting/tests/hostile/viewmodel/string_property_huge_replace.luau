@@ -11,7 +11,9 @@ assert(p.value == "a")
 p.value = "\255\254\253" .. string.rep("\192", 1024)
 p.value = ""
 assert(p.value == "")
-for _, v in ipairs({nil, {}, print, true}) do
+-- table.pack keeps the nil that ipairs would stop at.
+local args1 = table.pack(nil, {}, print, true)
+for i1 = 1, args1.n do local v = args1[i1]
   pcall(function() p.value = v end)
 end
 p.value = 1e308

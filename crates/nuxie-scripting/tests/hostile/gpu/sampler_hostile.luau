@@ -1,13 +1,15 @@
 --! attacks: GPUSampler.new with hostile LODs, anisotropy, filters and non-table descriptors, without an ORE context; expect: ok; within: 10s
-for _, d in ipairs({
+-- table.pack keeps the nil that ipairs would stop at.
+local args1 = table.pack(
   nil, 1, "s", {},
   {minLod = 0 / 0, maxLod = -math.huge},
   {minLod = 1e300, maxLod = -1e300},
   {maxAnisotropy = 2 ^ 32},
   {maxAnisotropy = -1},
   {maxAnisotropy = 0 / 0},
-  {min = "cubic", mag = {}, mipmap = 3, wrapU = "spiral", wrapV = "", wrapW = string.rep("w", 65536), compare = "sometimes"},
-}) do
+  {min = "cubic", mag = {}, mipmap = 3, wrapU = "spiral", wrapV = "", wrapW = string.rep("w", 65536), compare = "sometimes"}
+)
+for i1 = 1, args1.n do local d = args1[i1]
   local ok, err = pcall(GPUSampler.new, d)
   assert(not ok, "GPUSampler.new accepted")
 end

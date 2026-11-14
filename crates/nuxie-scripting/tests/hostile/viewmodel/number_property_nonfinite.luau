@@ -12,7 +12,9 @@ for _, v in ipairs({{}, print, "abc", coroutine.create(function() end)}) do
   assert(not pcall(function() p.value = v end), "accepted " .. tostring(v))
 end
 local b = inst:getBoolean("bol")
-for _, v in ipairs({0 / 0, "true", {}, nil}) do pcall(function() b.value = v end) end
+-- table.pack keeps the nil that ipairs would stop at.
+local args1 = table.pack(0 / 0, "true", {}, nil)
+for i1 = 1, args1.n do local v = args1[i1] pcall(function() b.value = v end) end
 -- the same NaN twice: NaN ~= NaN must not make every set notify forever
 local before = seen
 p.value = 0 / 0

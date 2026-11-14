@@ -1,5 +1,7 @@
 --! attacks: Audio.streamReader on non-stream values and forged descriptors, oversized/forged records, many readers; expect: ok; within: 15s
-for _, v in ipairs({nil, 1, "s", {}, {pcmStream = true}, {pcmStream = 1}, print}) do
+-- table.pack keeps the nil that ipairs would stop at.
+local args1 = table.pack(nil, 1, "s", {}, {pcmStream = true}, {pcmStream = 1}, print)
+for i1 = 1, args1.n do local v = args1[i1]
   assert(not pcall(Audio.streamReader, v), "accepted " .. tostring(v))
 end
 local function descriptor(ringBytes, rate, channels, frames)

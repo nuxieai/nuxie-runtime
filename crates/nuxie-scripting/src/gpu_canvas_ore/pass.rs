@@ -18,21 +18,17 @@ pub(super) struct Pass {
     pub pipeline_set: bool,
     pub draw_call_count: u32,
     pub label: String,
-    pub held: HeldCharges,
 }
 
-/// The charges of everything a pass has captured: its attachments and every
-/// buffer and bind group it was ever bound to, since its recording keeps them
-/// all (a rebound slot's old resource too) until the recording is replayed.
-/// Each charge is held once, keyed by its allocation, until the pass is
-/// collected.
-#[derive(Default)]
-pub(super) struct HeldCharges(std::collections::BTreeMap<usize, GpuCharge>);
-impl HeldCharges {
+impl Pass {
+    /// The pass's recording keeps everything it captures (a rebound slot's
+    /// old resource too) until the frame's recording is reset, so it keeps
+    /// the charge of each as well, whether or not the script still holds
+    /// the pass or the resource.
     pub(super) fn hold(&mut self, charge: &GpuCharge) {
-        // The address identifies the allocation while this map holds it.
-        let key = Rc::as_ptr(charge) as usize;
-        self.0.entry(key).or_insert_with(|| Rc::clone(charge));
+        if let Some(pass) = self.pass.as_deref_mut() {
+            pass.keepWithRecording(Rc::clone(charge) as Rc<dyn std::any::Any>);
+        }
     }
     fn hold_group(&mut self, bind_group: &BindGroup) {
         for charge in bind_group.charges.iter() {
@@ -109,7 +105,7 @@ impl UserData for Pass {
                 if let Some(pass) = this.pass() {
                     pass.setVertexBuffer(slot, Some(&buffer.resource), 0);
                 }
-                this.held.hold(&buffer.charge);
+                this.hold(&buffer.charge);
                 Ok(())
             },
         );
@@ -133,7 +129,7 @@ impl UserData for Pass {
                         0,
                     );
                 }
-                this.held.hold(&buffer.charge);
+                this.hold(&buffer.charge);
                 Ok(())
             },
         );
@@ -155,7 +151,7 @@ impl UserData for Pass {
             if !this.pipeline_set {
                 this.deferred_bind_groups.get_or_insert_with(DeferredBindGroups::default).defer(group, Some(&bg.resource), Some(&values), values.len() as u32);
                 this.draw_bindings.setBindGroup(group, Some(&bg.resource));
-                this.held.hold_group(&bg);
+                this.hold_group(&bg);
                 return Ok(());
             }
             if let Some(context) = context.as_ref() { context.borrow().clearLastError(); }
@@ -165,7 +161,7 @@ impl UserData for Pass {
                 if !error.is_empty() { return Err(Error::runtime(format!("setBindGroup: {error}"))); }
             }
             this.draw_bindings.setBindGroup(group, Some(&bg.resource));
-            this.held.hold_group(&bg);
+            this.hold_group(&bg);
             Ok(())
         });
         methods.add_method_mut(

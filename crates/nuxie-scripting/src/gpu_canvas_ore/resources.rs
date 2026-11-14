@@ -23,7 +23,11 @@ impl UserData for Buffer {
             let size = this.resource.size().unwrap_or(0);
             // Both operands are widened u32s, so the sum cannot overflow u64.
             if u64::from(dst).saturating_add(u64::from(length)) > u64::from(size) { return Err(Error::runtime("GPUBuffer:write: destination range exceeds buffer size")); }
-            this.resource.update(source, length, dst).map_err(|error| Error::runtime(format!("GPUBuffer:write: {error:?}")))
+            // A recorder keeps a copy of the written bytes until its frame is reset.
+            let copy = charge_gpu_bytes(lua, u64::from(length))?;
+            this.resource.update(source, length, dst).map_err(|error| Error::runtime(format!("GPUBuffer:write: {error:?}")))?;
+            keep_with_recording(&*context(lua)?.borrow(), &copy);
+            Ok(())
         });
     }
 }
@@ -168,7 +172,7 @@ impl UserData for Texture {
                 charge: Some(Rc::clone(&this.charge)),
             })
         });
-        methods.add_method_lent("upload", |_, this, mut loan, table: Table| {
+        methods.add_method_lent("upload", |lua, this, mut loan, table: Table| {
             let loan = &mut loan;
             let data: LuaBuffer = table.get_with(reborrow_loan(loan), "data")?;
             let bytes = data.to_vec();
@@ -186,9 +190,13 @@ impl UserData for Texture {
                 bytesPerRow: number(&table, loan, "bytesPerRow", 0.0)? as u32,
                 rowsPerImage: number(&table, loan, "rowsPerImage", 0.0)? as u32,
             };
+            // A recorder keeps a copy of the uploaded bytes until its frame is reset.
+            let copy = charge_gpu_bytes(lua, bytes.len() as u64)?;
             this.resource
                 .upload(&desc)
-                .map_err(|error| Error::runtime(error.to_string()))
+                .map_err(|error| Error::runtime(error.to_string()))?;
+            keep_with_recording(&*context(lua)?.borrow(), &copy);
+            Ok(())
         });
     }
 }
@@ -264,10 +272,19 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             label: label.as_deref(),
         };
         let charge = charge_gpu_bytes(lua, u64::from(desc.size))?;
+        // A recorder keeps a copy of the initial data until its frame is reset.
+        let copy = bytes
+            .as_ref()
+            .map(|bytes| charge_gpu_bytes(lua, bytes.len() as u64))
+            .transpose()?;
         let mut ctx = context.borrow_mut();
         ctx.clearLastError();
         let value = ctx.makeBuffer(&desc);
         let resource = resource_result(&*ctx, value, "GPUBuffer.new", "buffer")?;
+        keep_with_recording(&*ctx, &charge);
+        if let Some(copy) = &copy {
+            keep_with_recording(&*ctx, copy);
+        }
         // Release the context before allocating in the VM: a collection step there
         // can drop other GPU userdata, which must find the context free.
         drop(ctx);
@@ -341,6 +358,7 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         ctx.clearLastError();
         let value = ctx.makeTexture(&desc);
         let resource = resource_result(&*ctx, value, "GPUTexture.new", "texture")?;
+        keep_with_recording(&*ctx, &charge);
         // Release the context before allocating in the VM: a collection step there
         // can drop other GPU userdata, which must find the context free.
         drop(ctx);

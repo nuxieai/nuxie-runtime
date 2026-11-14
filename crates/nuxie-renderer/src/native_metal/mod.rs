@@ -639,7 +639,7 @@ impl NativeMetalFactory {
             .borrow_mut()
             .adopt_image_handle(texture, width, height);
         image
-            .map(|image| image.with_execution_domain(domain, Rc::clone(&mechanical) as Rc<dyn Any>, None))
+            .map(|image| image.with_execution_domain(domain, Rc::clone(&mechanical) as Rc<dyn Any>))
             .map(|image| Box::new(image) as Box<dyn RenderImage>)
     }
 
@@ -686,7 +686,6 @@ impl NativeMetalFactory {
         Ok(Box::new(image.with_execution_domain(
             domain,
             Rc::clone(&mechanical) as Rc<dyn Any>,
-            None,
         )))
     }
 
@@ -998,7 +997,7 @@ impl Factory for NativeMetalFactory {
         let domain = mechanical.borrow().resource_domain();
         let image = mechanical.borrow_mut().decode_image_handle(data);
         image
-            .map(|image| image.with_execution_domain(domain, Rc::clone(&mechanical) as Rc<dyn Any>, None))
+            .map(|image| image.with_execution_domain(domain, Rc::clone(&mechanical) as Rc<dyn Any>))
             .map(|image| Box::new(image) as Box<dyn RenderImage>)
             .ok_or(ImageDecodeError)
     }
@@ -1054,7 +1053,7 @@ impl Factory for NativeMetalFactory {
         ) else {
             return;
         };
-        shell.install_backing(Box::new(backing), domain, mechanical as Rc<dyn Any>, None);
+        shell.install_backing(Box::new(backing), domain, mechanical as Rc<dyn Any>);
     }
 
     fn make_gpu_canvas_image_view(

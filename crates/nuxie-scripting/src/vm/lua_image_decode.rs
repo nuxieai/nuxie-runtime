@@ -3,18 +3,23 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::luau::{AnyUserData, Buffer, Lua, RegistryKey, Result, Value};
-use nuxie_image_codec::{DecodedImageRgba, decode_image_rgba_unbounded};
+use nuxie_image_codec::{DecodedImageRgba, decode_image_rgba, decoded_rgba_len, preflight_encoded_image};
 use nuxie_runtime::{
     WorkCallbacks, WorkCancellationHandle, WorkPool, WorkTask, get_global_work_pool,
 };
 
+use super::host_memory_budget::HostMemoryCharge;
 use super::lua_promise;
 
 const DECODE_ERROR: &str = "failed to decode image data";
+/// Decodes one VM may have submitted and not yet settled or dropped: a fixed
+/// count beside the host memory budget, so cancelled requests that still
+/// hold their copies on the pool cannot pile up.
+const MAX_IMAGE_DECODES_IN_FLIGHT: usize = 16;
 // Assigned by work-pool delivery, not background execution: separate VM
 // queues must retain the global callback order when the root drains them.
 static NEXT_COMPLETION_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -29,8 +34,36 @@ trait ScriptImageDecoder: Send + Sync {
 struct RustScriptImageDecoder;
 
 impl ScriptImageDecoder for RustScriptImageDecoder {
+    /// The bounded decoder: at most 8,192 pixels a side and 64 MiB decoded,
+    /// the image import policy. A larger image fails as any undecodable one.
     fn decode_rgba(&self, encoded: &[u8]) -> Option<DecodedImageRgba> {
-        decode_image_rgba_unbounded(encoded)
+        decode_image_rgba(encoded)
+    }
+}
+
+/// One request counted in flight, from submit until its task or its
+/// completion is dropped, on whichever thread that is.
+struct InFlight(Arc<AtomicUsize>);
+
+impl InFlight {
+    fn admit(count: &Arc<AtomicUsize>) -> Option<Self> {
+        count
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                (current < MAX_IMAGE_DECODES_IN_FLIGHT).then(|| current.saturating_add(1))
+            })
+            .ok()
+            .map(|_| Self(Arc::clone(count)))
+    }
+}
+
+impl Drop for InFlight {
+    fn drop(&mut self) {
+        // Every token was counted when admitted, so this never goes below 0.
+        let _ = self
+            .0
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                Some(current.saturating_sub(1))
+            });
     }
 }
 
@@ -45,11 +78,13 @@ enum DecodeCompletion {
         sequence: u64,
         request_id: u64,
         image: DecodedImageRgba,
+        _in_flight: Option<InFlight>,
     },
     Failure {
         sequence: u64,
         request_id: u64,
         message: String,
+        _in_flight: Option<InFlight>,
     },
 }
 
@@ -93,6 +128,8 @@ struct ImageDecodeTask {
     encoded: Mutex<Vec<u8>>,
     decoded: Mutex<Option<DecodedImageRgba>>,
     completions: Arc<Mutex<CompletionQueue>>,
+    /// Moves into the completion, which then holds the decoded image.
+    in_flight: Option<InFlight>,
 }
 
 impl ImageDecodeTask {
@@ -101,6 +138,7 @@ impl ImageDecodeTask {
         decoder: Arc<dyn ScriptImageDecoder>,
         encoded: Vec<u8>,
         completions: Arc<Mutex<CompletionQueue>>,
+        in_flight: InFlight,
     ) -> Self {
         Self {
             request_id,
@@ -108,6 +146,7 @@ impl ImageDecodeTask {
             encoded: Mutex::new(encoded),
             decoded: Mutex::new(None),
             completions,
+            in_flight: Some(in_flight),
         }
     }
 
@@ -136,6 +175,7 @@ impl WorkCallbacks for ImageDecodeTask {
                 sequence: next_completion_sequence(),
                 request_id: self.request_id,
                 image,
+                _in_flight: self.in_flight.take(),
             });
         }
         self.release_buffers();
@@ -146,6 +186,7 @@ impl WorkCallbacks for ImageDecodeTask {
             sequence: next_completion_sequence(),
             request_id: self.request_id,
             message: error.to_owned(),
+            _in_flight: self.in_flight.take(),
         });
         self.release_buffers();
     }
@@ -158,6 +199,9 @@ impl WorkCallbacks for ImageDecodeTask {
 struct PendingDecode {
     promise: RegistryKey,
     cancellation: WorkCancellationHandle,
+    /// The encoded copy and the decoded image, until the promise settles or
+    /// is cancelled; the settled image is then the VM's buffer.
+    _charge: HostMemoryCharge,
 }
 
 pub(super) struct ImageDecodeRegistry {
@@ -166,6 +210,7 @@ pub(super) struct ImageDecodeRegistry {
     decoder: Arc<dyn ScriptImageDecoder>,
     pending: RefCell<HashMap<u64, PendingDecode>>,
     completions: Arc<Mutex<CompletionQueue>>,
+    in_flight: Arc<AtomicUsize>,
 }
 
 impl ImageDecodeRegistry {
@@ -176,6 +221,7 @@ impl ImageDecodeRegistry {
             decoder,
             pending: RefCell::new(HashMap::new()),
             completions: Arc::new(Mutex::new(CompletionQueue::default())),
+            in_flight: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -235,14 +281,29 @@ pub(super) fn start(lua: &Lua, encoded: Buffer) -> Result<AnyUserData> {
     }
 
     let registry = registry(lua)?;
+    let in_flight = InFlight::admit(&registry.in_flight).ok_or_else(|| {
+        crate::luau::Error::runtime(format!(
+            "decodeImage: at most {MAX_IMAGE_DECODES_IN_FLIGHT} images may be decoding at once"
+        ))
+    })?;
+    // The copy is charged before it is made, the decoded image before it is
+    // submitted, from the header. An image the header check refuses fails
+    // to decode, so only its copy is charged.
+    let mut charge = HostMemoryCharge::for_lua(lua, encoded.len())?;
+    let encoded = encoded.to_vec();
+    let decoded_bytes = preflight_encoded_image(&encoded)
+        .and_then(|image| decoded_rgba_len(image.width, image.height))
+        .unwrap_or(0);
+    charge.grow(decoded_bytes)?;
     let promise = lua_promise::new_pending(lua)?;
     let promise_ref = lua.create_registry_value(promise.clone())?;
     let request_id = registry.next_request_id();
     let mut task = WorkTask::new(ImageDecodeTask::new(
         request_id,
         Arc::clone(&registry.decoder),
-        encoded.to_vec(),
+        encoded,
         Arc::clone(&registry.completions),
+        in_flight,
     ));
     task.set_owner_id(registry.owner_id);
     registry.pending.borrow_mut().insert(
@@ -250,6 +311,7 @@ pub(super) fn start(lua: &Lua, encoded: Buffer) -> Result<AnyUserData> {
         PendingDecode {
             promise: promise_ref,
             cancellation: task.cancellation_handle(),
+            _charge: charge,
         },
     );
 
@@ -291,9 +353,7 @@ pub(super) fn registry_has_pending_work(registry: &ImageDecodeRegistry) -> bool 
 #[cfg(feature = "upstream-test-seams")]
 pub(super) fn upstream_test_owner_id(lua: &Lua) -> u64 {
     install(lua);
-    registry(lua)
-        .expect("installed image decode registry")
-        .owner_id
+    installed_registry(lua).map_or(0, |registry| registry.owner_id)
 }
 
 pub(super) fn poll_completed(lua: &Lua) -> Result<bool> {
@@ -418,6 +478,48 @@ mod tests {
             poll_completed(lua).unwrap();
             registry(lua).unwrap().pending.borrow().is_empty()
         });
+    }
+
+    // Inventory row 4: requests in flight had no bound.
+    #[test]
+    fn decodes_in_flight_are_capped() {
+        let lua = lua_with_context();
+        let (failed, error): (bool, String) = lua
+            .load(
+                "pending = {} \
+                 for i = 1, 16 do pending[i] = context:decodeImage(buffer.create(4)) end \
+                 local ok, err = pcall(function() return context:decodeImage(buffer.create(4)) end) \
+                 return not ok, tostring(err)",
+            )
+            .eval()
+            .unwrap();
+        assert!(failed);
+        assert!(error.contains("at most 16 images may be decoding at once"), "{error}");
+        drain_work(&lua);
+        lua.load("context:decodeImage(buffer.create(4))").exec().unwrap();
+        drain_work(&lua);
+    }
+
+    // Inventory rows 3 and 4: the encoded copy and the decoded image are
+    // charged to the VM's host memory budget until the promise settles.
+    #[test]
+    fn a_decode_is_charged_until_it_settles() {
+        let lua = lua_with_context();
+        super::super::host_memory_budget::HostMemoryBudget::install(&lua, 64).unwrap();
+        let budget = super::super::host_memory_budget::HostMemoryBudget::for_lua(&lua).unwrap();
+        let (failed, error): (bool, String) = lua
+            .load(
+                "local ok, err = pcall(function() return context:decodeImage(buffer.create(65)) end) \
+                 return not ok, tostring(err)",
+            )
+            .eval()
+            .unwrap();
+        assert!(failed);
+        assert!(error.contains("64-byte host memory budget"), "{error}");
+        lua.load("context:decodeImage(buffer.create(40))").exec().unwrap();
+        assert_eq!(budget.used(), 40);
+        drain_work(&lua);
+        assert_eq!(budget.used(), 0);
     }
 
     #[test]

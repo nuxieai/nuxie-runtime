@@ -1763,8 +1763,9 @@ impl UserData for ScriptedPropertyString {
             let mut charge = HostMemoryCharge::for_lua(lua, string.len())?;
             let value = super::lua_data_value::checked_string(lua, Value::String(string))?;
             let value = String::from_utf8_lossy(&value);
-            // A replaced invalid byte grows to three.
-            charge.reserve_to(value.len())?;
+            // What the property holds: cut at a NUL, and a replaced invalid
+            // byte grows to three.
+            charge.set(value.len())?;
             let owner = HostOwnerToken::new(charge);
             this.model
                 .defer_property_change_callbacks(|| this.model.set_string_owned(&this.name, &value, owner));
@@ -5739,6 +5740,16 @@ mod tests {
         lua.globals().set("propertyName", name.clone()).unwrap();
         refused_by_budget(&lua, "model[propertyName].value = string.rep('x', 100000)");
         assert_eq!(budget_used(&lua), 0, "a refused string is not copied");
+        // Codex review (lane H2): a string cut at a NUL kept the charge for
+        // the bytes it dropped.
+        lua.load("model[propertyName].value = 'ab\\0' .. string.rep('x', 40000)")
+            .exec()
+            .unwrap();
+        assert_eq!(
+            budget_used(&lua),
+            model.string(&name).map_or(0, |value| value.len()),
+            "charged what the property keeps"
+        );
         lua.load("model[propertyName].value = string.rep('x', 1000) model = nil")
             .exec()
             .unwrap();

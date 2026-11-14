@@ -200,6 +200,7 @@ pub(super) fn align_and_position_item(
         && margin.top.is_some()
         && margin.bottom.is_some())
     .then(|| f32_max(grid_area_size.height.maybe_sub(margin.top).maybe_sub(margin.bottom) - baseline_shim, 0.0));
+    let height_is_auto = size_style.height.is_auto();
     let given = size_style
         .maybe_resolve(containing_block_size, |val, basis| tree.calc(val, basis))
         .maybe_add(box_sizing_adjustment)
@@ -425,6 +426,25 @@ pub(super) fn align_and_position_item(
         }
 
         None
+    });
+    // nuxie-css: a ratio item stretched in neither axis takes its width from its content,
+    // and its height then follows that width through the ratio (Chrome:
+    // `aspect-ratio: 2; align-self: start; justify-self: start` around a 300-wide child is
+    // 300 by 150). Stock measured both axes from the content.
+    let width = width.or_else(|| {
+        if ratio.is_none() || height.is_some() || is_replaced || position.is_out_of_flow() || !height_is_auto {
+            return None;
+        }
+        let content_width = tree.measure_child_size(
+            node,
+            Size::NONE,
+            containing_block_size.map(Option::Some),
+            grid_area_minus_item_margins_size.map(AvailableSpace::Definite),
+            SizingMode::InherentSize,
+            AbsoluteAxis::Horizontal,
+            Line::FALSE,
+        );
+        Some(content_width.maybe_clamp(min_size.width, max_size.width))
     });
     // Reapply aspect ratio after stretch and absolute position height adjustments
     let (Size { width, height }, min_size, max_size) =

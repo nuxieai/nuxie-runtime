@@ -1270,3 +1270,28 @@ Of the 29,914 layouts, 3 more match and none that matched differ. Of the
 2,050 Chrome 152 layouts measured for the ratio-in-grid changes, 126
 differed and 6 differ now (`grid-template-rows: auto 1fr` in a grid sized
 by `min-height`).
+
+## A ratio grid item stretched in neither axis
+
+A grid item with an `aspect-ratio`, an automatic height and a width that
+is not stretched takes its width from its content, and its height then
+follows that width through the ratio. Chrome: `aspect-ratio: 2;
+align-self: start; justify-self: start` around a 300-wide, 10-tall child
+is 300 by 150. Stock measured both axes from the content (300 by 10), so
+the ratio and the limits it carries (`min-height: 80px` at ratio 2 is a
+160 minimum width) never applied.
+
+`align_and_position_item` measures the content width of such an item
+before the final ratio pass, clamped by the limits the ratio transferred.
+`GridItem::ratio_follows_content_width` gives its rows the same height
+(`block_contribution_known_dimensions`), so an automatic row is as tall as
+the item. The item is "stretched in neither axis" when its block alignment
+is not `normal` or `stretch` (or a block margin is auto), and its width is
+a content keyword or automatic with `justify-self` other than stretch or
+with an auto inline margin. The `normal` block alignment case keeps the
+existing rule (the width follows the area's height).
+
+Of the 29,914 layouts, 21 more match and none that matched differ. Of
+5,376 Chrome 152 layouts measured for this change (start, center, end and
+baseline alignment, auto margins, keyword widths, fixed and automatic
+tracks), 2,856 differed and all match now.

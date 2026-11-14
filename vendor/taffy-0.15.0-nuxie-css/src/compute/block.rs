@@ -1172,7 +1172,10 @@ fn determine_content_based_container_width(
             tree.measure_child_size(
                 item.node_id,
                 known_dimensions,
-                Size::NONE,
+                // nuxie-css: the container's height, when it has one, is what the item's
+                // percentage heights resolve against, here as in the final layout: a picture
+                // with a percentage `max-height` is as wide as that height lets it be.
+                Size { width: None, height: container_inner_height },
                 Size { width: item_available_width, height: available_space.height },
                 SizingMode::InherentSize,
                 crate::AbsoluteAxis::Horizontal,

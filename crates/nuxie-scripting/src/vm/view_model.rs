@@ -2349,6 +2349,13 @@ struct ScriptedPropertyList {
     item_refs: BTreeMap<ViewModelInstanceKey, MainThreadRef>,
     watch: Rc<ScriptedPropertyWatch>,
     listener_owner: Option<ScriptedPropertyListenerOwner>,
+    /// What the list holds at the longest a script made it, at
+    /// [`Self::item_bytes`] per entry; like a vector's capacity it is not
+    /// lowered when the list shrinks.
+    charge: RefCell<HostMemoryCharge>,
+    /// The bytes one entry is charged: its list item plus the largest
+    /// instance a script added.
+    item_bytes: Cell<usize>,
 }
 
 impl ScriptedPropertyList {
@@ -2364,7 +2371,26 @@ impl ScriptedPropertyList {
             item_refs: BTreeMap::new(),
             watch,
             listener_owner,
+            charge: RefCell::default(),
+            item_bytes: Cell::new(instance_bytes::LIST_ITEM),
         }
+    }
+
+    /// Charges for one more entry holding `item`, before it is added.
+    fn charge_growth(&self, lua: &Lua, item: &ScriptViewModel) -> crate::luau::Result<()> {
+        let item_bytes = self
+            .item_bytes
+            .get()
+            .max(instance_bytes::LIST_ITEM.saturating_add(instance_bytes::of(item)));
+        let len = self.model.list_len(&self.name).unwrap_or(0);
+        let mut charge = self
+            .charge
+            .try_borrow_mut()
+            .map_err(|_| crate::luau::Error::runtime("list is already being changed"))?;
+        charge.attach(lua)?;
+        charge.reserve_to(len.saturating_add(1).saturating_mul(item_bytes))?;
+        self.item_bytes.set(item_bytes);
+        Ok(())
     }
 
     fn retain_current_item_refs(&mut self) {
@@ -2478,14 +2504,16 @@ impl UserData for ScriptedPropertyList {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("push", |_, this, item: Table| {
+        methods.add_method("push", |lua, this, item: Table| {
             let item = model_from_table(&item)?;
+            this.charge_growth(lua, &item)?;
             this.model
                 .defer_property_change_callbacks(|| this.model.push_list_item(&this.name, &item));
             Ok(())
         });
-        methods.add_method("insert", |_, this, (item, index): (Table, usize)| {
+        methods.add_method("insert", |lua, this, (item, index): (Table, usize)| {
             let item = model_from_table(&item)?;
+            this.charge_growth(lua, &item)?;
             this.model.defer_property_change_callbacks(|| {
                 this.model
                     .insert_list_item(&this.name, index.saturating_sub(1), &item)
@@ -5488,6 +5516,55 @@ mod tests {
             &lua,
             "local all = {} for i = 1, 100000 do all[i] = model:new() end",
         );
+    }
+
+    // Inventory row 24: list `push`/`insert` grew the list (and kept the
+    // pushed instances alive) with no charge.
+    #[test]
+    fn list_growth_is_charged_before_it_happens() {
+        let (model, list) = model_with_property(ScriptViewModelProperty::List);
+        let (child, _) = model_with_property(ScriptViewModelProperty::String);
+        let child_model = child.clone();
+        let per_item = super::instance_bytes::LIST_ITEM + super::instance_bytes::of(&child);
+        let lua = budget_lua(64 * 1024 * 1024);
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
+        let child_table = create_scripted_view_model(&lua, child).expect("scripted child");
+        lua.globals().set("model", table).unwrap();
+        lua.globals().set("child", child_table).unwrap();
+        lua.globals().set("listName", list.clone()).unwrap();
+        let before = model.list_len(&list).unwrap();
+        lua.load(
+            "local list = model:getList(listName) \
+             for i = 1, 10 do list:push(child) end \
+             list:insert(child, 1)",
+        )
+        .exec()
+        .unwrap();
+        assert_eq!(budget_used(&lua), (before + 11) * per_item);
+        // Popping keeps the high-water charge, as a vector keeps capacity.
+        lua.load("local list = model:getList(listName) list:pop() list:push(child)")
+            .exec()
+            .unwrap();
+        assert_eq!(budget_used(&lua), (before + 11) * per_item);
+
+        let lua = budget_lua(64 * 1024);
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
+        let child_table = create_scripted_view_model(&lua, child_model).expect("child");
+        lua.globals().set("model", table).unwrap();
+        lua.globals().set("child", child_table).unwrap();
+        lua.globals().set("listName", list.clone()).unwrap();
+        let len = model.list_len(&list).unwrap();
+        refused_by_budget(
+            &lua,
+            "local list = model:getList(listName) for i = 1, 100000 do list:push(child) end",
+        );
+        let pushed = model.list_len(&list).unwrap() - len;
+        assert!(pushed < 100_000, "growth stopped at the budget");
+        refused_by_budget(
+            &lua,
+            "local list = model:getList(listName) list:insert(child, 1)",
+        );
+        assert_eq!(model.list_len(&list).unwrap() - len, pushed, "a refused insert adds nothing");
     }
 
     // Inventory row 24: the Blob setter copied a script's bytes into the

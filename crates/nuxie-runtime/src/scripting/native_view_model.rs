@@ -258,6 +258,16 @@ impl NativeScriptViewModel {
         })
     }
 
+    /// What making a new instance of this model from its schema
+    /// (`named_instance(None)`) would make, measured on the schema before
+    /// anything is made: the live instance's graph is not what is made.
+    pub fn default_copy_shape(&self, max_instances: usize) -> CopyShape {
+        let (Some(model), Some(file)) = (self.model.clone(), self.file.upgrade()) else {
+            return CopyShape::NoTemplate;
+        };
+        file.with_file(|file| schema_shape_of(file, model, max_instances))
+    }
+
     fn mutate<T: 'static>(&self, name: &str, mutation: impl FnOnce(&mut T) -> bool) -> bool {
         let Some(property) = self.property(name) else {
             return false;
@@ -823,6 +833,11 @@ impl ScriptViewModel {
         self.native().named_copy_shape(name, max_instances)
     }
 
+    /// See [`NativeScriptViewModel::default_copy_shape`].
+    pub fn default_copy_shape(&self, max_instances: usize) -> CopyShape {
+        self.native().default_copy_shape(max_instances)
+    }
+
     /// The owner [`Self::set_host_owner`] gave the instance.
     pub fn host_owner(&self) -> Option<crate::host_viewmodel::HostOwnerToken> {
         self.native()
@@ -996,6 +1011,60 @@ fn longest_walk(
         walked.insert(done, below);
     }
     None
+}
+
+/// What `File::create_view_model_instance(view_model)` makes, measured on the
+/// schema as it makes it: one instance per model, nested models made fresh
+/// down each path, never one already on the path and never 256 deep; lists
+/// and strings empty.
+fn schema_shape_of(file: &File, view_model: CoreHandle, max_instances: usize) -> CopyShape {
+    use crate::host_viewmodel::ViewModelCopyShape;
+    use crate::mechanical_port::source::viewmodel::{
+        viewmodel::ViewModel, viewmodel_property_viewmodel::ViewModelPropertyViewModel,
+    };
+    enum Step {
+        Make(CoreHandle),
+        Leave,
+    }
+    let mut shape = ViewModelCopyShape::default();
+    // The models being made, outermost first: the maker's `creating` plus
+    // the one it is making.
+    let mut path: Vec<CoreHandle> = Vec::new();
+    let mut steps = vec![Step::Make(view_model)];
+    while let Some(step) = steps.pop() {
+        let model = match step {
+            Step::Make(model) => model,
+            Step::Leave => {
+                path.pop();
+                continue;
+            }
+        };
+        if shape.instances >= max_instances {
+            return CopyShape::Unbounded;
+        }
+        shape.instances = shape.instances.saturating_add(1);
+        for name in properties_of(&model).into_keys() {
+            shape.properties = shape.properties.saturating_add(1);
+            shape.name_bytes = shape.name_bytes.saturating_add(name.len());
+        }
+        path.push(model.clone());
+        let properties = model
+            .with_downcast::<ViewModel, _>(|model| model.properties().to_vec())
+            .unwrap_or_default();
+        let nested: Vec<CoreHandle> = properties
+            .iter()
+            .filter_map(|property| {
+                property.with_downcast::<ViewModelPropertyViewModel, _>(|property| {
+                    property.base.view_model_reference_id()
+                })
+            })
+            .filter_map(|id| file.view_model_handle(id as usize))
+            .filter(|nested| path.len() < 256 && !path.contains(nested))
+            .collect();
+        steps.push(Step::Leave);
+        steps.extend(nested.into_iter().rev().map(Step::Make));
+    }
+    CopyShape::Shape(shape)
 }
 
 fn copy_shape_of(file: &File, source: CoreHandle, max_instances: usize) -> CopyShape {

@@ -626,11 +626,17 @@ fn new_owned_instance(
 ) -> crate::luau::Result<ScriptViewModel> {
     // A name selects an authored template, which the copy copies with its
     // lists, nested instances and strings: measured before it is copied.
-    // Without one, the instance has the shape of the model.
-    let bytes = match name.map(|name| model.named_copy_shape(name, instance_bytes::MAX_VISITED)) {
-        Some(CopyShape::Shape(shape)) => instance_bytes::of_copy(shape),
-        Some(CopyShape::Unbounded) => usize::MAX,
-        Some(CopyShape::NoTemplate) | None => instance_bytes::of(model),
+    // Without one (or without that template) the instance is made from the
+    // model's schema, whatever the live instance now holds: measured on the
+    // schema the same way.
+    let shape = match name.map(|name| model.named_copy_shape(name, instance_bytes::MAX_VISITED)) {
+        Some(CopyShape::NoTemplate) | None => model.default_copy_shape(instance_bytes::MAX_VISITED),
+        Some(shape) => shape,
+    };
+    let bytes = match shape {
+        CopyShape::Shape(shape) => instance_bytes::of_copy(shape),
+        CopyShape::Unbounded => usize::MAX,
+        CopyShape::NoTemplate => instance_bytes::of(model),
     };
     let charge = HostMemoryCharge::for_lua(lua, bytes)?;
     let instance = model
@@ -5616,6 +5622,25 @@ mod tests {
 
     // Inventory row 24: `model:new()` / `model:instance()` is the same
     // constructor as `Data.X.new`.
+    // Codex review (lane H2): `model:new()` was measured on the live
+    // instance's graph, but makes a new one from the model's schema; a live
+    // instance holding less than its schema under-charged what was made.
+    #[test]
+    fn model_new_is_charged_for_what_the_schema_makes() {
+        let file = fixture_file("script_create_viewmodel_instance.riv");
+        let models = nuxie_runtime::script_view_models(&file);
+        let lua = budget_lua(1024 * 1024);
+        install_data_global(&lua, &models).unwrap();
+        lua.load("first = Data.Main.new()").exec().unwrap();
+        let made = budget_used(&lua);
+        // The nested `child` (which holds a `SubChild`) becomes a bare
+        // `SubChild`: the live graph is now smaller than the schema's.
+        lua.load("first:getViewModel('chi').value = Data.SubChild.new()").exec().unwrap();
+        let before = budget_used(&lua);
+        lua.load("second = first:new()").exec().unwrap();
+        assert_eq!(budget_used(&lua) - before, made);
+    }
+
     #[test]
     fn model_new_is_charged_for_the_instance() {
         let file = fixture_file("script_create_viewmodel_instance.riv");

@@ -2303,11 +2303,18 @@ fn measure_item_content_main_size(
         // not when a cross margin is auto, as in the base size step.
         // A `stretch` keyword on the cross size stretches the item whatever its alignment
         // is, on any number of lines (see `keyword_stretches` in the base size step). Not
-        // a picture's: see there.
+        // a picture's: see there. The item's alignment does not matter here either: with
+        // the default `align-self` the keyword still counts on a wrapping line (Chrome: a
+        // 60 tall wrapping row around an 80 wide box and `aspect-ratio: 2; height:
+        // stretch` is 200 wide, as it is without wrapping). A picture keeps the alignment test:
+        // on a wrapping line Chrome counts it at its natural width.
+        let is_picture = tree.get_flexbox_child_style(item.node).is_compressible_replaced();
         let keyword_stretches = item.size_style.cross(dir).is_stretch()
-            && item.align_self != AlignSelf::STRETCH
-            && (!tree.get_flexbox_child_style(item.node).is_compressible_replaced()
-                || (constants.is_row && constants.pictures_follow_stretch_height));
+            && if is_picture {
+                item.align_self != AlignSelf::STRETCH && constants.is_row && constants.pictures_follow_stretch_height
+            } else {
+                true
+            };
         if constants.has_definite_cross_size
             && cross_axis_parent_size.is_some()
             && ckd.cross(dir).is_none()

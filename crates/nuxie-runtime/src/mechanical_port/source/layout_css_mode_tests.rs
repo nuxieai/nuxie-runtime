@@ -22027,24 +22027,25 @@ fn css_replaced_taffy_fork_matches_chrome() {
 
 /// Rows where the fork deliberately differs from Chrome 152: `(name, root css, tree, Chrome's
 /// frames, the fork's frames)`. Each has a box with a `stretch` keyword height inside a flex
-/// column's item. Chrome measures such an item's content height with the item's height
-/// unknown (for its automatic minimum height), and the keyword stays unresolved in that
-/// measurement and in the layout after it. Chrome skips the measurement when the item has
-/// `flex-shrink: 0` or a `min-height`, or is alone or on a wrapping line in a column whose
-/// content fits, and then the keyword resolves (Blink, `flex_layout_algorithm.cc`). The
-/// fork resolves it in every case. Every row was checked: with `min-height: 0` on the
-/// column's items Chrome gives the fork's frames.
+/// column's item (`g2253` has a ratio box in that place). Chrome measures such an item's
+/// content height with the item's height unknown (for its automatic minimum height), and
+/// the keyword stays unresolved in that measurement and in the layout after it. Chrome
+/// skips the measurement when the item has `flex-shrink: 0` or a `min-height`, or is alone
+/// or on a wrapping line in a column whose content fits, and then the keyword resolves
+/// (Blink, `flex_layout_algorithm.cc`). The fork resolves it in every case.
+///
+/// Evidence, per row: with `min-height: 0` on the column's items Chrome gives the fork's
+/// frames; and WebKit (Safari 27.2's engine, through Playwright) gives the fork's frames
+/// for 108 of the 115 rows and never Chrome's. In the other seven WebKit sizes the
+/// contested box as the fork does and draws the picture inside it differently. The
+/// `min-height: 0` check alone does not prove a row belongs here: it also changes a
+/// layout that depends on an automatic minimum height. Seven rows without a `stretch`
+/// height were recorded here on that check alone and have been taken out: WebKit sides
+/// with Chrome on six of them, so they are differences the fork still owes.
 #[rustfmt::skip]
-const TAFFY_FORK_CHROME_MEASURE_QUIRK_ROWS: &[(&str, &str, &str, &str, &str)] = &[
+const TAFFY_FORK_STRETCH_IN_COLUMN_ITEM_ROWS: &[(&str, &str, &str, &str, &str)] = &[
     ("g2253", "display:flex;flex-direction:column;align-items:flex-start;width:200px", "2>1>display:flex;flex-direction:column;flex-grow:1> & 3>2>display:flex;aspect-ratio:2;width:100px> & 4>3>picture:60x120;padding:10px;min-height:0px>", "1=0,0,200,140 2=0,0,100,140 3=0,0,100,140 4=0,0,80,140", "1=0,0,200,50 2=0,0,100,50 3=0,0,100,50 4=0,0,35,50"),
-    ("h0430", "display:flex;flex-direction:column;width:100px;height:300px", "2>1>display:flex;flex-direction:column;align-items:flex-start;flex-wrap:wrap;flex-grow:1> & 3>2>picture:60x120;padding:10px;flex-basis:auto> & 4>2>picture:60x120;max-width:100%;height:100%> & 5>1>width:120px;height:60px>", "1=0,0,100,300 2=0,0,100,260 3=0,0,80,140 4=80,0,100,260 5=0,260,120,40", "1=0,0,100,300 2=0,0,100,243.75 3=0,0,80,140 4=80,0,100,243.75 5=0,243.75,120,56.25"),
-    ("h0669", "display:grid;grid-template-columns:100px;grid-template-rows:100px;width:300px", "2>1>display:flex;flex-direction:column;flex-wrap:wrap> & 3>2>display:flex;flex-direction:column;flex-wrap:wrap> & 4>3>picture:120x60;padding:10px;width:50px;flex-grow:1> & 5>3>width:80px;height:80px;flex-shrink:0>", "1=0,0,300,100 2=0,0,100,100 3=0,0,100,125 4=0,0,70,45 5=0,45,80,80", "1=0,0,300,100 2=0,0,100,100 3=0,0,100,100 4=0,0,70,100 5=70,0,80,80"),
     ("h1387", "display:flex;flex-direction:column;align-items:flex-start;width:200px", "2>1>display:flex;align-items:flex-start;flex-wrap:wrap;height:100px> & 3>2>picture:40x40;padding:10px;max-width:50%;height:stretch;flex-grow:1>", "1=0,0,200,100 2=0,0,60,100 3=0,0,50,100", "1=0,0,200,100 2=0,0,100,100 3=0,0,70,100"),
-    ("h1966", "display:flex;flex-direction:column;align-items:flex-start;width:300px;height:100px", "2>1>display:flex;flex-direction:column;align-items:center;flex-wrap:wrap;width:max-content> & 3>2>picture:120x60;max-width:80px;min-width:0px;height:80px;flex-grow:1;flex-shrink:0;flex-basis:auto> & 4>2>picture:120x60;max-height:200px;align-self:flex-start>", "1=0,0,300,100 2=0,0,120,140 3=20,0,80,80 4=0,80,120,60", "1=0,0,300,100 2=0,0,200,100 3=0,0,80,100 4=80,0,120,60"),
-    ("h2396", "display:flex;flex-direction:column;align-items:flex-start;width:300px;height:100px", "2>1>display:flex;flex-direction:column;flex-wrap:wrap;height:200px> & 3>2>picture:40x40;height:50%> & 4>2>width:80px;height:80px;flex-shrink:0>", "1=0,0,300,100 2=0,0,140,120 3=0,0,60,60 4=60,0,80,80", "1=0,0,300,100 2=0,0,130,100 3=0,0,50,50 4=50,0,80,80"),
-    ("h2600", "display:flex;flex-direction:column;align-items:flex-start;width:300px;height:100px", "2>1>display:flex;flex-direction:column;flex-wrap:wrap;width:300px> & 3>2>picture:120x60;padding:10px;flex-grow:1;flex-basis:30px> & 4>2>width:80px;height:80px;flex-shrink:0>", "1=0,0,300,100 2=0,0,300,160 3=0,0,300,80 4=0,80,80,80", "1=0,0,300,100 2=0,0,300,100 3=0,0,200,100 4=200,0,80,80"),
-    ("h3626", "display:flex;flex-direction:column;align-items:flex-start;width:300px;height:100px", "2>1>display:flex;flex-direction:column;align-items:flex-start;flex-wrap:wrap;gap:10px> & 3>2>picture:40x40;max-width:50%> & 4>2>height:20px;flex-grow:1> & 5>2>width:80px;height:80px;flex-shrink:0>", "1=0,0,300,100 2=0,0,80,160 3=0,0,40,40 4=0,50,0,20 5=0,80,80,80", "1=0,0,300,100 2=0,0,130,100 3=0,0,40,40 4=0,50,0,50 5=50,0,80,80"),
-    ("h4039", "width:400px", "2>1>display:flex;flex-direction:column;align-items:center> & 3>2>picture:60x120> & 4>2>picture:40x40;max-height:200px;width:stretch;flex-basis:100px>", "1=0,0,400,320 2=0,0,400,320 3=170,0,60,120 4=0,120,400,200", "1=0,0,400,220 2=0,0,400,220 3=170,0,60,120 4=0,120,400,100"),
     ("h4106", "display:flex;flex-direction:column;width:100px;height:300px", "2>1>display:flex;flex-direction:column;flex-wrap:wrap> & 3>2>display:flex;height:200px> & 4>3>picture:60x120;height:stretch> & 5>3>width:120px;height:60px> & 6>3>width:30px;height:10px> & 7>1>width:120px;height:60px>", "1=0,0,100,300 2=0,0,100,200 3=0,0,210,200 4=0,0,100,200 5=100,0,88,60 6=188,0,22,10 7=0,200,120,60", "1=0,0,100,300 2=0,0,100,200 3=0,0,250,200 4=0,0,100,200 5=100,0,120,60 6=220,0,30,10 7=0,200,120,60"),
     ("a stretch keyword height in a row, s2-1", "display:flex;flex-direction:column;align-items:flex-start;width:200px", "2>1>display:flex;align-items:flex-start;flex-wrap:wrap;height:100px> & 3>2>picture:40x40;max-width:50%;height:stretch;flex-grow:1>", "1=0,0,200,100 2=0,0,40,100 3=0,0,20,100", "1=0,0,200,100 2=0,0,100,100 3=0,0,50,100"),
     ("a stretch keyword height in a row, s2-2", "display:flex;flex-direction:column;align-items:flex-start;width:200px", "2>1>display:flex;align-items:flex-start;flex-wrap:wrap;height:100px> & 3>2>picture:40x40;max-width:50%;height:stretch>", "1=0,0,200,100 2=0,0,40,100 3=0,0,20,100", "1=0,0,200,100 2=0,0,100,100 3=0,0,50,100"),
@@ -22173,7 +22174,8 @@ const TAFFY_FORK_CHROME_MEASURE_QUIRK_ROWS: &[(&str, &str, &str, &str, &str)] = 
 /// with `height: 100%` on the picture Chrome gives the fork's frames. `h1708` pads the
 /// picture, where the keyword and the percentage are different heights. `k2004` and
 /// `k5042` sit in a `fit-content` grid that the fork does not measure again, with either
-/// height.
+/// height. WebKit is no second opinion here: it draws a picture with a `stretch` height in
+/// a flex row 0 wide in 33 of these rows. The case rests on Blink's own note.
 #[rustfmt::skip]
 const TAFFY_FORK_CHROME_PICTURE_STRETCH_ROWS: &[(&str, &str, &str, &str, &str)] = &[
     ("a height that is known but not set, h1708", "display:grid;grid-template-columns:1fr 1fr;width:300px;height:200px", "2>1>display:flex> & 3>2>picture:40x40;padding:10px;height:stretch>", "1=0,0,300,200 2=0,0,150,200 3=0,0,200,200", "1=0,0,300,200 2=0,0,200,200 3=0,0,200,200"),
@@ -22236,10 +22238,10 @@ fn css_picture_stretch_height_counts_like_a_percentage_where_chrome_omits_it() {
     assert_taffy_chrome_rows(&rows);
 }
 
-/// See `TAFFY_FORK_CHROME_MEASURE_QUIRK_ROWS`.
+/// See `TAFFY_FORK_STRETCH_IN_COLUMN_ITEM_ROWS`.
 #[test]
 fn css_stretch_height_in_a_column_item_resolves_where_chrome_leaves_it() {
-    let rows: Vec<(&str, &str, &str, &str)> = TAFFY_FORK_CHROME_MEASURE_QUIRK_ROWS
+    let rows: Vec<(&str, &str, &str, &str)> = TAFFY_FORK_STRETCH_IN_COLUMN_ITEM_ROWS
         .iter()
         .map(|(name, root_css, nodes, chrome, fork)| {
             assert_ne!(chrome, fork, "{name}: no longer differs from Chrome, move it to a Chrome table");

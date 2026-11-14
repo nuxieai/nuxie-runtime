@@ -1683,7 +1683,7 @@ second small item to the column makes it 60 by 120.
 
 The fork resolves the keyword in every one of these cases. The rows
 that record the difference are in
-`TAFFY_FORK_CHROME_MEASURE_QUIRK_ROWS` with Chrome's frames and the
+`TAFFY_FORK_STRETCH_IN_COLUMN_ITEM_ROWS` with Chrome's frames and the
 fork's. Each was checked in Chrome 152: with `min-height: 0` on the
 column's items Chrome gives the fork's frames. Decided by Levi on
 2026-11-15.
@@ -1705,15 +1705,15 @@ column asking left the picture at its natural width. Forcing the flag
 on across the 32,600 Chrome rows changed eight. Three started matching
 Chrome (rows inside a grid item or a `fit-content` row, where the flag
 was lost on the way down). Five stopped matching, and each is a row
-inside a flex column's item: the Chrome measurement quirk described
+inside a flex column's item: the Chrome measuring-order result described
 under "Where the fork does not follow Chrome" above. Checked in Chrome
 152: with `min-height: 0` on the column's items (or `flex-shrink: 0`
 on the row), Chrome gives the fork's frames for all five. So the flag
-only copied the quirk, and the fork does the consistent thing instead.
+only copied that result, and the fork does the consistent thing instead.
 Decided by Levi on 2026-11-15.
 
 The five rows moved from `TAFFY_FORK_REPLACED_ROWS` to
-`TAFFY_FORK_CHROME_MEASURE_QUIRK_ROWS`; the three joined the guard
+`TAFFY_FORK_STRETCH_IN_COLUMN_ITEM_ROWS`; the three joined the guard
 rows. One less field in the measure cache key.
 
 ## A picture's stretch height counts like a percentage; the stretch-only flag is gone
@@ -1759,4 +1759,32 @@ The rows that record the difference are in
 fork's: 33 moved from `TAFFY_FORK_REPLACED_ROWS` and 12 new probes. 182
 new Chrome guard rows cover the cases that do resolve in Chrome. One
 less field in the measure cache key. Decided by Levi on 2026-11-15.
+
+## Evidence for the rows where the fork does not follow Chrome
+
+The two recorded tables were checked against a second engine: WebKit
+(Safari 27.2's engine, run through Playwright) on the same probe page.
+
+`TAFFY_FORK_STRETCH_IN_COLUMN_ITEM_ROWS` (a `stretch` height inside a
+flex column's item): of 115 rows WebKit gives the fork's frames for 108
+and Chrome's for none. In the other seven it sizes the contested box as
+the fork does and differs only in how it draws the picture inside. So
+two engines out of three resolve the keyword there.
+
+Seven rows are removed from that table: `h0430`, `h0669`, `h1966`,
+`h2396`, `h2600`, `h3626`, `h4039`. None has a `stretch` height. They
+were recorded on one check, that Chrome gives the fork's frames once
+the column's items have `min-height: 0`. That check also changes any
+layout that depends on an automatic minimum height, so it proves
+nothing for them. WebKit gives Chrome's frames for six of the seven.
+They are differences the fork still owes, not deliberate ones.
+
+`TAFFY_FORK_CHROME_PICTURE_STRETCH_ROWS` (a picture with a `stretch`
+height in a box whose height is known late): WebKit is no second
+opinion. It draws such a picture 0 wide inside a flex row in 33 of the
+45 rows. That table rests on the note in Blink's own source
+(`length_utils.cc`, crbug.com/40339056).
+
+The tables are named for what they hold. An earlier name called the
+first one a Chrome quirk, which claimed more than was shown.
 

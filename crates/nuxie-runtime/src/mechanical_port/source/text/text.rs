@@ -281,6 +281,18 @@ pub struct StyledText {
     css_indices: Option<crate::css_text::TextIndexMap>,
 }
 impl StyledText {
+    /// Heap bytes the code points and runs occupy (their capacity).
+    pub fn heap_bytes(&self) -> usize {
+        use crate::mechanical_port::source::text_engine::vec_bytes;
+        vec_bytes(&self.value).saturating_add(vec_bytes(&self.runs))
+    }
+    /// The most [`Self::heap_bytes`] can be after appending `text_bytes`
+    /// bytes of UTF-8: at most one code point per byte and one run, each
+    /// buffer grown by doubling.
+    pub fn heap_bytes_after_append(&self, text_bytes: usize) -> usize {
+        use crate::mechanical_port::source::text_engine::grown_bytes;
+        grown_bytes(&self.value, text_bytes).saturating_add(grown_bytes(&self.runs, 1))
+    }
     pub fn empty(&self) -> bool {
         self.runs.is_empty()
     }

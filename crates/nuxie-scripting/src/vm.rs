@@ -3151,8 +3151,14 @@ impl RuntimeScriptingVm for ScriptVm {
         if let Some(file) = file.upgrade() {
             self.set_image_assets(nuxie_runtime::script_image_assets(&file));
             let assets = file.with_file(|file| file.assets().to_vec());
+            // Shaders registered before this call. The host calls this once
+            // per import and may repeat it for the same file; a shader whose
+            // name and short name are already registered is not added again.
+            // Lookup takes the first entry of the best rank, so a repeat was
+            // never selected; it only grew the list.
+            let registered_before = self.gpu_canvas_shaders.borrow().len();
             for asset in assets {
-                if let Some((name, short_name, payload)) = asset.with_downcast::<nuxie_runtime::mechanical_port::source::assets::shader_asset::ShaderAsset,_>(|asset| {
+                if let Some((name, short_name)) = asset.with_downcast::<nuxie_runtime::mechanical_port::source::assets::shader_asset::ShaderAsset,_>(|asset| {
                     let short_name = asset.base.name().to_owned();
                     let folder_path = asset.base.folder_path();
                     let name = if folder_path.is_empty() {
@@ -3160,9 +3166,26 @@ impl RuntimeScriptingVm for ScriptVm {
                     } else {
                         format!("{folder_path}/{short_name}")
                     };
-                    (name, short_name, asset.encoded_payload().to_vec())
+                    (name, short_name)
                 }) {
-                    let provenance = self.native_shader_authorities.borrow().iter().find(|(bytes,_)|bytes.as_ref()==payload.as_slice()).map(|(_,proof)|proof.clone());
+                    let already_registered = self
+                        .gpu_canvas_shaders
+                        .borrow()
+                        .iter()
+                        .take(registered_before)
+                        .any(|entry| entry.name == name && entry.short_name == short_name);
+                    if already_registered {
+                        continue;
+                    }
+                    let provenance = asset
+                        .with_downcast::<nuxie_runtime::mechanical_port::source::assets::shader_asset::ShaderAsset, _>(|asset| {
+                            self.native_shader_authorities
+                                .borrow()
+                                .iter()
+                                .find(|(bytes, _)| bytes.as_ref() == asset.encoded_payload())
+                                .map(|(_, proof)| proof.clone())
+                        })
+                        .flatten();
                     self.gpu_canvas_shaders.borrow_mut().push(ImportedGpuCanvasShaderAssetEntry {
                         name, short_name,
                         owner:Rc::new(RefCell::new(RegisteredGpuCanvasShaderAsset::from_native(asset.clone(),provenance))),
@@ -5976,5 +5999,58 @@ mod gpu_canvas_tests {
                 .iter()
                 .any(|entry| entry.name == "unused/new-alias")
         );
+    }
+}
+
+/// E1 section 5 row 25: every host call of `install_native_file_assets`
+/// re-registered (and copied) every ShaderAsset of the file.
+#[cfg(test)]
+mod native_file_asset_tests {
+    use super::*;
+
+    fn shader_fixture() -> nuxie_runtime::RuntimeFileHandle {
+        let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+            .join("tests/unit_tests/assets/luau_shader_signed.riv");
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+        let mut factory =
+            nuxie_render_api::PersistentFactory::new(nuxie_render_api::RecordingFactory::new());
+        nuxie_runtime::File::import(
+            &bytes,
+            nuxie_runtime::RuntimeFactoryHandle::from_factory(&mut factory)
+                .expect("retained native factory"),
+            None,
+            None,
+            None,
+        )
+        .expect("shader fixture imports")
+    }
+
+    #[test]
+    fn repeating_the_install_registers_each_shader_once() {
+        let file = shader_fixture();
+        let vm = ScriptVm::new();
+        nuxie_runtime::ScriptingVm::install_native_file_assets(&vm, file.downgrade())
+            .expect("first install");
+        let names: Vec<String> = vm
+            .gpu_canvas_shaders
+            .borrow()
+            .iter()
+            .map(|entry| entry.name.clone())
+            .collect();
+        assert!(!names.is_empty(), "the fixture has ShaderAssets");
+        for _ in 0..3 {
+            nuxie_runtime::ScriptingVm::install_native_file_assets(&vm, file.downgrade())
+                .expect("repeated install");
+        }
+        let repeated: Vec<String> = vm
+            .gpu_canvas_shaders
+            .borrow()
+            .iter()
+            .map(|entry| entry.name.clone())
+            .collect();
+        assert_eq!(repeated, names);
     }
 }

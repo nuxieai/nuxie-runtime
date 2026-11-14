@@ -1380,6 +1380,15 @@ fn create_named_scripted_property(
     Ok(Some(property))
 }
 
+/// The error for an instance that would hold itself, an instance that holds
+/// it, or a graph nested deeper than the runtime walks (lane H2).
+fn holds_itself() -> crate::luau::Error {
+    crate::luau::Error::RuntimeError(
+        "a view model cannot hold itself or an instance that holds it, or nest more than 256 deep"
+            .to_owned(),
+    )
+}
+
 pub(super) fn model_from_table(table: &Table) -> crate::luau::Result<ScriptViewModel> {
     let handle = table.get::<crate::luau::AnyUserData>("__rive_model")?;
     Ok(handle.borrow::<ScriptedViewModelHandle>()?.model.clone())
@@ -1599,6 +1608,9 @@ impl UserData for ScriptedPropertyViewModel {
         });
         fields.add_field_method_set("value", |_, this, value: Table| {
             let value = model_from_table(&value)?;
+            if !this.parent.may_hold(&value) {
+                return Err(holds_itself());
+            }
             this.parent
                 .defer_property_change_callbacks(|| this.parent.set_view_model(&this.name, &value));
             Ok(())
@@ -2356,6 +2368,9 @@ impl ScriptedPropertyList {
         index: Option<usize>,
         item: &ScriptViewModel,
     ) -> crate::luau::Result<()> {
+        if !self.model.may_hold(item) {
+            return Err(holds_itself());
+        }
         let owner = HostOwnerToken::new(HostMemoryCharge::for_lua(lua, instance_bytes::LIST_ITEM)?);
         self.model.defer_property_change_callbacks(|| {
             self.model
@@ -5536,6 +5551,42 @@ mod tests {
             &lua,
             "for i = 1, 100000 do local _ = Data[name].new() end",
         );
+    }
+
+    // Lane H2, from H4's hostile corpus: a view model put in its own nested
+    // slot, or in a slot of an instance it holds, closed a cycle that the
+    // runtime's rebinding walked until the stack overflowed; a chain nested
+    // thousands deep overflowed it too.
+    #[test]
+    fn a_view_model_cannot_hold_what_holds_it() {
+        let file = fixture_file("script_create_viewmodel_instance.riv");
+        let models = nuxie_runtime::script_view_models(&file);
+        let lua = budget_lua(64 * 1024 * 1024);
+        install_data_global(&lua, &models).unwrap();
+        lua.load(
+            r#"
+            local function refused(assign)
+                local ok, err = pcall(assign)
+                assert(not ok, "assigned")
+                assert(string.find(tostring(err), "cannot hold itself", 1, true), tostring(err))
+            end
+            local main = Data.Main.new()
+            refused(function() main:getViewModel("chi").value = main end)
+            local c = Data.child.new()
+            main:getViewModel("chi").value = c
+            refused(function() c:getViewModel("subch").value = c end)
+            refused(function() c:getViewModel("subch").value = main end)
+            local at, depth = Data.Main.new(), 0
+            while depth < 10000 do
+                local below = Data.Main.new()
+                if not pcall(function() at:getViewModel("chi").value = below end) then break end
+                at, depth = below, depth + 1
+            end
+            assert(depth > 200 and depth < 256, depth)
+            "#,
+        )
+        .exec()
+        .unwrap();
     }
 
     // Codex review (lane G3): `Data.X.new(name)` was charged for the

@@ -459,7 +459,46 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
         },
         has_baseline_aligned_item,
     );
-    let initial_column_sum = columns.iter().map(|track| track.base_size).sum::<f32>();
+    let mut initial_column_sum = columns.iter().map(|track| track.base_size).sum::<f32>();
+    // nuxie-css: a grid with no width of its own in a definite space shrinks to fit it. Its
+    // flexible columns expanded to the items' max-content contributions above; when that is
+    // wider than the space, the grid is as wide as the space (or its own minimum) and the
+    // columns are sized again inside that width, as Chrome lays the grid out at its
+    // fit-content width (one `1fr` column around a 120 wide picture with `max-width: 100%`,
+    // in a 90 wide column with `align-items: flex-start`, is 90 wide; a
+    // `minmax(0, 0.5fr)` column around a 240 wide box leaves the grid 90 wide and the
+    // column 45). Columns that cannot shrink that far keep the grid as wide as they are.
+    if inner_node_size.width.is_none() {
+        if let AvailableSpace::Definite(space) = available_grid_space.width {
+            let space = space.maybe_max(inner_min_size.width);
+            if initial_column_sum > space && columns.iter().any(|track| track.max_track_sizing_function.is_fr()) {
+                items.iter_mut().for_each(|item| {
+                    item.grid_area_size_cache = None;
+                    item.min_content_contribution_cache.width = None;
+                    item.max_content_contribution_cache.width = None;
+                    item.minimum_contribution_cache.width = None;
+                });
+                track_sizing_algorithm(
+                    tree,
+                    AbstractAxis::Inline,
+                    inner_min_size.get(AbstractAxis::Inline),
+                    inner_max_size.get(AbstractAxis::Inline),
+                    justify_content,
+                    align_content,
+                    available_grid_space,
+                    Size { width: Some(space), ..inner_node_size },
+                    &mut columns,
+                    &mut rows,
+                    &mut items,
+                    |track: &GridTrack, parent_size: Option<f32>, tree: &Tree| {
+                        track.max_track_sizing_function.definite_value(parent_size, |val, basis| tree.calc(val, basis))
+                    },
+                    has_baseline_aligned_item,
+                );
+                initial_column_sum = f32_max(space, columns.iter().map(|track| track.base_size).sum::<f32>());
+            }
+        }
+    }
     inner_node_size.width = inner_node_size.width.or_else(|| initial_column_sum.into());
 
     // If only the container's width has been requested then we can skip sizing the rows entirely (which avoids

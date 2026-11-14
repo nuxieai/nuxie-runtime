@@ -1868,7 +1868,7 @@ regressed. Of 882 new probes (a picture with percentage widths in a grid inside 
 column, grid or block), 20 differ (352 before); the 20 are a grid with one `1fr` column
 that shrinks to fit, left for later. Guard rows: the 20 fixed rows and 24 of the probes.
 
-## A shrink-to-fit grid's flexible columns stop at the space the grid sits in
+## A shrink-to-fit grid with flexible columns is laid out at its fit-content width
 
 A grid with no width of its own expands its flexible columns to its items' max-content
 contributions (stock: definite available space is treated as max-content for the two
@@ -1877,17 +1877,25 @@ definite space (an item of a column with `align-items: flex-start`, a grid item 
 `justify-self: start`, an absolutely positioned box), that made it its max-content width
 even when the space was narrower.
 
-The space now bounds the expansion the way the grid's own `max-width` does (the spec's
-"redo this step, treating the free space as definite" branch). Chrome lays a shrink-to-fit
-grid out at its fit-content width, so its flexible columns share that width.
+Now, when the first column pass comes out wider than the space and the grid has a
+flexible column, the grid takes the space as its width (or its own minimum width) and
+the columns are sized again inside it (`compute_grid_layout`, after the first inline
+pass). Columns that cannot shrink that far keep the grid as wide as they are. Chrome lays
+a shrink-to-fit grid out at its fit-content width, so its flexible columns share that
+width. The second pass runs only for a grid that overflows its space.
 
-Example: a grid with one `1fr` column around a 120 by 60 picture with `max-width: 100%`,
-in a 90 wide column with `align-items: flex-start`. Chrome: grid and picture 90 wide.
-Before: 120 wide.
+Examples, in a 90 wide column with `align-items: flex-start`:
+
+- one `1fr` column around a 120 by 60 picture with `max-width: 100%`: Chrome has grid and
+  picture 90 wide. Before: 120 wide.
+- one `minmax(0, 0.5fr)` column around a 240 wide box: Chrome has the grid 90 wide and
+  the column 45. Before: grid 120 wide.
 
 The 32,600 compared layouts do not contain the case (440 differ, unchanged). Probes: the
 20 left from the nested-grid set now match (882 of 882); of 1,080 new probes of
 shrink-to-fit grids with flexible columns (six column lists, gaps, padding, minimum and
 maximum widths, five kinds of content, six containers), 200 more match and the 15 that
-differ are sub-pixel; 180 absolutely positioned ones all match. Guard rows: 40.
-
+differ are sub-pixel; 180 absolutely positioned ones all match; of 96 probes with flex
+factors below one, 26 more match and the 30 that differ did before (a grid whose flex
+factors sum below one, also when it is not shrinking to fit: left for later). Guard
+rows: 45.

@@ -355,8 +355,11 @@ impl UserData for ScriptedPath {
             Ok(())
         });
         methods.add_method_mut("reset", |_, this, ()| {
-            // `RawPath::reset` releases both vectors' capacity.
+            // `RawPath::reset` releases both vectors' capacity; the render
+            // path built from them goes too (a draw rebuilds it), so the
+            // whole charge is refunded.
             this.raw_path.reset();
+            this.render_path = None;
             this.charge.set(0)?;
             this.mark_dirty();
             Ok(())

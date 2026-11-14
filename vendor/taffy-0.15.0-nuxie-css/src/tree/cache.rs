@@ -31,10 +31,6 @@ const BOTH_SIGN_BITS_MASK: u64 = SIGN_BIT_1 | SIGN_BIT_2;
 /// Mask of excluding the sign bits (used when setting/getting the size excluding the packed bits)
 const NON_SIGN_BITS_MASK: u64 = !BOTH_SIGN_BITS_MASK;
 
-/// Mask which includes only the bits which encode the x-axis value that we can use to ignore the
-/// y-axis value when comparing a cache key.
-const X_AXIS_VALUE_MASK: u64 = (u32::MAX as u64) << 32;
-
 /// Pack `Option<f32>` into `u32`
 #[inline(always)]
 fn option_cache_key(input: Option<f32>) -> u32 {
@@ -100,16 +96,9 @@ struct CacheKey {
 
 impl CacheKey {
     #[inline(always)]
-    #[allow(dead_code)]
     /// Return the parent size with the extra bits that encode the requested axis masked out
     fn parent_size(&self) -> u64 {
         self.parent_size & NON_SIGN_BITS_MASK
-    }
-
-    /// Return the parent size with the extra bits that encode the requested axis masked out
-    /// And the y-axis value masked out
-    fn x_axis_parent_size(&self) -> u64 {
-        self.parent_size & (X_AXIS_VALUE_MASK & NON_SIGN_BITS_MASK)
     }
 
     /// Return the bits that encode the requested axis
@@ -273,7 +262,10 @@ impl Cache {
                         && entry.key.known_dimensions_are_definite == key.known_dimensions_are_definite
                         && entry.key.known_height_is_stretch_only == key.known_height_is_stretch_only
                         && entry.key.pictures_follow_stretch_height == key.pictures_follow_stretch_height
-                        && (entry.key.x_axis_parent_size() == key.x_axis_parent_size())
+                        // nuxie-css: the whole parent size, not its width alone: a node's
+                        // percentage heights resolve against the parent's height, so a width
+                        // measured under one height is not the width under another.
+                        && (entry.key.parent_size() == key.parent_size())
                         && entry.key.size_is_valid_for(&key)
                     {
                         self.recently_used_entries |= 1 << index;

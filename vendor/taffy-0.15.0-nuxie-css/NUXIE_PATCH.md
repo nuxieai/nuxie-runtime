@@ -1628,3 +1628,22 @@ against.
 Of the 29,914 layouts, 2 more match and none that matched differ. Of the
 16 Chrome probes left from the grid change above, 3 more match: the
 blocks whose height is known when their width is measured.
+
+## A measured width is reused only under the same parent height
+
+The measure lookup matched a stored result on the parent's width and
+ignored the parent's height. A node whose percentage height or
+`max-height` resolves against the parent's height has a different width
+under a different height, and the lookup returned the width from the
+first pass. Chrome: in a 400 wide grid with `auto 1fr` columns, a block
+around a 120 by 60 picture with `max-height: 50%` is 60 wide (the row is
+60 tall, the picture 60 by 30). The grid measured the block again once
+the row had its height, the block measured the picture with a 60 tall
+parent, and the lookup answered 120 from the pass that had no height.
+
+`Cache::get` now compares the whole parent size for measure entries, as
+it already did for the final layout. `x_axis_parent_size` and its mask
+are gone.
+
+Of the 29,914 layouts, 6 more match and none that matched differ. The 13
+Chrome probes left from the two changes above all match.

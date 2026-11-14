@@ -875,7 +875,10 @@ mod tests {
         }
         vm.collect_garbage();
         assert_eq!(descriptor.reader_count().unwrap(), 0);
-        assert_eq!(vm.host_memory_used(), 0);
+        // The slot list keeps its storage, so it keeps its charge; the
+        // readers' buffers are refunded.
+        assert!(vm.pcm_slot_list_bytes() > 0);
+        assert_eq!(vm.host_memory_used(), vm.pcm_slot_list_bytes());
         // A reader the script still holds is kept, readable, and charged.
         let mut vm = processor(
             r#"return {

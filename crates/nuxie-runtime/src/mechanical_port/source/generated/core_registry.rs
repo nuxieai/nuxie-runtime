@@ -3609,12 +3609,14 @@ mod update_dispatch_tests {
                 continue;
             };
             let transform = object.as_transform_component().is_some();
-            // PaintImage now overrides update without being a transform.
-            let paint_image =
-                key == crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY;
+            // PaintImage now overrides update without being a transform;
+            // Fill and Stroke run their path effects from the handle.
+            let paint = key == crate::source::shapes::paint::paint_image::PaintImage::TYPE_KEY
+                || key == crate::source::shapes::paint::fill::Fill::TYPE_KEY
+                || key == crate::source::shapes::paint::stroke::Stroke::TYPE_KEY;
             assert_eq!(
                 object.component_update_handler().is_some(),
-                transform || paint_image,
+                transform || paint,
                 "update registration {key}"
             );
             assert_eq!(
@@ -71711,6 +71713,13 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::dash::D
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::stroke::Stroke {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
+        Some(crate::mechanical_port::source::shapes::paint::stroke::Stroke::update_occurrence)
+    }
     fn component_on_dirty(
         &mut self,
         _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -72078,6 +72087,13 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::trim_pa
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::fill::Fill {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
+        Some(crate::mechanical_port::source::shapes::paint::fill::Fill::update_occurrence)
+    }
     fn component_on_dirty(
         &mut self,
         _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,

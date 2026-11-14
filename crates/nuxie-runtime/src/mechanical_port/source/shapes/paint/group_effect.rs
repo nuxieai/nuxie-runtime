@@ -61,6 +61,24 @@ impl GroupEffect {
         }
     }
 
+    /// Pinned GroupEffect::updateEffect at handle level: the group is only
+    /// read for its effects, which then run as a chain with no borrow of the
+    /// group open. False when `effect` is not a GroupEffect.
+    pub(crate) fn update_effect_occurrence(
+        effect: &crate::mechanical_port::source::core::CoreHandle,
+        provider: &PathProvider,
+        source: &ShapePaintPath,
+        paint: &effects_container::EffectPaint<'_>,
+    ) -> bool {
+        let Some(effects) =
+            effect.with_downcast::<Self, _>(|group| group.effects.effects().to_vec())
+        else {
+            return false;
+        };
+        effects_container::update_effect_chain(&effects, provider, source, paint);
+        true
+    }
+
     pub fn update_effect(
         &mut self,
         provider: &PathProvider,

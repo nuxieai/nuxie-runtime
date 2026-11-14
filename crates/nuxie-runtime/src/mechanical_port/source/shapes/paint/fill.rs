@@ -70,6 +70,25 @@ impl Fill {
         let kind = self.pick_path_kind();
         self.base.base.update_with_path_kind(value, kind, None);
     }
+
+    /// Pinned update at handle level, the component graph's handler: the
+    /// path-effect pass runs with the fill only read (see
+    /// ShapePaint::update_effects_occurrence).
+    pub(crate) fn update_occurrence(
+        fill: &crate::mechanical_port::source::core::CoreHandle,
+        value: ComponentDirt,
+    ) -> bool {
+        let pass = fill
+            .with_downcast_mut::<Self, _>(|fill| {
+                let kind = fill.pick_path_kind();
+                fill.base.base.begin_effect_pass(value, kind, None)
+            })
+            .flatten();
+        if let Some(pass) = pass {
+            crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaint::update_effects_occurrence(fill, pass);
+        }
+        true
+    }
     pub fn path_flags(&self) -> PathFlags {
         fill_rule_path_flags(self.base.fill_rule())
     }

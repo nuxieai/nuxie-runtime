@@ -888,19 +888,39 @@ impl ScriptedObject {
     }
 
     pub fn script_advance(&mut self, elapsed: f32) -> bool {
-        if !self.advances() || self.self_ref == 0 {
-            return false;
-        }
-        let Some(instance) = self.runtime_instance.clone() else {
+        let Some(instance) = self.advance_instance() else {
             return false;
         };
+        let (advanced, requested) = Self::call_advance_instance(&instance, elapsed);
+        self.note_update_request(requested);
+        advanced
+    }
+
+    /// The instance whose advance script_advance runs; `None` when it runs
+    /// nothing.
+    pub(crate) fn advance_instance(&self) -> Option<RuntimeScriptInstanceHandle> {
+        if !self.advances() || self.self_ref == 0 {
+            return None;
+        }
+        self.runtime_instance.clone()
+    }
+
+    /// Runs `instance`'s advance with no Core receiver lent: whether it
+    /// advanced, and whether it asked for an update.
+    pub(crate) fn call_advance_instance(
+        instance: &RuntimeScriptInstanceHandle,
+        elapsed: f32,
+    ) -> (bool, bool) {
         let mut host = ScriptUpdateRequestHost::default();
         let advanced = instance
             .borrow_mut()
             .call_advance_truthy(elapsed, &mut host)
             .unwrap_or(false);
-        self.callback_update_requested |= host.take_requested();
-        advanced
+        (advanced, host.take_requested())
+    }
+
+    pub(crate) fn note_update_request(&mut self, requested: bool) {
+        self.callback_update_requested |= requested;
     }
 
     /// The most-derived owner applies markNeedsUpdate after releasing the VM

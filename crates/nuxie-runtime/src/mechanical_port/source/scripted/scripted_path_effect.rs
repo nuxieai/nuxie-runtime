@@ -100,6 +100,39 @@ impl ScriptedPathEffect {
         }
         advanced
     }
+    /// Pinned advanceComponent at handle level: the effect's script
+    /// advances with no borrow of the effect open.
+    pub(crate) fn advance_occurrence(
+        owner: &CoreHandle,
+        elapsed: f32,
+        flags: AdvanceFlags,
+    ) -> bool {
+        let call = owner
+            .with_downcast_mut::<Self, _>(|effect| {
+                if elapsed == 0.0 || !effect.advance_active {
+                    return None;
+                }
+                effect.advance_active = false;
+                let elapsed = if flags.0 & AdvanceFlags::ADVANCE_NESTED.0 == 0 {
+                    0.0
+                } else {
+                    elapsed
+                };
+                Some((effect.scripted.advance_instance()?, elapsed))
+            })
+            .flatten();
+        let Some((instance, elapsed)) = call else {
+            return false;
+        };
+        let (advanced, requested) = ScriptedObject::call_advance_instance(&instance, elapsed);
+        owner.with_downcast_mut::<Self, _>(|effect| {
+            effect.scripted.note_update_request(requested);
+            if advanced {
+                effect.advance_active = true;
+            }
+        });
+        advanced
+    }
     pub fn add_scripted_dirt(&mut self, value: ComponentDirt, recurse: bool) -> bool {
         self.base.add_dirt(value, recurse)
     }
@@ -205,43 +238,99 @@ impl StrokeEffect for ScriptedPathEffect {
         source: &ShapePaintPath,
         paint: &ShapePaint,
     ) {
-        if !self.scripted.updates() {
-            return;
-        }
-        let Some(path) = self.effect_path(provider) else {
+        let Some(update) = self.begin_update(provider, source) else {
             return;
         };
+        let requested = update.run(source, crate::scripting::ScriptNode::from_path_effect(paint));
+        self.finish_update(requested);
+    }
+}
+impl ScriptedPathEffect {
+    /// Pinned ScriptedPathEffect::updateEffect at handle level: the effect
+    /// is borrowed to rewind its path and enter its update phase, and again
+    /// to leave it, but not while its script runs, since user code may reach
+    /// the effect or its paint. False when `effect` is not a
+    /// ScriptedPathEffect.
+    pub(crate) fn update_effect_occurrence(
+        effect: &CoreHandle,
+        provider: &PathProvider,
+        source: &ShapePaintPath,
+        paint: &crate::mechanical_port::source::shapes::paint::effects_container::EffectPaint<'_>,
+    ) -> bool {
+        let Some(update) =
+            effect.with_downcast_mut::<Self, _>(|effect| effect.begin_update(provider, source))
+        else {
+            return false;
+        };
+        let Some(update) = update else {
+            return true;
+        };
+        let node = paint
+            .with(crate::scripting::ScriptNode::from_path_effect)
+            .expect("a path effect's paint is live while it updates");
+        let requested = update.run(source, node);
+        effect.with_downcast_mut::<Self, _>(|effect| effect.finish_update(requested));
+        true
+    }
+
+    /// Everything before the script call: the output path rewound and the
+    /// update phase entered. `None` when there is nothing to run.
+    fn begin_update(
+        &mut self,
+        provider: &PathProvider,
+        source: &ShapePaintPath,
+    ) -> Option<EffectUpdate> {
+        if !self.scripted.updates() {
+            return None;
+        }
+        let path = self.effect_path(provider)?;
         if path.borrow().has_render_path() {
-            return;
+            return None;
         }
         path.borrow_mut()
             .rewind_as(source.is_local(), source.fill_rule());
-        let Some(instance) = self.scripted.runtime_instance() else {
-            return;
-        };
+        let instance = self.scripted.runtime_instance()?;
         if !instance.borrow_mut().script_lifetime_valid() {
-            return;
+            return None;
         }
         self.scripted.set_in_update_phase(true);
-        let node = crate::scripting::ScriptNode::from_path_effect(paint);
+        Some(EffectUpdate { path, instance })
+    }
+
+    fn finish_update(&mut self, requested: bool) {
+        if requested {
+            // Callback is still in update phase: upstream suppresses this request.
+            self.mark_needs_update();
+        }
+        self.scripted.set_in_update_phase(false);
+    }
+}
+
+/// One update call of an effect's script, taken out of the effect.
+struct EffectUpdate {
+    path: Rc<RefCell<ShapePaintPath>>,
+    instance: crate::scripting::RuntimeScriptInstanceHandle,
+}
+
+impl EffectUpdate {
+    /// Calls the script and adds what it returned to the output path; true
+    /// when it asked for an update.
+    fn run(self, source: &ShapePaintPath, node: crate::scripting::ScriptNode) -> bool {
         let mut host = ScriptUpdateRequestHost::default();
-        match instance.borrow_mut().call_path_effect_update(
+        match self.instance.borrow_mut().call_path_effect_update(
             to_render_raw_path(source.raw_path()),
             node,
             &mut host,
         ) {
             Ok(Some(output)) => {
                 // Through ShapePaintPath, which prunes what the script returned.
-                path.borrow_mut()
+                self.path
+                    .borrow_mut()
                     .add_path(&from_render_raw_path(&output), None);
             }
             Ok(None) | Err(_) => eprintln!("update function failed"),
         }
-        if host.take_requested() {
-            // Callback is still in update phase: upstream suppresses this request.
-            self.mark_needs_update();
-        }
-        self.scripted.set_in_update_phase(false);
+        host.take_requested()
     }
 }
 impl std::ops::Deref for ScriptedPathEffect {

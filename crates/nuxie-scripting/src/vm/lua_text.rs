@@ -1,8 +1,9 @@
 //! src/lua/renderer/lua_text.cpp and include/rive/lua/scripted_text.hpp at db31ea87.
-//! Retained layout plus revision-checked indices replace interior C++ pointers.
+//! Retained layout plus epoch-checked indices replace interior C++ pointers.
 use super::{
-    lua_font::ScriptedFont, lua_mat2d::ScriptedMat2D, lua_paint::ScriptedPaint,
-    lua_path::ScriptedPath, lua_renderer::ScriptedRenderer, lua_renderer_library::RendererBindings,
+    host_memory_budget::HostMemoryCharge, lua_font::ScriptedFont, lua_mat2d::ScriptedMat2D,
+    lua_paint::ScriptedPaint, lua_path::ScriptedPath, lua_renderer::ScriptedRenderer,
+    lua_renderer_library::RendererBindings,
 };
 use crate::luau::{
     AnyUserData, Error, Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods,
@@ -13,31 +14,111 @@ use nuxie_runtime::{
     source::{
         math::{raw_path::RawPath, vec2d::Vec2D},
         renderer::to_render_raw_path,
+        shapes::paint::shape_paint::RuntimeRenderPaintHandle,
         text::{
             cursor::{Cursor, CursorPosition},
             raw_text::RawText,
         },
         text_engine::{
-            GlyphRenderKind, GlyphRun, TextDirection, TextOrigin, TextOverflow, TextSizing,
-            TextWordBreak, TextWrap,
+            GlyphRenderKind, GlyphRun, OrderedLine, TextDirection, TextOrigin, TextOverflow,
+            TextSizing, TextWordBreak, TextWrap,
         },
     },
 };
 use std::{cell::RefCell, rc::Rc};
 
-type Layout = Rc<RefCell<RawText>>;
+/// Host bytes one appended input byte is charged: a code point (4 bytes; a
+/// byte is at most one code point) and the shaped glyph data it may become
+/// (glyph id, text index, advance, x position, offset: about 20 bytes).
+const TEXT_BYTES_PER_INPUT_BYTE: usize = 24;
+/// Host bytes one append's `TextRun` is charged.
+const TEXT_RUN_BYTES: usize = 64;
+/// Host bytes one new style (a distinct paint and colour) is charged: the
+/// style, its paint handle and its retained render path.
+const TEXT_STYLE_BYTES: usize = 256;
+/// Styles one Text may hold: a glyph run names its style with a `u16`.
+const MAX_TEXT_STYLES: usize = 1 << 16;
+
+const STALE: &str = "Text changed since this was fetched, fetch it again.";
+
+fn stale() -> Error {
+    Error::runtime(STALE)
+}
+
+/// A Text's layout and the epoch its handles are checked against.
+///
+/// `RawText::revision` is a `u32` that wraps, so after 2^32 changes a handle
+/// fetched before them would pass a revision check against a different
+/// layout. The epoch counts every revision change observed, in a `u64`; it
+/// is brought up to date on every access, and one binding call changes the
+/// revision a few times at most, never 2^32.
+struct TextLayout {
+    text: RawText,
+    /// `text.revision()` when last observed.
+    seen_revision: u32,
+    epoch: u64,
+    /// Host bytes this Text is charged: the most its content has needed
+    /// since it was created, since a clear keeps the capacity it grew to.
+    charge: HostMemoryCharge,
+    /// Bytes the content appended since the last clear needs.
+    content_bytes: usize,
+}
+
+impl TextLayout {
+    fn new(text: RawText) -> Self {
+        Self {
+            seen_revision: text.revision(),
+            text,
+            epoch: 0,
+            charge: HostMemoryCharge::default(),
+            content_bytes: 0,
+        }
+    }
+
+    fn sync(&mut self) {
+        let revision = self.text.revision();
+        self.epoch = advance_epoch(self.epoch, self.seen_revision, revision);
+        self.seen_revision = revision;
+    }
+
+    fn epoch(&mut self) -> u64 {
+        self.sync();
+        self.epoch
+    }
+
+    fn text(&mut self) -> &mut RawText {
+        self.sync();
+        &mut self.text
+    }
+
+    /// The text, if nothing changed since `epoch`.
+    fn fresh(&mut self, epoch: u64) -> Result<&mut RawText> {
+        if self.epoch() != epoch {
+            return Err(stale());
+        }
+        Ok(&mut self.text)
+    }
+}
+
+/// The epoch after the revision moved from `seen` to `revision`: the
+/// changes in between, counted modulo 2^32 as the revision wraps.
+fn advance_epoch(epoch: u64, seen: u32, revision: u32) -> u64 {
+    epoch.wrapping_add(u64::from(revision.wrapping_sub(seen)))
+}
+
+type Layout = Rc<RefCell<TextLayout>>;
 pub(super) struct ScriptedText {
     layout: Layout,
 }
 #[derive(Clone)]
 struct ScriptedTextLine {
     layout: Layout,
-    revision: u32,
+    epoch: u64,
     index: u32,
 }
 struct ScriptedGlyph {
     layout: Layout,
-    revision: u32,
+    epoch: u64,
     line: u32,
     run: usize,
     glyph: u32,
@@ -65,111 +146,173 @@ fn enum_index(value: &str, names: &[&str], kind: &str) -> Result<i32> {
         .map(|i| i as i32)
         .ok_or_else(|| Error::runtime(format!("'{value}' is not a valid {kind}")))
 }
-fn fresh(text: &RawText, revision: u32) -> Result<()> {
-    if text.revision() != revision {
-        Err(Error::runtime(
-            "Text changed since this was fetched, fetch it again.",
-        ))
-    } else {
-        Ok(())
-    }
+/// The name at a layout's enum index; a file can store any index.
+fn enum_name(names: &'static [&'static str], index: i32, kind: &str) -> Result<&'static str> {
+    usize::try_from(index)
+        .ok()
+        .and_then(|index| names.get(index).copied())
+        .ok_or_else(|| Error::runtime(format!("Text has an invalid {kind} value")))
+}
+/// A zero-based index as the one-based index a script sees.
+fn one_based(index: u32) -> Result<u32> {
+    index.checked_add(1).ok_or_else(stale)
 }
 
 fn vector(p: Vec2D) -> Vector {
     Vector::new(p.x, p.y, 0.0)
 }
 fn push_path(lua: &Lua, path: RawPath) -> Result<AnyUserData> {
-    lua.create_userdata(ScriptedPath::from_render_raw_path(to_render_raw_path(
-        &path,
-    )))
+    lua.create_userdata(ScriptedPath::charged(lua, to_render_raw_path(&path))?)
 }
 fn direction(value: TextDirection) -> &'static str {
-    DIRECTION[(value as i32 + 1) as usize]
+    match value {
+        TextDirection::Ltr => "ltr",
+        TextDirection::Rtl => "rtl",
+    }
+}
+fn line_at(text: &mut RawText, index: u32) -> Result<&OrderedLine> {
+    text.ordered_lines().get(index as usize).ok_or_else(stale)
+}
+fn run_at(line: &OrderedLine, run: usize) -> Result<&GlyphRun> {
+    line.runs().nth(run).ok_or_else(stale)
+}
+/// One glyph's entry in a run's per-glyph arrays.
+fn glyph_value<T: Copy>(values: &[T], glyph: u32) -> Result<T> {
+    values.get(glyph as usize).copied().ok_or_else(stale)
+}
+fn same_paint(a: Option<&RuntimeRenderPaintHandle>, b: Option<&RuntimeRenderPaintHandle>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => Rc::ptr_eq(a, b),
+        (None, None) => true,
+        _ => false,
+    }
+}
+/// Refuses an append that would add a style past the `u16` a glyph run
+/// names it with. `RawText::append` reuses a style with the same paint and
+/// colour, so only a full Text is searched, and only for a new style.
+fn check_style_room(
+    text: &RawText,
+    paint: Option<&RuntimeRenderPaintHandle>,
+    foreground: u32,
+) -> Result<()> {
+    if text.style_count() < MAX_TEXT_STYLES {
+        return Ok(());
+    }
+    let existing = (0..=u16::MAX).any(|style| {
+        text.style_foreground_color(style) == foreground
+            && same_paint(text.style_paint(style).as_ref(), paint)
+    });
+    if existing {
+        Ok(())
+    } else {
+        Err(Error::runtime(format!(
+            "Text may hold at most {MAX_TEXT_STYLES} styles"
+        )))
+    }
 }
 impl ScriptedText {
     fn line(&self, index: u32) -> ScriptedTextLine {
         ScriptedTextLine {
             layout: self.layout.clone(),
-            revision: self.layout.borrow().revision(),
+            epoch: self.layout.borrow_mut().epoch(),
             index,
         }
+    }
+    fn line_count(&self) -> usize {
+        self.layout.borrow_mut().text().ordered_lines().len()
     }
 }
 impl UserData for ScriptedText {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("sizing", |_, t| match t.layout.borrow().sizing() {
+        fields.add_field_method_get("sizing", |_, t| match t.layout.borrow_mut().text().sizing() {
             TextSizing::AutoWidth => Ok("autoWidth"),
             TextSizing::AutoHeight => Ok("autoHeight"),
             TextSizing::Fixed => Ok("fixed"),
             TextSizing::Unknown(_) => Err(Error::runtime("Text has an invalid sizing value")),
         });
-        fields.add_field_method_get("overflow", |_, t| match t.layout.borrow().overflow() {
-            TextOverflow::Visible => Ok("visible"),
-            TextOverflow::Hidden => Ok("hidden"),
-            TextOverflow::Clipped => Ok("clipped"),
-            TextOverflow::Ellipsis => Ok("ellipsis"),
-            TextOverflow::Fit | TextOverflow::FitFontSize | TextOverflow::Unknown(_) => {
-                Err(Error::runtime("Text has an invalid overflow value"))
+        fields.add_field_method_get("overflow", |_, t| {
+            match t.layout.borrow_mut().text().overflow() {
+                TextOverflow::Visible => Ok("visible"),
+                TextOverflow::Hidden => Ok("hidden"),
+                TextOverflow::Clipped => Ok("clipped"),
+                TextOverflow::Ellipsis => Ok("ellipsis"),
+                TextOverflow::Fit | TextOverflow::FitFontSize | TextOverflow::Unknown(_) => {
+                    Err(Error::runtime("Text has an invalid overflow value"))
+                }
             }
         });
         fields.add_field_method_get("align", |_, t| {
-            Ok(ALIGN[t.layout.borrow().align_index() as usize])
+            enum_name(ALIGN, t.layout.borrow_mut().text().align_index(), "align")
         });
-        fields.add_field_method_get("wrap", |_, t| match t.layout.borrow().wrap() {
+        fields.add_field_method_get("wrap", |_, t| match t.layout.borrow_mut().text().wrap() {
             TextWrap::Wrap => Ok("wrap"),
             TextWrap::NoWrap => Ok("noWrap"),
             TextWrap::Unknown(_) => Err(Error::runtime("Text has an invalid wrap value")),
         });
-        fields.add_field_method_get("wordBreak", |_, t| match t.layout.borrow().word_break() {
-            TextWordBreak::BreakWord => Ok("breakWord"),
-            TextWordBreak::Normal => Ok("normal"),
-            TextWordBreak::BreakAll => Ok("breakAll"),
-            TextWordBreak::Unknown(_) => Err(Error::runtime("Text has an invalid wordBreak value")),
+        fields.add_field_method_get("wordBreak", |_, t| {
+            match t.layout.borrow_mut().text().word_break() {
+                TextWordBreak::BreakWord => Ok("breakWord"),
+                TextWordBreak::Normal => Ok("normal"),
+                TextWordBreak::BreakAll => Ok("breakAll"),
+                TextWordBreak::Unknown(_) => {
+                    Err(Error::runtime("Text has an invalid wordBreak value"))
+                }
+            }
         });
-        fields.add_field_method_get("origin", |_, t| match t.layout.borrow().origin() {
+        fields.add_field_method_get("origin", |_, t| match t.layout.borrow_mut().text().origin() {
             TextOrigin::Top => Ok("top"),
             TextOrigin::Baseline => Ok("baseline"),
             TextOrigin::Unknown(_) => Err(Error::runtime("Text has an invalid origin value")),
         });
         fields.add_field_method_get("direction", |_, t| {
-            Ok(DIRECTION[t.layout.borrow().direction_index() as usize])
+            enum_name(
+                DIRECTION,
+                t.layout.borrow_mut().text().direction_index(),
+                "direction",
+            )
         });
-        fields.add_field_method_get("maxWidth", |_, t| Ok(t.layout.borrow().max_width()));
-        fields.add_field_method_get("maxHeight", |_, t| Ok(t.layout.borrow().max_height()));
+        fields.add_field_method_get("maxWidth", |_, t| {
+            Ok(t.layout.borrow_mut().text().max_width())
+        });
+        fields.add_field_method_get("maxHeight", |_, t| {
+            Ok(t.layout.borrow_mut().text().max_height())
+        });
         fields.add_field_method_get("paragraphSpacing", |_, t| {
-            Ok(t.layout.borrow().paragraph_spacing())
+            Ok(t.layout.borrow_mut().text().paragraph_spacing())
         });
-        fields.add_field_method_get("length", |_, t| Ok(t.layout.borrow().length()));
-        fields.add_field_method_get("isEmpty", |_, t| Ok(t.layout.borrow().empty()));
-        fields.add_field_method_get("lineCount", |_, t| {
-            Ok(t.layout.borrow_mut().ordered_lines().len())
-        });
+        fields.add_field_method_get("length", |_, t| Ok(t.layout.borrow_mut().text().length()));
+        fields.add_field_method_get("isEmpty", |_, t| Ok(t.layout.borrow_mut().text().empty()));
+        fields.add_field_method_get("lineCount", |_, t| Ok(t.line_count()));
         fields.add_field_method_set("sizing", |_, t, v: String| {
             t.layout
                 .borrow_mut()
+                .text()
                 .set_sizing_index(enum_index(&v, SIZING, "TextSizing")?);
             Ok(())
         });
         fields.add_field_method_set("overflow", |_, t, v: String| {
             t.layout
                 .borrow_mut()
+                .text()
                 .set_overflow_index(enum_index(&v, OVERFLOW, "TextOverflow")?);
             Ok(())
         });
         fields.add_field_method_set("align", |_, t, v: String| {
             t.layout
                 .borrow_mut()
+                .text()
                 .set_align_index(enum_index(&v, ALIGN, "TextAlign")?);
             Ok(())
         });
         fields.add_field_method_set("wrap", |_, t, v: String| {
             t.layout
                 .borrow_mut()
+                .text()
                 .set_wrap_index(enum_index(&v, WRAP, "TextWrap")?);
             Ok(())
         });
         fields.add_field_method_set("wordBreak", |_, t, v: String| {
-            t.layout.borrow_mut().set_word_break_index(enum_index(
+            t.layout.borrow_mut().text().set_word_break_index(enum_index(
                 &v,
                 WORD_BREAK,
                 "TextWordBreak",
@@ -179,25 +322,27 @@ impl UserData for ScriptedText {
         fields.add_field_method_set("origin", |_, t, v: String| {
             t.layout
                 .borrow_mut()
+                .text()
                 .set_origin_index(enum_index(&v, ORIGIN, "TextOrigin")?);
             Ok(())
         });
         fields.add_field_method_set("direction", |_, t, v: String| {
             t.layout
                 .borrow_mut()
+                .text()
                 .set_direction_index(enum_index(&v, DIRECTION, "TextDirection")?);
             Ok(())
         });
         fields.add_field_method_set("maxWidth", |_, t, v: f32| {
-            t.layout.borrow_mut().set_max_width(v);
+            t.layout.borrow_mut().text().set_max_width(v);
             Ok(())
         });
         fields.add_field_method_set("maxHeight", |_, t, v: f32| {
-            t.layout.borrow_mut().set_max_height(v);
+            t.layout.borrow_mut().text().set_max_height(v);
             Ok(())
         });
         fields.add_field_method_set("paragraphSpacing", |_, t, v: f32| {
-            t.layout.borrow_mut().set_paragraph_spacing(v);
+            t.layout.borrow_mut().text().set_paragraph_spacing(v);
             Ok(())
         });
     }
@@ -219,22 +364,53 @@ impl UserData for ScriptedText {
                 } else {
                     super::lua_color::required_unsigned(lua, Some(&foreground), "foregroundColor")?
                 };
-                t.layout.borrow_mut().append(
+                let size = style.raw_get::<Option<f32>>("size")?.unwrap_or(16.0);
+                let line_height = style.raw_get::<Option<f32>>("lineHeight")?.unwrap_or(-1.0);
+                let letter_spacing = style
+                    .raw_get::<Option<f32>>("letterSpacing")?
+                    .unwrap_or(0.0);
+                let mut layout = t.layout.borrow_mut();
+                let layout = &mut *layout;
+                check_style_room(layout.text(), paint.as_ref(), foreground)?;
+                // Charged for a new style up front; the content keeps only
+                // what it used, the charge the most it has needed.
+                let appended = bytes
+                    .len()
+                    .saturating_mul(TEXT_BYTES_PER_INPUT_BYTE)
+                    .saturating_add(TEXT_RUN_BYTES);
+                layout.charge.attach(lua)?;
+                layout.charge.reserve_to(
+                    layout
+                        .content_bytes
+                        .saturating_add(appended)
+                        .saturating_add(TEXT_STYLE_BYTES),
+                )?;
+                let styles = layout.text.style_count();
+                layout.text().append(
                     &bytes,
                     paint,
                     font,
-                    style.raw_get::<Option<f32>>("size")?.unwrap_or(16.0),
-                    style.raw_get::<Option<f32>>("lineHeight")?.unwrap_or(-1.0),
-                    style
-                        .raw_get::<Option<f32>>("letterSpacing")?
-                        .unwrap_or(0.0),
+                    size,
+                    line_height,
+                    letter_spacing,
                     foreground,
                 );
+                let new_style = if layout.text.style_count() > styles {
+                    TEXT_STYLE_BYTES
+                } else {
+                    0
+                };
+                layout.content_bytes = layout
+                    .content_bytes
+                    .saturating_add(appended)
+                    .saturating_add(new_style);
                 Ok(())
             },
         );
         methods.add_method("clear", |_, t, ()| {
-            t.layout.borrow_mut().clear();
+            let mut layout = t.layout.borrow_mut();
+            layout.text().clear();
+            layout.content_bytes = 0;
             Ok(())
         });
         methods.add_method_lent(
@@ -246,45 +422,47 @@ impl UserData for ScriptedText {
                 renderer
                     .borrow::<ScriptedRenderer>()?
                     .with_renderer_mut(loan, |renderer| {
-                        t.layout.borrow_mut().render(renderer, paint);
+                        t.layout.borrow_mut().text().render(renderer, paint);
                         Ok(())
                     })
             },
         );
         methods.add_method("bounds", |_, t, ()| {
-            let b = t.layout.borrow_mut().bounds();
+            let b = t.layout.borrow_mut().text().bounds();
             Ok((
                 vector(Vec2D::new(b.min_x, b.min_y)),
                 vector(Vec2D::new(b.max_x, b.max_y)),
             ))
         });
         methods.add_method("line", |lua, t, index: i32| {
-            let count = t.layout.borrow_mut().ordered_lines().len();
-            if index < 1 || index as usize > count {
-                return Err(Error::runtime(format!("line {index} is out of range")));
-            }
-            push_line(lua, t.line(index as u32 - 1))
+            let count = t.line_count();
+            let line = usize::try_from(index)
+                .ok()
+                .and_then(|index| index.checked_sub(1))
+                .filter(|line| *line < count)
+                .and_then(|line| u32::try_from(line).ok())
+                .ok_or_else(|| Error::runtime(format!("line {index} is out of range")))?;
+            push_line(lua, t.line(line))
         });
         methods.add_method("lines", |lua, t, ()| {
-            let count = t.layout.borrow_mut().ordered_lines().len();
+            let count = t.line_count();
             let lines = lua.create_table();
-            for i in 0..count {
-                lines.raw_set(i + 1, push_line(lua, t.line(i as u32))?)?;
+            for i in (0..count).map_while(|i| u32::try_from(i).ok()) {
+                lines.raw_push(push_line(lua, t.line(i))?)?;
             }
             Ok(lines)
         });
         methods.add_method("hitTest", |_, t, p: Vector| {
-            let mut text = t.layout.borrow_mut();
-            let view = text.layout_view();
-            Ok(
+            let mut layout = t.layout.borrow_mut();
+            let view = layout.text().layout_view();
+            one_based(
                 CursorPosition::from_translation(Vec2D::new(p.x(), p.y()), &view)
-                    .code_point_index()
-                    + 1,
+                    .code_point_index(),
             )
         });
         methods.add_method("caret", |_, t, index: i32| {
-            let mut text = t.layout.borrow_mut();
-            let view = text.layout_view();
+            let mut layout = t.layout.borrow_mut();
+            let view = layout.text().layout_view();
             let p = CursorPosition::at_index(index.saturating_sub(1).max(0) as u32, &view)
                 .visual_position(&view);
             Ok(if p.found() {
@@ -298,20 +476,25 @@ impl UserData for ScriptedText {
             })
         });
         methods.add_method("selectionRects", |lua, t, (from, to): (i32, i32)| {
-            let mut text = t.layout.borrow_mut();
-            let view = text.layout_view();
-            let cursor = Cursor::new(
-                CursorPosition::at_index(from.saturating_sub(1).max(0) as u32, &view),
-                CursorPosition::at_index(to.saturating_sub(1).max(0) as u32, &view),
-            );
-            let mut rects = Vec::new();
-            cursor.selection_rects(&mut rects, &view);
+            // The rectangles are collected and the layout released before any
+            // VM object is made.
+            let rects = {
+                let mut layout = t.layout.borrow_mut();
+                let view = layout.text().layout_view();
+                let cursor = Cursor::new(
+                    CursorPosition::at_index(from.saturating_sub(1).max(0) as u32, &view),
+                    CursorPosition::at_index(to.saturating_sub(1).max(0) as u32, &view),
+                );
+                let mut rects = Vec::new();
+                cursor.selection_rects(&mut rects, &view);
+                rects
+            };
             let table = lua.create_table();
-            for (i, r) in rects.into_iter().enumerate() {
+            for r in rects {
                 let row = lua.create_table();
                 row.set("min", vector(Vec2D::new(r.min_x, r.min_y)))?;
                 row.set("max", vector(Vec2D::new(r.max_x, r.max_y)))?;
-                table.raw_set(i + 1, row)?;
+                table.raw_push(row)?;
             }
             Ok(table)
         });
@@ -319,14 +502,13 @@ impl UserData for ScriptedText {
 }
 
 impl ScriptedTextLine {
-    fn with<R>(&self, f: impl FnOnce(&mut RawText) -> R) -> Result<R> {
-        let mut text = self.layout.borrow_mut();
-        fresh(&text, self.revision)?;
-        Ok(f(&mut text))
+    fn with<R>(&self, f: impl FnOnce(&mut RawText) -> Result<R>) -> Result<R> {
+        let mut layout = self.layout.borrow_mut();
+        f(layout.fresh(self.epoch)?)
     }
     fn glyphs(&self) -> Result<Vec<ScriptedGlyph>> {
         self.with(|text| {
-            let line = &text.ordered_lines()[self.index as usize];
+            let line = line_at(text, self.index)?;
             let mut itr = line.begin();
             let end = line.end();
             let mut x = line.start_x();
@@ -337,64 +519,66 @@ impl ScriptedTextLine {
                 let index = line
                     .runs()
                     .position(|candidate| std::ptr::eq(candidate, run))
-                    .unwrap();
-                let offset = run.offsets[glyph as usize];
+                    .ok_or_else(stale)?;
+                let offset = glyph_value(&run.offsets, glyph)?;
                 result.push(ScriptedGlyph {
                     layout: self.layout.clone(),
-                    revision: self.revision,
+                    epoch: self.epoch,
                     line: self.index,
                     run: index,
                     glyph,
                     position: Vec2D::new(x + offset.x, line.y() + offset.y),
                 });
-                x += run.advances[glyph as usize];
+                x += glyph_value(&run.advances, glyph)?;
                 itr.advance();
             }
-            result
+            Ok(result)
         })
     }
 }
 impl UserData for ScriptedTextLine {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("index", |_, l| l.with(|_| l.index + 1));
+        fields.add_field_method_get("index", |_, l| l.with(|_| one_based(l.index)));
         fields.add_field_method_get("x", |_, l| {
-            l.with(|t| t.ordered_lines()[l.index as usize].start_x())
+            l.with(|t| Ok(line_at(t, l.index)?.start_x()))
         });
-        fields.add_field_method_get("top", |_, l| l.with(|t| t.line_top(l.index)));
+        fields.add_field_method_get("top", |_, l| l.with(|t| Ok(t.line_top(l.index))));
         fields.add_field_method_get("baseline", |_, l| {
-            l.with(|t| t.ordered_lines()[l.index as usize].y())
+            l.with(|t| Ok(line_at(t, l.index)?.y()))
         });
         fields.add_field_method_get("bottom", |_, l| {
-            l.with(|t| t.ordered_lines()[l.index as usize].bottom())
+            l.with(|t| Ok(line_at(t, l.index)?.bottom()))
         });
         fields.add_field_method_get("width", |_, l| {
             l.with(|t| {
                 let mut width = 0.0;
                 t.for_each_glyph(l.index, |r, i, _| {
-                    width += r.advances[i as usize];
+                    width += r.advances.get(i as usize).copied().unwrap_or(0.0);
                     true
                 });
-                width
+                Ok(width)
             })
         });
         fields.add_field_method_get("direction", |_, l| {
-            l.with(|t| direction(t.line_direction(l.index)))
+            l.with(|t| Ok(direction(t.line_direction(l.index))))
         });
         fields.add_field_method_get("firstIndex", |_, l| {
             l.with(|t| {
                 let view = t.layout_view();
-                view.ordered_lines()[l.index as usize].first_code_point_index(view.glyph_lookup())
-                    + 1
+                let line = view.ordered_lines().get(l.index as usize).ok_or_else(stale)?;
+                one_based(line.first_code_point_index(view.glyph_lookup()))
             })
         });
         fields.add_field_method_get("lastIndex", |_, l| {
             l.with(|t| {
                 let view = t.layout_view();
-                view.ordered_lines()[l.index as usize].last_code_point_index(view.glyph_lookup())
-                    + 1
+                let line = view.ordered_lines().get(l.index as usize).ok_or_else(stale)?;
+                one_based(line.last_code_point_index(view.glyph_lookup()))
             })
         });
-        fields.add_field_method_get("glyphCount", |_, l| l.with(|t| t.line_glyph_count(l.index)));
+        fields.add_field_method_get("glyphCount", |_, l| {
+            l.with(|t| Ok(t.line_glyph_count(l.index)))
+        });
     }
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("glyph", |lua, l, index: i32| {
@@ -407,15 +591,15 @@ impl UserData for ScriptedTextLine {
         });
         methods.add_method("glyphs", |lua, l, ()| {
             let table = lua.create_table();
-            for (i, g) in l.glyphs()?.into_iter().enumerate() {
-                table.raw_set(i + 1, push_glyph(lua, g)?)?;
+            for g in l.glyphs()? {
+                table.raw_push(push_glyph(lua, g)?)?;
             }
             Ok(table)
         });
         methods.add_meta_method("__iter", |lua, l, ()| {
             let (glyph, x) = l.with(|t| {
-                let line = &t.ordered_lines()[l.index as usize];
-                (line.start_glyph_index(0), line.start_x())
+                let line = line_at(t, l.index)?;
+                Ok((line.start_glyph_index(0), line.start_x()))
             })?;
             let mut cursor = ScriptedGlyphCursor {
                 line: l.clone(),
@@ -425,11 +609,10 @@ impl UserData for ScriptedTextLine {
             };
             cursor.skip_empty_runs()?;
             let next = lua.create_function(|lua, (cursor, index): (AnyUserData, i32)| {
-                let mut c = cursor.borrow_mut::<ScriptedGlyphCursor>()?;
-                let glyph = c.next()?;
+                let glyph = cursor.borrow_mut::<ScriptedGlyphCursor>()?.next()?;
                 match glyph {
                     Some(g) => Ok(MultiValue::from_vec(vec![
-                        Value::Integer(i64::from(index) + 1),
+                        Value::Integer(i64::from(index).saturating_add(1)),
                         Value::UserData(push_glyph(lua, g)?),
                     ])),
                     None => Ok(MultiValue::from_vec(vec![Value::Nil])),
@@ -441,35 +624,34 @@ impl UserData for ScriptedTextLine {
 }
 impl ScriptedGlyphCursor {
     fn skip_empty_runs(&mut self) -> Result<()> {
-        let mut text = self.line.layout.borrow_mut();
-        fresh(&text, self.line.revision)?;
-        let line = &text.ordered_lines()[self.line.index as usize];
-        while self.glyph == line.end_glyph_index(self.run) && self.run + 1 < line.runs().len() {
-            self.run += 1;
+        let mut layout = self.line.layout.borrow_mut();
+        let line = line_at(layout.fresh(self.line.epoch)?, self.line.index)?;
+        let last_run = line.runs().len().saturating_sub(1);
+        while self.glyph == line.end_glyph_index(self.run) && self.run < last_run {
+            self.run = self.run.saturating_add(1);
             self.glyph = line.start_glyph_index(self.run);
         }
         Ok(())
     }
     fn next(&mut self) -> Result<Option<ScriptedGlyph>> {
         let result = {
-            let mut text = self.line.layout.borrow_mut();
-            fresh(&text, self.line.revision)?;
-            let line = &text.ordered_lines()[self.line.index as usize];
-            if self.run + 1 >= line.runs().len() && self.glyph == line.end_glyph_index(self.run) {
+            let mut layout = self.line.layout.borrow_mut();
+            let line = line_at(layout.fresh(self.line.epoch)?, self.line.index)?;
+            let last_run = line.runs().len().saturating_sub(1);
+            if self.run >= last_run && self.glyph == line.end_glyph_index(self.run) {
                 return Ok(None);
             }
-            let run = line.runs().nth(self.run).unwrap();
-            let i = self.glyph as usize;
-            let offset = run.offsets[i];
+            let run = run_at(line, self.run)?;
+            let offset = glyph_value(&run.offsets, self.glyph)?;
             let glyph = ScriptedGlyph {
                 layout: self.line.layout.clone(),
-                revision: self.line.revision,
+                epoch: self.line.epoch,
                 line: self.line.index,
                 run: self.run,
                 glyph: self.glyph,
                 position: Vec2D::new(self.x + offset.x, line.y() + offset.y),
             };
-            self.x += run.advances[i];
+            self.x += glyph_value(&run.advances, self.glyph)?;
             self.glyph = if run.dir() == TextDirection::Ltr {
                 self.glyph.wrapping_add(1)
             } else {
@@ -482,35 +664,40 @@ impl ScriptedGlyphCursor {
     }
 }
 impl ScriptedGlyph {
-    fn with<R>(&self, f: impl FnOnce(&GlyphRun) -> R) -> Result<R> {
-        let mut text = self.layout.borrow_mut();
-        fresh(&text, self.revision)?;
-        Ok(f(text.ordered_lines()[self.line as usize]
-            .runs()
-            .nth(self.run)
-            .unwrap()))
+    fn with<R>(&self, f: impl FnOnce(&GlyphRun) -> Result<R>) -> Result<R> {
+        let mut layout = self.layout.borrow_mut();
+        let line = line_at(layout.fresh(self.epoch)?, self.line)?;
+        f(run_at(line, self.run)?)
     }
+}
+/// The font a shaped run was shaped with.
+fn run_font(run: &GlyphRun) -> Result<&nuxie_runtime::source::text_engine::FontRef> {
+    run.font
+        .as_ref()
+        .ok_or_else(|| Error::runtime("glyph has no font"))
 }
 impl UserData for ScriptedGlyph {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("id", |_, g| g.with(|r| r.glyphs[g.glyph as usize]));
+        fields.add_field_method_get("id", |_, g| g.with(|r| glyph_value(&r.glyphs, g.glyph)));
         fields.add_field_method_get("font", |lua, g| {
-            super::lua_font::push_font(lua, g.with(|r| r.font.clone().expect("glyph run font"))?)
+            super::lua_font::push_font(lua, g.with(|r| run_font(r).cloned())?)
         });
-        fields.add_field_method_get("size", |_, g| g.with(|r| r.size));
-        fields.add_field_method_get("x", |_, g| g.with(|_| g.position.x));
-        fields.add_field_method_get("y", |_, g| g.with(|_| g.position.y));
-        fields.add_field_method_get("advance", |_, g| g.with(|r| r.advances[g.glyph as usize]));
+        fields.add_field_method_get("size", |_, g| g.with(|r| Ok(r.size)));
+        fields.add_field_method_get("x", |_, g| g.with(|_| Ok(g.position.x)));
+        fields.add_field_method_get("y", |_, g| g.with(|_| Ok(g.position.y)));
+        fields.add_field_method_get("advance", |_, g| {
+            g.with(|r| glyph_value(&r.advances, g.glyph))
+        });
         fields.add_field_method_get("textIndex", |_, g| {
-            g.with(|r| r.text_indices[g.glyph as usize] + 1)
+            g.with(|r| one_based(glyph_value(&r.text_indices, g.glyph)?))
         });
-        fields.add_field_method_get("direction", |_, g| g.with(|r| direction(r.dir())));
+        fields.add_field_method_get("direction", |_, g| g.with(|r| Ok(direction(r.dir()))));
         fields.add_field_method_get("isColor", |_, g| {
-            g.with(|r| r.glyph_render_kind(g.glyph as usize) == GlyphRenderKind::Color)
+            g.with(|r| Ok(r.glyph_render_kind(g.glyph as usize) == GlyphRenderKind::Color))
         });
         fields.add_field_method_get("transform", |lua, g| {
             lua.create_userdata(ScriptedMat2D(nuxie_render_api::Mat2D(
-                *g.with(|r| RawText::glyph_transform(r, g.position))?
+                *g.with(|r| Ok(RawText::glyph_transform(r, g.position)))?
                     .values(),
             )))
         });
@@ -520,16 +707,16 @@ impl UserData for ScriptedGlyph {
             let path = g.with(|r| {
                 let mut path = RawPath::default();
                 if r.glyph_render_kind(g.glyph as usize) == GlyphRenderKind::Suppressed {
-                    return path;
+                    return Ok(path);
                 }
                 path.add_path(
                     &RawText::glyph_path(
-                        r.font.as_ref().expect("glyph run font").as_ref(),
-                        r.glyphs[g.glyph as usize],
+                        run_font(r)?.as_ref(),
+                        glyph_value(&r.glyphs, g.glyph)?,
                     ),
                     Some(&RawText::glyph_transform(r, g.position)),
                 );
-                path
+                Ok(path)
             })?;
             push_path(lua, path)
         });
@@ -547,7 +734,7 @@ pub(super) fn register(lua: &Lua) -> Result<()> {
                         .ok_or_else(|| Error::runtime("retained factory required"))
                 })?;
             let userdata = lua.create_userdata(ScriptedText {
-                layout: Rc::new(RefCell::new(RawText::new(factory))),
+                layout: Rc::new(RefCell::new(TextLayout::new(RawText::new(factory)))),
             })?;
             super::lua_font::source_metatable(
                 lua,
@@ -622,7 +809,7 @@ fn push_line(lua: &Lua, line: ScriptedTextLine) -> Result<AnyUserData> {
         ],
         &["glyph", "glyphs"],
         None,
-        |u| u.borrow::<ScriptedTextLine>()?.with(|_| ()),
+        |u| u.borrow::<ScriptedTextLine>()?.with(|_| Ok(())),
     )?;
     Ok(userdata)
 }
@@ -646,7 +833,7 @@ fn push_glyph(lua: &Lua, glyph: ScriptedGlyph) -> Result<AnyUserData> {
         ],
         &["path"],
         None,
-        |u| u.borrow::<ScriptedGlyph>()?.with(|_| ()),
+        |u| u.borrow::<ScriptedGlyph>()?.with(|_| Ok(())),
     )?;
     Ok(userdata)
 }
@@ -748,5 +935,27 @@ mod host_cluster_tests {
         )
         .unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+}
+
+#[cfg(test)]
+mod epoch_tests {
+    use super::advance_epoch;
+
+    // A handle fetched at revision 5 was accepted again once the `u32`
+    // revision wrapped back to 5 (2^32 changes later), against a layout it
+    // no longer indexes. The epoch does not come back.
+    #[test]
+    fn a_wrapped_revision_does_not_make_a_stale_handle_fresh() {
+        let fetched = 7;
+        let mut epoch = fetched;
+        let mut seen = 5_u32;
+        for revision in [u32::MAX, 4, 5] {
+            epoch = advance_epoch(epoch, seen, revision);
+            seen = revision;
+        }
+        assert_eq!(seen, 5, "the revision is back where the handle saw it");
+        assert_eq!(epoch, fetched + (1 << 32));
+        assert_eq!(advance_epoch(9, 3, 3), 9, "no change keeps handles fresh");
     }
 }

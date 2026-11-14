@@ -927,7 +927,7 @@ impl StateMachineLayerInstance {
                     .flatten();
                 if self.can_change_state(&to) {
                     let allowed = transition
-                        .with_mut(|transition| {
+                        .with(|transition| {
                             transition.state_transition_allowed(
                                 &from,
                                 machine,
@@ -1062,7 +1062,7 @@ impl StateMachineLayerInstance {
                 .flatten();
             if self.can_change_state(&state_to) {
                 let allowed = transition
-                    .with_mut(|transition| {
+                    .with(|transition| {
                         transition.state_transition_allowed(
                             &from_instance,
                             machine,
@@ -1153,35 +1153,44 @@ impl StateMachineLayerInstance {
             else {
                 continue;
             };
-            // The target check, allowed and the weight writes run back to back
-            // on the transition, so they share one borrow of it.
+            // The target check and allowed read the transition; its
+            // conditions may run scripts, so the transition is only shared
+            // while they do. The weight writes and useInLayer follow under
+            // their own borrow.
             let current = self
                 .current_state
                 .as_ref()
                 .map(RuntimeStateInstanceHandle::definition_ref);
             let occurrence = &self.occurrence;
             let allowed = transition
-                .with_mut(|transition| {
+                .with(|transition| {
                     let state_to = transition.state_transition_state_to();
                     // can_change_state: a transition to the current state is skipped.
                     if current == state_to.as_ref() {
                         return None;
                     }
-                    let allowed = transition
-                        .state_transition_allowed(&from_instance, machine, occurrence.clone())
-                        .expect("an authored transition exposes allowed behavior");
-                    if allowed == AllowTransition::Yes {
-                        let weight = transition
-                            .state_transition_random_weight()
-                            .expect("an authored StateTransition must expose random weight");
-                        transition.state_transition_set_evaluated_random_weight(weight);
-                        transition.state_transition_use_layer(machine, occurrence.clone());
-                    } else {
-                        transition.state_transition_set_evaluated_random_weight(0);
-                    }
-                    Some(allowed)
+                    Some(
+                        transition
+                            .state_transition_allowed(&from_instance, machine, occurrence.clone())
+                            .expect("an authored transition exposes allowed behavior"),
+                    )
                 })
                 .expect("live authored transition");
+            if let Some(allowed) = allowed {
+                transition
+                    .with_mut(|transition| {
+                        if allowed == AllowTransition::Yes {
+                            let weight = transition
+                                .state_transition_random_weight()
+                                .expect("an authored StateTransition must expose random weight");
+                            transition.state_transition_set_evaluated_random_weight(weight);
+                            transition.state_transition_use_layer(machine, occurrence.clone());
+                        } else {
+                            transition.state_transition_set_evaluated_random_weight(0);
+                        }
+                    })
+                    .expect("live authored transition");
+            }
             match allowed {
                 None => continue,
                 Some(AllowTransition::Yes) => return Some(transition),
@@ -1637,6 +1646,17 @@ impl TransitionRuntime for DirectTransitionRuntime {
         machine: &mut StateMachineInstance,
         layer: RuntimeStateMachineLayerInstanceWeakHandle,
     ) -> bool {
+        use crate::mechanical_port::source::animation::scripted_transition_condition::ScriptedTransitionCondition;
+        // A scripted condition's script can reach the condition itself, so
+        // it runs from the handle with no borrow of the condition open.
+        if condition
+            .with_downcast::<ScriptedTransitionCondition, _>(|_| ())
+            .is_some()
+        {
+            return machine
+                .scripted_object(condition)
+                .is_some_and(|stateful| machine.evaluate_scripted_condition(&stateful));
+        }
         condition
             .with_mut(|condition| condition.transition_condition_allowed(machine, layer))
             .flatten()

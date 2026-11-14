@@ -1040,6 +1040,7 @@ impl Chunk {
         &self.name
     }
 
+    #[cfg_attr(debug_assertions, track_caller)]
     pub fn call<R: FromLuaMulti>(self, args: impl IntoLuaMulti) -> Result<R> {
         self.into_function()?.call::<R>(args)
     }
@@ -1053,6 +1054,7 @@ impl Chunk {
         Ok(func)
     }
 
+    #[cfg_attr(debug_assertions, track_caller)]
     pub fn exec(self) -> Result<()> {
         self.into_function()?.call::<()>(())
     }

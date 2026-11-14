@@ -31,6 +31,8 @@ pub fn in_place_holds_begun() -> usize {
     css_layout::flight_hold::holds_begun()
 }
 pub mod page_player;
+#[doc(hidden)]
+pub mod script_borrow_check;
 pub mod text_decoration;
 pub mod utils;
 pub mod video;

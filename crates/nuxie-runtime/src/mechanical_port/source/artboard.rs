@@ -8480,13 +8480,23 @@ impl RuntimeArtboardInstanceHandle {
         RuntimeArtboardInstanceWeakHandle(Rc::downgrade(&self.0))
     }
 
+    #[cfg_attr(feature = "test-support", track_caller)]
     pub fn with_artboard<R>(&self, f: impl FnOnce(&ArtboardInstance) -> R) -> R {
         let _pictures = crate::source::layout::picture_layout_mode::BorrowScope::new();
+        let _lent = crate::script_borrow_check::Lent::new(
+            crate::script_borrow_check::Lending::Shared,
+            std::panic::Location::caller(),
+        );
         f(&self.0.borrow())
     }
 
+    #[cfg_attr(feature = "test-support", track_caller)]
     pub fn with_artboard_mut<R>(&self, f: impl FnOnce(&mut ArtboardInstance) -> R) -> R {
         let _pictures = crate::source::layout::picture_layout_mode::BorrowScope::new();
+        let _lent = crate::script_borrow_check::Lent::new(
+            crate::script_borrow_check::Lending::Mutable,
+            std::panic::Location::caller(),
+        );
         f(&mut self.0.borrow_mut())
     }
 }
@@ -8496,10 +8506,12 @@ impl RuntimeArtboardInstanceWeakHandle {
         self.0.upgrade().map(RuntimeArtboardInstanceHandle)
     }
 
+    #[cfg_attr(feature = "test-support", track_caller)]
     pub fn with_artboard<R>(&self, f: impl FnOnce(&ArtboardInstance) -> R) -> Option<R> {
         self.upgrade().map(|artboard| artboard.with_artboard(f))
     }
 
+    #[cfg_attr(feature = "test-support", track_caller)]
     pub fn with_artboard_mut<R>(&self, f: impl FnOnce(&mut ArtboardInstance) -> R) -> Option<R> {
         self.upgrade().map(|artboard| artboard.with_artboard_mut(f))
     }

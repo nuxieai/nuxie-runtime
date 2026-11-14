@@ -115,11 +115,39 @@ impl RuntimeBindContextValue {
             valid,
         }
     }
-    fn borrow_mut(&self) -> RefMut<'_, Box<dyn BindContextValue>> {
-        self.value.borrow_mut()
+    #[cfg_attr(feature = "test-support", track_caller)]
+    fn borrow_mut(&self) -> LentContextValue<'_> {
+        let lent = crate::script_borrow_check::Lent::new(
+            crate::script_borrow_check::Lending::Mutable,
+            std::panic::Location::caller(),
+        );
+        LentContextValue {
+            value: self.value.borrow_mut(),
+            _lent: lent,
+        }
     }
     fn invalidate(&self) {
         self.valid.set(false);
+    }
+}
+
+/// A bind context's value, mutably lent; counted while it is out
+/// (`script_borrow_check`). Fields drop in order: the borrow, then its record.
+struct LentContextValue<'a> {
+    value: RefMut<'a, Box<dyn BindContextValue>>,
+    _lent: crate::script_borrow_check::Lent,
+}
+
+impl std::ops::Deref for LentContextValue<'_> {
+    type Target = Box<dyn BindContextValue>;
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl std::ops::DerefMut for LentContextValue<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
     }
 }
 

@@ -1040,6 +1040,7 @@ impl CoreHandle {
         Some(crate::source::artboard::RuntimeArtboardInstanceHandle::from_retained(root))
     }
 
+    #[cfg_attr(feature = "test-support", track_caller)]
     pub fn with<R>(&self, f: impl FnOnce(&dyn CoreObject) -> R) -> Option<R> {
         let slot = &self.identity.slot;
         if slot.generation.get() != self.identity.slot.hot.identity_generation {
@@ -1047,6 +1048,10 @@ impl CoreHandle {
         }
         // Declared before payload guards so refreshes run after their release.
         let _pictures = crate::source::layout::picture_layout_mode::BorrowScope::new();
+        let _lent = crate::script_borrow_check::Lent::new(
+            crate::script_borrow_check::Lending::Shared,
+            std::panic::Location::caller(),
+        );
         // Release after the payload Ref/RefMut, including callback unwinding.
         let _release = CoreBorrowRelease(slot);
         // Authored objects and runtime Artboard roots occupy disjoint slots.
@@ -1072,6 +1077,7 @@ impl CoreHandle {
         None
     }
 
+    #[cfg_attr(feature = "test-support", track_caller)]
     pub fn with_mut<R>(&self, f: impl FnOnce(&mut dyn CoreObject) -> R) -> Option<R> {
         let slot = &self.identity.slot;
         if slot.generation.get() != self.identity.slot.hot.identity_generation {
@@ -1079,6 +1085,10 @@ impl CoreHandle {
         }
         // Declared before payload guards so refreshes run after their release.
         let _pictures = crate::source::layout::picture_layout_mode::BorrowScope::new();
+        let _lent = crate::script_borrow_check::Lent::new(
+            crate::script_borrow_check::Lending::Mutable,
+            std::panic::Location::caller(),
+        );
         // Release after the payload Ref/RefMut, including callback unwinding.
         let _release = CoreBorrowRelease(slot);
         // Keep the two payload cells separate: liveness/type queries remain
@@ -1178,10 +1188,12 @@ impl CoreHandle {
             .map(f)
     }
 
+    #[cfg_attr(feature = "test-support", track_caller)]
     pub fn with_downcast<T: Any, R>(&self, f: impl FnOnce(&T) -> R) -> Option<R> {
         self.with(|object| object.as_any().downcast_ref::<T>().map(f))?
     }
 
+    #[cfg_attr(feature = "test-support", track_caller)]
     pub fn with_downcast_mut<T: Any, R>(&self, f: impl FnOnce(&mut T) -> R) -> Option<R> {
         self.with_mut(|object| object.as_any_mut().downcast_mut::<T>().map(f))?
     }

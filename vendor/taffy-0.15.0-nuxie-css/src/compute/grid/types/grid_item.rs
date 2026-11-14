@@ -355,11 +355,29 @@ impl GridItem {
     /// alignment, an automatic height and a width that is not stretched.
     fn width_follows_area_height(&self) -> bool {
         self.align_self.keyword == AlignItemsKeyword::Normal
-            && self.aspect_ratio.is_some()
-            && !self.is_replaced
-            && self.size.height.is_auto()
             && !self.margin.top.is_auto()
             && !self.margin.bottom.is_auto()
+            && self.ratio_width_is_not_stretched()
+    }
+
+    /// nuxie-css: whether the item's own content gives its width and its ratio then gives
+    /// its height: a ratio item with an automatic height that is stretched in neither axis
+    /// (Chrome: `aspect-ratio: 2; align-self: start; justify-self: start` around a 300-wide
+    /// child is 300 by 150). Stock sized it from its content in both axes.
+    fn ratio_follows_content_width(&self) -> bool {
+        let stretched_in_block = matches!(self.align_self.keyword, AlignItemsKeyword::Normal | AlignItemsKeyword::Stretch)
+            && !self.margin.top.is_auto()
+            && !self.margin.bottom.is_auto();
+        !stretched_in_block && self.ratio_width_is_not_stretched()
+    }
+
+    /// nuxie-css: a ratio item with an automatic height and a width that is not stretched: a
+    /// content keyword width, or an automatic width with `justify-self` other than stretch
+    /// or with auto inline margins.
+    fn ratio_width_is_not_stretched(&self) -> bool {
+        self.aspect_ratio.is_some()
+            && !self.is_replaced
+            && self.size.height.is_auto()
             && !self.size.width.is_stretch()
             && (self.size.width.is_sizing_keyword()
                 || (self.size.width.is_auto()
@@ -385,7 +403,7 @@ impl GridItem {
         if axis != AbstractAxis::Block
             || known_dimensions.width.is_some()
             || known_dimensions.height.is_some()
-            || !self.width_follows_area_height()
+            || !(self.width_follows_area_height() || self.ratio_follows_content_width())
         {
             return known_dimensions;
         }

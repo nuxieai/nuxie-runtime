@@ -520,6 +520,15 @@ impl ViewModelInstanceValue {
     }
 
     pub fn add_delegate(&mut self, delegate: &ViewModelInstanceValueDelegateHandle) {
+        if self.delegates.len() == self.delegates.capacity() {
+            // A full list first lets go of delegates that are gone, then
+            // keeps room for as many again as are live: each scan is paid
+            // for by the adds since the previous one, so an add stays
+            // amortised O(1) and the list stays within twice its live size.
+            self.delegates
+                .retain(|delegate| delegate.strong_count() != 0);
+            self.delegates.reserve(self.delegates.len().max(1));
+        }
         self.delegates.push(Rc::downgrade(delegate));
         self.set_flag(ValueFlags::DelegatesChanged);
     }

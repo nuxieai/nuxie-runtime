@@ -15413,7 +15413,7 @@ fn taffy_css_style(css: &str) -> taffy::Style {
                 "auto" => auto(),
                 "min-content" => min_content(),
                 "max-content" => max_content(),
-                value => length(px(value)),
+                value => size(value),
             };
             let max: taffy::MaxTrackSizingFunction = match max.trim() {
                 "auto" => auto(),
@@ -15421,7 +15421,7 @@ fn taffy_css_style(css: &str) -> taffy::Style {
                 "max-content" => max_content(),
                 value => match value.strip_suffix("fr") {
                     Some(flex) => fr(flex.parse::<f32>().unwrap()),
-                    None => length(px(value)),
+                    None => size(value),
                 },
             };
             return minmax(min, max);
@@ -15431,7 +15431,7 @@ fn taffy_css_style(css: &str) -> taffy::Style {
             None if track == "auto" => auto(),
             None if track == "min-content" => min_content(),
             None if track == "max-content" => max_content(),
-            None => length(px(track)),
+            None => size(track),
         }
     }
     fn px(value: &str) -> f32 {
@@ -22151,6 +22151,14 @@ const TAFFY_FORK_REPLACED_ROWS: &[(&str, &str, &str, &str)] = &[
     ("id-fcol-mm0-pic", "display:flex;flex-direction:column;align-items:flex-start;width:90px", "2>1>display:grid;grid-template-columns:minmax(0,1fr)> & 3>2>picture:120x60;max-width:100%>", "1=0,0,90,45 2=0,0,90,45 3=0,0,90,45"),
     ("id-gstart-mmh-box240", "display:grid;justify-items:start;width:90px", "2>1>display:grid;grid-template-columns:minmax(0,0.5fr)> & 3>2>width:240px;height:10px>", "1=0,0,90,10 2=0,0,90,10 3=0,0,240,10"),
     ("id-abs-mmh-box240", "position:relative;width:90px", "2>1>display:grid;grid-template-columns:minmax(0,0.5fr);position:absolute> & 3>2>width:240px;height:10px>", "1=0,0,90,0 2=0,0,90,10 3=0,0,240,10"),
+    ("ie-fcol-frp50-pic2-plain", "display:flex;flex-direction:column;align-items:flex-start;width:90px", "2>1>display:grid;grid-template-columns:1fr 50%> & 3>2>picture:120x60;max-width:100%> & 4>2>width:30px;height:10px>", "1=0,0,90,22.5 2=0,0,90,22.5 3=0,0,45,22.5 4=45,0,30,10"),
+    ("ie-fcol-frp50-pic2-gap", "display:flex;flex-direction:column;align-items:flex-start;width:90px", "2>1>display:grid;grid-template-columns:1fr 50%;gap:10px> & 3>2>picture:120x60;max-width:100%> & 4>2>width:30px;height:10px>", "1=0,0,90,17.5 2=0,0,90,17.5 3=0,0,35,17.5 4=45,0,30,10"),
+    ("ie-fcol-frp50-pic2-pad", "display:flex;flex-direction:column;align-items:flex-start;width:90px", "2>1>display:grid;grid-template-columns:1fr 50%;padding:5px> & 3>2>picture:120x60;max-width:100%> & 4>2>width:30px;height:10px>", "1=0,0,90,30 2=0,0,90,30 3=5,5,40,20 4=45,5,30,10"),
+    ("ie-gstart-frp50-pic2-plain", "display:grid;justify-items:start;width:90px", "2>1>display:grid;grid-template-columns:1fr 50%> & 3>2>picture:120x60;max-width:100%> & 4>2>width:30px;height:10px>", "1=0,0,90,22.5 2=0,0,90,22.5 3=0,0,45,22.5 4=45,0,30,10"),
+    ("ie-gstart-frp50-pic2-gap", "display:grid;justify-items:start;width:90px", "2>1>display:grid;grid-template-columns:1fr 50%;gap:10px> & 3>2>picture:120x60;max-width:100%> & 4>2>width:30px;height:10px>", "1=0,0,90,17.5 2=0,0,90,17.5 3=0,0,35,17.5 4=45,0,30,10"),
+    ("ie-gstart-frp50-pic2-pad", "display:grid;justify-items:start;width:90px", "2>1>display:grid;grid-template-columns:1fr 50%;padding:5px> & 3>2>picture:120x60;max-width:100%> & 4>2>width:30px;height:10px>", "1=0,0,90,30 2=0,0,90,30 3=5,5,40,20 4=45,5,30,10"),
+    ("ie-abs-frp50-pic2-plain", "position:relative;width:90px", "2>1>display:grid;grid-template-columns:1fr 50%;position:absolute> & 3>2>picture:120x60;max-width:100%> & 4>2>width:30px;height:10px>", "1=0,0,90,0 2=0,0,90,22.5 3=0,0,45,22.5 4=45,0,30,10"),
+    ("ie-abs-frp50-pic2-gap", "position:relative;width:90px", "2>1>display:grid;grid-template-columns:1fr 50%;gap:10px;position:absolute> & 3>2>picture:120x60;max-width:100%> & 4>2>width:30px;height:10px>", "1=0,0,90,0 2=0,0,90,17.5 3=0,0,35,17.5 4=45,0,30,10"),
 ];
 
 #[test]

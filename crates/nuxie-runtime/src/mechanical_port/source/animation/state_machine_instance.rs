@@ -981,9 +981,7 @@ impl StateMachineLayerInstance {
                 .expect("an authored listener action must expose scheduled occurrence");
             if matches {
                 let invocation = ListenerInvocation::none();
-                let performed = action
-                    .with_mut(|action| action.listener_action_perform(machine, &invocation))
-                    .unwrap_or(false);
+                let performed = machine.perform_listener_action_occurrence(action, &invocation);
                 assert!(performed, "an authored listener action must expose perform");
                 performed_any = true;
             }
@@ -4386,13 +4384,38 @@ impl StateMachineInstance {
             .flatten()
             .expect("a listener retains its authored action list");
         for action in actions {
-            action.with_mut(|action| {
+            if action.is_alive() {
                 assert!(
-                    action.listener_action_perform(self, &invocation),
+                    self.perform_listener_action_occurrence(&action, &invocation),
                     "an authored listener action has concrete dispatch"
                 );
-            });
+            }
         }
+    }
+
+    /// Performs one authored listener action. A scripted action's script
+    /// runs with no borrow of the authored action open (it performs on this
+    /// machine's stateful clone); every other action performs under its own
+    /// borrow as before. `false` when the action has no perform.
+    fn perform_listener_action_occurrence(
+        &mut self,
+        action: &CoreHandle,
+        invocation: &ListenerInvocation,
+    ) -> bool {
+        use crate::mechanical_port::source::animation::scripted_listener_action::ScriptedListenerAction;
+        if action
+            .with_downcast::<ScriptedListenerAction, _>(|_| ())
+            .is_some()
+        {
+            // ScriptedListenerAction::perform, from its handle.
+            if let Some(stateful) = self.scripted_object(action) {
+                self.perform_scripted_listener(&stateful, invocation);
+            }
+            return true;
+        }
+        action
+            .with_mut(|action| action.listener_action_perform(self, invocation))
+            .unwrap_or(false)
     }
 
     pub fn semantic_constraints_met(

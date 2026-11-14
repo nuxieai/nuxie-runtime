@@ -441,6 +441,14 @@ pub(super) fn end(flying: &Flying) -> Result<End> {
     })
 }
 
+/// An element's end, its place and resting size, for tests outside
+/// live_move.
+#[cfg(test)]
+pub(crate) fn end_of(element: &CoreHandle) -> Result<(Mat2D, Vec2D)> {
+    let end = end(&Flying::of(element)?)?;
+    Ok((end.place, end.size))
+}
+
 /// One flying copy of an in-place step.
 #[derive(Clone)]
 pub struct InPlaceFlight {
@@ -938,3 +946,7 @@ fn lift_matrix(
     }
     Some((lift * Wide::of(own).inverse()? * Wide::of(row)).narrow())
 }
+
+#[cfg(test)]
+#[path = "in_place_tests.rs"]
+mod tests;

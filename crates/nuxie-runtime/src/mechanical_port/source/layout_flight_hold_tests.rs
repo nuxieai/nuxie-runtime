@@ -1317,6 +1317,90 @@ fn in_place_hold_an_image() {
     });
 }
 
+/// An image flown in place by its own flight key: the key sits on the
+/// image's record, so the element is the image and its layout node is the
+/// participant it hosts. "Picture" starts the row with margins of 30 on its
+/// left and 12 on its top: its end is where layout put it, at (30, 12), at
+/// its natural 100 by 30, though layout moves the image's world and not its
+/// local matrix.
+#[test]
+fn in_place_an_images_end_is_its_participants_place() {
+    checked(|| {
+        let scene = scene(
+            (400.0, 300.0),
+            B {
+                image_participants: vec![(
+                    "Picture",
+                    vec![
+                        F(FLEX_SHRINK, 0.0),
+                        F(MARGIN_LEFT, 30.0),
+                        F(MARGIN_TOP, 12.0),
+                    ],
+                )],
+                ..css(
+                    "Frame",
+                    [
+                        [U(DISPLAY, 1), U(ALIGN_ITEMS, 2), F(COLUMN_GAP, 10.0)].as_slice(),
+                        &width(400.0),
+                        &height(300.0),
+                    ]
+                    .concat(),
+                    vec![sized("N1", 80.0, 100.0)],
+                )
+            },
+        );
+        scene.advance(2);
+        let participant = picture(&scene);
+        assert_eq!(participant_bounds(&participant), [30.0, 12.0, 100.0, 30.0]);
+        let image = participant
+            .with_downcast::<LayoutParticipant, _>(LayoutParticipant::measurement_host_handle)
+            .flatten()
+            .expect("the image");
+        let (place, size) = crate::live_move::in_place_end(&image).expect("the image's end");
+        let place = place.values();
+        assert_eq!((place[4], place[5]), (30.0, 12.0), "where layout put it");
+        assert_eq!((size.x, size.y), (100.0, 30.0), "its participant's size");
+    });
+}
+
+/// The same image with its parent scaled to 0: its place in that parent
+/// can't be read back through it, and its end still reads, so the step
+/// goes on and the lift, which can't be solved through a scale of 0, draws
+/// nothing until it can.
+#[test]
+fn in_place_an_images_end_reads_under_a_parent_scaled_to_0() {
+    checked(|| {
+        let scene = scene(
+            (400.0, 300.0),
+            B {
+                image_participants: vec![("Picture", vec![F(FLEX_SHRINK, 0.0)])],
+                ..css(
+                    "Frame",
+                    [
+                        [U(DISPLAY, 1), U(ALIGN_ITEMS, 2), F(COLUMN_GAP, 10.0)].as_slice(),
+                        &width(400.0),
+                        &height(300.0),
+                    ]
+                    .concat(),
+                    vec![sized("N1", 80.0, 100.0)],
+                )
+            },
+        );
+        scene.advance(2);
+        let frame = scene.named("Frame");
+        for key in [16u16, 17] {
+            assert!(CoreRegistry::set_double_handle(&frame, key.into(), 0.0));
+        }
+        scene.advance(2);
+        let image = picture(&scene)
+            .with_downcast::<LayoutParticipant, _>(LayoutParticipant::measurement_host_handle)
+            .flatten()
+            .expect("the image");
+        let (_, size) = crate::live_move::in_place_end(&image).expect("the image's end reads");
+        assert_eq!((size.x, size.y), (100.0, 30.0));
+    });
+}
+
 /// An image caught mid-retarget by its own interpolation: the hold snaps it
 /// past both animations, it flies at its resting place, and when the hold
 /// ends nothing it snapped past resumes.

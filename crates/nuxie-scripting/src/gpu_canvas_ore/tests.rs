@@ -760,6 +760,8 @@ fn gpu_texture_charges_cover_formats_layers_and_samples() {
     assert_eq!(texture_bytes(&desc(TextureFormat::bc7unorm, 8, 8)), 64);
     assert_eq!(texture_bytes(&desc(TextureFormat::astc6x6, 7, 6)), 32);
     assert_eq!(texture_bytes(&desc(TextureFormat::astc8x8, 8, 8)), 16);
+    // Codex review: Metal widens depth24plusStencil8 to 8 bytes a texel.
+    assert_eq!(texture_bytes(&desc(TextureFormat::depth24plusStencil8, 2, 2)), 32);
     let mut cube = desc(TextureFormat::r8unorm, 4, 4);
     cube.r#type = TextureType::cube;
     assert_eq!(texture_bytes(&cube), 6 * 16, "a cube has six faces");

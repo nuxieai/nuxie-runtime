@@ -1322,6 +1322,27 @@ after the column rerun.
 
 Of the 29,914 layouts, 20 more match and none that matched differ. Of 360
 Chrome 152 layouts measured for this change, 120 differed and 52 differ
-now. A grid with its own `aspect-ratio` is left as it was: there Chrome
-takes the larger of the ratio's width and the items' minimum, and letting
-the rerun run fixed 44 layouts but broke 3, and 29 of the probes.
+now.
+
+### The smallest width of a grid, and a grid with its own ratio
+
+Chrome's min-content width of a grid takes a ratio item's minimum
+contribution, not its min-content contribution: a `height: 100px;
+width: min-content` grid around an `aspect-ratio: 4` item is 400 wide, and
+0 wide once the item has `min-width: 0` or `overflow: hidden`. Under a
+min-content constraint `track_sizing` therefore uses the minimum
+contribution of an item with a ratio in both places the stock code took
+the limited min-content contribution.
+
+A grid with its own `aspect-ratio` and a set height has the width its
+ratio gives, floored by that smallest width (Chrome: `height: 100px;
+aspect-ratio: 2` around the same item is 400 wide in a flex row, and 200
+wide with `min-width: 0` on the item). `columns_follow_rows` covers such a
+grid only when it is measured under a min-content constraint and has a
+single row: with two automatic rows Chrome keeps the ratio's width.
+
+Of the 29,914 layouts, 30 more match and none that matched differ. Of the
+360 layouts above, 52 differed and 24 differ now. Of 108 further Chrome
+152 layouts (min-content, max-content and automatic widths, with and
+without the grid's own ratio), 12 differed and all match now. Of 1,920
+nested ratio grid layouts, 130 differed and 111 differ now.

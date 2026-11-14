@@ -4595,7 +4595,8 @@ impl Artboard {
                 let Some(parent) = parent else {
                     return Some(matrix);
                 };
-                return match parent.with_downcast_mut::<Artboard, _>(Artboard::semantic_root_matrix) {
+                return match parent.with_downcast_mut::<Artboard, _>(Artboard::semantic_root_matrix)
+                {
                     Some(root) => root.map(|root| root * matrix),
                     None => Some(matrix),
                 };
@@ -5110,7 +5111,11 @@ impl Artboard {
         let layer = state.screen.as_mut().map(|pass| pass.layer(current));
         // Our layer: a copy flying in place leaves its own Screen's draw, and
         // the upper Screen's lift entry draws it (css_layout/lift.rs).
-        if state.skip.as_ref().is_some_and(|skip| skip.contains(current)) {
+        if state
+            .skip
+            .as_ref()
+            .is_some_and(|skip| skip.contains(current))
+        {
             return false;
         }
         if let Some(lift) = crate::css_layout::lift::lift_of(current) {
@@ -5191,8 +5196,7 @@ impl Artboard {
         }
         renderer.save();
         renderer.transform(nuxie_render_api::Mat2D(*matrix.values()));
-        let clip_area =
-            clip.and_then(|clip| crate::css_layout::lift::clip_bounds(&element, clip));
+        let clip_area = clip.and_then(|clip| crate::css_layout::lift::clip_bounds(&element, clip));
         let plain = visitor.is_none();
         // The zoom's clip is part of what the copy draws, inside its picture,
         // as a flying unit's is: clipping where the picture composites would

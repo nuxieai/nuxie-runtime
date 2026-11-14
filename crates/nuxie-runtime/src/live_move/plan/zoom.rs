@@ -441,7 +441,11 @@ pub(in crate::live_move) fn hang(end: &End, zoom_box: &ZoomBox) -> (f32, Vec2D, 
 
 /// The box in a version's content space, the clip it draws in; None when
 /// it is not finite.
-pub(in crate::live_move) fn content_clip(end: &End, zoom_box: &ZoomBox, scales: Vec2D) -> Option<FlightClip> {
+pub(in crate::live_move) fn content_clip(
+    end: &End,
+    zoom_box: &ZoomBox,
+    scales: Vec2D,
+) -> Option<FlightClip> {
     let clip = FlightClip {
         width: end.content.x,
         height: zoom_box.size.y / scales.y,

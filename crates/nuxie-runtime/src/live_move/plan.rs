@@ -774,7 +774,10 @@ impl Plan {
             flight
                 .board
                 .with_downcast::<Artboard, _>(|board| {
-                    board.objects().iter().position(|o| o.as_ref() == Some(&flight.record))
+                    board
+                        .objects()
+                        .iter()
+                        .position(|o| o.as_ref() == Some(&flight.record))
                 })
                 .flatten()
                 .unwrap_or(0)
@@ -868,7 +871,10 @@ impl Plan {
                     .find(|flight| flight.element == *copy)
                     .ok_or_else(|| anyhow::anyhow!("a zoomed version left its step"))
             };
-            pair.pose([version(&pair.copies[0])?, version(&pair.copies[1])?], &active)?;
+            pair.pose(
+                [version(&pair.copies[0])?, version(&pair.copies[1])?],
+                &active,
+            )?;
         }
         let mut covers_changed = HashSet::new();
         for flight in &self.lifted {
@@ -1127,7 +1133,9 @@ fn screen_rows(root: &RuntimeArtboardInstanceHandle) -> Result<HashMap<String, S
         for row in result.values_mut().filter(|row| !row.in_place) {
             let objects = row
                 .board
-                .with_downcast::<Artboard, _>(|b| b.objects().iter().flatten().cloned().collect::<Vec<_>>())
+                .with_downcast::<Artboard, _>(|b| {
+                    b.objects().iter().flatten().cloned().collect::<Vec<_>>()
+                })
                 .unwrap_or_default();
             row.elements = super::in_place::keyed_elements(&objects);
         }
@@ -1379,7 +1387,13 @@ impl LiveMoves {
                 .borrow()
                 .lifted
                 .iter()
-                .map(|flight| (flight.element.clone(), flight.row.clone(), flight.record.clone()))
+                .map(|flight| {
+                    (
+                        flight.element.clone(),
+                        flight.row.clone(),
+                        flight.record.clone(),
+                    )
+                })
                 .collect()
         })
     }

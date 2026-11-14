@@ -12,28 +12,29 @@
 //! "Design" names the tests of `design-2`, "night" the earlier design's. The
 //! two number their tests apart, and both sets apply to this picture.
 use super::ore_gm_helper::*;
+use crate::RenderMode;
 use crate::deferred::cmd::{
     command_stream::CommandReader,
-    deferred_replayer::{snapshot_frame, DeferredFrame, DeferredReplayer},
+    deferred_replayer::{DeferredFrame, DeferredReplayer, snapshot_frame},
     deferred_session::{DeferredSession, SegmentTarget},
-    render_commands::{payload_size_of, DrawImagePod, RenderCmd},
+    render_commands::{DrawImagePod, RenderCmd, payload_size_of},
     render_handle::{CANVAS_HANDLE_FLAG, CANVAS_HANDLE_MASK},
 };
-use crate::RenderMode;
 use nuxie_runtime::css_layout::keys::{ABOVE_RANK, DISPLAY, FADE_OUTSIDE, OVERFLOW_X, OVERFLOW_Y};
 use nuxie_runtime::group_opacity_fixture::{
-    artboard_record, bind_page, box_record, row_opacity, screen_row, set_row_opacity, Block,
-    BoxShadow, Host, Item, Overflow, Page, Scene, Unit, KEYED_SCREEN, MARKS,
+    Block, BoxShadow, Host, Item, KEYED_SCREEN, MARKS, Overflow, Page, Scene, Unit,
+    artboard_record, bind_page, box_record, row_opacity, screen_row, set_row_opacity,
 };
 use nuxie_runtime::live_move::{
+    Flight, LiveMoves,
     records::{LiveFlight, LiveSlot},
-    slot_pose, Flight, LiveMoves,
+    slot_pose,
 };
 use nuxie_runtime::live_move_fixture::{
-    css_flight_over_backing_fixture, css_flight_over_cached_backing_fixture,
-    css_flight_under_fading_box_fixture, css_paint_fixture_shaped, flight_animation_fixture,
-    FlightWindow, PaintCase, PaintShape, ZoomCase, ABOVE_BADGE, ABOVE_BAR, FADING_BOX_UNIT, MARK_BACKING, MARK_CHILD, MARK_FLIGHT,
-    MARK_PANEL, SCREEN_B_BACKING,
+    ABOVE_BADGE, ABOVE_BAR, FADING_BOX_UNIT, FlightWindow, MARK_BACKING, MARK_CHILD, MARK_FLIGHT,
+    MARK_PANEL, PaintCase, PaintShape, SCREEN_B_BACKING, ZoomCase, css_flight_over_backing_fixture,
+    css_flight_over_cached_backing_fixture, css_flight_under_fading_box_fixture,
+    css_paint_fixture_shaped, flight_animation_fixture,
 };
 use nuxie_runtime::mechanical_port::source::{
     artboard::{Artboard, RuntimeDrawVisitor},
@@ -1809,10 +1810,7 @@ impl Journey {
     /// follower, which must report no error.
     fn follow(&mut self, progress: f32, what: &str) {
         for controls in &self.controls {
-            let key = if controls
-                .with_downcast::<LiveFlight, _>(|_| ())
-                .is_some()
-            {
+            let key = if controls.with_downcast::<LiveFlight, _>(|_| ()).is_some() {
                 RECORD_PROGRESS
             } else {
                 PROGRESS
@@ -1829,7 +1827,9 @@ impl Journey {
         slot_pose(&self.slot_flight().flight).unwrap().opacity
     }
     fn slot_flight(&self) -> &Flight {
-        self.flight.as_ref().expect("one unit flies alone in a flight slot")
+        self.flight
+            .as_ref()
+            .expect("one unit flies alone in a flight slot")
     }
     /// Draws the frame, and reads it at the center of the flight's pose.
     fn draw(&mut self) -> (Drawn, [f32; 3]) {
@@ -3274,17 +3274,24 @@ fn same_pixels(slots: &Drawn, in_place: &Drawn, what: &str) {
     let (x, y) = (pixel % slots.width, pixel / slots.width);
     // Where the pages differ: how many pixels, and the box around them.
     let off = (0..slots.pixels.len() / 4)
-        .filter(|i| (0..4).any(|c| slots.pixels[i * 4 + c].abs_diff(in_place.pixels[i * 4 + c]) > 1))
+        .filter(|i| {
+            (0..4).any(|c| slots.pixels[i * 4 + c].abs_diff(in_place.pixels[i * 4 + c]) > 1)
+        })
         .map(|i| (i % slots.width, i / slots.width))
         .collect::<Vec<_>>();
-    let around = off.iter().fold((usize::MAX, usize::MAX, 0, 0), |(x0, y0, x1, y1), &(x, y)| {
-        (x0.min(x), y0.min(y), x1.max(x), y1.max(y))
-    });
+    let around = off.iter().fold(
+        (usize::MAX, usize::MAX, 0, 0),
+        |(x0, y0, x1, y1), &(x, y)| (x0.min(x), y0.min(y), x1.max(x), y1.max(y)),
+    );
     let listed = off
         .iter()
         .map(|&(x, y)| {
             let i = (y * slots.width + x) * 4;
-            format!("({x}, {y}) {:?} {:?}", &slots.pixels[i..i + 3], &in_place.pixels[i..i + 3])
+            format!(
+                "({x}, {y}) {:?} {:?}",
+                &slots.pixels[i..i + 3],
+                &in_place.pixels[i..i + 3]
+            )
         })
         .collect::<Vec<_>>()
         .join("; ");

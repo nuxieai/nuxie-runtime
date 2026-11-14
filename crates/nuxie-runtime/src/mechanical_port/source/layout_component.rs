@@ -1914,7 +1914,10 @@ impl LayoutComponent {
     pub(crate) fn flight_rest(&self) -> Option<(Vec2D, Vec2D)> {
         let rest = self.layout_data.flight_hold.as_ref()?.rest;
         Some((
-            Vec2D::new(rest.left() - self.layout.left(), rest.top() - self.layout.top()),
+            Vec2D::new(
+                rest.left() - self.layout.left(),
+                rest.top() - self.layout.top(),
+            ),
             Vec2D::new(rest.width(), rest.height()),
         ))
     }
@@ -1925,7 +1928,10 @@ impl LayoutComponent {
         self.build_own_transform_sized(
             self.rest_values(),
             self.composes_layout_offset(),
-            Vec2D::new(self.pivot_origin_x() * size.x, self.pivot_origin_y() * size.y),
+            Vec2D::new(
+                self.pivot_origin_x() * size.x,
+                self.pivot_origin_y() * size.y,
+            ),
         )
     }
     fn build_own_transform_with(

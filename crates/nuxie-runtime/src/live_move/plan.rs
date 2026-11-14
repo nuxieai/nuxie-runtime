@@ -162,7 +162,7 @@ impl Plan {
             .collect::<HashSet<_>>();
         let lost_copy = self.lifted.iter().any(|flight| !flight.is_whole(&rows));
         if incoming_left || lost_flight || lost_copy {
-            self.settle(&mounted)?;
+            self.settle(&mounted, &rows)?;
         }
         let mut first = HashMap::new();
         let mut flight_keys = HashSet::new();
@@ -231,10 +231,21 @@ impl Plan {
     /// hook (`settle_leaving_rows`) already moved those whose flight slot's
     /// row went. Then every mounted slot the step emptied that is still empty
     /// gets a copy of its own (decision 297), and the step ends.
-    fn settle(&mut self, mounted: &HashSet<CoreHandle>) -> Result<()> {
-        // In place nothing is away: the cancel is the landing's clear.
-        for flight in std::mem::take(&mut self.lifted) {
+    fn settle(&mut self, mounted: &HashSet<CoreHandle>, rows: &HashSet<CoreHandle>) -> Result<()> {
+        // In place nothing is away: the cancel is the landing's clear, and
+        // each Screen still mounted that drew or left out a lift settles
+        // now, as at landing, so its next draw has no lift entry in it.
+        let lifted = std::mem::take(&mut self.lifted);
+        let touched = lifted
+            .iter()
+            .flat_map(|flight| [flight.row.clone(), flight.board.clone()])
+            .filter(|row| rows.contains(row))
+            .collect::<HashSet<_>>();
+        for flight in &lifted {
             flight.clear();
+        }
+        for row in &touched {
+            settle_row(row);
         }
         self.pairs.clear();
         let entries = std::mem::take(&mut self.flights);

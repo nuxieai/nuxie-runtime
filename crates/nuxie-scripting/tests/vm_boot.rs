@@ -467,16 +467,16 @@ fn scripted_listener_prefers_perform_action_and_preserves_pointer_payload() {
         )
         .unwrap();
 
-    assert!(instance.table().get::<bool>("actionCalled").unwrap());
-    assert!(!instance.table().get::<bool>("legacyCalled").unwrap());
-    assert_eq!(instance.table().get::<i64>("pointerId").unwrap(), 9);
+    assert!(instance.table().unwrap().get::<bool>("actionCalled").unwrap());
+    assert!(!instance.table().unwrap().get::<bool>("legacyCalled").unwrap());
+    assert_eq!(instance.table().unwrap().get::<i64>("pointerId").unwrap(), 9);
     assert_eq!(
-        instance.table().get::<String>("pointerType").unwrap(),
+        instance.table().unwrap().get::<String>("pointerType").unwrap(),
         "click"
     );
-    assert_eq!(instance.table().get::<f64>("positionX").unwrap(), 20.0);
-    assert_eq!(instance.table().get::<f64>("previousX").unwrap(), 10.0);
-    assert_eq!(instance.table().get::<f64>("timeStamp").unwrap(), 0.25);
+    assert_eq!(instance.table().unwrap().get::<f64>("positionX").unwrap(), 20.0);
+    assert_eq!(instance.table().unwrap().get::<f64>("previousX").unwrap(), 10.0);
+    assert_eq!(instance.table().unwrap().get::<f64>("timeStamp").unwrap(), 0.25);
 }
 
 #[test]
@@ -553,7 +553,7 @@ fn setting_file_models_refreshes_data_on_an_already_initialized_vm() {
     // file's view-model definitions are registered.
     let mut vm = ScriptVm::new();
     vm.install_rive_globals().expect("globals install");
-    vm.set_view_models(models);
+    vm.set_view_models(models).expect("set view models");
 
     let data: Table = vm.lua().globals().get("Data").expect("Data global");
     let definition: Table = data

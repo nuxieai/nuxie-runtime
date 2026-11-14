@@ -1335,10 +1335,12 @@ impl LuaScriptInstance {
         }
     }
 
-    pub fn table(&self) -> &Table {
+    /// The instance's live `m_self` table; an error once the instance has
+    /// been disposed or was never given one.
+    pub fn table(&self) -> std::result::Result<&Table, ScriptError> {
         self.table
             .as_ref()
-            .expect("LuaScriptInstance has no live C++ m_self table")
+            .ok_or_else(|| ScriptError::new("scripted object has no live Lua table"))
     }
 
     fn live_table(&self) -> std::result::Result<Table, ScriptError> {
@@ -2501,12 +2503,19 @@ impl ScriptVm {
 
     /// Register the file's view-model definitions and keep `Data` current even
     /// when this VM's globals were initialized before the file was attached.
-    pub fn set_view_models(&mut self, view_models: BTreeMap<String, ScriptViewModel>) {
+    ///
+    /// The definitions are kept either way; the error is the VM's when it
+    /// cannot build the refreshed `Data` global (for example, a script has
+    /// filled the VM to its memory ceiling).
+    pub fn set_view_models(
+        &mut self,
+        view_models: BTreeMap<String, ScriptViewModel>,
+    ) -> crate::luau::Result<()> {
         self.view_models = view_models;
         if self.rive_globals_installed.get() {
-            view_model::install_data_global(&self.lua, &self.view_models)
-                .expect("refreshing the initialized Data global should succeed");
+            view_model::install_data_global(&self.lua, &self.view_models)?;
         }
+        Ok(())
     }
 
     pub fn set_initializes_data_global_externally(&self, value: bool) {
@@ -5289,7 +5298,7 @@ mod context_init_tests {
         instance
             .prepare_init_retry_with_factory(&mut factory)
             .expect("recreate script lifetime");
-        assert_eq!(instance.table().get::<i64>("generation").unwrap(), 2);
+        assert_eq!(instance.table().unwrap().get::<i64>("generation").unwrap(), 2);
         lua.gc_collect().expect("collect with live replacement");
         assert!(
             lua.load("return weakTables[2] ~= nil")
@@ -5808,7 +5817,7 @@ mod context_init_tests {
         instance
             .prepare_init_retry_with_factory(&mut factory)
             .expect("recreate script lifetime");
-        assert_eq!(instance.table().get::<i64>("generation").unwrap(), 2);
+        assert_eq!(instance.table().unwrap().get::<i64>("generation").unwrap(), 2);
         assert!(
             instance
                 .call_init_with_factory(&mut host, &mut factory)

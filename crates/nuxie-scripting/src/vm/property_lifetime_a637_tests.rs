@@ -353,7 +353,7 @@ fn init_time_properties_belong_to_scripted_object() {
     let instance = initialized(&vm, models.facade(&screen.instance), true);
     assert_eq!(instance.property_listener_owner.tracked_property_count(), 2);
     for name in ["counter", "enabled"] {
-        let property: AnyUserData = instance.table().get(name).unwrap();
+        let property: AnyUserData = instance.table().unwrap().get(name).unwrap();
         let state = scripted_property_state(&property).unwrap();
         assert!(
             state
@@ -397,10 +397,10 @@ fn scripted_objects_do_not_share_property_wrappers() {
     let vm = ScriptVm::new();
     let first = initialized(&vm, models.facade(&screen.instance), false);
     assert_eq!(first.property_listener_owner.tracked_property_count(), 1);
-    let first_counter: AnyUserData = first.table().get("counter").unwrap();
+    let first_counter: AnyUserData = first.table().unwrap().get("counter").unwrap();
     let second = initialized(&vm, models.facade(&screen.instance), false);
     assert_eq!(second.property_listener_owner.tracked_property_count(), 1);
-    let second_counter: AnyUserData = second.table().get("counter").unwrap();
+    let second_counter: AnyUserData = second.table().unwrap().get("counter").unwrap();
     assert_ne!(first_counter.to_pointer(), second_counter.to_pointer());
     let first_property = first_counter.borrow::<ScriptedPropertyNumber>().unwrap();
     let second_property = second_counter.borrow::<ScriptedPropertyNumber>().unwrap();

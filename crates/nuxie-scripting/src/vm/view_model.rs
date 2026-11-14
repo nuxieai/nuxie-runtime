@@ -3524,7 +3524,7 @@ mod tests {
         );
 
         let mut vm = ScriptVm::new();
-        vm.set_view_models(models);
+        vm.set_view_models(models).expect("set view models");
         vm.install_rive_globals().expect("Data initialization");
         let data: Table = vm.lua().globals().get("Data").expect("Data table");
         let definition: Table = data.get("Dup").expect("Data.Dup table");
@@ -3543,13 +3543,13 @@ mod tests {
         let later_file = duplicate_definitions_file([b"Dup", b"Dup"]);
         let first = first_file.view_model(0).unwrap();
         let mut vm = ScriptVm::new();
-        vm.set_view_models(nuxie_runtime::script_view_models(&first_file));
+        vm.set_view_models(nuxie_runtime::script_view_models(&first_file)).expect("set view models");
         vm.install_rive_globals().unwrap();
         let original: Table = vm.lua().globals().get("Data").unwrap();
         // Reinitialization must restore the registry table even if the global
         // was replaced, and must not replace its already-installed definition.
         vm.lua().globals().set("Data", Value::Nil).unwrap();
-        vm.set_view_models(nuxie_runtime::script_view_models(&later_file));
+        vm.set_view_models(nuxie_runtime::script_view_models(&later_file)).expect("set view models");
         let data: Table = vm.lua().globals().get("Data").unwrap();
         assert_eq!(data.to_pointer(), original.to_pointer());
         let definition: Table = data.get("Dup").unwrap();
@@ -3586,7 +3586,7 @@ mod tests {
         for file in [&first_file, &later_file, &replacement_file] {
             let models = nuxie_runtime::script_view_models(file);
             if use_set_view_models {
-                vm.set_view_models(models);
+                vm.set_view_models(models).expect("set view models");
             } else {
                 nuxie_runtime::ScriptingVm::initialize_data_global(&vm, models)
                     .expect("late native Data initialization");
@@ -5426,7 +5426,7 @@ mod tests {
             let bytes = std::fs::read(&fixture)
                 .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
             let file = native_test_file(&bytes);
-            vm.set_view_models(nuxie_runtime::script_view_models(&file));
+            vm.set_view_models(nuxie_runtime::script_view_models(&file)).expect("set view models");
 
             let data: Table = vm.lua().globals().get("Data").expect("Data table");
             let model: Table = data.get("ProbeChipVM").expect("ProbeChipVM table");

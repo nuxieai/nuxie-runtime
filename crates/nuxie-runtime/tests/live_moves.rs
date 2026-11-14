@@ -9343,7 +9343,10 @@ mod paint_order {
                     FrameBoundScale,
                     FrameTurn,
                     FrameOffset,
-                    Sizes { a: (80.0, 60.0), b: (40.0, 120.0) },
+                    Sizes {
+                        a: (80.0, 60.0),
+                        b: (40.0, 120.0),
+                    },
                     UnequalScale,
                     RootKeyed,
                     OffCenterCard,
@@ -9434,7 +9437,8 @@ mod paint_order {
                 points: outline(&draw.points),
                 opacity: draw.opacity(),
                 clip: draw.clips.iter().fold(None, |open: Option<Rect>, clip| {
-                    let points: Vec<Vec2D> = clip.points.iter().map(|p| Vec2D::new(p.x, p.y)).collect();
+                    let points: Vec<Vec2D> =
+                        clip.points.iter().map(|p| Vec2D::new(p.x, p.y)).collect();
                     let rect = drawn_rect(&points);
                     Some(match open {
                         None => rect,
@@ -9481,7 +9485,10 @@ mod paint_order {
             let same_clip = match (a.clip, b.clip) {
                 (None, None) => true,
                 (Some(p), Some(q)) => {
-                    near(p.0.x, q.0.x) && near(p.0.y, q.0.y) && near(p.1.x, q.1.x) && near(p.1.y, q.1.y)
+                    near(p.0.x, q.0.x)
+                        && near(p.0.y, q.0.y)
+                        && near(p.1.x, q.1.x)
+                        && near(p.1.y, q.1.y)
                 }
                 _ => false,
             };
@@ -9515,7 +9522,12 @@ mod paint_order {
                 failed.push(format!("{case:?}: {why}"));
             }
         }
-        assert!(failed.is_empty(), "{} cases differ:\n{}", failed.len(), failed.join("\n"));
+        assert!(
+            failed.is_empty(),
+            "{} cases differ:\n{}",
+            failed.len(),
+            failed.join("\n")
+        );
     }
 
     fn equivalent(case: PaintCase, frames: &[f32]) {
@@ -9546,7 +9558,10 @@ mod paint_order {
             if near_zero {
                 for (card, copies) in inside {
                     if !has(&in_place, card) {
-                        assert!(!has(&slots, card), "{case:?} {label}: only a card at 0 is skipped");
+                        assert!(
+                            !has(&slots, card),
+                            "{case:?} {label}: only a card at 0 is skipped"
+                        );
                         slots.retain(|d| !d.rgb.is_some_and(|color| copies.contains(&color)));
                     }
                 }
@@ -9573,7 +9588,10 @@ mod paint_order {
         }
         // Home: each page draws what the same page draws that never
         // stepped, after the same time (its timelines keep playing).
-        for (s, shape) in [(&slots, PaintShape::SlotCopies), (&in_place, PaintShape::InPlace)] {
+        for (s, shape) in [
+            (&slots, PaintShape::SlotCopies),
+            (&in_place, PaintShape::InPlace),
+        ] {
             let mut still = PaintScene::shaped(case, shape);
             still.advance(2.0);
             same_draws(
@@ -9624,8 +9642,12 @@ mod paint_order {
                 both(&slots, &in_place, &format!("after {step} again"));
                 continue;
             }
-            let removed = pages[0].list_item_by_property_name_path("screens", row).unwrap();
-            let removed_in_place = pages[1].list_item_by_property_name_path("screens", row).unwrap();
+            let removed = pages[0]
+                .list_item_by_property_name_path("screens", row)
+                .unwrap();
+            let removed_in_place = pages[1]
+                .list_item_by_property_name_path("screens", row)
+                .unwrap();
             for (s, page) in [(&mut slots, &pages[0]), (&mut in_place, &pages[1])] {
                 assert!(page.remove_list_item_by_property_name_path("screens", row));
                 s.advance(0.0);
@@ -9635,7 +9657,11 @@ mod paint_order {
                     ["A", "B"][row]
                 );
             }
-            both(&slots, &in_place, &format!("{step} cancelled, {} removed", ["A", "B"][row]));
+            both(
+                &slots,
+                &in_place,
+                &format!("{step} cancelled, {} removed", ["A", "B"][row]),
+            );
             for (s, page, item) in [
                 (&mut slots, &pages[0], &removed),
                 (&mut in_place, &pages[1], &removed_in_place),
@@ -9737,7 +9763,9 @@ mod paint_order {
         let mut s = PaintScene::shaped(PaintCase::EndOpacities, PaintShape::InPlace);
         let w = s.layout("B", "W");
         let visible = |s: &PaintScene, name: &str| {
-            color_draws(s, name).iter().any(|(_, opacity)| *opacity > 0.0)
+            color_draws(s, name)
+                .iter()
+                .any(|(_, opacity)| *opacity > 0.0)
         };
         s.begin("B", "go");
         s.to(0.4);
@@ -9745,7 +9773,10 @@ mod paint_order {
         set(&w, 16, 0.0);
         set(&w, 17, 0.0);
         s.to(0.5);
-        assert!(!visible(&s, "Eb"), "under a box at 0, Eb's copy draws nothing");
+        assert!(
+            !visible(&s, "Eb"),
+            "under a box at 0, Eb's copy draws nothing"
+        );
         assert!(visible(&s, "Ea"), "Ea's copy flies on");
         set(&w, 16, 1.0);
         set(&w, 17, 1.0);
@@ -9777,8 +9808,15 @@ mod paint_order {
             for s in [&mut awake, &mut asleep] {
                 s.to(p);
             }
-            assert!(!color_draws(&awake, "a").is_empty(), "a's copy draws at {p} with A awake");
-            assert_eq!(color_draws(&asleep, "a"), [], "nothing of a's copy at {p} with A asleep");
+            assert!(
+                !color_draws(&awake, "a").is_empty(),
+                "a's copy draws at {p} with A awake"
+            );
+            assert_eq!(
+                color_draws(&asleep, "a"),
+                [],
+                "nothing of a's copy at {p} with A asleep"
+            );
         }
         set_row_collapsed(&list, 0, false).unwrap();
         for p in [0.8, 0.9] {
@@ -9871,7 +9909,11 @@ mod paint_order {
             s.begin(to, step);
             for p in PROGRESS {
                 s.to(p);
-                assert_eq!(boxes(&s, &neighbors), rest, "{step} at {p}: the neighbors rest");
+                assert_eq!(
+                    boxes(&s, &neighbors),
+                    rest,
+                    "{step} at {p}: the neighbors rest"
+                );
                 let want = if p == 0.0 {
                     from_lines
                 } else if p == 0.5 {
@@ -9882,7 +9924,11 @@ mod paint_order {
                     continue;
                 };
                 for row in ["A", "B"] {
-                    same_lines(&format!("{step} at {p}, {row}'s copy"), &text_lines(&s, row), want);
+                    same_lines(
+                        &format!("{step} at {p}, {row}'s copy"),
+                        &text_lines(&s, row),
+                        want,
+                    );
                 }
             }
             s.end(to, step);
@@ -9910,7 +9956,11 @@ mod paint_order {
         let mut fresh = PaintScene::shaped(PaintCase::StyleSwitch, PaintShape::InPlace);
         fresh.advance(2.0);
         let under = boxes(&fresh, &two);
-        assert_eq!(under[0], [0.0, 30.0, 40.0, 30.0], "a column after its switch");
+        assert_eq!(
+            under[0],
+            [0.0, 30.0, 40.0, 30.0],
+            "a column after its switch"
+        );
         s.begin("B", "go");
         for p in [0.0, 0.25, 0.45, 0.5, 0.75, 1.0] {
             s.to(p);
@@ -9955,7 +10005,11 @@ mod paint_order {
         );
         let solves = Artboard::layout_pass_count();
         s.moves.after_advance(&s.root).unwrap();
-        assert_eq!(Artboard::layout_pass_count(), solves, "the same frame again solves nothing");
+        assert_eq!(
+            Artboard::layout_pass_count(),
+            solves,
+            "the same frame again solves nothing"
+        );
     }
 
     /// Inventory row 14: a write to an end mid-step shows the next frame.
@@ -9979,7 +10033,11 @@ mod paint_order {
         assert_eq!(left(&s), [40.0, 40.0], "both copies from 40 half way");
         set(&record_of(&s.layout("B", "N1")), 61022, 60.0);
         s.to(0.5);
-        assert_eq!(left(&s), [50.0, 50.0], "the next frame, half way to the moved end");
+        assert_eq!(
+            left(&s),
+            [50.0, 50.0],
+            "the next frame, half way to the moved end"
+        );
         s.to(1.0);
         assert_eq!(left(&s), [60.0, 60.0], "at the moved end");
         s.end("B", "go");
@@ -10154,9 +10212,7 @@ mod drawn {
         }
         fn layout(&self, row: &str, name: &str) -> CoreHandle {
             self.row(row)
-                .with_artboard(|r| {
-                    r.find_handle::<source::layout_component::LayoutComponent>(name)
-                })
+                .with_artboard(|r| r.find_handle::<source::layout_component::LayoutComponent>(name))
                 .unwrap_or_else(|| panic!("no box {name} on {row}"))
         }
         /// The frame `name` rests as on `row`: its slot's unit, or in place
@@ -10238,7 +10294,11 @@ mod drawn {
             self.moves.drawn_now(&self.root, content).unwrap()
         }
         /// Sets the clip a zoomed pair sets on `frame`, a flight's frame.
-        fn set_flight_clip(&mut self, frame: &CoreHandle, clip: Option<source::artboard::FlightClip>) {
+        fn set_flight_clip(
+            &mut self,
+            frame: &CoreHandle,
+            clip: Option<source::artboard::FlightClip>,
+        ) {
             match SHAPE.get() {
                 PaintShape::InPlace => self.moves.set_lift_clip(&self.root, frame, clip),
                 _ => {
@@ -10812,7 +10872,9 @@ mod drawn {
                 .flatten()?,
         };
         let leaves = board
-            .with_downcast::<nuxie_runtime::Artboard, _>(|b| b.find_all_handles::<source::nested_artboard_leaf::NestedArtboardLeaf>())
+            .with_downcast::<nuxie_runtime::Artboard, _>(|b| {
+                b.find_all_handles::<source::nested_artboard_leaf::NestedArtboardLeaf>()
+            })
             .unwrap_or_default();
         leaves.into_iter().find(|leaf| {
             let mut node = Some(leaf.clone());
@@ -13071,7 +13133,11 @@ fn in_place_a_file_imports_and_draws_as_without_keys() {
     moves.step_begin(&page.root, "B", Some("t1")).unwrap();
     assert!(moves.flights(&page.root).is_empty(), "no slot flight");
     assert_eq!(moves.flight_controls(&page.root).len(), 2, "two copies fly");
-    assert_eq!(nuxie_runtime::in_place_holds_begun(), holds + 2, "both are held");
+    assert_eq!(
+        nuxie_runtime::in_place_holds_begun(),
+        holds + 2,
+        "both are held"
+    );
     page.machine.advance_and_apply(0.1);
     assert!(moves.after_advance(&page.root).unwrap());
     moves.step_end(&page.root, "B", Some("t1")).unwrap();
@@ -13247,8 +13313,16 @@ fn in_place_a_refused_step_marks_nothing() {
     let error = moves.step_begin(&page.root, "B", Some("t1")).unwrap_err();
     assert!(error.to_string().contains("already active"), "{error}");
     page.frame(&mut moves, 0.0);
-    assert_eq!(moves.flight_controls(&page.root), controls, "the step runs on");
-    assert_eq!(nuxie_runtime::in_place_holds_begun(), holds, "nothing held again");
+    assert_eq!(
+        moves.flight_controls(&page.root),
+        controls,
+        "the step runs on"
+    );
+    assert_eq!(
+        nuxie_runtime::in_place_holds_begun(),
+        holds,
+        "nothing held again"
+    );
     assert_eq!(page.draw(), flying, "the same frame");
     moves.step_end(&page.root, "B", Some("t1")).unwrap();
     page.frame(&mut moves, 0.0);
@@ -13311,7 +13385,11 @@ fn in_place_a_step_builds_no_bookkeeping_and_keeps_every_object() {
     let weak = page.root.downgrade();
     drop((moves, page));
     assert!(weak.upgrade().is_none());
-    assert_eq!(hosted_scene::bookkeeping_counts(), empty, "dropped mid-step");
+    assert_eq!(
+        hosted_scene::bookkeeping_counts(),
+        empty,
+        "dropped mid-step"
+    );
 }
 
 /// `pending_insert_is_applied_before_takeoff`, in place. B is removed, a
@@ -13346,8 +13424,19 @@ fn in_place_a_pending_insert_is_applied_before_takeoff() {
     // No advance or draw between the insert and take-off.
     let holds = nuxie_runtime::in_place_holds_begun();
     moves.step_begin(&page.root, "B", Some("t1")).unwrap();
-    assert!(screens(&page.root).unwrap().contains_key("B"), "the insert is applied");
-    assert_eq!(moves.flight_controls(&page.root).len(), 2, "both copies fly");
-    assert_eq!(nuxie_runtime::in_place_holds_begun(), holds + 2, "both are held");
+    assert!(
+        screens(&page.root).unwrap().contains_key("B"),
+        "the insert is applied"
+    );
+    assert_eq!(
+        moves.flight_controls(&page.root).len(),
+        2,
+        "both copies fly"
+    );
+    assert_eq!(
+        nuxie_runtime::in_place_holds_begun(),
+        holds + 2,
+        "both are held"
+    );
     assert_eq!(page.draw(), want, "the first draw after take-off");
 }

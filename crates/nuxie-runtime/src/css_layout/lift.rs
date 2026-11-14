@@ -278,7 +278,10 @@ pub(crate) fn drawing_lift(
             std::mem::replace(&mut artboard.draw_visitor, visitor)
         })
         .flatten();
-    struct Restore<'a>(&'a CoreHandle, Option<crate::source::artboard::RuntimeDrawVisitor>);
+    struct Restore<'a>(
+        &'a CoreHandle,
+        Option<crate::source::artboard::RuntimeDrawVisitor>,
+    );
     impl Drop for Restore<'_> {
         fn drop(&mut self) {
             let previous = self.1.take();
@@ -321,12 +324,11 @@ pub(crate) fn apply_clip(
     row: &CoreHandle,
     clip: FlightClip,
 ) {
-    use crate::source::{
-        math::raw_path::RawPath, shapes::paint::shape_paint_path::ShapePaintPath,
-    };
+    use crate::source::{math::raw_path::RawPath, shapes::paint::shape_paint_path::ShapePaintPath};
     let (Some(world), Some(factory)) = (
         element_world(element),
-        row.with_downcast::<Artboard, _>(Artboard::factory).flatten(),
+        row.with_downcast::<Artboard, _>(Artboard::factory)
+            .flatten(),
     ) else {
         return;
     };

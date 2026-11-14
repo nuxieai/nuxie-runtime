@@ -4,8 +4,8 @@
 pub(crate) mod flight_hold;
 pub(crate) mod group_opacity;
 pub(crate) mod hosted_frame;
-pub(crate) mod lift;
 pub mod keys;
+pub(crate) mod lift;
 pub mod paint;
 pub(crate) mod paint_order;
 pub(crate) mod pointer;

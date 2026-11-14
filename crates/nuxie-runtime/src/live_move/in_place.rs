@@ -18,12 +18,12 @@ use super::{
 };
 use crate::{
     Artboard, CoreHandle,
+    css_layout::paint::Radii,
     css_layout::{
         flight_hold,
         lift::{Lift, OpacityRoot, set_opacity_root},
         record::LayoutCssStyle,
     },
-    css_layout::paint::Radii,
     source::{
         artboard::FlightClip,
         component_dirt::ComponentDirt,
@@ -92,8 +92,9 @@ fn layout_node(element: &CoreHandle) -> CoreHandle {
 /// Where `element` rests in its layout parent, its size from its hold while
 /// held. Zero when it has no layout node.
 fn resting_size(element: &CoreHandle) -> Vec2D {
-    flight_hold::resting_box(&layout_node(element))
-        .map_or_else(Vec2D::default, |rest| Vec2D::new(rest.width(), rest.height()))
+    flight_hold::resting_box(&layout_node(element)).map_or_else(Vec2D::default, |rest| {
+        Vec2D::new(rest.width(), rest.height())
+    })
 }
 
 /// The size `element` draws at now: a box's laid-out size, which layout
@@ -151,12 +152,10 @@ fn layout_place(element: &CoreHandle) -> Result<(CoreHandle, Vec2D)> {
         Some(translation) => translation,
         None => element
             .with(|object| {
-                object
-                    .as_transform_component()
-                    .map(|transform| {
-                        let local = transform.transform();
-                        Vec2D::new(local[4], local[5])
-                    })
+                object.as_transform_component().map(|transform| {
+                    let local = transform.transform();
+                    Vec2D::new(local[4], local[5])
+                })
             })
             .flatten()
             .ok_or_else(|| anyhow::anyhow!("a flying element has no transform"))?,
@@ -264,16 +263,15 @@ impl InPlaceFlight {
 
     /// Both ends, read live for an awake Screen and kept for one asleep.
     fn ends(&self, active: Option<&HashSet<CoreHandle>>) -> Result<(End, End)> {
-        let read = |element: &CoreHandle, row: &CoreHandle, kept: &Cell<Option<End>>| {
-            match kept.get() {
+        let read =
+            |element: &CoreHandle, row: &CoreHandle, kept: &Cell<Option<End>>| match kept.get() {
                 Some(end) if active.is_some_and(|active| !active.contains(row)) => Ok(end),
                 _ => {
                     let end = end(element)?;
                     kept.set(Some(end));
                     Ok::<_, anyhow::Error>(end)
                 }
-            }
-        };
+            };
         Ok((
             read(&self.from, &self.from_row, &self.from_end)?,
             read(&self.to, &self.to_row, &self.to_end)?,
@@ -580,7 +578,11 @@ impl InPlacePair {
     /// from the arriving copy's place now over its place at rest, without
     /// its own transform, as a slot holds its unit. While its Screen sleeps,
     /// the last r and t stay.
-    fn follow(&self, arriving: &InPlaceFlight, active: &HashSet<CoreHandle>) -> Result<(f32, Vec2D)> {
+    fn follow(
+        &self,
+        arriving: &InPlaceFlight,
+        active: &HashSet<CoreHandle>,
+    ) -> Result<(f32, Vec2D)> {
         let Some((home, rest_inverse, center, point)) = &self.tracker else {
             return Ok((1.0, Vec2D::default()));
         };
@@ -604,11 +606,7 @@ fn frame_size(frame: &FlightFrame, a: Vec2D, b: Vec2D) -> Vec2D {
 
 /// Writes the corners and shadow `element`'s box draws in place of its own;
 /// None for its own. A change rebuilds its paths, as on a unit's root.
-fn set_flight_paint(
-    element: &CoreHandle,
-    corners: Option<[f32; 4]>,
-    shadow: Option<FlightShadow>,
-) {
+fn set_flight_paint(element: &CoreHandle, corners: Option<[f32; 4]>, shadow: Option<FlightShadow>) {
     let node = box_of(element);
     if node.with(|object| object.as_artboard().is_some()) == Some(true) {
         node.with_downcast_mut::<Artboard, _>(|artboard| {
@@ -668,6 +666,7 @@ pub(super) fn is_inside(inner: &CoreHandle, outer: &CoreHandle) -> bool {
 /// place now. It cancels `own` by its inverse, so it is composed in f64
 /// (`wide.rs`). None when `upper` or `own` has no inverse.
 fn lift_matrix(upper: Mat2D, pose: Mat2D, own: Mat2D, row: Mat2D) -> Option<Mat2D> {
-    let lift = Wide::of(upper).inverse()? * Wide::of(pose) * Wide::of(own).inverse()? * Wide::of(row);
+    let lift =
+        Wide::of(upper).inverse()? * Wide::of(pose) * Wide::of(own).inverse()? * Wide::of(row);
     Some(lift.narrow())
 }

@@ -49,7 +49,9 @@ pub fn drawn_entry_owner(
 ) -> source::core::CoreHandle {
     match entry {
         source::drawable::RuntimeDrawableOccurrence::Authored(handle) => handle.clone(),
-        source::drawable::RuntimeDrawableOccurrence::RuntimeProxy(proxy) => proxy.borrow().owner_handle(),
+        source::drawable::RuntimeDrawableOccurrence::RuntimeProxy(proxy) => {
+            proxy.borrow().owner_handle()
+        }
     }
 }
 pub mod page_player;

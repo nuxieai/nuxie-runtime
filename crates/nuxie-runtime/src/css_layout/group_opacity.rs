@@ -5,11 +5,11 @@
 //! and its descendants composite as one, so the element draws whole into a
 //! canvas and the canvas goes down at the fade, once. Rive-made content keeps
 //! upstream's per-paint fade.
+use super::lift::{Lift, lift_of};
 use super::{
     keys::{ABOVE_RANK, FADE_OUTSIDE},
     record::{LayoutCssStyle, find_in},
 };
-use super::lift::{Lift, lift_of};
 use crate::live_move::records::LiveSlot;
 use crate::source::{
     artboard::Artboard,

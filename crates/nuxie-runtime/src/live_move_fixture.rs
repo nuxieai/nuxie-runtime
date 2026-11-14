@@ -526,7 +526,13 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
     }
     // A box at `id`: the component, its style, its record, a Fill and its
     // color (`id` to `id + 4`).
-    let boxed_in = |b: &mut Vec<u8>, parent: u64, id: u64, name: &str, size: (f32, f32), key: u64, color: u32| {
+    let boxed_in = |b: &mut Vec<u8>,
+                    parent: u64,
+                    id: u64,
+                    name: &str,
+                    size: (f32, f32),
+                    key: u64,
+                    color: u32| {
         obj(
             b,
             "LayoutComponent",
@@ -5423,11 +5429,19 @@ fn unit_text(b: &mut Vec<u8>, id: u64, parent: u64, words: &str, color: u32) {
         ],
     ); // id + 1
     obj(b, "Fill", &[("parentId", U(id + 1))]); // id + 2
-    obj(b, "SolidColor", &[("parentId", U(id + 2)), ("colorValue", Color(color))]); // id + 3
+    obj(
+        b,
+        "SolidColor",
+        &[("parentId", U(id + 2)), ("colorValue", Color(color))],
+    ); // id + 3
     obj(
         b,
         "TextValueRun",
-        &[("parentId", U(id)), ("styleId", U(id + 1)), ("text", S(words))],
+        &[
+            ("parentId", U(id)),
+            ("styleId", U(id + 1)),
+            ("text", S(words)),
+        ],
     ); // id + 4
 }
 fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
@@ -5501,7 +5515,13 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
         ],
     ); // 4, or 8
     if let Some(words) = u.text {
-        unit_text(b, fill + 2, 0, words, paint_color(&format!("{} text", u.name)));
+        unit_text(
+            b,
+            fill + 2,
+            0,
+            words,
+            paint_color(&format!("{} text", u.name)),
+        );
     }
     if u.child {
         assert!(
@@ -5615,9 +5635,10 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
 
 /// `UnitKey::Flow`'s row: a flex row of two boxes 40 by 30.
 fn flow_row() -> PaintEl {
-    bx("row", vec![("display", V::U(1))])
-        .paintless()
-        .kids(vec![bx("one", css_size(40.0, 30.0)), bx("two", css_size(40.0, 30.0))])
+    bx("row", vec![("display", V::U(1))]).paintless().kids(vec![
+        bx("one", css_size(40.0, 30.0)),
+        bx("two", css_size(40.0, 30.0)),
+    ])
 }
 /// `UnitKey::Flow`'s key: the row's direction, a row to frame 30, then a
 /// column.
@@ -5770,17 +5791,37 @@ impl PaintSpec {
         if moved.is_empty() {
             return self;
         }
-        fn twin(els: &mut Vec<PaintEl>, moved: &std::collections::HashSet<u64>, names: &mut Vec<String>) {
+        fn twin(
+            els: &mut Vec<PaintEl>,
+            moved: &std::collections::HashSet<u64>,
+            names: &mut Vec<String>,
+        ) {
             let mut out = Vec::new();
             for mut el in std::mem::take(els) {
                 twin(&mut el.kids, moved, names);
                 let arriving = match el.kind {
-                    PaintKind::Flight { unit, key, flight, mode } if moved.contains(&flight) => {
-                        Some(PaintKind::Flight { unit, key, flight: flight + COPY_FLIGHT, mode })
-                    }
-                    PaintKind::Native { unit, key, flight, mode } if moved.contains(&flight) => {
-                        Some(PaintKind::Native { unit, key, flight: flight + COPY_FLIGHT, mode })
-                    }
+                    PaintKind::Flight {
+                        unit,
+                        key,
+                        flight,
+                        mode,
+                    } if moved.contains(&flight) => Some(PaintKind::Flight {
+                        unit,
+                        key,
+                        flight: flight + COPY_FLIGHT,
+                        mode,
+                    }),
+                    PaintKind::Native {
+                        unit,
+                        key,
+                        flight,
+                        mode,
+                    } if moved.contains(&flight) => Some(PaintKind::Native {
+                        unit,
+                        key,
+                        flight: flight + COPY_FLIGHT,
+                        mode,
+                    }),
                     _ => None,
                 };
                 let twin = arriving.map(|kind| {
@@ -5814,7 +5855,11 @@ impl PaintSpec {
         }
         for name in &names {
             let live = format!("{name}.live");
-            if !self.tracks.iter().any(|t| t.target == live && t.key == 62014) {
+            if !self
+                .tracks
+                .iter()
+                .any(|t| t.target == live && t.key == 62014)
+            {
                 self.tracks.push(hold(&live, 62014, &[(0, 0.0)]));
             }
         }
@@ -6026,7 +6071,13 @@ impl PaintArt<'_> {
         );
         if let Some(words) = u.text {
             let text = self.next;
-            unit_text(self.b, text, id, words, paint_color(&format!("{} text", u.name)));
+            unit_text(
+                self.b,
+                text,
+                id,
+                words,
+                paint_color(&format!("{} text", u.name)),
+            );
             self.next += 5;
         }
         if u.child {
@@ -6146,7 +6197,9 @@ impl PaintArt<'_> {
                     self.emit(kid, id);
                 }
             }
-            PaintKind::Slot { unit, key } if self.in_place => self.inline_unit(el, parent, unit, key),
+            PaintKind::Slot { unit, key } if self.in_place => {
+                self.inline_unit(el, parent, unit, key)
+            }
             PaintKind::Flight { flight, mode, .. } if self.in_place => {
                 self.add(
                     "LiveFlight",
@@ -7202,7 +7255,10 @@ pub enum PaintShape {
 /// The page for one paint case in `shape`, or why the case has no such
 /// page: a plain or native host, a list row and a bitmap-cached unit are
 /// hosted artboards, which have no in-place shape.
-pub fn css_paint_fixture_shaped(case: PaintCase, shape: PaintShape) -> Result<Vec<u8>, &'static str> {
+pub fn css_paint_fixture_shaped(
+    case: PaintCase,
+    shape: PaintShape,
+) -> Result<Vec<u8>, &'static str> {
     let spec = paint_spec(case);
     match shape {
         PaintShape::Slots => Ok(paint_file(&spec)),
@@ -8045,7 +8101,8 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                     }
                 }
                 Some(keyed) => {
-                    for ((_, property), (from, to)) in SHADOW_CONTROLS.into_iter().zip(SHADOW_KEYS) {
+                    for ((_, property), (from, to)) in SHADOW_CONTROLS.into_iter().zip(SHADOW_KEYS)
+                    {
                         tracks.push(track("a go.live", property, &[(0, from), (60, to)]));
                     }
                     tracks.push(hold("b go.live", SHADOW_CONTROLS[0].1, &[(0, 0.0)]));
@@ -8101,10 +8158,7 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
         PaintCase::StyleSwitch => PaintSpec::new(
             vec![unit("E", 160.0, 100.0).keyed(UnitKey::Flow)],
             vec![at_rest("E", 1, 36.0, 20.0, 160.0, 100.0)],
-            vec![
-                at_rest("E", 1, 120.0, 60.0, 160.0, 100.0),
-                fly("E", 1, 11),
-            ],
+            vec![at_rest("E", 1, 120.0, 60.0, 160.0, 100.0), fly("E", 1, 11)],
         )
         .one_version(&[(1, 11)]),
         // A static plain host at (50, 40) holding E's CSS frame, turned at

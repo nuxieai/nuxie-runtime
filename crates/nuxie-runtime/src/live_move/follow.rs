@@ -133,7 +133,9 @@ fn set_flight_box(flight: &CoreHandle, instance: &RuntimeArtboardInstanceHandle,
         // `size` is the unit's border box, what the ends measure; its record
         // holds the CSS size, under the root's own box-sizing.
         let css = instance.with_artboard(|unit| {
-            unit.base.base.css_size_for_border_box(Vec2D::new(width, height))
+            unit.base
+                .base
+                .css_size_for_border_box(Vec2D::new(width, height))
         });
         for (kind, value) in [(WIDTH_KIND, css.x), (HEIGHT_KIND, css.y)] {
             // A length-percentage: the length, with no percentage part.
@@ -911,7 +913,9 @@ pub(super) fn lift_cover(
     let list = board
         .with_downcast::<Artboard, _>(|board| board.drawables().to_vec())
         .unwrap_or_default();
-    let at = list.iter().position(|item| draws_for(item, anchor, board))?;
+    let at = list
+        .iter()
+        .position(|item| draws_for(item, anchor, board))?;
     let mut rest = Resting::new(board);
     let anchor_box = rest.drawable_box(&RuntimeDrawableOccurrence::Authored(anchor.clone()));
     list[..at]

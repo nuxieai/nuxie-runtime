@@ -145,10 +145,20 @@ impl Table {
 
     /// `table[key]`, metamethods honored.
     pub fn get<V: FromLua>(&self, key: impl IntoLua) -> Result<V> {
+        self.get_with(None, key)
+    }
+
+    /// [`Table::get`] passing `loan` on to an `__index` it runs (a host
+    /// callback forwarding the loan it received).
+    pub fn get_with<V: FromLua>(&self, loan: super::Loan<'_>, key: impl IntoLua) -> Result<V> {
         let key = key.into_lua(&self.lua)?;
         let value = self.with(|vm, t| {
             let k = value::to_vm(vm, &key)?;
-            let v: vm::Value = t.get(vm, k).map_err(Error::from_vm)?;
+            let v: vm::Value = match loan {
+                Some(loan) => t.get_lent(vm, loan, k),
+                None => t.get(vm, k),
+            }
+            .map_err(Error::from_vm)?;
             self.lift(vm, v)
         })?;
         V::from_lua(value, &self.lua)

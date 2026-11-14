@@ -15,9 +15,9 @@ impl RendererBindings {
         let bindings = self.clone();
         table.set(
             "linear",
-            lua.create_function(
-                move |lua, (from, to, stops): (LuaVector, LuaVector, Table)| {
-                    let (colors, positions) = gradient_stops(stops)?;
+            lua.create_function_lent(
+                move |lua, loan, (from, to, stops): (LuaVector, LuaVector, Table)| {
+                    let (colors, positions) = gradient_stops(loan, stops)?;
                     let shader = bindings.with_factory(|factory| {
                         Ok(factory.make_linear_gradient(
                             from.x(),
@@ -36,9 +36,9 @@ impl RendererBindings {
         let bindings = self.clone();
         table.set(
             "radial",
-            lua.create_function(
-                move |lua, (center, radius, stops): (LuaVector, f32, Table)| {
-                    let (colors, positions) = gradient_stops(stops)?;
+            lua.create_function_lent(
+                move |lua, loan, (center, radius, stops): (LuaVector, f32, Table)| {
+                    let (colors, positions) = gradient_stops(loan, stops)?;
                     let shader = bindings.with_factory(|factory| {
                         Ok(factory.make_radial_gradient(
                             center.x(),
@@ -63,7 +63,9 @@ pub(super) struct ScriptedGradient(pub(super) Rc<dyn RenderShader>);
 
 impl UserData for ScriptedGradient {}
 
-fn gradient_stops(stops: Table) -> Result<(Vec<ColorInt>, Vec<f32>)> {
+/// The stops of a gradient; an `__index` a stop runs gets the loan of the
+/// call that made the gradient.
+fn gradient_stops(mut loan: crate::luau::Loan<'_>, stops: Table) -> Result<(Vec<ColorInt>, Vec<f32>)> {
     let mut colors = Vec::with_capacity(stops.raw_len());
     let mut positions = Vec::with_capacity(stops.raw_len());
     let mut index = 1_i64;
@@ -71,8 +73,8 @@ fn gradient_stops(stops: Table) -> Result<(Vec<ColorInt>, Vec<f32>)> {
         let Value::Table(stop) = stops.raw_get::<Value>(index)? else {
             break;
         };
-        positions.push(stop.get("position")?);
-        let color = stop.get::<Value>("color")?;
+        positions.push(stop.get_with(crate::luau::reborrow_loan(&mut loan), "position")?);
+        let color = stop.get_with::<Value>(crate::luau::reborrow_loan(&mut loan), "color")?;
         colors.push(super::lua_color::required_unsigned(
             &stop.lua(),
             Some(&color),

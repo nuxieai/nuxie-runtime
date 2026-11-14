@@ -373,9 +373,9 @@ impl UserData for ScriptedCanvas {
             this.pending_height = height;
             this.satisfy_pending(lua)
         });
-        methods.add_function(
+        methods.add_function_lent(
             "beginFrame",
-            |lua, (userdata, descriptor): (AnyUserData, Option<Value>)| {
+            |lua, loan, (userdata, descriptor): (AnyUserData, Option<Value>)| {
                 let mut this = userdata.borrow_mut::<Self>()?;
                 this.satisfy_pending(lua)?;
                 if this.render_context.is_none() {
@@ -398,7 +398,7 @@ impl UserData for ScriptedCanvas {
                 })?;
                 let clear_color = match descriptor {
                     Some(Value::Table(descriptor)) => {
-                        lua.coerce_number(descriptor.get::<Value>("clearColor")?)?
+                        lua.coerce_number(descriptor.get_with::<Value>(loan, "clearColor")?)?
                             .unwrap_or(0.0) as u32
                     }
                     _ => 0,

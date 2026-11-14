@@ -1445,11 +1445,30 @@ impl Table {
 
     /// `t[key]` with metamethods (C++ `lua_gettable`).
     pub fn get<L: LoanFamily, V: FromLua>(&self, vm: &mut Vm<L>, key: impl IntoLua) -> Result<V, Error> {
+        self.get_with(vm, None, key)
+    }
+
+    /// [`Table::get`] with `loan` lent to an `__index` it runs.
+    pub fn get_lent<V: FromLua, L: LoanFamily>(
+        &self,
+        vm: &mut Vm<L>,
+        loan: &mut <L as LoanFamily>::Loan<'_>,
+        key: impl IntoLua,
+    ) -> Result<V, Error> {
+        self.get_with(vm, Some(L::shorten(loan)), key)
+    }
+
+    fn get_with<L: LoanFamily, V: FromLua>(
+        &self,
+        vm: &mut Vm<L>,
+        loan: Lent<'_, Compat<L>>,
+        key: impl IntoLua,
+    ) -> Result<V, Error> {
         let t = self.id(vm)?;
         let (k, _key_root) = vm.lower_into(key)?;
         let v = vm.protect_value(|vm| {
             let step = vm.get_table_step(RawValue::Table(t), k)?;
-            vm.meta_now(step, None)
+            vm.meta_now(step, loan)
         })?;
         V::from_lua(v, vm)
     }

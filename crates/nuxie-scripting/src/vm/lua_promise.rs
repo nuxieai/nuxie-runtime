@@ -8,8 +8,8 @@
 //! parent/consumer/callback links as `src/lua/lua_promise.cpp`.
 
 use crate::luau::{
-    AnyUserData, Function, IntoLuaMulti, Lua, MultiValue, Result, Table, UserData, UserDataMethods,
-    Value,
+    AnyUserData, Function, IntoLuaMulti, Loan, Lua, MultiValue, Result, Table, UserData,
+    UserDataMethods, Value,
 };
 
 const PROMISE_ENGINE_REGISTRY_KEY: &str = "rive_scripting_promise_engine";
@@ -17,10 +17,14 @@ const PROMISE_ENGINE_REGISTRY_KEY: &str = "rive_scripting_promise_engine";
 #[derive(Debug, Clone, Copy)]
 struct ScriptedPromise;
 
-fn dispatch(lua: &Lua, method: &str, args: MultiValue) -> Result<MultiValue> {
+/// Runs a promise method in the Luau engine, passing on the loan its call
+/// carries: a handler the engine runs synchronously (a settled promise's
+/// `andThen`, a `cancel`) reaches what the caller could, such as a draw
+/// call's renderer.
+fn dispatch(lua: &Lua, loan: Loan<'_>, method: &str, args: MultiValue) -> Result<MultiValue> {
     let engine: Table = lua.named_registry_value(PROMISE_ENGINE_REGISTRY_KEY)?;
     let function: Function = engine.get(method)?;
-    function.call(args)
+    function.call_with(loan, args)
 }
 
 fn call_engine<R: crate::luau::FromLuaMulti>(
@@ -51,23 +55,23 @@ pub(super) fn set_on_cancel(lua: &Lua, promise: AnyUserData, callback: Function)
 
 impl UserData for ScriptedPromise {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_function("andThen", |lua, args: MultiValue| {
-            dispatch(lua, "andThen", args)
+        methods.add_function_lent("andThen", |lua, loan, args: MultiValue| {
+            dispatch(lua, loan, "andThen", args)
         });
-        methods.add_function("catch", |lua, args: MultiValue| {
-            dispatch(lua, "catch", args)
+        methods.add_function_lent("catch", |lua, loan, args: MultiValue| {
+            dispatch(lua, loan, "catch", args)
         });
-        methods.add_function("finally", |lua, args: MultiValue| {
-            dispatch(lua, "finally", args)
+        methods.add_function_lent("finally", |lua, loan, args: MultiValue| {
+            dispatch(lua, loan, "finally", args)
         });
-        methods.add_function("cancel", |lua, args: MultiValue| {
-            dispatch(lua, "cancel", args)
+        methods.add_function_lent("cancel", |lua, loan, args: MultiValue| {
+            dispatch(lua, loan, "cancel", args)
         });
-        methods.add_function("onCancel", |lua, args: MultiValue| {
-            dispatch(lua, "onCancel", args)
+        methods.add_function_lent("onCancel", |lua, loan, args: MultiValue| {
+            dispatch(lua, loan, "onCancel", args)
         });
-        methods.add_function("getStatus", |lua, args: MultiValue| {
-            dispatch(lua, "getStatus", args)
+        methods.add_function_lent("getStatus", |lua, loan, args: MultiValue| {
+            dispatch(lua, loan, "getStatus", args)
         });
     }
 }

@@ -159,6 +159,14 @@ pub trait UserDataMethods<T> {
         A: FromLuaMulti,
         R: IntoLuaMulti;
 
+    /// [`UserDataMethods::add_function`] for a function that uses, or
+    /// passes on, the loan its call carries ([`Loan`]).
+    fn add_function_lent<F, A, R>(&mut self, name: impl Into<String>, function: F)
+    where
+        F: Fn(&Lua, Loan<'_>, A) -> Result<R> + 'static,
+        A: FromLuaMulti,
+        R: IntoLuaMulti;
+
     fn add_meta_method<M, A, R>(&mut self, name: impl Into<String>, method: M)
     where
         M: Fn(&Lua, &T, A) -> Result<R> + 'static,
@@ -582,6 +590,19 @@ impl<T: 'static> UserDataMethods<T> for Collector<T> {
         let callback: BoxedCallback = Box::new(move |lua, _loan, args| {
             let a = A::from_lua_multi(args, lua)?;
             function(lua, a)?.into_lua_multi(lua)
+        });
+        self.method(name.into(), false, callback);
+    }
+
+    fn add_function_lent<F, A, R>(&mut self, name: impl Into<String>, function: F)
+    where
+        F: Fn(&Lua, Loan<'_>, A) -> Result<R> + 'static,
+        A: FromLuaMulti,
+        R: IntoLuaMulti,
+    {
+        let callback: BoxedCallback = Box::new(move |lua, loan, args| {
+            let a = A::from_lua_multi(args, lua)?;
+            function(lua, loan, a)?.into_lua_multi(lua)
         });
         self.method(name.into(), false, callback);
     }

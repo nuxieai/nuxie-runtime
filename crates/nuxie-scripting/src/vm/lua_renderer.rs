@@ -1006,10 +1006,11 @@ return instances
     }
 
     #[test]
-    fn a_draw_reaches_its_renderer_through_the_guarded_protected_calls_and_print() {
+    fn a_draw_reaches_its_renderer_through_guarded_calls_print_and_gradient_stops() {
         // `pcall`, `xpcall` and `coroutine.resume` are host guards that call
-        // the originals from Rust, and `print` runs `tostring` from Rust:
-        // each passes on the draw call's loan.
+        // the originals from Rust, `print` runs `tostring` from Rust, and
+        // `Gradient.linear` reads its stops from Rust: each passes on the
+        // draw call's loan.
         let vm = ScriptVm::new();
         let mut factory = PersistentFactory::new(RecordingFactory::new());
         vm.install_render_factory(&mut factory).unwrap();
@@ -1034,6 +1035,13 @@ return instances
                             renderer:restore()
                             return "drawn"
                         end}))
+                        Gradient.linear(Vector.xy(), Vector.xy(10, 0), {
+                            setmetatable({}, {__index = function(_, key)
+                                if key == "position" then renderer:save() return 0 end
+                                renderer:restore()
+                                return Color.rgba(0, 0, 0, 255)
+                            end}),
+                        })
                     end,
                 }
                 "#,
@@ -1048,7 +1056,7 @@ return instances
             factory
                 .borrow()
                 .stream()
-                .contains("save\nsave\nrestore\nrestore\nsave\nrestore\n"),
+                .contains("save\nsave\nrestore\nrestore\nsave\nrestore\nsave\nrestore\n"),
             "{}",
             factory.borrow().stream()
         );

@@ -232,8 +232,8 @@ the render path, so the next draw made a new one through the factory, and
 `script_layout_test` failed exact verification on an extra
 `makeEmptyRenderPath`. That fix was replaced (reset keeps the render path
 and the charge), and the scripted compare and both test suites were run
-again green; `luau-vm-diff` and `golden-compare` ran green on the tip
-before that one-line change. Disk stayed at 160–162 GB free.
+again green, then `luau-vm-diff` (0 disagreements) and `golden-compare`
+(356 / 8) once more on the tip (load 13.03 → 15.29). Disk stayed at 160–162 GB free.
 
 Each fixed row has a test that fails on the old code: the path self-add
 (1 MiB budget, 30 doublings), path commands and extracts (64 KiB), vertex
@@ -250,7 +250,6 @@ line, the epoch check, and print truncation.
 
 - `Path:reset` keeping the charge once a render path exists has no
   dedicated test (the existing reset test never draws).
-- `golden-compare` and `luau-vm-diff` after the last `Path:reset` change.
 - The wasm lint count after the review fixes (Apple only; the touched code
   has no target-specific parts).
 - The real size of `RawText`'s shaped data per layout.

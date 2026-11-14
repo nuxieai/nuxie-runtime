@@ -1,4 +1,4 @@
---! attacks: snapshot publish hold chain of ~65,536 links dropped at collection (E1 4.4); expect: ok; within: 40s; harness: instance
+--! attacks: snapshot publish hold chain of ~65,536 links dropped at collection (E1 4.4); expect: ok; within: 90s; harness: instance
 -- Each snapshot publishes the previous one, so dropping the head drops the
 -- whole chain. The chain is built across several callbacks (each callback has
 -- its own safepoint allowance), and dropped when the VM is collected.

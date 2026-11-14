@@ -52,6 +52,8 @@ const CASE_STACK_BYTES: usize = 2 * 1024 * 1024;
 /// binary itself. A case that stays within its budgets stays far below it.
 const MEMORY_CEILING_KIB: u64 = 512 * 1024;
 const PARALLEL_CASES: usize = 4;
+/// See `new_vm`.
+const MODULE_TIMEOUT_MS: i32 = 20_000;
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(50);
 const KEPT_OUTPUT_BYTES: usize = 16 * 1024;
 
@@ -183,6 +185,12 @@ fn limits() -> ScriptExecutionLimits {
 
 fn new_vm(header: &Header) -> Result<(ScriptVm, PersistentFactory<NullFactory>), String> {
     let mut vm = ScriptVm::new_with_execution_limits(limits()).map_err(|e| format!("boot: {e}"))?;
+    // The one limit that is not the default: the module's wall-clock
+    // deadline. At 1 s it decides outcomes by machine load, not by the code
+    // (a loaded host turned a dozen budget cases into timeouts). The
+    // deterministic bounds (interrupt safepoints, VM and host memory) stay
+    // at their defaults, and the case's `within` bounds its wall time.
+    vm.set_timeout_ms(MODULE_TIMEOUT_MS);
     let mut factory = PersistentFactory::new(NullFactory::new());
     vm.install_render_factory(&mut factory)
         .map_err(|e| format!("factory: {e}"))?;

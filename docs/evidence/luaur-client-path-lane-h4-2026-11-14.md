@@ -261,9 +261,11 @@ build, which I gave to H2 (native ownership); move it to H1 if that lane owns
 
 ## Not verified
 
-- The round-3 fix (an empty filtered case set fails) was committed without a
-  build, because disk was under the stop line; the last full
-  `make luau-abort-gate` ran on the commit before it.
+- The final tip: the round-2 edits (923b448783, b46476dd31) and the
+  round-3 fix (an empty filtered case set fails) were committed without a
+  gate run, because disk was under the stop line. The last corpus run was
+  unwind on 3f04e36eee; codex round 3 ran the corpus on the round-2 tip
+  only with a filter. Run `make luau-abort-gate` once before landing.
 - Apple and Android devices, and release builds: the corpus ran on macOS
   arm64 debug (fastbuild) only. Stack depths differ in release, and iOS
   secondary threads have 512 KiB stacks, not the 2 MiB used here.
@@ -316,6 +318,6 @@ allowed), bound to corpus coverage and runner correctness:
   the corpus test pass on zero cases; it now fails.
 
 No round 4: free disk fell to 59 GB after round 3, under the brief's 60 GB
-stop line, so I ran no more builds. The round-3 fix is a single `assert!`
-that has not been compiled or run (see Not verified). The last full gate,
-green in all three runs, was on the tip before it.
+stop line, so I ran no more builds. The round-2 case edits and the
+round-3 `assert!` have not been run by me (see Not verified); the last
+corpus run was the unwind run after round 1 (3f04e36eee).

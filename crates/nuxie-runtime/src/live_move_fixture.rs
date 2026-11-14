@@ -4723,6 +4723,9 @@ pub enum PaintCase {
     MixedModes,
     /// `MixedModes` with a's layout interpolating over a second.
     MixedModesInterpolated,
+    /// `MixedModes` with a turned by 0.35 and b 160 by 60, so a's copy
+    /// stretches unevenly along its own turned axes.
+    MixedModesTurned,
     /// `Corners`' versions, unkeyed, each a content box with 10 points of
     /// padding a side, flown in Layout mode.
     Padded,
@@ -8042,13 +8045,19 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
         | PaintCase::Shadows(_)
         | PaintCase::MixedModes
         | PaintCase::MixedModesInterpolated
+        | PaintCase::MixedModesTurned
         | PaintCase::Padded => {
             let shadows = match case {
                 PaintCase::Shadows(shadows) => Some(shadows),
                 _ => None,
             };
+            let turned = case == PaintCase::MixedModesTurned;
+            let b_height = if turned { 60.0 } else { 120.0 };
             let mut a = unit("a", 80.0, 60.0).corner(4.0);
-            let mut b = unit("b", 160.0, 120.0).corner(8.0);
+            let mut b = unit("b", 160.0, b_height).corner(8.0);
+            if turned {
+                a = a.turned(0.35);
+            }
             if case == PaintCase::Padded {
                 (a, b) = (a.padded(10.0), b.padded(10.0));
             }
@@ -8066,14 +8075,16 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                 );
             }
             let a_mode = match case {
-                PaintCase::MixedModes | PaintCase::MixedModesInterpolated => 0,
+                PaintCase::MixedModes
+                | PaintCase::MixedModesInterpolated
+                | PaintCase::MixedModesTurned => 0,
                 _ => 1,
             };
             let mut spec = PaintSpec::new(
                 vec![a, b],
                 vec![rest_as("v", "a", 1, css_at(20.0, 36.0, 80.0, 60.0))],
                 vec![
-                    rest_as("v", "b", 2, css_at(120.0, 40.0, 160.0, 120.0)),
+                    rest_as("v", "b", 2, css_at(120.0, 40.0, 160.0, b_height)),
                     bx("C", css_at(300.0, 200.0, 60.0, 60.0)),
                     flight_slot("a go", "a", 1, 11, a_mode),
                     flight_slot("b go", "b", 2, 12, 1),

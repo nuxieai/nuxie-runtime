@@ -1934,6 +1934,19 @@ impl LayoutComponent {
             ),
         )
     }
+    /// Nuxie: `build_own_transform` with its pivot taken from `size`, as a
+    /// frame stretched to `size` turns about its stretched pivot
+    /// (`hosted_frame::self_transform`).
+    pub(crate) fn own_transform_sized(&self, size: Vec2D) -> Mat2D {
+        self.build_own_transform_sized(
+            self.own_transform_values(),
+            self.composes_layout_offset(),
+            Vec2D::new(
+                self.pivot_origin_x() * size.x,
+                self.pivot_origin_y() * size.y,
+            ),
+        )
+    }
     fn build_own_transform_with(
         &self,
         values: OwnTransformValues,

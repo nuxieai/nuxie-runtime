@@ -355,12 +355,14 @@ impl UserData for ScriptedPath {
             Ok(())
         });
         methods.add_method_mut("reset", |_, this, ()| {
-            // `RawPath::reset` releases both vectors' capacity; the render
-            // path built from them goes too (a draw rebuilds it), so the
-            // whole charge is refunded.
+            // `RawPath::reset` releases both vectors' capacity. A render
+            // path already built is kept (the next draw rewinds it, the
+            // factory is not asked for another) and keeps its allocation,
+            // so then the charge stays as a high-water mark.
             this.raw_path.reset();
-            this.render_path = None;
-            this.charge.set(0)?;
+            if this.render_path.is_none() {
+                this.charge.set(0)?;
+            }
             this.mark_dirty();
             Ok(())
         });

@@ -80,7 +80,7 @@ impl ScriptedPath {
     /// amortized) before reserving exactly that, so the commands that
     /// follow append without reallocating. Running out of memory is an
     /// error, not an abort.
-    fn reserve(&mut self, lua: &Lua, verbs: usize, points: usize) -> Result<()> {
+    pub(super) fn reserve(&mut self, lua: &Lua, verbs: usize, points: usize) -> Result<()> {
         let (current_verbs, current_points) = self.verb_and_point_counts();
         let (verb_capacity, point_capacity) = self.raw_path.capacity();
         let capacity = (

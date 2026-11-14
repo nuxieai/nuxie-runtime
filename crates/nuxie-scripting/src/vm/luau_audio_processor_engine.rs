@@ -719,6 +719,19 @@ mod tests {
         Arc::new(Shared::new(RUNNING))
     }
     fn processor(source: &str, input: SharedValue) -> Processor {
+        processor_with_hard_blocks(source, input, 2)
+    }
+    /// For tests whose blocks do host work (making or copying readers): that
+    /// time is the machine's, not the script's, so a block deadline would
+    /// measure the load on the test host.
+    fn processor_without_deadline(source: &str, input: SharedValue) -> Processor {
+        processor_with_hard_blocks(source, input, 0)
+    }
+    fn processor_with_hard_blocks(
+        source: &str,
+        input: SharedValue,
+        hard_blocks: u32,
+    ) -> Processor {
         let mut vm = Processor::new(
             shared(),
             "processor".into(),
@@ -727,7 +740,7 @@ mod tests {
             48_000,
             2,
             1024,
-            2,
+            hard_blocks,
             16 * 1024 * 1024,
         )
         .unwrap();
@@ -823,7 +836,7 @@ mod tests {
     #[test]
     fn processor_stream_readers_are_charged_to_the_processor_budget() {
         let descriptor = large_chunk_descriptor();
-        let mut vm = processor(
+        let mut vm = processor_without_deadline(
             r#"return {
             init=function(self,rate,maxFrames,channels,input)
                 self.readers = {}
@@ -843,7 +856,6 @@ mod tests {
         let held = descriptor.reader_count().unwrap();
         assert!((30..32).contains(&held), "{held}");
         assert!(vm.host_memory_used() > 15 << 20);
-        // Blocks of 1,024 frames get a 42 ms deadline (two blocks' worth).
         let mut output = vec![0.0f32; 2048];
         vm.render(&mut output, 1024, 0);
         assert_eq!(vm.shared().state.load(Ordering::Acquire), RUNNING);
@@ -853,7 +865,7 @@ mod tests {
         let descriptor = large_chunk_descriptor();
         // Each block makes a reader and drops it; 100 blocks of 512 KiB
         // readers would hold 50 MiB if none were freed.
-        let mut vm = processor(
+        let mut vm = processor_without_deadline(
             r#"return {
             init=function(self,rate,maxFrames,channels,input) self.input = input end,
             process=function(self,out,frames,startFrame)
@@ -863,7 +875,6 @@ mod tests {
         }"#,
             descriptor.shared_value(),
         );
-        // Blocks of 1,024 frames get a 42 ms deadline (two blocks' worth).
         let mut output = vec![0.0f32; 2048];
         for _ in 0..100 {
             vm.render(&mut output, 1024, 0);
@@ -881,7 +892,7 @@ mod tests {
         assert!(vm.pcm_slot_list_bytes() > 0);
         assert_eq!(vm.host_memory_used(), vm.pcm_slot_list_bytes());
         // A reader the script still holds is kept, readable, and charged.
-        let mut vm = processor(
+        let mut vm = processor_without_deadline(
             r#"return {
             init=function(self,rate,maxFrames,channels,input) self.reader = Audio.streamReader(input) end,
             process=function(self,out,frames,startFrame) assert(self.reader.channels == 2) end

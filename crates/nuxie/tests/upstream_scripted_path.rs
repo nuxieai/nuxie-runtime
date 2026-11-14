@@ -126,3 +126,16 @@ fn access_paint_and_path_data() {
 
     compare_silver("scripted_as_path", &silver.borrow().bytes());
 }
+
+/// A scripted path effect's update runs with no Core receiver mutably lent
+/// (before: under its paint's and its own borrows).
+#[test]
+fn scripted_path_effects_update_with_no_core_receiver_lent() {
+    let ((), reports) = nuxie_runtime::script_borrow_check::record_script_borrow_reports(|| {
+        path_drawing_examples();
+        path_effects_examples();
+        paths_with_opacity_applied();
+        access_paint_and_path_data();
+    });
+    assert!(reports.is_empty(), "{}", reports.join("\n"));
+}

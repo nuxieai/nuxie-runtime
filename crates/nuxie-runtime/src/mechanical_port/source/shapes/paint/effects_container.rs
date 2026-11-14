@@ -723,3 +723,76 @@ mod tests {
 #[cfg(test)]
 #[path = "effects_container_empty_paint_tests.rs"]
 mod empty_paint_tests;
+
+/// The paint a path-effect chain runs for: borrowed by the caller already,
+/// or reached through its handle for each effect that needs it, so a
+/// scripted effect's script runs with no borrow of the paint open.
+pub(crate) enum EffectPaint<'a> {
+    Lent(&'a crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaint),
+    Handle(&'a CoreHandle),
+}
+
+impl EffectPaint<'_> {
+    pub(crate) fn with<R>(
+        &self,
+        use_paint: impl FnOnce(&crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaint) -> R,
+    ) -> Option<R> {
+        match self {
+            Self::Lent(paint) => Some(use_paint(paint)),
+            Self::Handle(paint) => paint
+                .with(|paint| paint.as_shape_paint().map(use_paint))
+                .flatten(),
+        }
+    }
+}
+
+/// Runs `effects` in order on `source`, each on the previous one's output.
+/// Each effect is borrowed only for its own step, and a group, a target or a
+/// scripted effect is stepped from its handle, so no effect is lent while a
+/// script in the chain runs.
+pub(crate) fn update_effect_chain(
+    effects: &[CoreHandle],
+    provider: &PathProvider,
+    source: &ShapePaintPath,
+    paint: &EffectPaint<'_>,
+) {
+    let mut current: Option<Rc<std::cell::RefCell<ShapePaintPath>>> = None;
+    for effect in effects {
+        let next = match current.as_ref() {
+            Some(current) => update_effect_step(effect, provider, &current.borrow(), paint),
+            None => update_effect_step(effect, provider, source, paint),
+        };
+        if let Some(next) = next {
+            current = Some(next);
+        }
+    }
+}
+
+/// One effect's update, then its output path for `provider`.
+fn update_effect_step(
+    effect: &CoreHandle,
+    provider: &PathProvider,
+    source: &ShapePaintPath,
+    paint: &EffectPaint<'_>,
+) -> Option<Rc<std::cell::RefCell<ShapePaintPath>>> {
+    use crate::mechanical_port::source::scripted::scripted_path_effect::ScriptedPathEffect;
+    let stepped = ScriptedPathEffect::update_effect_occurrence(effect, provider, source, paint)
+        || GroupEffect::update_effect_occurrence(effect, provider, source, paint)
+        || TargetEffect::update_effect_occurrence(effect, provider, source, paint);
+    if !stepped {
+        let updated = paint
+            .with(|paint| {
+                effect.with_mut(|effect| {
+                    let effect = effect.as_stroke_effect_mut()?;
+                    effect.update_effect(provider, source, paint);
+                    Some(())
+                })
+            })
+            .flatten()
+            .flatten();
+        updated?;
+    }
+    effect
+        .with_mut(|effect| effect.as_stroke_effect_mut()?.effect_path(provider))
+        .flatten()
+}

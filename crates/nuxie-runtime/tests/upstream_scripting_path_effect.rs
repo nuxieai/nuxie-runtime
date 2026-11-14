@@ -117,3 +117,15 @@ fn a_clip_follows_the_path_effect_on_its_sources_fill() {
     )
     .expect("pinned scripted_path_effect_clip silver");
 }
+
+/// Scripted path effects, alone and inside group and target effects, update
+/// and advance with no Core receiver mutably lent (before: under their
+/// paint's update borrow, their group's and their own).
+#[test]
+fn scripted_path_effects_run_with_no_core_receiver_lent() {
+    let ((), reports) = nuxie_runtime::script_borrow_check::record_script_borrow_reports(|| {
+        reusing_a_path_in_multiple_passes_works_correctly();
+        a_clip_follows_the_path_effect_on_its_sources_fill();
+    });
+    assert!(reports.is_empty(), "{}", reports.join("\n"));
+}

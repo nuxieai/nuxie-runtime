@@ -8,11 +8,11 @@ use crate::mechanical_port::source::{
     shapes::{
         paint::shape_paint_path::ShapePaintPath,
         paint::{
-            effects_container::{EffectsContainer, EffectsContainerState},
+            effects_container::{EffectPaint, EffectsContainer, EffectsContainerState},
             feather::Feather,
             paint_cells::PaintCells,
             shape_paint_mutator::{MutatorFlags, ShapePaintMutator},
-            stroke_effect::{PathProvider, StrokeEffect},
+            stroke_effect::PathProvider,
         },
         path_flags::PathFlags,
         shape_paint_container::ShapePaintContainer,
@@ -232,71 +232,93 @@ impl ShapePaint {
         kind: ShapePaintPathKind,
         stroke: Option<(f32, u32, u32)>,
     ) {
-        if has_dirt(value, ComponentDirt::PATH) && !self.effects_container.effects().is_empty() {
-            let parent = self.base.parent_handle().expect("ShapePaint container");
-            // Hidden paints are invalidated again when shown (see
-            // set_render_opacity). Clip sources still consume their effect
-            // geometry while hidden. Paints without a color or gradient never show.
-            if (self.paint_mutator.is_none() || self.render_opacity() == 0.0)
-                && parent
-                    .with(|container| {
-                        let flags = container
-                            .as_shape_paint_container()
-                            .expect("ShapePaint container")
-                            .path_flags();
-                        (flags & PathFlags::CLIPPING).is_empty()
-                    })
-                    .expect("live ShapePaint container")
-            {
-                self.effects_deferred = true;
-                return;
-            }
-            self.effects_deferred = false;
-            // The snapshot reuses the previous update's buffers.
-            let mut source = std::mem::take(&mut self.effect_source);
-            let mut copied = false;
-            parent.with_mut(|container| {
-                container.with_shape_paint_path_mut(kind, &mut |path| {
-                    source.reset_to_copy_of(path);
-                    copied = true;
-                });
-            });
-            // Effects consume immutable raw geometry. Release the container before
-            // a scripted effect reads or edits that same parent TransformComponent.
-            if !copied {
-                self.effect_source = source;
-                return;
-            }
-            // A paint snapshot is only needed inside a scripted effect's
-            // invocation. Ordinary Fill/Stroke updates never construct Lua
-            // PaintData upstream.
-            if self.effects_container.effects().iter().any(|effect| {
-                effect.occupied_core_type()
-                    == Some(crate::mechanical_port::source::generated::scripted::scripted_path_effect_base::ScriptedPathEffectBase::TYPE_KEY)
-            }) {
-                self.script_paint_scope = Some(Rc::new(
-                    crate::scripting::ScriptPaint::from_fresh(self, stroke),
-                ));
-            }
-            let mut current: Option<Rc<RefCell<ShapePaintPath>>> = None;
-            for handle in self.effects_container.effects().iter().cloned() {
-                handle.with_mut(|effect| {
-                    let Some(effect) = effect.as_stroke_effect_mut() else {
-                        return;
-                    };
-                    if let Some(current) = current.as_ref() {
-                        effect.update_effect(&self.path_provider, &current.borrow(), self);
-                    } else {
-                        effect.update_effect(&self.path_provider, &source, self);
-                    }
-                    if let Some(new_path) = effect.effect_path(&self.path_provider) {
-                        current = Some(new_path);
-                    }
-                });
-            }
-            self.script_paint_scope = None;
-            self.effect_source = source;
+        if let Some(pass) = self.begin_effect_pass(value, kind, stroke) {
+            let source = pass.run(&EffectPaint::Lent(self));
+            self.end_effect_pass(source);
         }
+    }
+
+    /// Pinned update's path-effect pass at handle level, for a Fill or
+    /// Stroke: the paint is borrowed to snapshot its source path and again to
+    /// keep it, and only read while the effects run, since a scripted
+    /// effect's user code may reach it.
+    pub(crate) fn update_effects_occurrence(paint: &CoreHandle, pass: EffectPass) {
+        let source = pass.run(&EffectPaint::Handle(paint));
+        paint.with_mut(|paint| {
+            paint
+                .as_shape_paint_mut()
+                .expect("a Fill or Stroke is a ShapePaint")
+                .end_effect_pass(source)
+        });
+    }
+
+    /// The effect pass's start: its source path copied out of the container
+    /// and, when a scripted effect will run, the paint snapshot it reads.
+    /// `None` when there is no pass to run.
+    pub(crate) fn begin_effect_pass(
+        &mut self,
+        value: ComponentDirt,
+        kind: ShapePaintPathKind,
+        stroke: Option<(f32, u32, u32)>,
+    ) -> Option<EffectPass> {
+        if !has_dirt(value, ComponentDirt::PATH) || self.effects_container.effects().is_empty() {
+            return None;
+        }
+        let parent = self.base.parent_handle().expect("ShapePaint container");
+        // Hidden paints are invalidated again when shown (see
+        // set_render_opacity). Clip sources still consume their effect
+        // geometry while hidden. Paints without a color or gradient never show.
+        if (self.paint_mutator.is_none() || self.render_opacity() == 0.0)
+            && parent
+                .with(|container| {
+                    let flags = container
+                        .as_shape_paint_container()
+                        .expect("ShapePaint container")
+                        .path_flags();
+                    (flags & PathFlags::CLIPPING).is_empty()
+                })
+                .expect("live ShapePaint container")
+        {
+            self.effects_deferred = true;
+            return None;
+        }
+        self.effects_deferred = false;
+        // The snapshot reuses the previous update's buffers.
+        let mut source = std::mem::take(&mut self.effect_source);
+        let mut copied = false;
+        parent.with_mut(|container| {
+            container.with_shape_paint_path_mut(kind, &mut |path| {
+                source.reset_to_copy_of(path);
+                copied = true;
+            });
+        });
+        // Effects consume immutable raw geometry. Release the container before
+        // a scripted effect reads or edits that same parent TransformComponent.
+        if !copied {
+            self.effect_source = source;
+            return None;
+        }
+        // A paint snapshot is only needed inside a scripted effect's
+        // invocation. Ordinary Fill/Stroke updates never construct Lua
+        // PaintData upstream.
+        if self.effects_container.effects().iter().any(|effect| {
+            effect.occupied_core_type()
+                == Some(crate::mechanical_port::source::generated::scripted::scripted_path_effect_base::ScriptedPathEffectBase::TYPE_KEY)
+        }) {
+            self.script_paint_scope = Some(Rc::new(
+                crate::scripting::ScriptPaint::from_fresh(self, stroke),
+            ));
+        }
+        Some(EffectPass {
+            source,
+            effects: self.effects_container.effects().to_vec(),
+            provider: self.path_provider,
+        })
+    }
+
+    fn end_effect_pass(&mut self, source: ShapePaintPath) {
+        self.script_paint_scope = None;
+        self.effect_source = source;
     }
 
     pub fn init_render_paint(
@@ -990,3 +1012,24 @@ impl EffectsContainer for ShapePaint {
 #[cfg(test)]
 #[path = "shape_paint_factory_contract_tests.rs"]
 mod factory_contract_tests;
+
+/// A paint's path-effect pass between its start and end: the effects run on
+/// `source` for this paint's provider.
+pub(crate) struct EffectPass {
+    source: ShapePaintPath,
+    effects: Vec<CoreHandle>,
+    provider: PathProvider,
+}
+
+impl EffectPass {
+    /// Runs the chain and hands back the source path for the paint to keep.
+    fn run(self, paint: &EffectPaint<'_>) -> ShapePaintPath {
+        crate::mechanical_port::source::shapes::paint::effects_container::update_effect_chain(
+            &self.effects,
+            &self.provider,
+            &self.source,
+            paint,
+        );
+        self.source
+    }
+}

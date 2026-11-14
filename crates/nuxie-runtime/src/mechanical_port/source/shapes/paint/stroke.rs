@@ -126,12 +126,43 @@ impl Stroke {
 
     pub fn update(&mut self, value: ComponentDirt) {
         let kind = self.pick_path_kind();
-        let stroke = Some((
+        let stroke = self.effect_stroke();
+        self.base.base.update_with_path_kind(value, kind, stroke);
+        self.update_render_paint(value);
+    }
+
+    /// Pinned update at handle level, the component graph's handler: the
+    /// path-effect pass runs with the stroke only read (see
+    /// ShapePaint::update_effects_occurrence), then the render paint is
+    /// updated under a new borrow, after it as before.
+    pub(crate) fn update_occurrence(
+        stroke: &crate::mechanical_port::source::core::CoreHandle,
+        value: ComponentDirt,
+    ) -> bool {
+        let pass = stroke
+            .with_downcast_mut::<Self, _>(|this| {
+                let kind = this.pick_path_kind();
+                let effect_stroke = this.effect_stroke();
+                this.base.base.begin_effect_pass(value, kind, effect_stroke)
+            })
+            .flatten();
+        if let Some(pass) = pass {
+            crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaint::update_effects_occurrence(stroke, pass);
+        }
+        stroke.with_downcast_mut::<Self, _>(|stroke| stroke.update_render_paint(value));
+        true
+    }
+
+    /// The thickness, cap and join a scripted effect's paint snapshot reads.
+    fn effect_stroke(&self) -> Option<(f32, u32, u32)> {
+        Some((
             self.base.thickness(),
             u32::from(self.base.cap()),
             u32::from(self.base.join()),
-        ));
-        self.base.base.update_with_path_kind(value, kind, stroke);
+        ))
+    }
+
+    fn update_render_paint(&mut self, value: ComponentDirt) {
         if has_dirt(value, ComponentDirt::PAINT) {
             let thickness = self.base.thickness();
             let cap = StrokeCap::from(u32::from(self.base.cap())).into();

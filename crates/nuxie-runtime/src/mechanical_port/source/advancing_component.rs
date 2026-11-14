@@ -54,6 +54,8 @@ impl AdvancingComponentHandle {
             crate::source::text::text_style_global::TextStyleGlobal::advance_component_occurrence
         } else if component.is_type_of(crate::source::text::text::Text::TYPE_KEY) {
             crate::source::text::text::Text::advance_component_occurrence
+        } else if component.is_type_of(crate::source::generated::scripted::scripted_path_effect_base::ScriptedPathEffectBase::TYPE_KEY) {
+            crate::source::scripted::scripted_path_effect::ScriptedPathEffect::advance_occurrence
         } else {
             advance_dynamic
         };

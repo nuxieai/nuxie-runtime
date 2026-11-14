@@ -145,6 +145,26 @@ impl TargetEffect {
         });
         StatusCode::Ok
     }
+    /// Pinned TargetEffect::updateEffect at handle level: the target is
+    /// only read for its group and the group-side provider, and the group
+    /// runs from its handle. False when `effect` is not a TargetEffect.
+    pub(crate) fn update_effect_occurrence(
+        effect: &CoreHandle,
+        provider: &PathProvider,
+        source: &ShapePaintPath,
+        paint: &crate::mechanical_port::source::shapes::paint::effects_container::EffectPaint<'_>,
+    ) -> bool {
+        let Some(target) = effect
+            .with_downcast::<Self, _>(|target| Some((target.group_effect()?, target.proxy(provider)?)))
+        else {
+            return false;
+        };
+        if let Some((group, proxy)) = target {
+            GroupEffect::update_effect_occurrence(&group, &proxy, source, paint);
+        }
+        true
+    }
+
     pub fn update_effect(
         &mut self,
         provider: &PathProvider,

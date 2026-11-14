@@ -1305,14 +1305,14 @@ impl LiveMoves {
     #[cfg(feature = "test-support")]
     pub fn pair_ends(&self, root: &RuntimeArtboardInstanceHandle) -> Vec<zoom::Ends> {
         crate::hosted_scene::root_scene(root).map_or_else(Vec::new, |s| {
-            s.plan
-                .borrow()
-                .flights
+            let plan = s.plan.borrow();
+            plan.flights
                 .iter()
                 .filter_map(|entry| match entry {
                     Entry::One(_) => None,
                     Entry::Pair(pair) => Some(pair.ends()),
                 })
+                .chain(plan.pairs.iter().map(|pair| pair.ends()))
                 .collect()
         })
     }
@@ -1325,11 +1325,93 @@ impl LiveMoves {
     ) -> Result<crate::source::math::mat2d::Mat2D> {
         super::drawn::drawn(component, when)
     }
+    /// Where a component is drawn now: `drawn(component, Live)`, and for a
+    /// part of a copy flying in place, through its lift. The lift draws the
+    /// copy's entries under the upper Screen's page matrix and the lift's
+    /// transform, where its own Screen's draw puts them under its own page
+    /// matrix, so the part's draw is U · M · L⁻¹ · `drawn`.
+    #[cfg(feature = "test-support")]
+    pub fn drawn_now(
+        &self,
+        root: &RuntimeArtboardInstanceHandle,
+        component: &CoreHandle,
+    ) -> Result<crate::source::math::mat2d::Mat2D> {
+        let own = super::drawn::drawn(component, super::When::Live)?;
+        let Some(scene) = crate::hosted_scene::root_scene(root) else {
+            return Ok(own);
+        };
+        let plan = scene.plan.borrow();
+        let under = |element: &CoreHandle| {
+            let mut node = Some(component.clone());
+            while let Some(current) = node {
+                if current == *element {
+                    return true;
+                }
+                // An artboard's next level is its host, as the draw's.
+                node = current
+                    .with(|o| match o.as_artboard() {
+                        Some(board) => board.host(),
+                        None => o.component_parent_handle(),
+                    })
+                    .flatten();
+            }
+            false
+        };
+        let Some(flight) = plan.lifted.iter().find(|flight| under(&flight.element)) else {
+            return Ok(own);
+        };
+        let matrix = flight.lift.0.borrow().matrix;
+        let (upper, _, _) = super::follow::draw_pose(&flight.board)?;
+        let (row, _, _) = super::follow::draw_pose(&flight.row)?;
+        let mut row_inverse = crate::source::math::mat2d::Mat2D::identity();
+        ensure!(row.invert(&mut row_inverse), "singular Screen matrix");
+        Ok(upper * matrix * row_inverse * own)
+    }
+    /// Each copy flying in place in the active step: its element, its
+    /// Screen and its flight record, in placing order.
+    #[cfg(feature = "test-support")]
+    pub fn lifted_records(
+        &self,
+        root: &RuntimeArtboardInstanceHandle,
+    ) -> Vec<(CoreHandle, CoreHandle, CoreHandle)> {
+        crate::hosted_scene::root_scene(root).map_or_else(Vec::new, |s| {
+            s.plan
+                .borrow()
+                .lifted
+                .iter()
+                .map(|flight| (flight.element.clone(), flight.row.clone(), flight.record.clone()))
+                .collect()
+        })
+    }
+    /// Sets the clip of the lift of `element`, a copy flying in place, as a
+    /// zoomed pair does: a box in the element's own content space.
+    #[cfg(feature = "test-support")]
+    pub fn set_lift_clip(
+        &mut self,
+        root: &RuntimeArtboardInstanceHandle,
+        element: &CoreHandle,
+        clip: Option<crate::source::artboard::FlightClip>,
+    ) {
+        let scene = crate::hosted_scene::root_scene(root).expect("live scene");
+        let plan = scene.plan.borrow();
+        let flight = plan
+            .lifted
+            .iter()
+            .find(|flight| flight.element == *element)
+            .expect("the element flies in place");
+        flight.lift.0.borrow_mut().clip = clip;
+    }
     /// The matrix placement gives a CSS slot's frame at rest, in its Screen's
     /// space, made by the same helpers placement's resting boxes use.
     #[cfg(feature = "test-support")]
     pub fn resting_slot(&self, slot: &CoreHandle) -> Option<crate::source::math::mat2d::Mat2D> {
         super::follow::resting_slot(slot)
+    }
+    /// The matrix placement gives a CSS box at rest, in its Screen's space,
+    /// made by the same helpers placement's resting boxes use.
+    #[cfg(feature = "test-support")]
+    pub fn resting_box(&self, element: &CoreHandle) -> Option<crate::source::math::mat2d::Mat2D> {
+        super::follow::resting_box(element)
     }
     /// Sets a flying frame's clip, as a zoomed pair does.
     #[cfg(feature = "test-support")]

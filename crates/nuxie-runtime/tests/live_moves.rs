@@ -9684,9 +9684,36 @@ mod paint_order {
 /// geometric oracle here reads what the renderer got, through `frame_draws`.
 mod drawn {
     use super::*;
-    use fixture::PaintCase;
+    use fixture::{PaintCase, PaintShape};
     use nuxie_render_api as render;
     use nuxie_render_stream::{DrawnClip, FrameDraw, RoundedRect, frame_draws, stream_ops};
+
+    thread_local! {
+        /// The shape every `DrawnScene::new` of this thread writes its page
+        /// in: an in-place twin runs a test's own assertions in place.
+        static SHAPE: std::cell::Cell<PaintShape> = const { std::cell::Cell::new(PaintShape::Slots) };
+    }
+
+    /// Writes a flight value on every flight of the step, named by its key
+    /// on a flight slot's controls: a flight record carries the same value
+    /// 30 keys on for progress and path, and 22 on for the rest.
+    fn set_flights(s: &DrawnScene, slot_key: i32, value: f32) {
+        for controls in s.moves.flight_controls(&s.root) {
+            set(&controls, key_on(&controls, slot_key), value);
+        }
+    }
+    /// A flight slot's key on `controls`: itself on a slot's values, and on
+    /// a flight record the record's own key for the same control.
+    fn key_on(controls: &CoreHandle, slot_key: i32) -> i32 {
+        let record = controls
+            .with_downcast::<live_move::records::LiveFlight, _>(|_| ())
+            .is_some();
+        match (record, slot_key) {
+            (false, key) => key,
+            (true, key @ 62003..=62005) => key + 30,
+            (true, key) => key + 22,
+        }
+    }
 
     /// A page mounted as a host mounts a published page.
     struct DrawnScene {
@@ -9700,7 +9727,8 @@ mod drawn {
         fn new(case: PaintCase) -> Self {
             let mut factory = PersistentFactory::new(RecordingFactory::new());
             let file = File::import(
-                &fixture::css_paint_fixture(case),
+                &fixture::css_paint_fixture_shaped(case, SHAPE.get())
+                    .unwrap_or_else(|why| panic!("{case:?} has no {:?} page: {why}", SHAPE.get())),
                 RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
                 None,
                 None,
@@ -9735,6 +9763,103 @@ mod drawn {
             self.row(row)
                 .with_artboard(|r| r.find_handle::<NestedArtboard>(name))
                 .unwrap_or_else(|| panic!("no slot {name} on {row}"))
+        }
+        fn layout(&self, row: &str, name: &str) -> CoreHandle {
+            self.row(row)
+                .with_artboard(|r| {
+                    r.find_handle::<source::layout_component::LayoutComponent>(name)
+                })
+                .unwrap_or_else(|| panic!("no box {name} on {row}"))
+        }
+        /// The frame `name` rests as on `row`: its slot's unit, or in place
+        /// the element itself.
+        fn home_frame(&self, row: &str, name: &str) -> CoreHandle {
+            match SHAPE.get() {
+                PaintShape::InPlace => self.layout(row, name),
+                _ => child(&self.slot(row, name))
+                    .unwrap_or_else(|| panic!("{name} is home on {row}"))
+                    .core_handle(),
+            }
+        }
+        /// Where `name`'s slot rests on `row`, or in place where the element
+        /// draws on its own Screen, which a flight never moves.
+        fn resting_place(&self, row: &str, name: &str) -> [f32; 6] {
+            match SHAPE.get() {
+                PaintShape::InPlace => *self
+                    .moves
+                    .drawn(&self.layout(row, name), When::Live)
+                    .unwrap()
+                    .values(),
+                _ => *slot_pose(&self.slot(row, name)).unwrap().transform.values(),
+            }
+        }
+        /// The step's one flight, showing `name` on its way to `to`: the frame
+        /// in its flight slot, or in place `to`'s own copy, which flies beside
+        /// the leaving copy held at fade 0.
+        fn flight_frame(&self, to: &str, name: &str) -> CoreHandle {
+            match SHAPE.get() {
+                PaintShape::InPlace => {
+                    let copies = self.moves.lifted_records(&self.root);
+                    assert_eq!(copies.len(), 2, "{name} flies alone, as two copies");
+                    self.layout(to, name)
+                }
+                _ => {
+                    let flights = self.moves.flights(&self.root);
+                    assert_eq!(flights.len(), 1, "{name} flies alone");
+                    child(&flights[0].flight)
+                        .unwrap_or_else(|| panic!("{name} is in its flight slot"))
+                        .core_handle()
+                }
+            }
+        }
+        /// The controls of the flight that shows on `to`: the one flight's,
+        /// or in place `to`'s copy's record.
+        fn shown_controls(&self, to: &str) -> CoreHandle {
+            match SHAPE.get() {
+                PaintShape::InPlace => {
+                    let row = self.row(to).core_handle();
+                    self.moves
+                        .lifted_records(&self.root)
+                        .into_iter()
+                        .find(|(_, on, _)| *on == row)
+                        .map(|(.., record)| record)
+                        .unwrap_or_else(|| panic!("a copy flies on {to}"))
+                }
+                _ => self.moves.flights(&self.root)[0].controls(),
+            }
+        }
+        /// What placement reads `name`'s resting place from on `row`: its
+        /// slot, or in place the element.
+        fn resting_item(&self, row: &str, name: &str) -> CoreHandle {
+            match SHAPE.get() {
+                PaintShape::InPlace => self.layout(row, name),
+                _ => self.slot(row, name),
+            }
+        }
+        /// The matrix placement's resting boxes give `item` from
+        /// `resting_item`.
+        fn resting_matrix(&self, item: &CoreHandle) -> Option<source::math::mat2d::Mat2D> {
+            match SHAPE.get() {
+                PaintShape::InPlace => self.moves.resting_box(item),
+                _ => self.moves.resting_slot(item),
+            }
+        }
+        /// Where `content` draws now: through its lift when it flies in
+        /// place.
+        fn drawn_now(&self, content: &CoreHandle) -> source::math::mat2d::Mat2D {
+            self.moves.drawn_now(&self.root, content).unwrap()
+        }
+        /// Sets the clip a zoomed pair sets on `frame`, a flight's frame.
+        fn set_flight_clip(&mut self, frame: &CoreHandle, clip: Option<source::artboard::FlightClip>) {
+            match SHAPE.get() {
+                PaintShape::InPlace => self.moves.set_lift_clip(&self.root, frame, clip),
+                _ => {
+                    let flights = self.moves.flights(&self.root);
+                    let unit = child(&flights[0].flight).unwrap();
+                    assert!(unit.core_handle() == *frame, "the frame in the flight slot");
+                    self.moves.set_flight_clip(&unit, clip);
+                }
+            }
         }
         fn advance(&mut self, dt: f32) {
             self.machine.advance_and_apply(dt);
@@ -9815,34 +9940,31 @@ mod drawn {
     #[test]
     fn the_arriving_screen_is_laid_out_when_a_step_begins() {
         let mut s = DrawnScene::new(PaintCase::BoundSubtitle);
-        let arriving = s.slot("B", "E");
-        let one_line = slot_pose(&arriving).unwrap();
+        let one_line = s.resting_place("B", "E");
         assert!(CoreRegistry::set_string_handle(
             &property(&vm(&s.row("B")), "subtitle"),
             561,
             "A subtitle long enough to wrap onto a second line once it is bound. ".repeat(3),
         ));
         s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
-        let at_takeoff = slot_pose(&arriving).unwrap();
+        let at_takeoff = s.resting_place("B", "E");
         assert!(
-            at_takeoff.transform[5] > one_line.transform[5] + 20.0,
+            at_takeoff[5] > one_line[5] + 20.0,
             "the bound text must move the slot: {} from {}",
-            at_takeoff.transform[5],
-            one_line.transform[5]
+            at_takeoff[5],
+            one_line[5]
         );
-        for flight in s.moves.flights(&s.root) {
-            set(&flight.controls(), 62003, 1.0);
-        }
+        set_flights(&s, 62003, 1.0);
         s.advance(0.1);
         s.moves.step_end(&s.root, "B", Some("go")).unwrap();
         s.advance(0.0);
-        let landed = slot_pose(&arriving).unwrap();
+        let landed = s.resting_place("B", "E");
         for i in 0..6 {
             assert!(
-                (at_takeoff.transform[i] - landed.transform[i]).abs() < 1e-3,
+                (at_takeoff[i] - landed[i]).abs() < 1e-3,
                 "component {i}: {} at takeoff, {} after landing",
-                at_takeoff.transform[i],
-                landed.transform[i]
+                at_takeoff[i],
+                landed[i]
             );
         }
     }
@@ -10014,22 +10136,30 @@ mod drawn {
         let halfway = |own: f32| {
             let mut s = DrawnScene::new(PaintCase::OwnOpacity(own));
             s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
-            let flights = s.moves.flights(&s.root);
-            assert_eq!(flights.len(), 1, "one version flies");
-            set(&flights[0].controls(), 62003, 0.5);
+            s.flight_frame("B", "E");
+            set_flights(&s, 62003, 0.5);
             s.advance(0.1);
-            close(val(&flights[0].controls(), 62014), 0.5);
+            let controls = s.shown_controls("B");
+            close(val(&controls, key_on(&controls, 62014)), 0.5);
             s.draws()
         };
         let draws = halfway(0.5);
-        let draw = one_of(&draws, rgb, "own opacity 0.5");
-        assert!(
-            (draw.opacity() - 0.25).abs() < 0.003,
-            "drawn at {}, under {:?}, in {:08x}",
-            draw.opacity(),
-            draw.modulations,
-            draw.color.unwrap()
-        );
+        // In place E flies as two copies, and both carry the fade.
+        let copies = match SHAPE.get() {
+            PaintShape::InPlace => 2,
+            _ => 1,
+        };
+        let drawn = of_rgb(&draws, rgb);
+        assert_eq!(drawn.len(), copies, "own opacity 0.5: E's draws");
+        for draw in drawn {
+            assert!(
+                (draw.opacity() - 0.25).abs() < 0.003,
+                "drawn at {}, under {:?}, in {:08x}",
+                draw.opacity(),
+                draw.modulations,
+                draw.color.unwrap()
+            );
+        }
         let draws = halfway(0.0);
         assert!(
             of_rgb(&draws, rgb).is_empty(),
@@ -10194,7 +10324,7 @@ mod drawn {
     #[test]
     fn resting_boxes_keep_a_bound_value_beside_a_key() {
         let mut s = DrawnScene::new(PaintCase::BoundBesideKey);
-        let cases = [("held", s.slot("B", "held")), ("own", s.slot("B", "own"))];
+        let cases = ["held", "own"].map(|name| (name, s.resting_item("B", name)));
         s.advance(0.5);
         let draws = s.draws();
         for (name, _) in &cases {
@@ -10203,9 +10333,8 @@ mod drawn {
         }
         let resting: Vec<_> = cases
             .iter()
-            .map(|(name, slot)| {
-                s.moves
-                    .resting_slot(slot)
+            .map(|(name, item)| {
+                s.resting_matrix(item)
                     .unwrap_or_else(|| panic!("{name} has a resting place"))
             })
             .collect();
@@ -10258,37 +10387,60 @@ mod drawn {
     fn reader_is_the_draw_of(
         kind: fixture::ReaderKind,
         name: &str,
-        content: impl Fn(&RuntimeArtboardInstanceHandle) -> CoreHandle,
+        content: impl Fn(&CoreHandle) -> CoreHandle,
     ) -> (render::Mat2D, render::Mat2D) {
         let rgb = fixture::paint_color(name);
         let mut s = DrawnScene::new(PaintCase::Reader { kind, flies: true });
         s.advance(0.25);
         s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
-        let flights = s.moves.flights(&s.root);
-        assert_eq!(flights.len(), 1, "E flies alone");
-        set(&flights[0].controls(), 62003, 0.5);
+        let frame = s.flight_frame("B", "E");
+        set_flights(&s, 62003, 0.5);
         s.advance(0.0);
-        let frame = child(&flights[0].flight).expect("E is in its flight slot");
-        let read = s.moves.drawn(&content(&frame), When::Live).unwrap();
+        let read = s.drawn_now(&content(&frame));
         let draws = s.draws();
         let draw = one_of(&draws, rgb, "in flight");
         assert_reads(read, draw, "in flight");
         let in_flight = draw.matrix;
 
-        set(&flights[0].controls(), 62003, 1.0);
+        set_flights(&s, 62003, 1.0);
         s.advance(0.0);
         s.moves.step_end(&s.root, "B", Some("go")).unwrap();
         s.retire_a();
         s.advance(0.0);
-        let frame = child(&s.slot("B", "E")).expect("E is home");
+        let frame = s.home_frame("B", "E");
         let read = s.moves.drawn(&content(&frame), When::Live).unwrap();
         let draws = s.draws();
         let draw = one_of(&draws, rgb, "at rest");
         assert_reads(read, draw, "at rest");
         (in_flight, draw.matrix)
     }
+    /// The leaf that hosts an artboard inside `frame`: a unit artboard's,
+    /// or in place one under the element on its Screen.
+    fn leaf_under(frame: &CoreHandle) -> Option<CoreHandle> {
+        let board = match frame.with(|o| o.as_artboard().is_some()) {
+            Some(true) => frame.clone(),
+            _ => frame
+                .with(|o| o.as_component().and_then(|c| c.artboard_handle()))
+                .flatten()?,
+        };
+        let leaves = board
+            .with_downcast::<nuxie_runtime::Artboard, _>(|b| b.find_all_handles::<source::nested_artboard_leaf::NestedArtboardLeaf>())
+            .unwrap_or_default();
+        leaves.into_iter().find(|leaf| {
+            let mut node = Some(leaf.clone());
+            while let Some(current) = node {
+                if current == *frame {
+                    return true;
+                }
+                node = current
+                    .with(|o| o.as_component().and_then(|c| c.parent_handle()))
+                    .flatten();
+            }
+            false
+        })
+    }
     fn reader_is_the_draw(kind: fixture::ReaderKind) -> (render::Mat2D, render::Mat2D) {
-        reader_is_the_draw_of(kind, "E", RuntimeArtboardInstanceHandle::core_handle)
+        reader_is_the_draw_of(kind, "E", CoreHandle::clone)
     }
 
     /// R1a. Layout's placement alone.
@@ -10364,8 +10516,8 @@ mod drawn {
     fn the_reader_is_the_draw_hosted_fit() {
         use source::nested_artboard_leaf::NestedArtboardLeaf;
         let (_, rest) = reader_is_the_draw_of(fixture::ReaderKind::HostedFit, "inner", |frame| {
-            let leaf = frame.with_artboard(|unit| unit.find_all_handles::<NestedArtboardLeaf>());
-            child(&leaf[0]).expect("the leaf hosts inner").core_handle()
+            let leaf = leaf_under(frame).expect("E holds a leaf");
+            child(&leaf).expect("the leaf hosts inner").core_handle()
         });
         close(rest.0[0], 2.0);
         close(rest.0[3], 2.0);
@@ -10431,7 +10583,7 @@ mod drawn {
 
     fn rest_scene(kind: fixture::ReaderKind) -> (DrawnScene, CoreHandle) {
         let s = DrawnScene::new(PaintCase::Reader { kind, flies: false });
-        let frame = child(&s.slot("B", "E")).expect("E is home").core_handle();
+        let frame = s.home_frame("B", "E");
         (s, frame)
     }
 
@@ -10530,8 +10682,7 @@ mod drawn {
     #[test]
     fn rest_keeps_a_bound_value_beside_a_key() {
         let mut s = DrawnScene::new(PaintCase::BoundBesideKey);
-        let frames =
-            ["held", "own"].map(|name| (name, child(&s.slot("B", name)).unwrap().core_handle()));
+        let frames = ["held", "own"].map(|name| (name, s.home_frame("B", name)));
         s.advance(0.5);
         let rests = frames.clone().map(|(_, frame)| {
             let rest = s.moves.drawn(&frame, When::Rest).unwrap();
@@ -10580,24 +10731,20 @@ mod drawn {
         use source::{artboard::FlightClip, math::vec2d::Vec2D};
         let mut s = DrawnScene::new(PaintCase::TurnedInClippingHolder);
         s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
-        let flights = s.moves.flights(&s.root);
-        assert_eq!(flights.len(), 1, "E flies alone");
-        set(&flights[0].controls(), 62003, 0.5);
+        let frame = s.flight_frame("B", "E");
+        set_flights(&s, 62003, 0.5);
         s.advance(0.0);
-        let frame = child(&flights[0].flight).expect("E is in its flight slot");
         let clip = FlightClip {
             width: CLIP_SIZE.0,
             height: CLIP_SIZE.1,
             radii: CLIP_RADII.map(|(x, y)| Vec2D::new(x, y)),
         };
-        s.moves.set_flight_clip(&frame, Some(clip));
+        s.set_flight_clip(&frame, Some(clip));
         s.advance(0.0);
         s
     }
     fn land_flight(s: &mut DrawnScene) {
-        for flight in s.moves.flights(&s.root) {
-            set(&flight.controls(), 62003, 1.0);
-        }
+        set_flights(&s, 62003, 1.0);
         s.advance(0.0);
         s.moves.step_end(&s.root, "B", Some("go")).unwrap();
         s.retire_a();
@@ -11116,9 +11263,7 @@ mod drawn {
             (p / 0.65).min(1.0)
         }
         fn set_progress(s: &DrawnScene, p: f32) {
-            for flight in s.moves.flights(&s.root) {
-                set(&flight.controls(), 62003, p);
-            }
+            set_flights(s, 62003, p);
         }
         fn draws_under(s: &DrawnScene, fit: Mat2D) -> Vec<FrameDraw> {
             s.factory.borrow_mut().clear();
@@ -11666,20 +11811,19 @@ mod drawn {
         #[test]
         fn zoom_reads_the_arriving_screen_laid_out_at_takeoff() {
             let mut s = DrawnScene::new(PaintCase::Zoom(Case::BoundSubtitle));
-            let home = s.slot("B", "b");
-            let one_line = slot_pose(&home).unwrap();
+            let one_line = s.resting_place("B", "b");
             assert!(CoreRegistry::set_string_handle(
                 &property(&vm(&s.row("B")), "subtitle"),
                 561,
                 "A subtitle long enough to wrap onto a second line once it is bound. ".repeat(3),
             ));
             s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
-            let at_takeoff = slot_pose(&home).unwrap();
+            let at_takeoff = s.resting_place("B", "b");
             assert!(
-                at_takeoff.transform[5] > one_line.transform[5] + 20.0,
+                at_takeoff[5] > one_line[5] + 20.0,
                 "the bound text must move the slot: {} from {}",
-                at_takeoff.transform[5],
-                one_line.transform[5]
+                at_takeoff[5],
+                one_line[5]
             );
             let ends = s.moves.pair_ends(&s.root);
             assert_eq!(ends.len(), 1, "a zoomed step holds one pair");
@@ -12001,7 +12145,13 @@ mod drawn {
                     // Each p is also how far the one-second keys have run.
                     let draws = run.at(&mut s, p, 0.25);
                     let label = format!("{label} at {p}");
-                    if way == Way::Back && p == 0.5 {
+                    // In place both copies draw nothing at 0.5 either way: the
+                    // card is at scale 0, and inside a box scaled to exactly 0
+                    // a copy flying in place draws nothing, as CSS draws
+                    // nothing inside `scale(0)` (the fourth known difference,
+                    // docs/live-moves.md, Flying in place).
+                    let in_place = super::SHAPE.get() == PaintShape::InPlace;
+                    if (way == Way::Back || in_place) && p == 0.5 {
                         for version in ["a", "b"] {
                             no_ink(&draws, color(version), &label);
                             no_ink(&draws, child_color(version), &label);
@@ -12155,6 +12305,303 @@ mod drawn {
                     }
                 }
             }
+        }
+
+        /// 4.2 of the in-place plan: each test above, run again on its page's
+        /// in-place shape, with its own assertions. Not twinned:
+        /// `the_zoom_lives_only_in_a_pair` and
+        /// `a_zoom_on_one_key_without_transfers_flies_the_zoomed_pair` read
+        /// the slot plan's entries and its units landing back in their slots,
+        /// which in place has neither (no copy leaves its Screen); their
+        /// cases, `OneUnit`, `ZoomOutOfRange` and `OneKeyCopies`, are cases of
+        /// `in_place_matches_the_slot_path`. `LayerFromZero` keys the
+        /// compiler's flight layer, which no file can (see `in_place_cases`).
+        mod in_place_twins {
+            #[test]
+            fn zoom_draws_both_versions_on_one_box_a_keyed_scale_above() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_draws_both_versions_on_one_box_a_keyed_scale_above();
+            }
+            #[test]
+            fn zoom_draws_both_versions_on_one_box_the_slots_turn() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_draws_both_versions_on_one_box_the_slots_turn();
+            }
+            #[test]
+            fn zoom_draws_both_versions_on_one_box_the_frames_keyed_scale() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_draws_both_versions_on_one_box_the_frames_keyed_scale();
+            }
+            #[test]
+            fn zoom_draws_both_versions_on_one_box_the_frames_bound_scale() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_draws_both_versions_on_one_box_the_frames_bound_scale();
+            }
+            #[test]
+            fn zoom_draws_both_versions_on_one_box_the_frames_turn() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_draws_both_versions_on_one_box_the_frames_turn();
+            }
+            #[test]
+            fn zoom_draws_both_versions_on_one_box_a_css_slot_offset() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_draws_both_versions_on_one_box_a_css_slot_offset();
+            }
+            #[test]
+            fn zoom_draws_both_versions_on_one_box_a_turned_screen() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_draws_both_versions_on_one_box_a_turned_screen();
+            }
+            #[test]
+            fn zoom_draws_both_versions_on_one_box_the_hosts_fit() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_draws_both_versions_on_one_box_the_hosts_fit();
+            }
+            #[test]
+            fn zoom_draws_both_versions_on_one_box_a_scale_about_the_screens_center() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_draws_both_versions_on_one_box_a_scale_about_the_screens_center();
+            }
+            #[test]
+            fn zoom_draws_both_versions_on_one_box_shares_on_the_height() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_draws_both_versions_on_one_box_shares_on_the_height();
+            }
+            #[test]
+            fn zoom_draws_both_versions_on_one_box_unequal_axis_scales() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_draws_both_versions_on_one_box_unequal_axis_scales();
+            }
+            #[test]
+            fn zoom_draws_both_versions_on_one_box_a_scale_off_center() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_draws_both_versions_on_one_box_a_scale_off_center();
+            }
+            #[test]
+            fn zoom_draws_both_versions_on_one_box_a_card_in_the_screen() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_draws_both_versions_on_one_box_a_card_in_the_screen();
+            }
+            #[test]
+            fn zoom_meets_each_version_at_its_own_end() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_meets_each_version_at_its_own_end();
+            }
+            #[test]
+            fn zoom_lands_with_a_jump_under_a_key_that_ends_off_identity() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_lands_with_a_jump_under_a_key_that_ends_off_identity();
+            }
+            #[test]
+            fn zoom_lands_on_the_resting_place_while_the_element_animates() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_lands_on_the_resting_place_while_the_element_animates();
+            }
+            #[test]
+            fn zoom_reads_the_arriving_screen_laid_out_at_takeoff() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_reads_the_arriving_screen_laid_out_at_takeoff();
+            }
+            #[test]
+            fn zoom_hands_over_by_the_rule() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_hands_over_by_the_rule();
+            }
+            #[test]
+            fn zoom_hands_over_by_the_rule_under_a_faded_ancestor() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_hands_over_by_the_rule_under_a_faded_ancestor();
+            }
+            #[test]
+            fn zoom_hands_over_by_the_rule_on_a_frame_with_its_own_opacity() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_hands_over_by_the_rule_on_a_frame_with_its_own_opacity();
+            }
+            #[test]
+            fn zoom_runs_on_ends_that_arent_plain_rectangles_skewed() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_runs_on_ends_that_arent_plain_rectangles_skewed();
+            }
+            #[test]
+            fn zoom_runs_on_ends_that_arent_plain_rectangles_mirrored() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_runs_on_ends_that_arent_plain_rectangles_mirrored();
+            }
+            #[test]
+            fn zoom_runs_on_ends_that_arent_plain_rectangles_zero_height_laid_out() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_runs_on_ends_that_arent_plain_rectangles_zero_height_laid_out();
+            }
+            #[test]
+            fn zoom_runs_on_ends_that_arent_plain_rectangles_zero_height_scaled() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_runs_on_ends_that_arent_plain_rectangles_zero_height_scaled();
+            }
+            #[test]
+            fn zoom_runs_on_ends_that_arent_plain_rectangles_empty_laid_out() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_runs_on_ends_that_arent_plain_rectangles_empty_laid_out();
+            }
+            #[test]
+            fn zoom_runs_on_ends_that_arent_plain_rectangles_empty_scaled() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_runs_on_ends_that_arent_plain_rectangles_empty_scaled();
+            }
+            #[test]
+            fn zoom_runs_on_ends_that_arent_plain_rectangles_scale_through_zero() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_runs_on_ends_that_arent_plain_rectangles_scale_through_zero();
+            }
+            #[test]
+            fn zoom_runs_on_ends_that_arent_plain_rectangles_scale_from_zero() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_runs_on_ends_that_arent_plain_rectangles_scale_from_zero();
+            }
+            #[test]
+            fn zoom_versions_keep_their_strength_under_a_fading_screen() {
+                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+                super::zoom_versions_keep_their_strength_under_a_fading_screen();
+            }
+        }
+    }
+
+    /// 4.2 of the in-place plan: each test above, run again on its page's
+    /// in-place shape, with its own assertions.
+    mod in_place_twins {
+        #[test]
+        fn a_cubic_easing_keys_past_its_end() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::a_cubic_easing_keys_past_its_end();
+        }
+        #[test]
+        fn the_arriving_screen_is_laid_out_when_a_step_begins() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::the_arriving_screen_is_laid_out_when_a_step_begins();
+        }
+        #[test]
+        fn take_off_starts_every_flight_at_its_tracks_first_frame() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::take_off_starts_every_flight_at_its_tracks_first_frame();
+        }
+        #[test]
+        fn a_layout_flight_lays_out_at_the_blend() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::a_layout_flight_lays_out_at_the_blend();
+        }
+        #[test]
+        fn a_frames_own_opacity_multiplies_its_slots_fade() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::a_frames_own_opacity_multiplies_its_slots_fade();
+        }
+        #[test]
+        fn the_runtime_harness_fades_a_picture_by_scope() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::the_runtime_harness_fades_a_picture_by_scope();
+        }
+        #[test]
+        fn frame_draws_sees_a_wrong_turn_and_a_wrong_corner() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::frame_draws_sees_a_wrong_turn_and_a_wrong_corner();
+        }
+        #[test]
+        fn resting_boxes_keep_a_bound_value_beside_a_key() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::resting_boxes_keep_a_bound_value_beside_a_key();
+        }
+        #[test]
+        fn the_reader_is_the_draw_placement() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::the_reader_is_the_draw_placement();
+        }
+        #[test]
+        fn the_reader_is_the_draw_ancestor_scale() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::the_reader_is_the_draw_ancestor_scale();
+        }
+        #[test]
+        fn the_reader_is_the_draw_slot_turn() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::the_reader_is_the_draw_slot_turn();
+        }
+        #[test]
+        fn the_reader_is_the_draw_frame_keyed_scale() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::the_reader_is_the_draw_frame_keyed_scale();
+        }
+        #[test]
+        fn the_reader_is_the_draw_frame_bound_scale() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::the_reader_is_the_draw_frame_bound_scale();
+        }
+        #[test]
+        fn the_reader_is_the_draw_frame_turn() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::the_reader_is_the_draw_frame_turn();
+        }
+        #[test]
+        fn the_reader_is_the_draw_css_slot_offset() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::the_reader_is_the_draw_css_slot_offset();
+        }
+        #[test]
+        fn the_reader_is_the_draw_hosted_fit() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::the_reader_is_the_draw_hosted_fit();
+        }
+        #[test]
+        fn the_reader_is_the_draw_turned_screen_on_a_row() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::the_reader_is_the_draw_turned_screen_on_a_row();
+        }
+        #[test]
+        fn rest_is_the_draw_once_the_keys_end_ancestor_scale() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::rest_is_the_draw_once_the_keys_end_ancestor_scale();
+        }
+        #[test]
+        fn rest_is_the_draw_once_the_keys_end_ancestor_turn() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::rest_is_the_draw_once_the_keys_end_ancestor_turn();
+        }
+        #[test]
+        fn rest_is_the_draw_once_the_keys_end_frame_scale() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::rest_is_the_draw_once_the_keys_end_frame_scale();
+        }
+        #[test]
+        fn rest_is_the_draw_once_the_keys_end_ancestor_translate() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::rest_is_the_draw_once_the_keys_end_ancestor_translate();
+        }
+        #[test]
+        fn rest_is_the_draw_once_the_keys_end_layout_width() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::rest_is_the_draw_once_the_keys_end_layout_width();
+        }
+        #[test]
+        fn rest_takes_a_key_that_ends_off_identity_at_identity() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::rest_takes_a_key_that_ends_off_identity_at_identity();
+        }
+        #[test]
+        fn rest_keeps_a_bound_value_beside_a_key() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::rest_keeps_a_bound_value_beside_a_key();
+        }
+        #[test]
+        fn rest_is_the_draw_of_a_css_slot_frames_own_keys() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::rest_is_the_draw_of_a_css_slot_frames_own_keys();
+        }
+        #[test]
+        fn a_flight_clip_bounds_the_frames_ink() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::a_flight_clip_bounds_the_frames_ink();
+        }
+        #[test]
+        fn landing_clears_a_flight_clip() {
+            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
+            super::landing_clears_a_flight_clip();
         }
     }
 }

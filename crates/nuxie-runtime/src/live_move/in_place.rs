@@ -108,11 +108,23 @@ fn box_of(element: &CoreHandle) -> CoreHandle {
 /// matrix. Its opacity is its parent's child opacity times the fades the
 /// boxes above it hold out of it.
 pub(super) fn end(element: &CoreHandle) -> Result<End> {
+    let (parent, translation) = layout_place(element)?;
+    let (parent_page, _, child_opacity) = draw_pose(&parent)?;
+    Ok(End {
+        place: parent_page * Mat2D::from_translation(translation),
+        size: resting_size(element),
+        opacity: child_opacity * crate::css_layout::group_opacity::held_above(element),
+    })
+}
+
+/// `element`'s parent and its place in it without its own transform: a CSS
+/// box's layout position, or the translation of any other element's local
+/// matrix.
+fn layout_place(element: &CoreHandle) -> Result<(CoreHandle, Vec2D)> {
     let parent = element
         .with(|object| object.component_parent_handle())
         .flatten()
         .ok_or_else(|| anyhow::anyhow!("a flying element has no parent"))?;
-    let (parent_page, _, child_opacity) = draw_pose(&parent)?;
     let css_box = element
         .with(|object| {
             object
@@ -124,6 +136,7 @@ pub(super) fn end(element: &CoreHandle) -> Result<End> {
     let translation = match css_box {
         Some(translation) => translation,
         None => {
+            let (parent_page, _, _) = draw_pose(&parent)?;
             let (page, _, _) = draw_pose(element)?;
             let mut inverse = Mat2D::identity();
             ensure!(parent_page.invert(&mut inverse), "singular flight parent");
@@ -131,11 +144,16 @@ pub(super) fn end(element: &CoreHandle) -> Result<End> {
             Vec2D::new(local[4], local[5])
         }
     };
-    Ok(End {
-        place: parent_page * Mat2D::from_translation(translation),
-        size: resting_size(element),
-        opacity: child_opacity * crate::css_layout::group_opacity::held_above(element),
-    })
+    Ok((parent, translation))
+}
+
+/// Where `element` is placed without its own transform, read at `when`:
+/// its parent as `drawn` reads it, then its layout place. It is what the
+/// slot path reads from a home slot, which a key on the element itself
+/// does not move.
+fn place(element: &CoreHandle, when: When) -> Result<Mat2D> {
+    let (parent, translation) = layout_place(element)?;
+    Ok(drawn(&parent, when)? * Mat2D::from_translation(translation))
 }
 
 /// One flying copy of an in-place step.
@@ -453,7 +471,7 @@ impl InPlacePair {
             Rule::Returning => {
                 let home = arriving.element.clone();
                 let mut rest_inverse = Mat2D::identity();
-                let inverts = drawn(&home, When::Rest)?.invert(&mut rest_inverse)
+                let inverts = place(&home, When::Rest)?.invert(&mut rest_inverse)
                     && rest_inverse.values().iter().all(|v| v.is_finite());
                 inverts.then(|| (home, rest_inverse, center, rest_inverse * center))
             }
@@ -536,14 +554,15 @@ impl InPlacePair {
     }
 
     /// r and t on Back, as `zoom::Pair` reads them from the home slot, here
-    /// from the arriving copy as drawn now over its rest. While its Screen
-    /// sleeps, the last r and t stay.
+    /// from the arriving copy's place now over its place at rest, without
+    /// its own transform, as a slot holds its unit. While its Screen sleeps,
+    /// the last r and t stay.
     fn follow(&self, arriving: &InPlaceFlight, active: &HashSet<CoreHandle>) -> Result<(f32, Vec2D)> {
         let Some((home, rest_inverse, center, point)) = &self.tracker else {
             return Ok((1.0, Vec2D::default()));
         };
         if active.contains(&arriving.row) {
-            let now = drawn(home, When::Live)?;
+            let now = place(home, When::Live)?;
             let r = (now * *rest_inverse).determinant().abs().sqrt();
             let t = now * *point - *center;
             if r.is_finite() && t.x.is_finite() && t.y.is_finite() {

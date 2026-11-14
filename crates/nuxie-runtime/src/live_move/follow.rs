@@ -930,6 +930,17 @@ pub(super) fn resting_slot(slot: &CoreHandle) -> Option<Mat2D> {
     Resting::new(&board).slot_matrix(slot)
 }
 
+/// The matrix placement's resting boxes give a CSS box at rest, in its
+/// Screen's space: its resting world, which for a box flying in place is
+/// where its hold keeps it.
+#[cfg(feature = "test-support")]
+pub(super) fn resting_box(element: &CoreHandle) -> Option<Mat2D> {
+    let board = element
+        .with(|o| o.as_component().and_then(|c| c.artboard_handle()))
+        .flatten()?;
+    Resting::new(&board).world(element)
+}
+
 /// The CSS record layout reads `item`'s style from: a box's own, or for a
 /// slot the one among its children.
 fn css_record(item: &CoreHandle) -> Option<CoreHandle> {

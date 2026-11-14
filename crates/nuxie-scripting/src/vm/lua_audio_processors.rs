@@ -84,8 +84,31 @@ impl OwnedProcessor {
         self.handle.is_unreferenced_terminal() && !self.pending()
     }
 }
+/// Processors one script VM may have starting or running at once. Tests and
+/// tools start at most three per VM; each is a VM of up to 16 MiB and a
+/// renderer the audio thread runs every block.
+pub(super) const MAX_LIVE_PROCESSORS: usize = 64;
+
 #[derive(Default)]
 struct VmOwners(RefCell<Vec<WeakProcessorOwner>>);
+/// Processors of the VM's owners, and `owner`'s if it is not tracked yet,
+/// that are starting or running.
+fn live_processors(lua: &Lua, owner: &ProcessorOwner) -> usize {
+    let mut owners = live_owners(lua);
+    if !owners.iter().any(|tracked| Rc::ptr_eq(&tracked.0, &owner.0)) {
+        owners.push(owner.clone());
+    }
+    owners.iter().fold(0usize, |count, owner| {
+        let live = owner
+            .0
+            .processors
+            .borrow()
+            .iter()
+            .filter(|processor| matches!(processor.handle.state(), "starting" | "running"))
+            .count();
+        count.saturating_add(live)
+    })
+}
 fn live_owners(lua: &Lua) -> Vec<ProcessorOwner> {
     lua.app_data_ref::<VmOwners>()
         .map(|owners| {
@@ -586,6 +609,11 @@ pub(super) fn install(lua: &Lua, audio: &Table) -> Result<()> {
                     )
                 })?;
             owner.admit()?;
+            if live_processors(lua, &owner) >= MAX_LIVE_PROCESSORS {
+                return Err(Error::runtime(format!(
+                    "Audio.start: at most {MAX_LIVE_PROCESSORS} processors may run at once"
+                )));
+            }
             let modules = lua
                 .app_data_ref::<ProcessorModules>()
                 .map(|modules| modules.0.borrow().clone())
@@ -1370,6 +1398,45 @@ mod tests {
         "#,
         );
         assert!(vm.lua().load("Audio.start('tone')").exec().is_err());
+    }
+
+    #[test]
+    fn authored_audio_caps_live_processors_per_vm() {
+        let _guard = AUDIO_TEST_LOCK.lock().unwrap();
+        let _engine = AudioEngine::make_and_store(2, 48000).unwrap();
+        let vm = ScriptVm::new();
+        register(&vm, "tone", PROCESSOR);
+        let _owned = instance(
+            &vm,
+            r#"
+            return {init=function(self)
+                local input = {gain=0, messages=Audio.Ring.create(64), meter=Audio.Snapshot.create(64)}
+                started = {}
+                for i = 1, 100 do
+                    local ok, processor = pcall(Audio.start, 'tone', input)
+                    if not ok then refusal = tostring(processor); break end
+                    started[i] = processor
+                end
+                count = #started
+                -- A stopped processor no longer counts.
+                started[1]:stop()
+                retained = Audio.start('tone', input)
+                return true
+            end}
+        "#,
+        );
+        let globals = vm.lua().globals();
+        assert_eq!(globals.get::<usize>("count").unwrap(), MAX_LIVE_PROCESSORS);
+        let refusal: String = globals.get("refusal").unwrap();
+        assert!(
+            refusal.contains("Audio.start: at most 64 processors may run at once"),
+            "{refusal}"
+        );
+        wait_running(&vm);
+        vm.lua()
+            .load("for _, processor in ipairs(started) do processor:stop() end retained:stop()")
+            .exec()
+            .unwrap();
     }
 
     #[test]

@@ -5,12 +5,16 @@ Branch `claude/luaur-lane-h3-renderer-7fd816`, based on `levi/luaur-client-stage
 `crates/nuxie-ore-metal`, and in `crates/nuxie-scripting` the `gpu_canvas*` files,
 `shader_asset.rs` and `vm/lua_canvas.rs`. Not pushed.
 
-**Status: stopped early, with two open P1 review findings.** Free disk fell to
-59 GB (the brief's stop line is 60 GB) during the final check battery. The
-lane's own Bazel output base is 5.6 GB, so other work on the machine caused the
-drop. The first `codex review` round then found two real defects, listed under
-"Open findings". Neither is fixed, because fixing needs builds. The golden
-compares, the `nuxie` suite, panic-lints and later review rounds were not run.
+**Status: done, with piece 3 reverted.** Lane H3 stopped at the 60 GB disk
+line on 2026-11-14 with two open review findings. It resumed on 2026-11-15
+when the coordinator freed disk and reported 137 GB free. Both findings are fixed, each with a
+test that fails on the old code. Codex round 2 then found that the backend
+type is not enough for the canvas handles (piece 3): a handle must also name
+its device and keep that device alive. That needs a device identity in
+Vulkan's wrap paths, which can only be compiled here, not run, so piece 3 is
+reverted as the brief allows. Round 2's third finding, about pass charges,
+is fixed. Round 3 found nothing. The full check battery passes on the final
+tree.
 
 ## Commits
 
@@ -19,42 +23,87 @@ compares, the `nuxie` suite, panic-lints and later review rounds were not run.
 | `a4f167065a` | 1 | ore: a frame recording keeps opaque owners until it is reset |
 | `ad59cadad6` | 1 | scripting: GPU charges live as long as the frame recording holds the memory |
 | `fadc71519e` | 2 | render-api: native shaders are built only by decoding the artifact they come from |
-| `25d23424e3` | 3 | ore: canvas infos carry handles the backend issued, and wrapping them is safe |
+| `25d23424e3` | 3 | ore: canvas infos carry handles the backend issued, and wrapping them is safe (reverted) |
+| `5625f6c47b` | 3 | renderer: a source handle names the backend whose context resolves it (round 1 finding 1; reverted) |
+| `b6f298abed` | 1 | ore: an inline pass keeps what it is asked to keep with its recording (round 1 finding 2) |
+| `e51696a804` | 1 | scripting: a pass keeps the charges of what it still holds itself (round 2 finding 3) |
+| `7ba4f90f9d` | 3 | Revert of `5625f6c47b` |
+| `b73c8c5d2e` | 3 | Revert of `25d23424e3`, with the reason in the message |
 
-## Open findings (codex review round 1, both judged correct)
+## Review findings and what happened to them
 
-1. **[P1, piece 3] One handle type is shared by GL, Vulkan and WebGPU.**
-   `ore_source_handle.rs` issues the same private `SourceTexture` and
-   `SourceCanvas` types for every non-Metal backend. In a build with more than
-   one of them (WebGPU already compiles the GL module), a GL image's handle
-   downcasts in the Vulkan context. It then reaches Vulkan's `wrapRiveTexture`,
-   which casts it to Vulkan's `Texture2D` with no check. Before this commit the
-   same mix-up needed an `unsafe` call. Now a safe call reaches it, so the
-   `SAFETY` claim in `wrap_source_texture` ("a source gpu::Texture is what every
-   backend's raw wrap reads") is false for Vulkan and WebGPU. GL itself checks
-   the execution domain.
-   **Fix:** have the handle record which backend issued it. Either the producer
-   stores its execution anchor (the `RiveRenderImageHandle` execution domain)
-   and each context compares it to its own, or each backend gets its own handle
-   types. The test: a handle from one backend's image is refused by another
-   backend's context.
-   **Alternative:** if that cannot be built or verified, revert `25d23424e3`.
-   The base is then sound in the same way it was before (the obligation sits
-   with the `unsafe` callers).
+Round 1 (2026-11-14), both judged correct:
 
-2. **[P1, piece 1] Inline passes drop the charges.** For contexts that do not
-   record (immediate GL, Vulkan, WebGPU), `beginRecordedRenderPass` returns
-   `InlineDeferredRenderPass` (`ore_cmd/ore_deferred_render_pass.rs:75`). That
-   type does not override `RenderPassApi::keepWithRecording`, so it uses the
-   default, which drops the owner. Commit `ad59cadad6` removed the pass's own
-   `HeldCharges`. On these contexts, a bound buffer's charge is therefore
-   refunded when its userdata is collected, while the inline command buffer
-   still keeps the allocation in `keepAlive`. A loop that allocates, binds and
-   collects buffers inside one open pass gets past the budget.
-   **Fix:** in `InlineDeferredRenderPass`, forward `keepWithRecording` to
-   `state.buffer.borrow_mut().keep(owner)`, so the inline buffer holds the
-   owners until it resets. The test: the H3 loop test run on an immediate
-   (non-recording) context.
+1. **[P1, piece 3] GL, Vulkan and WebGPU shared one handle type.** A GL
+   image's handle downcast in the Vulkan context and reached Vulkan's
+   unchecked `Texture2D` cast through a safe call.
+   - Fixed in `5625f6c47b`. `SourceCanvas<I>` and `SourceTexture<I>` carry
+     their issuer (`GlIssued`, `VulkanIssued`, `WebGpuIssued`), and each
+     context resolves only its own.
+     - An `ExactSourceBackend` names its issuer (`type SourceHandles`).
+     - An image records its domain's texture issuer when it joins that
+       domain. An unattached image, or one in Metal's domain, issues no
+       source handle.
+   - Test: the GL test `deferred_canvas_dispatch_stays_lazy_and_immediate_image_sampling_wraps_source`.
+     - It builds a real GL context and, on macOS, a real Metal context in
+       the same process.
+     - Each refuses the other's handles.
+     - The Vulkan and WebGPU resolvers refuse the GL handles, and the GL
+       context refuses handles typed for them.
+   - Fixed, then reverted with piece 3; see round 2.
+2. **[P1, piece 1] `InlineDeferredRenderPass` dropped what it was asked to
+   keep.**
+   - Fixed in `b6f298abed`: it keeps the owner in its inline buffer, which
+     lives until the pass drops after its replay.
+   - Test: `an_inline_pass_on_an_immediate_context_keeps_owners_until_it_drops`,
+     run on the immediate GL context through `beginRecordedRenderPass`. It
+     fails on the old code ("the open inline pass keeps the owner").
+   - Correction: the brief asked for the scripting loop test on an
+     immediate context. That cannot run. `check_begin_pass`
+     (`gpu_canvas_ore/canvas.rs`) refuses `beginRenderPass` unless the
+     context records, so script passes always go to the deferred recorder
+     and no script reached this gap. The fix guards the API for other
+     callers. The test sits at the ORE level instead.
+
+Round 2 (after the fixes above, all P1):
+
+1. **Same-backend devices share a handle type.** Two `NativeVulkanFactory`
+   instances both issue `SourceTexture<VulkanIssued>`, so a texture from the
+   wrong device resolves. Vulkan's wrap then records into the receiving
+   context's command buffer.
+2. **A handle does not keep its execution owner alive.** A caller can keep
+   the handle after dropping the info, the image and the factory. On Vulkan
+   the device is then destroyed while the source resource is still alive.
+3. **A retained pass loses the charges of what it still holds.** A bind
+   group set before any pipeline waits in the pass's deferred groups. If the
+   script finishes and keeps the pass, the reset gives its charges back
+   while the pass still holds the memory. This repeats every frame.
+
+Findings 1 and 2 need each handle to carry and check its device identity
+and keep its execution owner. GL and WebGPU check an execution stamp
+natively, but Vulkan has no device identity on its textures or targets, and
+its paths can be compiled here but not run. The coordinator's instruction
+covers this case, so piece 3 is reverted (`7ba4f90f9d`, `b73c8c5d2e`). The
+wraps are explicit `unsafe` calls again, with their documented invariants,
+as on the base.
+
+Finding 3 is fixed in `e51696a804`. The pass holds each charge itself,
+once per allocation, as well as handing it to the recording, so a charge
+lasts until both let go.
+- Test: `a_retained_pass_keeps_the_charges_of_what_it_still_holds_after_reset`
+  opens the pass through `canvas:beginRenderPass` on the recorder's frame.
+  It fails when the pass's own set is disabled ("the retained pass still
+  keeps the deferred group after the reset").
+
+Round 3, on the final tree: "No actionable regressions were identified".
+
+What a later attempt at piece 3 needs:
+- a per-device identity on Vulkan textures and render targets, checked in
+  `wrapRiveTexture`, `wrapCanvasTexture` and `wrapRenderTarget`, as GL's
+  `belongs_to_owner_thread_execution` does;
+- handles that retain the issuing execution owner and drop the source
+  first;
+- a run on Android to check it.
 
 ## Piece 1: the frame recording holds the charges (G2 section 4)
 
@@ -71,8 +120,9 @@ How it works now:
     context or pass they wrap.
 - The renderer never looks inside an owner and knows nothing about budgets.
 - Scripting:
-  - `keep_with_recording(ctx, &GpuCharge)`, and `Pass::hold` / `hold_group`,
-    replace `HeldCharges`.
+  - `keep_with_recording(ctx, &GpuCharge)` hands a charge to the recording.
+    `Pass::hold` / `hold_group` hand it to the pass's recording and also
+    keep it in the pass's own `HeldCharges` (`e51696a804`).
   - New GPU buffers and textures keep their charge.
   - So do the copies made by `GPUBuffer.new` with data, `Buffer:write` and
     `Texture:upload`, each charged at its length.
@@ -90,7 +140,7 @@ Tests:
 - With `keep` disabled, three scripting tests fail, so the new tests fail on the
   old code.
 
-Limits that remain (besides open finding 2):
+Limits that remain:
 
 - The real allocation lives one frame past reset, until its destroy replays.
   The charge is refunded at reset.
@@ -128,61 +178,31 @@ There are now two RSTB indexers, the runtime's and render-api's.
 select the same things. Follow-up: the runtime `ShaderAsset` could use
 render-api's index.
 
-## Piece 3: CanvasTextureInfo carries opaque handles (D4)
+## Piece 3: CanvasTextureInfo carries opaque handles (D4) — reverted
 
-How it works now:
+`25d23424e3` replaced the `*mut c_void` fields with backend-issued
+`Rc<dyn Any>` handles and made the wraps safe. `5625f6c47b` gave each backend
+its own handle type. Both are reverted, for the reasons under "Review
+findings". The branch is back to the base API, so the canvas wraps stay
+`unsafe`. D4's estimate of about 17 touched files was low: the change
+touched 21, because the wrap methods' callers and implementors also had to
+change.
 
-- `CanvasTextureInfo.canvas` and `CanvasTextureInfo.texture` are
-  `Option<Rc<dyn Any>>` handles issued by the producing backend. They used to
-  be `*mut c_void`.
-  - Metal issues its `MetalRenderCanvasBridge` and `MetalRiveTextureBridge`.
-  - The source `RiveRenderImage` and `RenderCanvas` issue private
-    `ore_source_handle` types.
-- `wrapCanvasTextureInfo`, `wrapCanvasSampleView` and `wrapImageSampleView` are
-  safe and default to `None`.
-  - Metal downcasts the handle to its own bridge and resolves it through new
-    safe cores, `mtlWrapTargetHost` and `wrapRiveTextureHost`.
-  - GL, Vulkan and WebGPU resolve through `ore_source_handle::wrap_source_*`.
-    Each has one `unsafe` call into the raw wrap, and open finding 1 applies
-    here.
-  - The deferred, owned and observed contexts forward the calls. The deferred
-    context keeps its tripwire for an immediate sample wrap while recording.
-- The replay's image path now wraps through `wrapImageSampleView` instead of the
-  raw `wrapRiveTexture`.
-- The raw `wrapCanvasTexture` and `wrapRiveTexture` stay on the trait. Removing
-  them would also remove the test contexts' `unsafe fn` stubs, including the 4
-  in scripting. That was not done.
-- Nothing changes in the public C API or the replay format: neither referenced
-  these pointers.
+## `unsafe` counts
 
-Tests:
+`tools/ratchets/unsafe-count.sh` tracks nuxie-scripting: 44 now against
+baseline row 47 (down 3, from piece 2). It passes, and `tests/ratchets/*`
+was not edited. For the renderer crates the table counts `unsafe` words in
+`.rs` files, at the base and now:
 
-- `a_metal_context_wraps_only_the_handles_metal_issued` (new): made-up handles,
-  a handle holding the native texture's address, and a whole info nested as a
-  handle are all refused. A texture bridge in the canvas slot is refused.
-- The GL test `deferred_canvas_dispatch_stays_lazy_and_immediate_image_sampling_wraps_source`
-  was extended: made-up handles and a canvas handle in the texture slot are
-  refused.
-- On the old code these cases cannot be written without `unsafe`, because the
-  fields were addresses.
-
-Where D4's estimate was off: it named about 17 files that mention
-`CanvasTextureInfo`. The change touched 21, because the wrap methods' callers
-and implementors (the backend contexts, the replay, the forwarding contexts and
-the tests) also had to change.
-
-## `unsafe` counts (`tools/ratchets/unsafe-count.sh`)
-
-| Crate | Base `b495c08c29` | After |
+| Crate | Base `b495c08c29` | Now |
 | --- | --- | --- |
-| nuxie-scripting (baseline row 47) | 46 | 41 |
-| nuxie-render-api | 13 | 11 |
-| nuxie-ore-metal | 260 | 252 |
-| nuxie-renderer | 3960 | 3946 |
-| tools/runtime-test-support | 9 | 5 |
+| nuxie-render-api | 16 | 12 |
+| nuxie-ore-metal | 265 | 265 |
+| nuxie-renderer | 3972 | 3972 |
+| tools/runtime-test-support | 9 | 9 |
 
-No crate went up, and the ratchet passes. `tests/ratchets/*` was not edited (no
-`--update`).
+No crate went up. With piece 3 reverted, only piece 2's removals remain.
 
 The brief's target was that only `vm::luau_audio_web::host` remains in
 nuxie-scripting. That cannot hold as written. The remaining sites are:
@@ -193,23 +213,37 @@ nuxie-scripting. That cannot hold as written. The remaining sites are:
 - the test `provenance()` helper in `shader_asset.rs`;
 - the test contexts' raw-wrap `unsafe fn` stubs in
   `script_call_gpu_scope_tests.rs` and `upstream_scripting_gpu_features.rs`.
-  These go only if the raw wraps leave `ContextApi`.
+  These go only if the raw wraps leave `ContextApi`;
+- with piece 3 reverted, the canvas and `Image:view()` wrap sites in
+  `gpu_canvas_ore/canvas.rs` and `mod.rs`, as on the base.
 
-## Checks
+## Checks (final tree `b73c8c5d2e`, 2026-11-15)
 
-Load averages are shown as 1/5/15 minutes.
+Load averages are 1/5/15 minutes, at the end of each step. Free disk stayed
+between 117 and 131 GB.
 
 | Check | Result | Load |
 | --- | --- | --- |
-| `runtime.py test -p nuxie-ore-metal` | pass | 12.9 / 16.8 / 18.2 |
-| `runtime.py test -p nuxie-render-api` | pass | 15.3 / 17.1 / 18.2 |
-| `runtime.py test -p nuxie-scripting` (after piece 3) | pass | 10.8 / 11.7 / 14.5 |
-| `runtime.py test -p runtime-test-support` | pass | 12.1 / 11.9 / 14.5 |
-| `runtime.py test -p nuxie-renderer --features renderer-metal` | 930 pass, 9 fail; the base has the same 9 (926 pass), so +4 new tests | 10.1 / 11.4 / 14.1 (base run: 37.2 / 19.9 / 16.7) |
-| `runtime.py test -p nuxie-renderer --no-default-features --features renderer-webgl2` | 638 pass, 1 fail; the base has the same 1 (635 pass) | 14.1 / 12.2 / 14.2 (base run: 32.6 / 27.0 / 20.4) |
-| `runtime.py check --locked -p nuxie-renderer --no-default-features --features renderer-vulkan / renderer-webgpu / renderer-webgl2` | pass (host build) | 34.0 / 21.1 / 18.1 at the end |
-| `runtime.py check -p nuxie-renderer --no-default-features` | pass | — |
-| `unsafe-count.sh` | PASS | — |
+| `runtime.py test -p nuxie-renderer --features renderer-metal` | 929 pass, 9 fail: the same 9 as the base (diffed) | 23.8 / 17.5 / 16.0 |
+| `runtime.py test -p nuxie-renderer --no-default-features --features renderer-webgl2` | 639 pass, 1 fail: the same 1 as the base; +1 is the new inline-pass test | 22.9 / 18.2 / 16.3 |
+| `runtime.py test -p nuxie-scripting` | pass | 13.3 / 17.6 / 16.5 |
+| `runtime.py test -p nuxie-ore-metal` | pass | 13.7 / 17.5 / 16.5 |
+| `runtime.py test -p nuxie-render-api` | pass | 14.8 / 17.7 / 16.6 |
+| `runtime.py test -p runtime-test-support` | pass | 16.3 / 17.9 / 16.7 |
+| `runtime.py check --locked -p nuxie-renderer --no-default-features --features renderer-vulkan` / `renderer-webgpu` | pass (host build) | 15.8 / 17.7 / 16.6 |
+| `runtime.py check -p nuxie-renderer --no-default-features` | pass | 16.4 / 17.8 / 16.7 |
+| `runtime.py test -p nuxie --features scripting,test-support` | 41 of 42 targets pass. `upstream_data_binding_images_direct::stateful_component_image_bind` fails the same way on the base `b495c08c29` (run separately) | 12.0 / 16.4 / 16.4 |
+| `panic-lints.sh` for nuxie-scripting, `__apple`, `__android` | PASS, 0 forced sites each | 28.3 / 20.3 / 17.8 |
+| `unsafe-count.sh` | PASS | 30.1 / 20.8 / 18.0 |
+| `generate.py --check` | exit 0, nothing stale | 30.1 / 20.8 / 18.0 |
+| `runtime.py check --locked -p nux-capi --no-default-features --features android-vulkan,scripting,android-authored-wgsl` | pass | 44.3 / 28.6 / 21.3 |
+| `make golden-compare` | exact 356, diverges 8 | 29.1 / 27.6 / 21.8 |
+| `make scripted-golden-compare` | exact 348, diverges 16 | 37.9 / 34.3 / 26.1 |
+| `codex review --base levi/luaur-client-stage1f`, round 3 | no findings | — |
+
+The `inline` and `HeldCharges` fixes passed the same battery before piece 3
+was reverted. The handle fix `5625f6c47b` also passed it then, with the
+renderer, golden and `nuxie` results above.
 
 The renderer reds that also fail on the base:
 
@@ -221,38 +255,27 @@ The renderer reds that also fail on the base:
   `native_metal::tests::source_render_context_drops_members_in_reverse_then_base`.
 - GL: the same `draw_cpp` test.
 
-The failure sets at base and after are identical (diffed).
+`generate.py --check` "exit 2" was a misreading. In that earlier command,
+`generate.py --check | tail -3` printed nothing, and the `2` came from the
+`runtime.py test` run after it, which had three failing tests at that point.
+`generate.py --check` exits 1 when files are stale and has never been
+anything but clean on this branch.
 
-Not run, because the disk stop came first:
-
-- `runtime.py test -p nuxie --features scripting,test-support` (Bazel was
-  stopped while starting);
-- `make golden-compare` and `make scripted-golden-compare`;
-- `tools/ratchets/panic-lints.sh` for `nuxie-scripting` and its `__apple` and
-  `__android` variants;
-- `generate.py --check` (it exited 2 after the piece 2 repin and was not
-  looked into);
-- `check -p nux-capi … android-authored-wgsl`;
-- `codex review` rounds 2 to 4.
-
-Not available on this machine: the Makefile's renderer golden gates,
+Not available on this machine: the renderer golden gates
 `renderer-golden-same-runner` and `renderer-metal-cpp-parity`. They need the
-Dawn live-reference replay and the upstream Metal archives, which do not exist
-here and would take multi-GB bootstraps. Android Vulkan and browser (wasm)
-builds were not run; the Vulkan, WebGPU and WebGL2 code was only compiled for
-the host.
+Dawn live-reference replay and the upstream Metal archives. Android Vulkan
+and browser (wasm) builds were not run; Vulkan, WebGPU and WebGL2 were only
+compiled for the host.
 
 ## Not verified
 
-- Rendering output is unchanged: the golden compares were not run. Piece 3
-  changes the wrap plumbing, and piece 2 changes where shaders are decoded.
-- Piece 3 on Vulkan and WebGPU at run time: they were only compiled.
-- Open findings 1 and 2.
+- Piece 1 on Vulkan and WebGPU at run time.
+- The `stateful_component_image_bind` red. It is not this lane's: it fails
+  identically on the base, and the test serializes a recording stream
+  against a pinned silver without the renderer.
 
 ## State left behind
 
-- The Bazel output base (5.6 GB) and the copied fixtures
-  (`crates/nuxie/tests/fixtures/`, untracked, not committed) are still in
-  place, so the lane can resume after disk is freed.
-- `bazel clean --expunge` and deleting the fixtures are still owed when the
-  lane finishes.
+`bazel clean --expunge` was run in the worktree. The copied
+`crates/nuxie/tests/fixtures/` and any `target/` were deleted. Nothing is
+pushed.

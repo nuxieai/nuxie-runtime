@@ -91,28 +91,19 @@ pub(super) fn artboard_input_invocation(
     userdata: &AnyUserData,
 ) -> Result<ScriptListenerInvocation> {
     use nuxie_runtime::ScriptMethod;
+    if let Some(kind) = pointer_event_kind(method) {
+        let event = userdata.borrow::<ScriptedPointerEvent>()?;
+        return Ok(ScriptListenerInvocation::Pointer {
+            pointer_id: event.id as i32,
+            x: event.x,
+            y: event.y,
+            previous_x: event.previous_x,
+            previous_y: event.previous_y,
+            timestamp_seconds: event.timestamp_seconds,
+            event: kind,
+        });
+    }
     Ok(match method {
-        ScriptMethod::PointerDown
-        | ScriptMethod::PointerMove
-        | ScriptMethod::PointerUp
-        | ScriptMethod::PointerExit => {
-            let event = userdata.borrow::<ScriptedPointerEvent>()?;
-            ScriptListenerInvocation::Pointer {
-                pointer_id: event.id as i32,
-                x: event.x,
-                y: event.y,
-                previous_x: event.previous_x,
-                previous_y: event.previous_y,
-                timestamp_seconds: event.timestamp_seconds,
-                event: match method {
-                    ScriptMethod::PointerDown => ScriptPointerEventKind::Down,
-                    ScriptMethod::PointerMove => ScriptPointerEventKind::Move,
-                    ScriptMethod::PointerUp => ScriptPointerEventKind::Up,
-                    ScriptMethod::PointerExit => ScriptPointerEventKind::Exit,
-                    _ => unreachable!(),
-                },
-            }
-        }
         ScriptMethod::GamepadConnected => ScriptListenerInvocation::GamepadConnected {
             snapshot: userdata.borrow::<ScriptedGamepadConnected>()?.0.clone(),
         },
@@ -130,6 +121,19 @@ pub(super) fn artboard_input_invocation(
         }
         _ => return Err(crate::luau::Error::runtime("invalid artboard input method")),
     })
+}
+
+/// The pointer event a pointer input method carries; `None` for every other
+/// method.
+fn pointer_event_kind(method: nuxie_runtime::ScriptMethod) -> Option<ScriptPointerEventKind> {
+    use nuxie_runtime::ScriptMethod;
+    match method {
+        ScriptMethod::PointerDown => Some(ScriptPointerEventKind::Down),
+        ScriptMethod::PointerMove => Some(ScriptPointerEventKind::Move),
+        ScriptMethod::PointerUp => Some(ScriptPointerEventKind::Up),
+        ScriptMethod::PointerExit => Some(ScriptPointerEventKind::Exit),
+        _ => None,
+    }
 }
 
 pub(super) fn listener_action_argument(
@@ -450,15 +454,15 @@ where
     });
     fields.add_field_method_get("buttons", move |lua, this| {
         let table = lua.create_table();
-        for (index, value) in snapshot(this).button_values.iter().enumerate() {
-            table.raw_set(index + 1, *value)?;
+        for (index, value) in (1_usize..).zip(snapshot(this).button_values.iter()) {
+            table.raw_set(index, *value)?;
         }
         Ok(table)
     });
     fields.add_field_method_get("axes", move |lua, this| {
         let table = lua.create_table();
-        for (index, value) in snapshot(this).axes.iter().enumerate() {
-            table.raw_set(index + 1, *value)?;
+        for (index, value) in (1_usize..).zip(snapshot(this).axes.iter()) {
+            table.raw_set(index, *value)?;
         }
         Ok(table)
     });
@@ -542,10 +546,13 @@ where
     M: UserDataMethods<T>,
 {
     methods.add_method("buttonPressed", move |_, this, index: i64| {
-        if !(1..=64).contains(&index) {
-            return Ok(false);
-        }
-        Ok(snapshot(this).button_mask & (1_u64 << (index - 1)) != 0)
+        // Buttons 1 to 64 are the mask's bits 0 to 63; any other index is
+        // not pressed.
+        let bit = index
+            .checked_sub(1)
+            .and_then(|bit| u32::try_from(bit).ok())
+            .and_then(|bit| 1_u64.checked_shl(bit));
+        Ok(bit.is_some_and(|bit| snapshot(this).button_mask & bit != 0))
     });
     methods.add_method("buttonValue", move |_, this, index: i64| {
         Ok(index

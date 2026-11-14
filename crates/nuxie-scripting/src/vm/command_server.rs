@@ -42,11 +42,14 @@ impl PersistentRenderContext {
     }
 
     /// Re-point a caller-supplied VM at the factory the file imported through.
+    ///
+    /// An import factory without a persistent context leaves the VM with
+    /// none, so the VM's next renderer resource allocation fails with
+    /// [`with_factory`](Self::with_factory)'s ordinary error instead of
+    /// reaching a factory from another device domain. (The host's
+    /// `route_to_import_factory` has no error channel to report it sooner.)
     pub(crate) fn adopt(&self, factory: &mut dyn RenderFactory) {
-        let candidate = factory
-            .persistent_context()
-            .expect("import factory must provide a persistent context");
-        *self.context.borrow_mut() = Some(candidate);
+        *self.context.borrow_mut() = factory.persistent_context();
     }
 
     /// Verify a callback adapter still carries the factory installed before

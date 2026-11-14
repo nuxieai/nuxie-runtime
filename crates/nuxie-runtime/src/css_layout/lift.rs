@@ -316,8 +316,13 @@ pub(crate) fn clip_bounds(
 }
 
 /// Clips the renderer to a zoom's box, `clip`, in `element`'s own content
-/// space, mapped into `row`'s drawing space by the element's world, so it
-/// turns and stretches with the copy.
+/// space, under the element's world, so it turns and stretches with the copy.
+/// The box reaches the renderer as a flying unit's does (`Artboard::draw`):
+/// its own outline under the element's world, the input the element's paint
+/// draws with, so the clip covers the samples the fill covers and a rounded
+/// edge is smoothed once. The world is taken back after the clip, so the
+/// copy's entries draw under the lift's transform alone. An element whose
+/// world collapses draws nothing, and takes no clip.
 pub(crate) fn apply_clip(
     renderer: &mut Renderer,
     element: &CoreHandle,
@@ -334,7 +339,13 @@ pub(crate) fn apply_clip(
     };
     let mut raw = RawPath::default();
     super::paint::add_rounded_rect(&mut raw, clip.area(), clip.radii);
+    let mut inverse = Mat2D::default();
+    if !world.invert(&mut inverse) {
+        return;
+    }
     let mut path = ShapePaintPath::new(false);
-    path.add_path(&raw, Some(&world));
+    path.add_path(&raw, None);
+    renderer.transform(nuxie_render_api::Mat2D(*world.values()));
     renderer.clip_path(path.render_path(&factory));
+    renderer.transform(nuxie_render_api::Mat2D(*inverse.values()));
 }

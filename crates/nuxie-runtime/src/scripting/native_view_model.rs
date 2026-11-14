@@ -827,6 +827,38 @@ impl ScriptViewModel {
             .is_some()
     }
 
+    /// Gives each string this instance's graph holds (in its nested slots and
+    /// lists, each instance once) that keeps no owner the owner `owner_for`
+    /// makes for its length, so the string's share of a charge is refunded
+    /// once the property lets it go.
+    pub fn own_strings(
+        &self,
+        mut owner_for: impl FnMut(usize) -> Option<crate::host_viewmodel::HostOwnerToken>,
+    ) {
+        let Some(root) = self.native().instance.clone() else {
+            return;
+        };
+        let mut seen = std::collections::HashSet::new();
+        let mut pending = vec![root];
+        while let Some(instance) = pending.pop() {
+            if !seen.insert(instance.clone()) {
+                continue;
+            }
+            let values = instance
+                .with_downcast::<ViewModelInstance, _>(|instance| instance.property_values().to_vec())
+                .unwrap_or_default();
+            for value in values {
+                value.with_downcast_mut::<ViewModelInstanceString, _>(|string| {
+                    let len = string.base.property_value().len();
+                    if len > 0 && string.host_owner().is_none() {
+                        string.keep_host_owner(owner_for(len));
+                    }
+                });
+            }
+            pending.extend(held_by(&instance));
+        }
+    }
+
     /// What `named_instance(Some(name))` would copy, measured before the
     /// copy is made.
     pub fn named_copy_shape(&self, name: &str, max_instances: usize) -> CopyShape {

@@ -195,7 +195,7 @@ impl Snapshot {
                         let string = value.downcast_mut::<ViewModelInstanceString>().unwrap();
                         string.base.set_property_value_value(v);
                         // The restored value is the one its owner paid for.
-                        string.restore_host_owner(host_owner);
+                        string.keep_host_owner(host_owner);
                     }
                     Payload::Color(v) => {
                         value

@@ -638,13 +638,16 @@ fn new_owned_instance(
         CopyShape::Unbounded => usize::MAX,
         CopyShape::NoTemplate => instance_bytes::of(model),
     };
-    let charge = HostMemoryCharge::for_lua(lua, bytes)?;
+    let mut charge = HostMemoryCharge::for_lua(lua, bytes)?;
     let instance = model
         .named_instance(name)
         .or_else(|| model.named_instance(None))
         .ok_or_else(|| crate::luau::Error::runtime("view-model instance not found"))?;
+    // Each string copied from the template keeps its share of the charge,
+    // refunded when its property lets the string go.
+    instance.own_strings(|len| charge.split_off(len).map(HostOwnerToken::new));
     // The File's arena keeps the instance from here, whatever the script
-    // keeps, so the instance keeps the charge.
+    // keeps, so the instance keeps the rest of the charge.
     instance.set_host_owner(HostOwnerToken::new(charge));
     Ok(instance)
 }
@@ -5618,6 +5621,123 @@ mod tests {
         install_data_global(&lua, &models).unwrap();
         lua.load("kept = Data.MainVM.new('Instance 1')").exec().unwrap();
         assert_eq!(budget_used(&lua), copied);
+    }
+
+    // Codex review (lane H2): strings copied from a named template were
+    // charged in the instance's one charge, so a string the script replaced
+    // kept its share charged for the File's life.
+    #[test]
+    fn a_copied_template_string_is_refunded_when_replaced() {
+        use nuxie_runtime::mechanical_port::source::core::CoreHandle;
+        use nuxie_runtime::mechanical_port::source::viewmodel::{
+            viewmodel::ViewModel, viewmodel_instance::ViewModelInstance,
+            viewmodel_instance_list::ViewModelInstanceList,
+            viewmodel_instance_list_item::ViewModelInstanceListItem,
+            viewmodel_instance_string::ViewModelInstanceString,
+        };
+        const LEN: usize = 10_000;
+        // Every string an instance's graph holds, each instance once.
+        fn strings(root: CoreHandle) -> Vec<CoreHandle> {
+            let (mut seen, mut pending, mut found) = (Vec::new(), vec![root], Vec::new());
+            while let Some(instance) = pending.pop() {
+                if seen.contains(&instance) {
+                    continue;
+                }
+                seen.push(instance.clone());
+                let values = instance
+                    .with_downcast::<ViewModelInstance, _>(|i| i.property_values().to_vec())
+                    .unwrap_or_default();
+                for value in values {
+                    if value.with_downcast::<ViewModelInstanceString, _>(|_| ()).is_some() {
+                        found.push(value);
+                    } else if let Some(nested) = value
+                        .with(|v| v.as_view_model_instance_view_model()?.reference_view_model_instance())
+                        .flatten()
+                    {
+                        pending.push(nested);
+                    } else if let Some(items) = value
+                        .with_downcast::<ViewModelInstanceList, _>(|l| l.list_items().to_vec())
+                    {
+                        pending.extend(items.iter().filter_map(|item| {
+                            item.with_downcast::<ViewModelInstanceListItem, _>(
+                                ViewModelInstanceListItem::view_model_instance,
+                            )
+                            .flatten()
+                        }));
+                    }
+                }
+            }
+            found
+        }
+        let mut tried = 0;
+        for asset in [
+            "component_list_virtualized.riv",
+            "rebind_with_nested_viewmodel.riv",
+            "script_create_viewmodel_instance.riv",
+        ] {
+            let file = fixture_file(asset);
+            // Every authored string made long, so a template's copied
+            // strings hold a plain share; then each named template.
+            let templates = file.with_file(|file| {
+                let mut templates = Vec::new();
+                for i in 0..file.view_model_count() {
+                    let Some(model) = file.view_model_handle(i) else { continue };
+                    let Some((model_name, instances)) = model.with_downcast::<ViewModel, _>(|m| {
+                        let all = (0..m.instance_count()).filter_map(|j| m.instance_at(j));
+                        (m.base.name().to_owned(), all.collect::<Vec<_>>())
+                    }) else {
+                        continue;
+                    };
+                    for instance in instances {
+                        let Some((name, values)) = instance.with_downcast::<ViewModelInstance, _>(
+                            |i| (i.base.name().to_owned(), i.property_values().to_vec()),
+                        ) else {
+                            continue;
+                        };
+                        for value in values {
+                            value.with_downcast_mut::<ViewModelInstanceString, _>(|string| {
+                                string.set_value("s".repeat(LEN))
+                            });
+                        }
+                        if !name.is_empty() {
+                            templates.push((model_name.clone(), name));
+                        }
+                    }
+                }
+                templates
+            });
+            let models = nuxie_runtime::script_view_models(&file);
+            for (model, template) in templates {
+                let lua = budget_lua(64 * 1024 * 1024);
+                install_data_global(&lua, &models).unwrap();
+                lua.globals().set("m", model.as_str()).unwrap();
+                lua.globals().set("t", template.as_str()).unwrap();
+                lua.load("kept = Data[m].new(t)").exec().unwrap();
+                let kept = model_from_table(&lua.globals().get::<Table>("kept").unwrap()).unwrap();
+                let copied = strings(kept.native_instance().expect("an instance"));
+                let long = copied
+                    .iter()
+                    .filter(|s| {
+                        s.with_downcast::<ViewModelInstanceString, _>(|s| s.value().len() == LEN)
+                            .unwrap_or(false)
+                    })
+                    .count();
+                if long == 0 {
+                    continue;
+                }
+                tried += 1;
+                let before = budget_used(&lua);
+                for string in &copied {
+                    string.with_downcast_mut::<ViewModelInstanceString, _>(|s| s.set_value(""));
+                }
+                assert_eq!(
+                    before - budget_used(&lua),
+                    long * LEN,
+                    "{asset} {model} '{template}': each copied string's share is refunded"
+                );
+            }
+        }
+        assert!(tried > 0, "a named template whose graph holds a string");
     }
 
     // Inventory row 24: `model:new()` / `model:instance()` is the same

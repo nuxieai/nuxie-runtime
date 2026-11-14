@@ -19,7 +19,7 @@ import uuid
 
 from cargo_graph import collect_packages, resolve_features
 from emit import render_package
-from runtime_features import uses_native_tools
+from runtime_features import requires_macos, uses_native_tools
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
@@ -146,7 +146,9 @@ def materialize(options, packages):
         (destination / "BUILD.bazel").write_text(render_package(package, {variant: graph}, label_for,
             registry_prefix=registry_prefix, registry_repo=registry_repo,
             fixture_labels=["//:fixtures"], source_owner=owner, examples=authored,
-            unit_tests=authored, integration_tests=authored))
+            unit_tests=authored, integration_tests=authored,
+            # The pool places a target by its tags (native_contract.platforms).
+            test_tags=["requires-macos"] if requires_macos(graph, name) else []))
     labels = []
     for name in selected:
         package = packages[name]

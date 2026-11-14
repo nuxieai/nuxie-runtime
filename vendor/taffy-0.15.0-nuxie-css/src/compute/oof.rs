@@ -684,8 +684,6 @@ pub(crate) fn layout_oof_box<Tree: LayoutContainingBlock>(
                         known_dimensions,
                         known_dimensions_are_definite: Size { width: true, height: true },
                         known_height_is_stretch_only: false,
-                        pictures_follow_stretch_height: known_dimensions.height.is_some()
-                            && known_dimensions.width.is_none(),
                         parent_size: area_size.map(Some),
                         available_space,
                         sizing_mode: SizingMode::ContentSize,
@@ -713,7 +711,6 @@ pub(crate) fn layout_oof_box<Tree: LayoutContainingBlock>(
         known_dimensions: final_size.map(Some),
         known_dimensions_are_definite: Size { width: true, height: height_is_definite },
         known_height_is_stretch_only: false,
-        pictures_follow_stretch_height: false,
         parent_size: area_size.map(Some),
         available_space,
         sizing_mode: SizingMode::ContentSize,

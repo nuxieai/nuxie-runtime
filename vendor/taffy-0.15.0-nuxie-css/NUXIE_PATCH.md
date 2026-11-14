@@ -1612,3 +1612,19 @@ width, an automatic column stretched back to the natural width.
 Of the 29,914 layouts, 8 more match and none that matched differ. Of 80
 new Chrome probes of the shape, 36 differed before and 16 still do: the
 ones whose outer box is a block or a flex column.
+
+## A block with a height measures its children's widths against that height
+
+A block that finds its width from its content measured each child with
+no containing size, so a child's percentage height stayed unresolved
+there and resolved in the final layout. Chrome: a block item of a 100
+tall flex row, around a 120 by 60 picture with `max-height: 50%`, is 100
+wide (the picture is 100 by 50). The fork made the block 120 wide.
+
+`determine_content_based_container_width` now passes the container's
+height, when it has one, as the height the child's percentages resolve
+against.
+
+Of the 29,914 layouts, 2 more match and none that matched differ. Of the
+16 Chrome probes left from the grid change above, 3 more match: the
+blocks whose height is known when their width is measured.

@@ -21853,6 +21853,11 @@ const TAFFY_FORK_REPLACED_ROWS: &[(&str, &str, &str, &str)] = &[
     ("k4790", "display:grid;grid-template-columns:auto 1fr;grid-template-rows:100px auto;width:300px", "2>1>display:grid;width:fit-content> & 3>2>height:60px;flex-grow:1> & 4>2>picture:40x40;max-height:50%> & 5>1>width:30px;height:10px>", "1=0,0,300,100 2=0,0,20,100 3=0,0,20,60 4=0,60,20,20 5=20,0,30,10"),
     ("k4842", "display:grid;grid-template-columns:auto 1fr;width:300px", "2>1>display:grid;width:min-content> & 3>2>picture:40x40;max-height:50%> & 4>2>height:20px;flex-grow:1> & 5>1>width:30px;height:10px>", "1=0,0,300,60 2=0,0,20,60 3=0,0,20,20 4=0,40,20,20 5=20,0,30,10"),
     ("k5035", "display:grid;grid-template-columns:1fr 1fr;width:300px;height:200px", "2>1>display:grid> & 3>2>picture:120x60;height:100%>", "1=0,0,300,200 2=0,0,400,200 3=0,0,400,200"),
+    ("hm41", "display:flex;width:400px;height:100px", "2>1>display:block> & 3>2>picture:120x60;max-height:50%>", "1=0,0,400,100 2=0,0,100,100 3=0,0,100,50"),
+    ("hm42", "display:flex;width:400px;height:100px", "2>1>display:block> & 3>2>picture:120x60;max-height:50%> & 4>2>width:30px;height:10px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,100,50 4=0,50,30,10"),
+    ("hm59", "display:grid;grid-template-columns:auto 1fr;width:400px", "2>1>display:block;height:100px> & 3>2>picture:120x60;max-height:50%>", "1=0,0,400,100 2=0,0,100,100 3=0,0,100,50"),
+    ("k1257", "display:grid;grid-template-columns:100px;grid-template-rows:100px;width:300px", "2>1>display:block;position:absolute;height:60px> & 3>2>picture:40x40;max-height:50%> & 4>2>picture:60x120;height:stretch>", "1=0,0,300,100 2=0,0,30,60 3=0,0,30,30 4=0,30,30,60"),
+    ("k4937", "display:grid;grid-template-columns:100px;grid-template-rows:100px;width:300px", "2>1>display:block;width:fit-content;max-height:50px> & 3>2>picture:40x40;max-height:50%> & 4>1>width:120px;height:60px>", "1=0,0,300,160 2=0,0,25,50 3=0,0,25,25 4=0,100,120,60"),
 ];
 
 #[test]

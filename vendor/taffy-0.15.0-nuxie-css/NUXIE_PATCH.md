@@ -1819,3 +1819,26 @@ case that table records. Two rows already in that table (`k2004`,
 Layout work over the row set: computed layouts 495,680 before, 497,066
 after; requests 729,996 before, 737,116 after.
 
+## A column finding its width measures every item at its own height
+
+A column whose width comes from its content measures each item at the item's own height,
+not the height flexing gave it, and measures again once the width is known
+(`flexed_height_awaits_width`). Items whose width, minimum width or maximum width is a
+percentage of the column's width were left out of that rule and were measured at their
+flexed height, so a picture with `flex-basis: 100px` or `flex-grow: 1` and
+`max-width: 50%` made its column as wide as the picture is at the flexed height.
+
+The exception is removed. In Chrome an item's content contribution is found from its own
+style, with a percentage of an unknown width behaving as automatic
+(`ComputeMinAndMaxContentContributionForReplaced` and `ResolveInlineLengthInternal` in
+`length_utils.cc`); the height flexing gives the item is not part of it.
+
+Example: a 40 by 40 picture with `max-width: 50%; flex-basis: 100px` in a column with
+`align-items: flex-start`. Chrome: column 40 wide, picture 20 by 100. Before: column 100
+wide, picture 50 by 100.
+
+Of the 32,600 compared layouts, 460 differ from Chrome (474 before): 14 fixed, none
+regressed. 480 new probes of a picture under `width`, `min-width` and `max-width`
+percentages in columns, rows, grids and fit-content blocks all match (40 differed
+before). Guard rows: the 14 fixed rows and 8 of the probes.
+

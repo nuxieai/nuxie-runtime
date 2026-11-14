@@ -14,8 +14,9 @@ return function()
   local function work(self)
     self.calls += 1
     if not self.refused then
-      local t0 = os.clock()
-      while os.clock() - t0 < 0.6 do
+      -- A fixed count, not a time window: the outcome must not depend on
+      -- the machine's speed. 7 callbacks x 40 Texts is far past 64 MiB.
+      for _ = 1, 40 do
         local ok, err = pcall(function()
           local t = Text.new()
           t.maxWidth = 300

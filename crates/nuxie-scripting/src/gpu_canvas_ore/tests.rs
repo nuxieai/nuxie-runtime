@@ -933,17 +933,35 @@ fn a_pass_keeps_the_charges_of_what_it_binds() {
         .unwrap();
     vm.lua().gc_collect().unwrap();
     assert_eq!(host_bytes_used(&vm) - base, 1800);
+    // Codex review: the recording keeps a rebound slot's old buffer too.
     vm.lua()
-        .load("rp:setVertexBuffer(0, GPUBuffer.new {size = 10, usage = 'vertex'}) rp:finish()")
+        .load(
+            "for i = 1, 3 do rp:setVertexBuffer(0, GPUBuffer.new {size = 10, usage = 'vertex'}) end \
+             rp:finish()",
+        )
         .exec()
         .unwrap();
     vm.lua().gc_collect().unwrap();
     assert_eq!(
         host_bytes_used(&vm) - base,
-        1310,
-        "a rebound slot lets go of the old buffer; a finished pass keeps the rest"
+        1830,
+        "rebound and finished, the pass keeps every buffer it bound"
     );
     vm.lua().load("rp = nil").exec().unwrap();
+    vm.lua().gc_collect().unwrap();
+    assert_eq!(host_bytes_used(&vm), base);
+
+    // Codex review: a pass keeps its attachments' charges.
+    vm.lua()
+        .load(
+            "local view = GPUTexture.new {width = 16, height = 16, renderTarget = true}:view() \
+             attached = canvas:beginRenderPass {color = {{view = view, storeOp = 'store'}}}",
+        )
+        .exec()
+        .unwrap();
+    vm.lua().gc_collect().unwrap();
+    assert_eq!(host_bytes_used(&vm) - base, 16 * 16 * 4);
+    vm.lua().load("attached:finish() attached = nil").exec().unwrap();
     vm.lua().gc_collect().unwrap();
     assert_eq!(host_bytes_used(&vm), base);
 }

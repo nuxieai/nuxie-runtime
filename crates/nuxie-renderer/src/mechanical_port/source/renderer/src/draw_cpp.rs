@@ -2309,7 +2309,24 @@ mod transformed_area_consumer_tests {
             0.0,
             0.0,
         ]);
-        assert_eq!(transformed_cubic_segment_count(points, transform), 9);
+        // Wang's formula to the 4th power lands just above 9^4 (6561.002).
+        // Upstream processPieces counts through the four-wide
+        // wangs_formula::cubicSegmentCounts, whose fast inverse sqrt applied
+        // twice yields 10 on NEON and 9 under SSE. Pinned C++ (cd5351c3)
+        // built on arm64 prints 10 with -ffp-contract on, off and fast;
+        // built for x86_64 and run under Rosetta it prints 9. On targets
+        // with neither, the port's unfused pow4 (6561.00195) gives
+        // sqrt(sqrt()) = 9.000001, so 10; C++ there would give 9 only if
+        // the compiler contracted pow4 to 6561.00098 (not checked).
+        let expected = if cfg!(all(
+            any(target_arch = "x86", target_arch = "x86_64"),
+            target_feature = "sse"
+        )) {
+            9
+        } else {
+            10
+        };
+        assert_eq!(transformed_cubic_segment_count(points, transform), expected);
     }
 
     #[test]

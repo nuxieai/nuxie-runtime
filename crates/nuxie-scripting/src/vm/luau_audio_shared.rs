@@ -153,6 +153,76 @@ impl Drop for Charge {
         state.objects = state.objects.saturating_sub(self.objects);
     }
 }
+/// The shared handles one ring record or one snapshot publication keeps
+/// alive.
+///
+/// A ring or snapshot can hold the last handle of another ring or snapshot,
+/// which holds the last handle of another, and so on: a script builds such a
+/// chain with `s:publish(prev)` in a loop. Dropping the links one inside the
+/// other would recurse once per link and overflow the stack, so the drop
+/// below walks the chain with a list: before a link it owns outright drops,
+/// its own holds are moved onto the list, and the link then drops with no
+/// holds left. A link someone else still owns only loses one reference.
+#[derive(Default)]
+struct Holds {
+    values: Vec<SharedValue>,
+}
+impl Holds {
+    fn new(values: Vec<SharedValue>) -> Self {
+        Self { values }
+    }
+}
+impl Drop for Holds {
+    fn drop(&mut self) {
+        let mut pending = std::mem::take(&mut self.values);
+        while let Some(value) = pending.pop() {
+            take_holds(value, &mut pending);
+        }
+    }
+}
+/// Moves the holds of `value`, where this was its last owner, onto `pending`,
+/// then drops `value`.
+fn take_holds(value: SharedValue, pending: &mut Vec<SharedValue>) {
+    match value {
+        SharedValue::Array(values) => pending.extend(values),
+        SharedValue::Object(values) => pending.extend(values.into_values()),
+        SharedValue::Ring(ring) => {
+            let Some(ring) = Arc::into_inner(ring) else {
+                return;
+            };
+            let Some(state) = Arc::into_inner(ring.state) else {
+                return;
+            };
+            let mut state = state
+                .into_inner()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            for holds in state.holds.values_mut() {
+                pending.append(&mut holds.values);
+            }
+        }
+        SharedValue::Snapshot(snapshot) => {
+            let Some(snapshot) = Arc::into_inner(snapshot) else {
+                return;
+            };
+            let Some(state) = Arc::into_inner(snapshot.state) else {
+                return;
+            };
+            let mut writer = state
+                .writer
+                .into_inner()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            for holds in &mut writer.holds {
+                pending.append(&mut holds.values);
+            }
+        }
+        SharedValue::Nil
+        | SharedValue::Boolean(_)
+        | SharedValue::Number(_)
+        | SharedValue::Bytes(_)
+        | SharedValue::Blob(_)
+        | SharedValue::Region(_) => {}
+    }
+}
 /// Bytes after a record's payload that carries shared holds: one index word
 /// per hold and the count word.
 fn layout_trailer_bytes(holds: usize) -> usize {
@@ -215,7 +285,7 @@ struct RingState {
     used: usize,
     // Keys are record offsets, which cannot collide while the records are live.
     // This map is touched only for messages containing main-lane shared handles.
-    holds: BTreeMap<usize, Vec<SharedValue>>,
+    holds: BTreeMap<usize, Holds>,
     closed: bool,
 }
 impl RingState {
@@ -358,7 +428,7 @@ impl SharedRing {
             return Ok(false);
         };
         if !encoded.holds.is_empty() {
-            state.holds.insert(tail, encoded.holds);
+            state.holds.insert(tail, Holds::new(encoded.holds));
         }
         Ok(true)
     }
@@ -409,7 +479,7 @@ impl SharedRing {
             let holds = state.holds.remove(&head).unwrap_or_default();
             state.pop(payload.saturating_add(4));
             drop(state);
-            return decode(&encoded, &holds).map(Some);
+            return decode(&encoded, &holds.values).map(Some);
         }
     }
     pub fn try_receive(&self) -> Result<Option<SharedValue>, String> {
@@ -497,7 +567,7 @@ impl SnapshotCopy {
 }
 struct SnapshotWriter {
     sequence: u64,
-    holds: [Vec<SharedValue>; 2],
+    holds: [Holds; 2],
     closed: bool,
 }
 struct SnapshotState {
@@ -540,7 +610,7 @@ impl SharedSnapshot {
             published: AtomicUsize::new(0),
             writer: Mutex::new(SnapshotWriter {
                 sequence: 0,
-                holds: [Vec::new(), Vec::new()],
+                holds: [Holds::default(), Holds::default()],
                 closed: false,
             }),
         });
@@ -585,7 +655,7 @@ impl SharedSnapshot {
             return Ok(false);
         }
         let published = self.state.published();
-        if processor && published.is_some_and(|slot| !slot.of(&writer.holds).is_empty()) {
+        if processor && published.is_some_and(|slot| !slot.of(&writer.holds).values.is_empty()) {
             return Err(PROCESSOR_HOLDS_ERROR.into());
         }
         let index = if published == Some(Slot::First) {
@@ -603,7 +673,7 @@ impl SharedSnapshot {
             .store(!encoded.holds.is_empty(), Ordering::SeqCst);
         writer.sequence = writer.sequence.wrapping_add(1);
         copy.sequence.store(writer.sequence, Ordering::SeqCst);
-        let old = std::mem::replace(index.of_mut(&mut writer.holds), encoded.holds);
+        let old = std::mem::replace(index.of_mut(&mut writer.holds), Holds::new(encoded.holds));
         copy.version.fetch_add(1, Ordering::SeqCst);
         self.state.published.store(index.number(), Ordering::SeqCst);
         // The prior publication is no longer live. Keep neither duplicate holds
@@ -658,7 +728,7 @@ impl SharedSnapshot {
                     .try_reserve_exact(size)
                     .map_err(|_| "cannot read shared snapshot")?;
                 bytes.extend(copy.load(size));
-                let holds = published.of(&writer.holds).clone();
+                let holds = published.of(&writer.holds).values.clone();
                 drop(writer);
                 return decode(&bytes, &holds).map(|value| Some((sequence, value)));
             }
@@ -925,6 +995,79 @@ mod tests {
         budget.close();
         assert!(weak.upgrade().is_none());
         assert_eq!(lock(&budget.state).bytes, 0);
+    }
+    /// Runs `f` on a thread with a 256 KiB stack: a drop that recursed once
+    /// per link of a 20,000-link chain overflows it and aborts the process.
+    fn on_small_stack(f: impl FnOnce() + Send + 'static) {
+        std::thread::Builder::new()
+            .stack_size(256 << 10)
+            .spawn(f)
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+    const CHAIN_LINKS: usize = 20_000;
+    #[test]
+    fn dropping_a_long_snapshot_hold_chain_does_not_recurse() {
+        // Each snapshot publishes the previous one, as `s:publish(prev)` in a
+        // script loop does; the head owns the whole chain.
+        let mut head = Arc::new(SharedSnapshot::new(16).unwrap());
+        for _ in 0..CHAIN_LINKS {
+            let next = Arc::new(SharedSnapshot::new(16).unwrap());
+            assert!(next.publish(SharedValue::Snapshot(head)).unwrap());
+            head = next;
+        }
+        on_small_stack(move || drop(head));
+    }
+    #[test]
+    fn dropping_a_long_ring_hold_chain_does_not_recurse() {
+        let mut head = Arc::new(SharedRing::new(64).unwrap());
+        for _ in 0..CHAIN_LINKS {
+            let next = Arc::new(SharedRing::new(64).unwrap());
+            // Rings and snapshots alternate inside containers, too.
+            let value = SharedValue::Array(vec![SharedValue::Object(BTreeMap::from([(
+                "next".to_owned(),
+                SharedValue::Ring(head),
+            )]))]);
+            assert!(next.send(value).unwrap());
+            head = next;
+        }
+        on_small_stack(move || drop(head));
+    }
+    #[test]
+    fn closing_a_budget_with_a_long_hold_chain_does_not_recurse() {
+        // Registered head first, so `close` reaches the head while every
+        // other link is owned only by its predecessor's holds.
+        let budget = Arc::new(SharedBudget::default());
+        let links: Vec<_> = (0..CHAIN_LINKS)
+            .map(|_| Arc::new(SharedSnapshot::with_budget(16, budget.clone()).unwrap()))
+            .collect();
+        for pair in links.windows(2) {
+            assert!(pair[0].publish(SharedValue::Snapshot(pair[1].clone())).unwrap());
+        }
+        let mut links = links.into_iter();
+        let head = links.next().unwrap();
+        drop(links);
+        let weak = Arc::downgrade(&head);
+        on_small_stack(move || {
+            budget.close();
+            drop(head);
+        });
+        assert!(weak.upgrade().is_none());
+    }
+    #[test]
+    fn a_dropped_chain_keeps_the_holds_of_links_still_owned_elsewhere() {
+        let first = Arc::new(SharedSnapshot::new(16).unwrap());
+        assert!(first.publish(SharedValue::Number(3.0)).unwrap());
+        let second = Arc::new(SharedSnapshot::new(16).unwrap());
+        assert!(second.publish(SharedValue::Snapshot(first)).unwrap());
+        let third = Arc::new(SharedSnapshot::new(16).unwrap());
+        assert!(third.publish(SharedValue::Snapshot(second.clone())).unwrap());
+        drop(third);
+        let Some((_, SharedValue::Snapshot(first))) = second.latest() else {
+            panic!("the second snapshot lost its publication");
+        };
+        assert!(matches!(first.latest(), Some((1, SharedValue::Number(3.0)))));
     }
 }
 

@@ -8,17 +8,16 @@ use crate::luau::{
     AnyUserData, Buffer, Function, Lua, MultiValue, Table, UserData, UserDataFields,
     UserDataMethods, Value,
 };
-use nuxie_runtime::source::text_engine::FontRef;
 use nuxie_runtime::view_model_cell::RuntimeCellDirtSink;
 use nuxie_runtime::{
-    RuntimeBlobAsset, RuntimeOwnedViewModelInstance, ScriptFont, ScriptViewModel,
+    CopyShape, HostOwnerToken, RuntimeBlobAsset, RuntimeOwnedViewModelInstance, ScriptViewModel,
     ScriptViewModelChangeRegistration, ScriptViewModelProperty, ScriptedContextDataProjection,
     ScriptedContextSource, ScriptedDataContextSource,
 };
 
 use super::lua_blob::{ScriptedBlob, ScriptedBlobAssets};
 use super::host_memory_budget::HostMemoryCharge;
-use super::lua_font::{ScriptedFont, create_asset_font, create_charged_asset_font};
+use super::lua_font::{ScriptedFont, create_asset_font};
 use super::lua_image::{ScriptedImage, create_asset_image};
 use super::host_dispatch::patch_metatable_once;
 use super::lua_main_ref::MainThreadRef;
@@ -262,9 +261,6 @@ struct ScriptedPropertyState {
     disposed: Cell<bool>,
     track_index: Cell<usize>,
     owning_model: RefCell<Option<ScriptViewModel>>,
-    /// The charge of the instance a script created that this property
-    /// keeps alive, shared with the instance's table.
-    owning_charge: RefCell<Option<Rc<HostMemoryCharge>>>,
     owner_audio_processors: RefCell<super::lua_audio_processors::WeakProcessorOwner>,
     owner_properties: RefCell<Weak<RefCell<Vec<Weak<ScriptedPropertyState>>>>>,
     owner_watches: RefCell<Weak<RefCell<Vec<TrackedScriptedPropertyWatch>>>>,
@@ -483,26 +479,6 @@ impl ScriptViewModelFrameContext {
 /// slice of C++ `src/lua/lua_properties.cpp`.
 struct ScriptedViewModelHandle {
     model: ScriptViewModel,
-    /// For an instance a script created (`Data.X.new`, `model:new()`):
-    /// what [`instance_bytes::of`] estimates it holds; empty otherwise.
-    _charge: Rc<HostMemoryCharge>,
-}
-
-/// A view model with the charge of its instance, for what a view-model
-/// table hands out (its methods and properties): each keeps the instance
-/// alive, so each keeps the charge.
-#[derive(Clone)]
-struct ChargedModel {
-    model: ScriptViewModel,
-    _charge: Rc<HostMemoryCharge>,
-}
-
-impl std::ops::Deref for ChargedModel {
-    type Target = ScriptViewModel;
-
-    fn deref(&self) -> &ScriptViewModel {
-        &self.model
-    }
 }
 
 /// Host memory of view-model instances a script creates or adds to lists.
@@ -510,6 +486,10 @@ impl std::ops::Deref for ChargedModel {
 /// The runtime does not report what an instance allocates, so the charge is
 /// an estimate from its shape: each core object counts its own size plus a
 /// stated slot overhead (the arena entry and handle identity).
+///
+/// A File's arena never frees an instance or list item once inserted, so
+/// the charge is kept by the native object (as a [`HostOwnerToken`]) and
+/// lives as long as the arena, not as long as any script wrapper.
 mod instance_bytes {
     use std::mem::size_of;
 
@@ -568,15 +548,34 @@ mod instance_bytes {
         object::<ViewModelInstanceTrigger>(),
         object::<ViewModelInstanceViewModel>(),
     ]);
-    /// One list entry, without the instance it holds.
-    pub(super) const LIST_ITEM: usize = object::<ViewModelInstanceListItem>();
+    /// One list entry, without the instance it holds: the item object, and
+    /// two handle slots of the list's vector (whose capacity at most
+    /// doubles, and never exceeds the items ever made for it, which stay in
+    /// the arena).
+    pub(super) const LIST_ITEM: usize = object::<ViewModelInstanceListItem>()
+        .saturating_add(2 * size_of::<std::rc::Rc<()>>());
     /// The most instances one estimate visits: it bounds the work, and a
     /// cycle a script made by assigning an instance into itself stops here.
-    const MAX_VISITED: usize = 4096;
+    pub(super) const MAX_VISITED: usize = 4096;
+
+    /// What a copy of an authored instance makes, measured before it is
+    /// made: [`of`] of the copy, from its counts.
+    pub(super) fn of_copy(shape: nuxie_runtime::ViewModelCopyShape) -> usize {
+        [
+            shape.instances.saturating_mul(INSTANCE),
+            shape.properties.saturating_mul(PROPERTY),
+            shape.name_bytes,
+            shape.string_bytes,
+            shape.list_items.saturating_mul(LIST_ITEM),
+        ]
+        .into_iter()
+        .fold(0, usize::saturating_add)
+    }
 
     /// What `model` and the instances nested in it (view-model properties
-    /// and list items) hold, estimated from their shape; strings and assets
-    /// they hold are charged where they are set. A graph past `MAX_VISITED`
+    /// and list items) hold, estimated from their shape, plus the strings
+    /// they hold (a copy copies them; assets are shared, not copied). A
+    /// graph past `MAX_VISITED`
     /// instances is `usize::MAX`, which no budget admits, rather than the
     /// part of it that was walked.
     pub(super) fn of(model: &ScriptViewModel) -> usize {
@@ -594,6 +593,9 @@ mod instance_bytes {
                     .saturating_add(PROPERTY)
                     .saturating_add(name.len());
                 match kind {
+                    ScriptViewModelProperty::String => {
+                        bytes = bytes.saturating_add(model.string(name).map_or(0, |s| s.len()));
+                    }
                     ScriptViewModelProperty::ViewModel => {
                         pending.extend(model.view_model(name));
                     }
@@ -615,25 +617,30 @@ mod instance_bytes {
     }
 }
 
-/// A view-model instance for `model`, charged before it is created.
-fn new_charged_instance(
+/// A view-model instance for `model`, charged before it is created; the
+/// instance keeps the charge for as long as it lives.
+fn new_owned_instance(
     lua: &Lua,
     model: &ScriptViewModel,
     name: Option<&str>,
-) -> crate::luau::Result<(ScriptViewModel, HostMemoryCharge)> {
-    // The new instance has at least the shape of the model it is created
-    // from; that is charged before the copy.
-    let mut charge = HostMemoryCharge::for_lua(lua, instance_bytes::of(model))?;
+) -> crate::luau::Result<ScriptViewModel> {
+    // A name selects an authored template, which the copy copies with its
+    // lists, nested instances and strings: measured before it is copied.
+    // Without one, the instance has the shape of the model.
+    let bytes = match name.map(|name| model.named_copy_shape(name, instance_bytes::MAX_VISITED)) {
+        Some(CopyShape::Shape(shape)) => instance_bytes::of_copy(shape),
+        Some(CopyShape::Unbounded) => usize::MAX,
+        Some(CopyShape::NoTemplate) | None => instance_bytes::of(model),
+    };
+    let charge = HostMemoryCharge::for_lua(lua, bytes)?;
     let instance = model
         .named_instance(name)
         .or_else(|| model.named_instance(None))
         .ok_or_else(|| crate::luau::Error::runtime("view-model instance not found"))?;
-    // An authored template copies its lists and nested instances too, which
-    // the model's shape does not show, and the runtime has no way to measure
-    // a template before copying it. The copy is measured, and refused (and
-    // dropped) before the script can keep it if it does not fit.
-    charge.reserve_to(instance_bytes::of(&instance))?;
-    Ok((instance, charge))
+    // The File's arena keeps the instance from here, whatever the script
+    // keeps, so the instance keeps the charge.
+    instance.set_host_owner(HostOwnerToken::new(charge));
+    Ok(instance)
 }
 
 impl UserData for ScriptedViewModelHandle {}
@@ -650,23 +657,13 @@ fn create_scripted_view_model_with_listener_owner(
     model: ScriptViewModel,
     listener_owner: Option<ScriptedPropertyListenerOwner>,
 ) -> crate::luau::Result<Table> {
-    create_charged_scripted_view_model(lua, model, listener_owner, HostMemoryCharge::default())
-}
-
-/// A view-model table whose handle keeps `charge` for the instance.
-fn create_charged_scripted_view_model(
-    lua: &Lua,
-    model: ScriptViewModel,
-    listener_owner: Option<ScriptedPropertyListenerOwner>,
-    charge: HostMemoryCharge,
-) -> crate::luau::Result<Table> {
     if lua
         .named_registry_value::<Function>(PROPERTY_METATABLE_PATCHER)
         .is_err()
     {
         install_property_binding_support(lua)?;
     }
-    create_scripted_view_model_retained(lua, model, listener_owner, charge)
+    create_scripted_view_model_retained(lua, model, listener_owner)
 }
 
 pub(super) fn install_property_binding_support(lua: &Lua) -> crate::luau::Result<()> {
@@ -1014,24 +1011,17 @@ fn create_scripted_view_model_retained(
     lua: &Lua,
     model: ScriptViewModel,
     listener_owner: Option<ScriptedPropertyListenerOwner>,
-    charge: HostMemoryCharge,
 ) -> crate::luau::Result<Table> {
     let frame_context = ScriptViewModelFrameContext::for_lua(lua);
-    let charge = Rc::new(charge);
-    let charged = ChargedModel {
-        model: model.clone(),
-        _charge: Rc::clone(&charge),
-    };
     let table = lua.create_table();
     table.set(
         "__rive_model",
         lua.create_userdata(ScriptedViewModelHandle {
             model: model.clone(),
-            _charge: Rc::clone(&charge),
         })?,
     )?;
 
-    let get_number_model = charged.clone();
+    let get_number_model = model.clone();
     table.set(
         "getNumber",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1041,7 +1031,7 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let get_color_model = charged.clone();
+    let get_color_model = model.clone();
     table.set(
         "getColor",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1051,7 +1041,7 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let get_string_model = charged.clone();
+    let get_string_model = model.clone();
     table.set(
         "getString",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1061,7 +1051,7 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let get_list_model = charged.clone();
+    let get_list_model = model.clone();
     table.set(
         "getList",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1071,7 +1061,7 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let get_trigger_model = charged.clone();
+    let get_trigger_model = model.clone();
     table.set(
         "getTrigger",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1081,7 +1071,7 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let get_boolean_model = charged.clone();
+    let get_boolean_model = model.clone();
     table.set(
         "getBoolean",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1091,7 +1081,7 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let get_enum_model = charged.clone();
+    let get_enum_model = model.clone();
     table.set(
         "getEnum",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1101,7 +1091,7 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let get_index_model = charged.clone();
+    let get_index_model = model.clone();
     table.set(
         "getIndex",
         lua.create_function(move |_, _self: Table| {
@@ -1111,7 +1101,7 @@ fn create_scripted_view_model_retained(
                 .unwrap_or(-1))
         })?,
     )?;
-    let get_image_model = charged.clone();
+    let get_image_model = model.clone();
     table.set(
         "getImage",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1121,7 +1111,7 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let get_blob_model = charged.clone();
+    let get_blob_model = model.clone();
     table.set(
         "getBlob",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1131,13 +1121,13 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let get_font_model = charged.clone();
+    let get_font_model = model.clone();
     let properties = Rc::new(RefCell::new(BTreeMap::<String, MainThreadRef>::new()));
     #[cfg(feature = "scriptnet")]
     let nil_properties = Rc::new(RefCell::new(std::collections::BTreeSet::<Vec<u8>>::new()));
     #[cfg(feature = "scriptnet")]
     {
-        let model = charged.clone();
+        let model = model.clone();
         let properties = properties.clone();
         let nil_properties = nil_properties.clone();
         table.set(
@@ -1192,7 +1182,7 @@ fn create_scripted_view_model_retained(
         })?,
     )?;
     let instance_method =
-        |model: ChargedModel, listener_owner: Option<ScriptedPropertyListenerOwner>| {
+        |model: ScriptViewModel, listener_owner: Option<ScriptedPropertyListenerOwner>| {
             lua.create_function(move |lua, args: MultiValue| {
                 if model.native_model().is_none() {
                     return Ok(Value::Nil);
@@ -1205,8 +1195,8 @@ fn create_scripted_view_model_retained(
                     }
                     _ => None,
                 };
-                let (model, charge) = new_charged_instance(lua, &model, name.as_deref())?;
-                create_charged_scripted_view_model(lua, model, listener_owner.clone(), charge)
+                let model = new_owned_instance(lua, &model, name.as_deref())?;
+                create_scripted_view_model_with_listener_owner(lua, model, listener_owner.clone())
                     .map(Value::Table)
             })
         };
@@ -1216,13 +1206,13 @@ fn create_scripted_view_model_retained(
     // input (`lua_properties.cpp:940-955`).
     table.set(
         "instance",
-        instance_method(charged.clone(), listener_owner.clone())?,
+        instance_method(model.clone(), listener_owner.clone())?,
     )?;
     table.set(
         "new",
-        instance_method(charged.clone(), listener_owner.clone())?,
+        instance_method(model.clone(), listener_owner.clone())?,
     )?;
-    let get_view_model = charged.clone();
+    let get_view_model = model.clone();
     table.set(
         "getViewModel",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -1277,9 +1267,6 @@ fn create_scripted_view_model_retained(
             else {
                 return Ok(Value::Nil);
             };
-            if let Some(state) = scripted_property_state(&property) {
-                *state.owning_charge.borrow_mut() = Some(Rc::clone(&charge));
-            }
             properties
                 .borrow_mut()
                 .insert(name, MainThreadRef::new(lua, property.clone())?);
@@ -1770,11 +1757,17 @@ impl UserData for ScriptedPropertyString {
             Ok(this.model.string(&this.name).unwrap_or_default())
         });
         fields.add_field_method_set("value", |lua, this, value: Value| {
-            let value = super::lua_data_value::checked_string(lua, value)?;
-            this.model.defer_property_change_callbacks(|| {
-                this.model
-                    .set_string(&this.name, &String::from_utf8_lossy(&value))
-            });
+            // Checked before it is copied; the property keeps the copy (and
+            // the charge) until its value next changes, whoever changes it.
+            let string: crate::luau::LuaString = lua.unpack(value)?;
+            let mut charge = HostMemoryCharge::for_lua(lua, string.len())?;
+            let value = super::lua_data_value::checked_string(lua, Value::String(string))?;
+            let value = String::from_utf8_lossy(&value);
+            // A replaced invalid byte grows to three.
+            charge.reserve_to(value.len())?;
+            let owner = HostOwnerToken::new(charge);
+            this.model
+                .defer_property_change_callbacks(|| this.model.set_string_owned(&this.name, &value, owner));
             Ok(())
         });
     }
@@ -1923,9 +1916,6 @@ struct ScriptedPropertyBlob {
     name: String,
     watch: Rc<ScriptedBlobWatch>,
     cached_value: Rc<RefCell<Option<MainThreadRef>>>,
-    /// The blob a script last assigned and the charge for its bytes, kept
-    /// while the model may still hold it and handed to blobs read back.
-    assigned: RefCell<Option<(Arc<RuntimeBlobAsset>, Rc<HostMemoryCharge>)>>,
     _change_sink: RuntimeCellDirtSink,
 }
 
@@ -1982,36 +1972,24 @@ impl ScriptedPropertyBlob {
             name,
             watch,
             cached_value,
-            assigned: RefCell::new(None),
             _change_sink: change_sink,
         }
     }
-
-    /// The charge of the assigned blob if the model still holds it; drops it
-    /// once the model holds another blob or none.
-    fn charge_for(&self, asset: Option<&Arc<RuntimeBlobAsset>>) -> Rc<HostMemoryCharge> {
-        let mut assigned = self.assigned.borrow_mut();
-        let held = match (assigned.as_ref(), asset) {
-            (Some((held, charge)), Some(asset)) if Arc::ptr_eq(held, asset) => {
-                Some(Rc::clone(charge))
-            }
-            _ => None,
-        };
-        if held.is_none() {
-            *assigned = None;
-        }
-        held.unwrap_or_default()
-    }
 }
 
-/// A blob of a script's bytes, charged before they are copied.
+/// A blob of a script's bytes, charged before they are copied. The blob
+/// keeps the charge for as long as it lives, wherever the runtime carries
+/// it (another property, a data bind), not as long as a script's wrapper.
 fn charged_blob(
     lua: &Lua,
     len: usize,
     bytes: impl FnOnce() -> Vec<u8>,
-) -> crate::luau::Result<(Arc<RuntimeBlobAsset>, Rc<HostMemoryCharge>)> {
-    let charge = Rc::new(HostMemoryCharge::for_lua(lua, len)?);
-    Ok((Arc::new(RuntimeBlobAsset::new("", Arc::<[u8]>::from(bytes()))), charge))
+) -> crate::luau::Result<Arc<RuntimeBlobAsset>> {
+    let charge = HostMemoryCharge::for_lua(lua, len)?;
+    Ok(Arc::new(
+        RuntimeBlobAsset::new("", Arc::<[u8]>::from(bytes()))
+            .with_host_owner(HostOwnerToken::new(charge)),
+    ))
 }
 
 impl UserData for ScriptedPropertyBlob {
@@ -2020,34 +1998,25 @@ impl UserData for ScriptedPropertyBlob {
             if let Some(cached) = this.cached_value.borrow().as_ref() {
                 return cached.get::<AnyUserData>(lua).map(Value::UserData);
             }
-            let asset = this.model.blob_asset(&this.name);
-            let charge = this.charge_for(asset.as_ref());
-            let Some(asset) = asset else {
+            let Some(asset) = this.model.blob_asset(&this.name) else {
                 return Ok(Value::Nil);
             };
-            let value = lua.create_userdata(ScriptedBlob::charged(asset, charge))?;
+            let value = lua.create_userdata(ScriptedBlob::from_asset(asset))?;
             *this.cached_value.borrow_mut() = Some(MainThreadRef::new(lua, value.clone())?);
             Ok(Value::UserData(value))
         });
         fields.add_field_method_set("value", |lua, this, value: Value| {
-            // The model keeps the copy past the script's value, so the
-            // property keeps its charge.
-            let assigned = match value {
+            let asset = match value {
                 Value::Nil => None,
                 Value::String(value) => Some(charged_blob(lua, value.len(), || value.as_bytes())?),
                 Value::Buffer(value) => Some(charged_blob(lua, value.len(), || value.to_vec())?),
-                Value::UserData(value) => {
-                    let blob = value.borrow::<ScriptedBlob>()?;
-                    Some((blob.asset(), blob.charge()))
-                }
+                Value::UserData(value) => Some(value.borrow::<ScriptedBlob>()?.asset()),
                 _ => {
                     return Err(crate::luau::Error::runtime(
                         "expected Blob, string, buffer, or nil",
                     ));
                 }
             };
-            let asset = assigned.as_ref().map(|(asset, _)| Arc::clone(asset));
-            *this.assigned.borrow_mut() = assigned;
             this.model
                 .defer_property_change_callbacks(|| this.model.set_blob_asset(&this.name, asset));
             Ok(())
@@ -2177,10 +2146,6 @@ struct ScriptedPropertyFont {
     model: ScriptViewModel,
     name: String,
     cached_value: Rc<RefCell<Option<MainThreadRef>>>,
-    /// The face a script last assigned and the charge its decode paid, kept
-    /// while the model may still hold that face and handed to every wrapper
-    /// read back for it.
-    assigned: RefCell<Option<(FontRef, Rc<HostMemoryCharge>)>>,
     _change_sink: RuntimeCellDirtSink,
     watch: Rc<ScriptedPropertyWatch>,
 }
@@ -2309,26 +2274,9 @@ impl ScriptedPropertyFont {
             model,
             name,
             cached_value,
-            assigned: RefCell::new(None),
             _change_sink: change_sink,
             watch,
         }
-    }
-
-    /// The charge of the assigned face if the model still holds it; drops it
-    /// once the model holds another face or none.
-    fn charge_for(&self, font: Option<&ScriptFont>) -> Rc<HostMemoryCharge> {
-        let mut assigned = self.assigned.borrow_mut();
-        let held = match (assigned.as_ref(), font.and_then(ScriptFont::native_font)) {
-            (Some((face, charge)), Some(native)) if Arc::ptr_eq(face, &native) => {
-                Some(Rc::clone(charge))
-            }
-            _ => None,
-        };
-        if held.is_none() {
-            *assigned = None;
-        }
-        held.unwrap_or_default()
     }
 }
 
@@ -2338,10 +2286,11 @@ impl UserData for ScriptedPropertyFont {
             if let Some(cached) = this.cached_value.borrow().as_ref() {
                 return cached.get::<AnyUserData>(lua).map(Value::UserData);
             }
-            let font = this.model.font(&this.name);
-            let charge = this.charge_for(font.as_ref());
-            let value = font
-                .map(|font| create_charged_asset_font(lua, font, charge))
+            // A face a script decoded keeps its charge itself.
+            let value = this
+                .model
+                .font(&this.name)
+                .map(|font| create_asset_font(lua, font))
                 .transpose()?
                 .flatten();
             let Some(value) = value else {
@@ -2351,20 +2300,11 @@ impl UserData for ScriptedPropertyFont {
             Ok(Value::UserData(value))
         });
         fields.add_field_method_set("value", |_, this, value: Value| {
-            let (font, charge) = match value {
-                Value::Nil => (None, None),
-                Value::UserData(font) => {
-                    let font = font.borrow::<ScriptedFont>()?;
-                    (Some(font.font()), Some(font.charge()))
-                }
+            let font = match value {
+                Value::Nil => None,
+                Value::UserData(font) => Some(font.borrow::<ScriptedFont>()?.font()),
                 _ => return Err(crate::luau::Error::runtime("expected Font userdata or nil")),
             };
-            // The model keeps the face past the script's font, so the
-            // property keeps the charge its decode paid.
-            *this.assigned.borrow_mut() = font
-                .as_ref()
-                .and_then(ScriptFont::native_font)
-                .zip(charge);
             this.model
                 .defer_property_change_callbacks(|| this.model.set_font(&this.name, font.as_ref()));
             Ok(())
@@ -2387,13 +2327,6 @@ struct ScriptedPropertyList {
     item_refs: BTreeMap<ViewModelInstanceKey, MainThreadRef>,
     watch: Rc<ScriptedPropertyWatch>,
     listener_owner: Option<ScriptedPropertyListenerOwner>,
-    /// What the list holds at the longest a script made it, at
-    /// [`Self::item_bytes`] per entry; like a vector's capacity it is not
-    /// lowered when the list shrinks.
-    charge: RefCell<HostMemoryCharge>,
-    /// The bytes one entry is charged: its list item plus the largest
-    /// instance a script added.
-    item_bytes: Cell<usize>,
 }
 
 impl ScriptedPropertyList {
@@ -2409,25 +2342,24 @@ impl ScriptedPropertyList {
             item_refs: BTreeMap::new(),
             watch,
             listener_owner,
-            charge: RefCell::default(),
-            item_bytes: Cell::new(instance_bytes::LIST_ITEM),
         }
     }
 
-    /// Charges for one more entry holding `item`, before it is added.
-    fn charge_growth(&self, lua: &Lua, item: &ScriptViewModel) -> crate::luau::Result<()> {
-        let item_bytes = self
-            .item_bytes
-            .get()
-            .max(instance_bytes::LIST_ITEM.saturating_add(instance_bytes::of(item)));
-        let len = self.model.list_len(&self.name).unwrap_or(0);
-        let mut charge = self
-            .charge
-            .try_borrow_mut()
-            .map_err(|_| crate::luau::Error::runtime("list is already being changed"))?;
-        charge.attach(lua)?;
-        charge.reserve_to(len.saturating_add(1).saturating_mul(item_bytes))?;
-        self.item_bytes.set(item_bytes);
+    /// Adds `item` at `index` (or the end), charged for its list item first.
+    /// The item stays in the File's arena once made, popped or not, and
+    /// keeps the charge as long; the instance it refers to is charged where
+    /// it was made.
+    fn insert(
+        &self,
+        lua: &Lua,
+        index: Option<usize>,
+        item: &ScriptViewModel,
+    ) -> crate::luau::Result<()> {
+        let owner = HostOwnerToken::new(HostMemoryCharge::for_lua(lua, instance_bytes::LIST_ITEM)?);
+        self.model.defer_property_change_callbacks(|| {
+            self.model
+                .insert_list_item_owned(&self.name, index, item, owner)
+        });
         Ok(())
     }
 
@@ -2543,20 +2475,10 @@ impl UserData for ScriptedPropertyList {
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("push", |lua, this, item: Table| {
-            let item = model_from_table(&item)?;
-            this.charge_growth(lua, &item)?;
-            this.model
-                .defer_property_change_callbacks(|| this.model.push_list_item(&this.name, &item));
-            Ok(())
+            this.insert(lua, None, &model_from_table(&item)?)
         });
         methods.add_method("insert", |lua, this, (item, index): (Table, usize)| {
-            let item = model_from_table(&item)?;
-            this.charge_growth(lua, &item)?;
-            this.model.defer_property_change_callbacks(|| {
-                this.model
-                    .insert_list_item(&this.name, index.saturating_sub(1), &item)
-            });
-            Ok(())
+            this.insert(lua, Some(index.saturating_sub(1)), &model_from_table(&item)?)
         });
         methods.add_method("pop", |lua, this, ()| {
             let item = this
@@ -3341,8 +3263,9 @@ pub(super) fn install_data_global(
                     [_] => return Ok(Value::Nil),
                     _ => None,
                 };
-                let (instance, charge) = new_charged_instance(lua, &model, name.as_deref())?;
-                create_charged_scripted_view_model(lua, instance, None, charge).map(Value::Table)
+                let instance = new_owned_instance(lua, &model, name.as_deref())?;
+                create_scripted_view_model_with_listener_owner(lua, instance, None)
+                    .map(Value::Table)
             })?,
         )?;
         data.set(name, definition)?;
@@ -5517,8 +5440,12 @@ mod tests {
 
     // Inventory row 24: `Data.X.new` made a full instance per call with no
     // charge.
+    // Lane H2: the File's arena never frees an instance, but the charge was
+    // refunded when the script's table (or the last property or method it
+    // handed out) was collected, so a loop that dropped each instance made
+    // the arena grow without bound under a budget that read near zero.
     #[test]
-    fn data_new_is_charged_for_the_instance() {
+    fn data_new_is_charged_for_as_long_as_the_instance_lives() {
         let file = fixture_file("script_create_viewmodel_instance.riv");
         let models = nuxie_runtime::script_view_models(&file);
         let (name, model) = models.iter().next().expect("a view model");
@@ -5529,39 +5456,16 @@ mod tests {
         lua.globals().set("name", name.clone()).unwrap();
         lua.load("kept = Data[name].new()").exec().unwrap();
         assert_eq!(budget_used(&lua), expected);
-        refused_by_budget(
-            &lua,
-            "local all = {} for i = 1, 100000 do all[i] = Data[name].new() end",
-        );
         lua.load("kept = nil").exec().unwrap();
         lua.gc_collect().unwrap();
-        assert_eq!(budget_used(&lua), 0, "a collected instance refunds");
-
-        // Codex review (lane G3): a property or a method of the instance
-        // kept it alive after its table was collected, uncharged.
-        let property = model
-            .properties()
-            .iter()
-            .find_map(|(name, kind)| {
-                (*kind != ScriptViewModelProperty::SymbolListIndex).then(|| name.clone())
-            })
-            .expect("a property");
-        lua.globals().set("property", property).unwrap();
-        lua.load("keptProperty = Data[name].new()[property] keptMethod = Data[name].new().getNumber")
-            .exec()
-            .unwrap();
         lua.gc_collect().unwrap();
-        assert_eq!(budget_used(&lua), 2 * expected, "what keeps the instance keeps its charge");
-        // A dropped wrapper frees what it held only on the next cycle,
-        // so each release is collected twice.
-        lua.load("keptProperty = nil").exec().unwrap();
-        lua.gc_collect().unwrap();
-        lua.gc_collect().unwrap();
-        assert_eq!(budget_used(&lua), expected);
-        lua.load("keptMethod = nil").exec().unwrap();
-        lua.gc_collect().unwrap();
-        lua.gc_collect().unwrap();
-        assert_eq!(budget_used(&lua), 0);
+        assert_eq!(budget_used(&lua), expected, "the arena keeps the instance");
+        // Each instance is dropped at once, so the script never holds more
+        // than one; the arena keeps every one.
+        refused_by_budget(
+            &lua,
+            "for i = 1, 100000 do local _ = Data[name].new() end",
+        );
     }
 
     // Codex review (lane G3): `Data.X.new(name)` was charged for the
@@ -5576,11 +5480,12 @@ mod tests {
         let copied = super::instance_bytes::of(&template);
         assert!(copied > 4 * schema, "the template holds more than its shape");
 
+        // Measured before the copy is made: a refused copy is never made
+        // (the arena would keep it, uncharged).
         let lua = budget_lua(copied - 1);
         install_data_global(&lua, &models).unwrap();
         refused_by_budget(&lua, "kept = Data.MainVM.new('Instance 1')");
-        lua.gc_collect().unwrap();
-        assert_eq!(budget_used(&lua), 0, "a refused copy keeps nothing");
+        assert_eq!(budget_used(&lua), 0, "a refused copy is not made");
 
         let lua = budget_lua(64 * 1024);
         install_data_global(&lua, &models).unwrap();
@@ -5626,19 +5531,21 @@ mod tests {
         assert_eq!(super::instance_bytes::of(&model), usize::MAX);
     }
 
+    // Lane H2: the charge was the list wrapper's, refunded when the wrapper
+    // was collected, while every item stays in the File's arena (a popped
+    // one too); a script could push and pop with nothing held.
     #[test]
-    fn list_growth_is_charged_before_it_happens() {
+    fn list_items_are_charged_for_as_long_as_they_live() {
         let (model, list) = model_with_property(ScriptViewModelProperty::List);
         let (child, _) = model_with_property(ScriptViewModelProperty::String);
         let child_model = child.clone();
-        let per_item = super::instance_bytes::LIST_ITEM + super::instance_bytes::of(&child);
+        let per_item = super::instance_bytes::LIST_ITEM;
         let lua = budget_lua(64 * 1024 * 1024);
         let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
         let child_table = create_scripted_view_model(&lua, child).expect("scripted child");
         lua.globals().set("model", table).unwrap();
         lua.globals().set("child", child_table).unwrap();
         lua.globals().set("listName", list.clone()).unwrap();
-        let before = model.list_len(&list).unwrap();
         lua.load(
             "local list = model:getList(listName) \
              for i = 1, 10 do list:push(child) end \
@@ -5646,12 +5553,18 @@ mod tests {
         )
         .exec()
         .unwrap();
-        assert_eq!(budget_used(&lua), (before + 11) * per_item);
-        // Popping keeps the high-water charge, as a vector keeps capacity.
+        assert_eq!(budget_used(&lua), 11 * per_item);
+        // A popped item stays in the arena, and charged; the push after it
+        // makes another.
         lua.load("local list = model:getList(listName) list:pop() list:push(child)")
             .exec()
             .unwrap();
-        assert_eq!(budget_used(&lua), (before + 11) * per_item);
+        lua.gc_collect().unwrap();
+        assert_eq!(budget_used(&lua), 12 * per_item);
+        assert_eq!(
+            model.list_item_host_owners(&list).iter().filter(|owner| owner.is_some()).count(),
+            11,
+        );
 
         let lua = budget_lua(64 * 1024);
         let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
@@ -5660,17 +5573,21 @@ mod tests {
         lua.globals().set("child", child_table).unwrap();
         lua.globals().set("listName", list.clone()).unwrap();
         let len = model.list_len(&list).unwrap();
-        refused_by_budget(
+        // The list never holds more than one more item than it started with,
+        // and the script holds no list wrapper across iterations.
+        let error = refused_by_budget(
             &lua,
-            "local list = model:getList(listName) for i = 1, 100000 do list:push(child) end",
+            "for i = 1, 100000 do \
+               local list = model:getList(listName) list:push(child) list:pop() \
+             end",
         );
-        let pushed = model.list_len(&list).unwrap() - len;
-        assert!(pushed < 100_000, "growth stopped at the budget");
+        assert!(error.contains("host memory budget"));
+        assert_eq!(model.list_len(&list).unwrap(), len, "a refused push adds nothing");
         refused_by_budget(
             &lua,
             "local list = model:getList(listName) list:insert(child, 1)",
         );
-        assert_eq!(model.list_len(&list).unwrap() - len, pushed, "a refused insert adds nothing");
+        assert_eq!(model.list_len(&list).unwrap(), len, "a refused insert adds nothing");
     }
 
     // Inventory row 24: the Blob setter copied a script's bytes into the
@@ -5703,17 +5620,66 @@ mod tests {
         lua.gc_collect().unwrap();
         assert_eq!(budget_used(&lua), 0);
 
-        // Codex review (lane G3): a blob cleared by the host stayed charged
-        // on the wrapper that had assigned it, even once read back as nil.
+        // A blob the host clears is refunded as it goes, read back or not.
         lua.load("blobProperty = model[propertyName] blobProperty.value = buffer.create(1000)")
             .exec()
             .unwrap();
         assert_eq!(budget_used(&lua), 1000);
         model.set_blob(&name, None);
-        let cleared: Value = lua.load("return blobProperty.value").eval().unwrap();
-        assert!(cleared.is_nil());
         lua.gc_collect().unwrap();
-        assert_eq!(budget_used(&lua), 0, "a cleared blob is refunded once read back");
+        assert_eq!(budget_used(&lua), 0, "a cleared blob is refunded");
+    }
+
+    // Lane H2 (G3 item 3): the charge was the assigning wrapper's, so a
+    // blob the runtime carried elsewhere (here a sibling wrapper of the
+    // same model keeps the native value) stayed while its charge went.
+    #[test]
+    fn a_blob_is_charged_while_the_runtime_keeps_it() {
+        let (model, name) =
+            model_with_property_from("data_bind_blob_test.riv", ScriptViewModelProperty::Blob);
+        let lua = budget_lua(64 * 1024);
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
+        lua.globals().set("model", table).unwrap();
+        lua.globals().set("propertyName", name.clone()).unwrap();
+        // Each assignment drops its property wrapper; the native property
+        // keeps one blob at a time, so only the last is held.
+        lua.load(
+            "for i = 1, 100 do model[propertyName].value = buffer.create(1000) end",
+        )
+        .exec()
+        .unwrap();
+        lua.load("model = nil").exec().unwrap();
+        lua.gc_collect().unwrap();
+        lua.gc_collect().unwrap();
+        let held = model.blob_asset(&name).expect("the model keeps the blob");
+        assert_eq!(held.bytes().len(), 1000);
+        assert_eq!(budget_used(&lua), 1000, "the native blob keeps its charge");
+        drop(held);
+        model.set_blob(&name, None);
+        assert_eq!(budget_used(&lua), 0);
+    }
+
+    // Lane H2: a string property's value was copied into the model with no
+    // charge, and an instance a script makes can hold any number of them.
+    #[test]
+    fn a_string_assigned_to_a_property_is_charged_while_it_holds_it() {
+        let (model, name) = model_with_property(ScriptViewModelProperty::String);
+        let lua = budget_lua(64 * 1024);
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
+        lua.globals().set("model", table).unwrap();
+        lua.globals().set("propertyName", name.clone()).unwrap();
+        refused_by_budget(&lua, "model[propertyName].value = string.rep('x', 100000)");
+        assert_eq!(budget_used(&lua), 0, "a refused string is not copied");
+        lua.load("model[propertyName].value = string.rep('x', 1000) model = nil")
+            .exec()
+            .unwrap();
+        lua.gc_collect().unwrap();
+        lua.gc_collect().unwrap();
+        assert_eq!(budget_used(&lua), 1000, "the property keeps the copy");
+        // Any change of value lets the charge go, whoever makes it.
+        assert!(model.set_string(&name, "host"));
+        assert!(model.string_host_owner(&name).is_none());
+        assert_eq!(budget_used(&lua), 0);
     }
 
     fn font_property_fixture() -> (nuxie_runtime::RuntimeFileHandle, ScriptViewModel, String) {
@@ -5776,16 +5742,26 @@ mod tests {
         lua.gc_collect().unwrap();
         assert_eq!(used(), 0);
 
-        // Codex review (lane G3): a face cleared by the host stayed charged
-        // on the wrapper that had assigned it, even once read back as nil.
+        // A face the host clears is refunded as it goes, read back or not.
         lua.load("fontProperty.value = Font.decode(fontBytes)").exec().unwrap();
         lua.gc_collect().unwrap();
         assert_eq!(used(), 226_004);
         native.set_font(&name, None);
-        let cleared: Value = lua.load("return fontProperty.value").eval().unwrap();
-        assert!(cleared.is_nil());
         lua.gc_collect().unwrap();
-        assert_eq!(used(), 0, "a cleared face is refunded once read back");
+        assert_eq!(used(), 0, "a cleared face is refunded");
+
+        // Lane H2 (G3 item 3): with the wrapper that assigned it and the
+        // script's font gone, the native property still keeps the face.
+        lua.load(
+            "for i = 1, 3 do model[propertyName].value = Font.decode(fontBytes) end \
+             fontProperty = nil model = nil",
+        )
+        .exec()
+        .unwrap();
+        lua.gc_collect().unwrap();
+        lua.gc_collect().unwrap();
+        assert!(native.font(&name).is_some(), "the model keeps the face");
+        assert_eq!(used(), 226_004, "the face keeps its charge");
     }
 
     fn positive_blob_lookup_surface() -> String {

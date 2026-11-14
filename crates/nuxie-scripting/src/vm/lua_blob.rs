@@ -7,8 +7,6 @@ use std::sync::Arc;
 use crate::luau::{Lua, Result, UserData, UserDataFields, Value};
 use nuxie_runtime::RuntimeBlobAsset;
 
-use super::host_memory_budget::HostMemoryCharge;
-
 #[derive(Debug)]
 struct ScriptedBlobData {
     name: String,
@@ -16,9 +14,9 @@ struct ScriptedBlobData {
 }
 
 #[derive(Debug, Clone)]
-/// A blob and the charge for its bytes when a script's value was copied
-/// into it (empty for a blob from the File).
-pub(super) struct ScriptedBlob(Arc<RuntimeBlobAsset>, Rc<HostMemoryCharge>);
+/// A blob. One a script's value was copied into keeps the charge for its
+/// bytes itself (`RuntimeBlobAsset::host_owner`).
+pub(super) struct ScriptedBlob(Arc<RuntimeBlobAsset>);
 
 impl UserData for ScriptedBlob {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
@@ -35,20 +33,11 @@ impl UserData for ScriptedBlob {
 
 impl ScriptedBlob {
     pub(super) fn from_asset(asset: Arc<RuntimeBlobAsset>) -> Self {
-        Self(asset, Rc::default())
-    }
-
-    /// A blob whose bytes `charge` paid for.
-    pub(super) fn charged(asset: Arc<RuntimeBlobAsset>, charge: Rc<HostMemoryCharge>) -> Self {
-        Self(asset, charge)
+        Self(asset)
     }
 
     pub(super) fn asset(&self) -> Arc<RuntimeBlobAsset> {
         Arc::clone(&self.0)
-    }
-
-    pub(super) fn charge(&self) -> Rc<HostMemoryCharge> {
-        Rc::clone(&self.1)
     }
 }
 

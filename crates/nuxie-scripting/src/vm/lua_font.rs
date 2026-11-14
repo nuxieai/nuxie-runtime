@@ -1,6 +1,5 @@
 //! Direct retained owner for scripted Font values.
 
-use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::luau::{
@@ -12,7 +11,7 @@ use nuxie_runtime::source::{
     text::{font_hb::HbFont, raw_text::RawText},
     text_engine::{Coord, Feature, FontRef},
 };
-use nuxie_runtime::{RuntimeFontAssetOwners, ScriptFont};
+use nuxie_runtime::{HostOwnerToken, RuntimeFontAssetOwners, ScriptFont};
 
 use super::host_memory_budget::HostMemoryCharge;
 
@@ -32,13 +31,14 @@ impl ScriptedFontAssetOwners {
 
 /// Lua's opaque Font extern type. The Arc is the Rust counterpart of the
 /// upstream `rcp<Font>` member and runs its destructor with the userdata.
+///
+/// A face `Font.decode` made keeps the charge for its bytes inside itself
+/// (`HbFont::host_owner`), so the charge lives exactly as long as the face:
+/// in this wrapper, a derived font, a Text's runs, a view-model property or
+/// anything the runtime binds it to.
 pub(super) struct ScriptedFont {
     font_bytes: Arc<[u8]>,
     font: ScriptFont,
-    /// What `Font.decode` charged for the face it decoded, shared with every
-    /// font derived from it and every Text it was appended to, since they
-    /// keep its bytes; empty for a font from the File.
-    charge: Rc<HostMemoryCharge>,
 }
 
 impl ScriptedFont {
@@ -65,11 +65,7 @@ impl ScriptedFont {
         } else {
             font
         };
-        Some(Self {
-            font_bytes,
-            font,
-            charge: Rc::default(),
-        })
+        Some(Self { font_bytes, font })
     }
 
     pub(super) fn font_bytes(&self) -> Arc<[u8]> {
@@ -78,11 +74,6 @@ impl ScriptedFont {
 
     pub(super) fn font(&self) -> ScriptFont {
         self.font.clone()
-    }
-
-    /// The charge for the bytes this font keeps alive.
-    pub(super) fn charge(&self) -> Rc<HostMemoryCharge> {
-        Rc::clone(&self.charge)
     }
 
     pub(super) fn native(&self) -> Result<FontRef> {
@@ -94,7 +85,6 @@ impl ScriptedFont {
         Self {
             font_bytes: Arc::from([]),
             font: ScriptFont::from_native_font(font),
-            charge: Rc::default(),
         }
     }
 }
@@ -196,11 +186,7 @@ impl UserData for ScriptedFont {
                         value: (value as i64) as u32,
                     })
                     .collect();
-                push_charged_font(
-                    lua,
-                    this.native()?.with_options(&coords, &features),
-                    this.charge(),
-                )
+                push_font(lua, this.native()?.with_options(&coords, &features))
             },
         );
         methods.add_method("glyphPath", |lua, this, glyph: Value| {
@@ -220,10 +206,10 @@ pub(super) fn register(lua: &Lua) -> Result<()> {
         "decode",
         lua.create_function(|lua, buffer: Buffer| {
             // The decoded face keeps the font's bytes; charged before they
-            // are copied out of the buffer.
-            let charge = Rc::new(HostMemoryCharge::for_lua(lua, buffer.len())?);
-            HbFont::decode(&buffer.to_vec())
-                .map(|font| push_charged_font(lua, font, charge))
+            // are copied out of the buffer, and kept by the face.
+            let charge = HostMemoryCharge::for_lua(lua, buffer.len())?;
+            HbFont::decode_with_owner(&buffer.to_vec(), HostOwnerToken::new(charge))
+                .map(|font| push_font(lua, font))
                 .transpose()
         })?,
     )?;
@@ -235,37 +221,13 @@ pub(super) fn set_font_asset_owners(lua: &Lua, owners: Arc<RuntimeFontAssetOwner
 }
 
 pub(super) fn create_asset_font(lua: &Lua, font: ScriptFont) -> Result<Option<AnyUserData>> {
-    create_charged_asset_font(lua, font, Rc::default())
-}
-
-/// A font read back from a view-model property that keeps bytes `charge`
-/// paid for (the charge of the decoded font a script assigned to it).
-pub(super) fn create_charged_asset_font(
-    lua: &Lua,
-    font: ScriptFont,
-    charge: Rc<HostMemoryCharge>,
-) -> Result<Option<AnyUserData>> {
     ScriptedFont::from_asset(lua, font)
-        .map(|mut font| {
-            font.charge = charge;
+        .map(|font| {
             let userdata = lua.create_userdata(font)?;
             prepare_font(lua, &userdata)?;
             Ok(userdata)
         })
         .transpose()
-}
-
-/// A font that keeps bytes `charge` paid for.
-pub(super) fn push_charged_font(
-    lua: &Lua,
-    font: FontRef,
-    charge: Rc<HostMemoryCharge>,
-) -> Result<AnyUserData> {
-    let mut font = ScriptedFont::from_native(font);
-    font.charge = charge;
-    let userdata = lua.create_userdata(font)?;
-    prepare_font(lua, &userdata)?;
-    Ok(userdata)
 }
 
 pub(super) fn push_font(lua: &Lua, font: FontRef) -> Result<AnyUserData> {

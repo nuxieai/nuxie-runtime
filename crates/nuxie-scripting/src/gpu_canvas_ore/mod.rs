@@ -95,6 +95,14 @@ pub(crate) fn canvas_bytes(width: u32, height: u32) -> u64 {
         .saturating_mul(4)
 }
 
+/// The images a texture holds at each level: a cube's six faces at least.
+pub(super) fn texture_layers(desc: &TextureDesc<'_>) -> u32 {
+    match desc.r#type {
+        TextureType::cube => desc.depthOrArrayLayers.max(6),
+        _ => desc.depthOrArrayLayers.max(1),
+    }
+}
+
 /// An upper bound of the bytes the backend allocates for `desc`: every mip
 /// level of every layer and sample. A 3D texture's depth is charged at every
 /// level as if it did not shrink.
@@ -110,10 +118,7 @@ pub(super) fn texture_bytes(desc: &TextureDesc<'_>) -> u64 {
         TextureFormat::astc8x8 => (8, 8, 16),
         format => (1, 1, u64::from(textureFormatBytesPerTexel(format))),
     };
-    let layers = match desc.r#type {
-        TextureType::cube => desc.depthOrArrayLayers.max(6),
-        _ => desc.depthOrArrayLayers.max(1),
-    };
+    let layers = texture_layers(desc);
     let levels = desc.numMipmaps.max(1);
     let mut level_bytes_sum: u64 = 0;
     for level in 0..levels {

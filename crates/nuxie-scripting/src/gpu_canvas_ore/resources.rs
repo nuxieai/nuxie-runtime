@@ -309,7 +309,7 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         check_sample_count(&*context.borrow(), desc.sampleCount)?;
         desc.numMipmaps = number(&table, loan, "mipmaps", 1.0)? as u32;
         desc.depthOrArrayLayers = number(&table, loan, "layers", 1.0)? as u32;
-        check_gpu_size("GPUTexture.new", desc.width, desc.height, desc.depthOrArrayLayers)?;
+        check_gpu_size("GPUTexture.new", desc.width, desc.height, texture_layers(&desc))?;
         let charge = charge_gpu_bytes(lua, texture_bytes(&desc))?;
         // Lua field access can invoke __index, including another ORE call.
         // Borrow the selected context only after those source field reads.

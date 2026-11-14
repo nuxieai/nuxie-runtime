@@ -320,3 +320,17 @@ fn a_huge_payload_table_is_walked_only_as_far_as_the_node_budget() {
     host.rollback_cycle(checkpoint);
     vm.end_script_cycle();
 }
+
+#[test]
+fn an_installed_host_module_does_not_keep_the_vm_alive() {
+    let vm = ScriptVm::new();
+    let host = HostCommandHost::install(&vm, "bridge", HostCommandLimits::default())
+        .expect("install host module");
+    let weak = vm.lua().weak();
+    drop(host);
+    drop(vm);
+    assert!(
+        weak.try_upgrade().is_none(),
+        "the host module keeps its Lua state alive"
+    );
+}

@@ -357,14 +357,22 @@ impl HostCommandHost {
     }
 }
 
+const BUILTIN_NEXT: &str = "nuxie.host_commands.next";
+
 fn host_module(lua: &Lua, host: HostCommandHost) -> Result<Table> {
     // The builtin `next`, taken before any script runs, walks a payload
-    // table one entry at a time (see `table_value`).
-    let next: Function = lua.globals().get("next")?;
+    // table one entry at a time (see `table_value`). It lives in the
+    // registry: a host closure that held the handle would keep the VM alive.
+    // A later install keeps the builtin the first one took.
+    if lua.named_registry_value::<Option<Function>>(BUILTIN_NEXT)?.is_none() {
+        let next: Function = lua.globals().get("next")?;
+        lua.set_named_registry_value(BUILTIN_NEXT, next)?;
+    }
     let module = lua.create_table();
     module.set(
         "command",
-        lua.create_function(move |_, mut args: MultiValue| {
+        lua.create_function(move |lua, mut args: MultiValue| {
+            let next: Function = lua.named_registry_value(BUILTIN_NEXT)?;
             let name = required_identifier(
                 args.pop_front(),
                 "host command name",

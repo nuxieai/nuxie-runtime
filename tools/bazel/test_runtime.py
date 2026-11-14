@@ -247,6 +247,31 @@ class RuntimeBuildTest(unittest.TestCase):
         self.assertNotIn(':dep"', (self.root / plain[0][2:].replace(":core", "/BUILD.bazel")).read_text())
         self.assertIn(':dep"', (self.root / optional[0][2:].replace(":core", "/BUILD.bazel")).read_text())
 
+    def test_a_test_built_with_a_metal_feature_declares_it_needs_a_mac(self):
+        renderer = self.package("nuxie-renderer", '[features]\nrenderer-metal = ["native-metal-experimental"]\nnative-metal-experimental = []\n')
+        (renderer.parent / "tests").mkdir()
+        (renderer.parent / "tests/pixels.rs").write_text("#[test] fn pixels() {}\n")
+        host = self.package("host", '[features]\nmetal = ["nuxie-renderer/renderer-metal"]\n[dependencies]\nnuxie-renderer = { path = "../nuxie-renderer" }\n')
+        other = self.package("other", '[features]\nmetal = []\n')
+        packages = collect_packages([renderer, host, other])
+
+        def tests(arguments, package):
+            labels = runtime.materialize(runtime.command_options(["test", *arguments]), packages)
+            directory = self.root / labels[0][2:].split(":")[0]
+            build = (directory.parent / package / "BUILD.bazel").read_text()
+            rules = build.split("rust_test(")[1:]
+            self.assertTrue(rules, package + " has tests")
+            return {rule.split('"')[1]: 'tags = ["requires-macos"]' in rule for rule in rules}
+
+        self.assertEqual(tests(["-p", "nuxie-renderer", "--features", "renderer-metal"], "nuxie-renderer"),
+                         {"nuxie-renderer__unit_test": True, "nuxie-renderer__test_pixels": True})
+        self.assertEqual(tests(["-p", "nuxie-renderer"], "nuxie-renderer"),
+                         {"nuxie-renderer__unit_test": False, "nuxie-renderer__test_pixels": False})
+        # Through a dependency's feature, and only for packages that reach it.
+        both = ["-p", "host", "-p", "other", "--features", "metal"]
+        self.assertEqual(tests(both, "host"), {"host__unit_test": True})
+        self.assertEqual(tests(both, "other"), {"other__unit_test": False})
+
     def test_native_tools_do_not_widen_shipping_registry(self):
         audio = self.package("nuxie-audio", '[features]\naudio-device = ["dep:cpal"]\n[dependencies]\ncpal = { version = "0.16", optional = true }\n')
         capi = self.package("nux-capi", '[dependencies]\nnuxie-audio = { path = "../nuxie-audio" }\n')

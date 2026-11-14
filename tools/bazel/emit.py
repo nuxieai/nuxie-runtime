@@ -91,14 +91,15 @@ def dependency_expression(dependencies, variant, label_for, registry_prefix, pac
     return " + ".join(pieces) or "[]"
 
 
-def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", registry_repo="@runtime_crates", conditions_repo="", fixture_labels=None, unit_tests=True, integration_tests=True, source_owner=None, examples=False):
+def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", registry_repo="@runtime_crates", conditions_repo="", fixture_labels=None, unit_tests=True, integration_tests=True, source_owner=None, examples=False, test_tags=()):
     """Return one BUILD file for the package and named feature graph variants.
 
     graphs maps suffixes to FeatureGraph instances; an empty suffix is Cargo's
     default product. label_for(package_name, suffix) supplies repository-aware
     local labels. source_owner can identify an external source-owning package
     (for example @nuxie_runtime//crates/nuxie-runtime), letting a connected graph
-    compile those sources against its own registry dependencies.
+    compile those sources against its own registry dependencies. test_tags
+    are the tags each rust_test declares, such as the platform it needs.
     """
     fixtures = fixture_labels or []
     lines = [
@@ -288,18 +289,19 @@ def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", re
         if package.name in SERIAL_UNIT_TEST_PACKAGES:
             unit_runtime_env["RUST_TEST_THREADS"] = "1"
         unit_env = ('    env = ' + quoted(unit_runtime_env) + ',',) if unit_runtime_env else ()
+        tags = ('    tags = ' + quoted(sorted(test_tags)) + ',',) if test_tags else ()
         unit_data = '_compile_data + ' + quoted(test_data) if test_data else '_compile_data'
         if unit_tests and has_lib:
             lines.extend([
                 'rust_test(', f'    name = {quoted(package.name + "__unit_test")},', f'    crate = {quoted(":" + target)},',
-                f'    crate_features = {compiler_features},',
+                *tags, f'    crate_features = {compiler_features},',
                 f'    deps = {test_deps},', f'    data = {unit_data},', *unit_env,
                 f'    proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = {quoted(registry_package)}),', ')', '',
             ])
         elif unit_tests and package.name in binaries:
             lines.extend([
                 'rust_test(', f'    name = {quoted(package.name + "__unit_test")},', f'    crate = {quoted(":" + target)},',
-                f'    crate_features = {compiler_features},',
+                *tags, f'    crate_features = {compiler_features},',
                 f'    deps = {test_deps},', f'    data = {unit_data},', *unit_env,
                 f'    proc_macro_deps = all_crate_deps(proc_macro_dev = True, package_name = {quoted(registry_package)}),', ')', '',
             ])
@@ -322,7 +324,7 @@ def render_package(package, graphs, label_for, registry_prefix="bazel/cargo", re
                     continue
                 compile_inputs = "_compile_data"
                 lines.extend([
-                    'rust_test(', f'    name = {quoted(package.name + "__test_" + test_name)},',
+                    'rust_test(', f'    name = {quoted(package.name + "__test_" + test_name)},', *tags,
                     f'    crate_name = {quoted(test_name.replace("-", "_"))},',
                     f'    crate_root = {quoted(source(file.relative_to(package.directory).as_posix()))},',
                     '    srcs = _test_sources,', f'    compile_data = {compile_inputs},',

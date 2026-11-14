@@ -156,9 +156,8 @@ mod check {
         .unwrap_or_default()
     }
 
-    /// Whether an unrecorded entry outside a survey aborts. Off while the
-    /// entry points the suites reach are still being moved out of borrows.
-    const ENFORCED: bool = false;
+    /// Whether an unrecorded entry outside a survey aborts.
+    const ENFORCED: bool = true;
 
     fn survey() -> bool {
         static SURVEY: OnceLock<bool> = OnceLock::new();

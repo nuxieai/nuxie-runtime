@@ -4566,6 +4566,48 @@ impl Artboard {
         local
     }
 
+    /// Nuxie: `semantic_root_transform` as one matrix, composed level by
+    /// level. A reader that needs the matrix multiplies by it rather than
+    /// subtracting mapped points, which loses f32 digits in proportion to
+    /// how far the points are from the page's origin. None where the root is
+    /// mapped by a host callback, which has no matrix.
+    pub(crate) fn semantic_root_matrix(&mut self) -> Option<Mat2D> {
+        let mut local = if self.has_self_transform() {
+            self.self_transform()
+        } else {
+            Mat2D::identity()
+        };
+        if self.frame_origin {
+            local = Mat2D::from_translation(self.content_origin()) * local;
+        }
+        if let Some(host) = self.host() {
+            let runtime = self.runtime_self.clone();
+            let mapped = host.with(|object| {
+                let host = object.as_artboard_host()?;
+                let transform = if let Some(list) = object.as_any().downcast_ref::<crate::mechanical_port::source::artboard_component_list::ArtboardComponentList>() {
+                    list.draw_transform_for_artboard(runtime)?
+                } else {
+                    host.world_transform_for_artboard(runtime)
+                };
+                Some((transform * local, host.parent_artboard()))
+            }).flatten();
+            if let Some((matrix, parent)) = mapped {
+                let Some(parent) = parent else {
+                    return Some(matrix);
+                };
+                return match parent.with_downcast_mut::<Artboard, _>(Artboard::semantic_root_matrix) {
+                    Some(root) => root.map(|root| root * matrix),
+                    None => Some(matrix),
+                };
+            }
+        }
+        #[cfg(feature = "tools")]
+        if self.root_transform_callback.is_some() {
+            return None;
+        }
+        Some(local)
+    }
+
     pub fn hit_test_point(
         &mut self,
         position: &Vec2D,

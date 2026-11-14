@@ -535,22 +535,25 @@ pub trait Font: Any + Send + Sync {
         };
         compute_line_breaks(text, line_breaks);
         let mut in_word = false;
-        let reserve_size = text.len() / 4;
-        let mut breaks = Vec::with_capacity(reserve_size);
-        let mut joiners = Vec::with_capacity(reserve_size);
+        // Upstream reserves a quarter of the whole text for every run; each
+        // run's breaks are reserved for a quarter of its own glyphs, so many
+        // short runs hold what their glyphs need, not runs x text.
+        let mut breaks = Vec::new();
+        let mut joiners = Vec::new();
         let mut last_run: Option<(usize, usize)> = None;
 
         for paragraph_index in 0..paragraphs.len() {
             for run_index in 0..paragraphs[paragraph_index].runs.len() {
                 if let Some((previous_paragraph, previous_run)) = last_run {
                     let previous = &mut paragraphs[previous_paragraph].runs[previous_run];
-                    previous.breaks =
-                        std::mem::replace(&mut breaks, Vec::with_capacity(reserve_size));
-                    previous.joiners =
-                        std::mem::replace(&mut joiners, Vec::with_capacity(reserve_size));
+                    previous.breaks = std::mem::take(&mut breaks);
+                    previous.joiners = std::mem::take(&mut joiners);
                 }
 
                 let glyph_run = &mut paragraphs[paragraph_index].runs[run_index];
+                let reserve_size = glyph_run.text_indices.len() / 4;
+                breaks.reserve(reserve_size);
+                joiners.reserve(reserve_size);
                 let mut last_offset = u32::MAX;
                 for (glyph_index, offset) in glyph_run.text_indices.iter().copied().enumerate() {
                     if offset == last_offset {

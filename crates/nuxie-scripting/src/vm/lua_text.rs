@@ -1144,6 +1144,27 @@ mod budget_tests {
         assert!(failed);
     }
 
+    // Lane H2: each shaped run reserved a quarter of the whole text for its
+    // breaks and joiners, so 3,000 one-character runs held about 18 MB more
+    // than they need and a 12 MiB budget refused them.
+    #[test]
+    fn many_short_runs_lay_out_in_what_their_glyphs_need() {
+        let vm = Vm::with_budget(FONT_BYTES + 12 * 1024 * 1024);
+        vm.vm
+            .eval::<()>(
+                "font = Font.decode(fontBytes) \
+                 text = Text.new() \
+                 for i = 1, 3000 do \
+                   text:append('a', {font = font, foregroundColor = if i % 2 == 0 then 0xff000000 else 0xff000001}) \
+                 end \
+                 local _ = text:bounds()",
+            )
+            .unwrap();
+        let text = vm.text_bytes();
+        println!("3,000 one-character runs: the layout holds {text} bytes");
+        assert_eq!(vm.used(), FONT_BYTES + text);
+    }
+
     #[test]
     fn an_append_is_charged_before_the_content_grows() {
         let vm = Vm::with_budget(FONT_BYTES + 100_000);

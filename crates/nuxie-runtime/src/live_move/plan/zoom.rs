@@ -26,7 +26,7 @@ use std::{cell::Cell, collections::HashSet, f32::consts::PI};
 
 /// The hand-over: the arriving version reaches 1, and the leaving one leaves
 /// it, over this much of the flight's progress.
-const HAND_OVER: f32 = 0.65;
+pub(in crate::live_move) const HAND_OVER: f32 = 0.65;
 
 /// What a pair reads once when its step starts, in the page's drawing space.
 #[derive(Clone, Copy, Debug)]
@@ -43,7 +43,7 @@ pub struct Ends {
 
 /// The rule the box follows, from the step unit's `zoom`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Rule {
+pub(in crate::live_move) enum Rule {
     /// 1, leaving the source: the arriving shape drawn at a scale that blends
     /// evenly from k, L's share of A, to 1.
     Leaving,
@@ -53,7 +53,7 @@ pub(super) enum Rule {
 }
 impl Rule {
     /// The rule a step unit's `zoom` names, or None for no zoom.
-    pub(super) fn of(zoom: u32) -> Option<Self> {
+    pub(in crate::live_move) fn of(zoom: u32) -> Option<Self> {
         match zoom {
             1 => Some(Self::Leaving),
             2 => Some(Self::Returning),
@@ -64,7 +64,7 @@ impl Rule {
 
 /// One end of the box: a version's frame content box under its end's matrix.
 #[derive(Clone, Copy, Debug)]
-struct End {
+pub(in crate::live_move) struct End {
     center: Vec2D,
     turn: f32,
     size: Vec2D,
@@ -78,7 +78,7 @@ impl End {
     /// skewed or mirrored end's rectangle is the axis-aligned box around it,
     /// unturned, with both axis scales that box's width over the content's
     /// width. Each corner's radii take the axis scales.
-    fn of(matrix: Mat2D, content: Vec2D, corners: Radii) -> Self {
+    pub(in crate::live_move) fn of(matrix: Mat2D, content: Vec2D, corners: Radii) -> Self {
         let (a, b, c, d) = (matrix[0], matrix[1], matrix[2], matrix[3]);
         let (sx, sy) = (a.hypot(b), c.hypot(d));
         let skewed = (a * c + b * d).abs() > 1e-4 * (sx * sy).max(1e-6);
@@ -115,7 +115,7 @@ impl End {
 }
 
 /// The box at one progress, in the page's drawing space.
-struct ZoomBox {
+pub(in crate::live_move) struct ZoomBox {
     center: Vec2D,
     turn: f32,
     size: Vec2D,
@@ -294,35 +294,8 @@ impl Pair {
     /// and corner radius is lerp(L / k, A, p) times lerp(k, 1, p). Returning,
     /// or where k is 0 or not finite, each is lerp(L, A, p) times r, and the
     /// center moves by t.
-    fn zoom_box(&self, [l, a]: &[End; 2], p: f32, (r, t): (f32, Vec2D)) -> ZoomBox {
-        let lerp = |l: f32, a: f32, p: f32| l + (a - l) * p;
-        let k = {
-            let (width, height) = (l.size.x / a.size.x, l.size.y / a.size.y);
-            if (width - 1.0).abs() <= (height - 1.0).abs() {
-                width
-            } else {
-                height
-            }
-        };
-        let leaves_the_source = self.rule == Rule::Leaving && k != 0.0 && k.is_finite();
-        let blend = |l: f32, a: f32| {
-            if leaves_the_source {
-                lerp(l / k, a, p) * lerp(k, 1.0, p)
-            } else {
-                lerp(l, a, p) * r
-            }
-        };
-        let apart = (a.turn - l.turn + PI).rem_euclid(2.0 * PI) - PI;
-        let mut radii = Radii::default();
-        for (corner, (from, to)) in radii.iter_mut().zip(l.radii.iter().zip(a.radii)) {
-            *corner = Vec2D::new(blend(from.x, to.x), blend(from.y, to.y));
-        }
-        ZoomBox {
-            center: Vec2D::lerp(l.center, a.center, p) + t,
-            turn: l.turn + apart * p,
-            size: Vec2D::new(blend(l.size.x, a.size.x), blend(l.size.y, a.size.y)),
-            radii,
-        }
+    fn zoom_box(&self, ends: &[End; 2], p: f32, follow: (f32, Vec2D)) -> ZoomBox {
+        zoom_box(self.rule, ends, p, follow)
     }
 
     /// Solves one version onto the box. Its scale λ is the box's width over
@@ -339,14 +312,7 @@ impl Pair {
         let Some(unit) = child(&flight.flight)? else {
             return Ok(());
         };
-        let lambda = if end.size.x > 0.0 {
-            zoom_box.size.x / end.size.x
-        } else if end.size.y > 0.0 {
-            zoom_box.size.y / end.size.y
-        } else {
-            0.0
-        };
-        let scales = end.scales * lambda;
+        let (lambda, scales, target) = hang(end, zoom_box);
         let parent = flight
             .flight
             .with(|o| o.component_parent_handle())
@@ -361,8 +327,7 @@ impl Pair {
         } else {
             rule / parent_opacity
         };
-        let solvable = lambda > 0.0 && lambda.is_finite() && scales.x > 0.0 && scales.y > 0.0;
-        let stretch = if solvable {
+        let stretch = if target.is_some() {
             Vec2D::new(lambda, lambda)
         } else {
             self.last[version].get().1
@@ -372,20 +337,8 @@ impl Pair {
             b.set_flight_stretch(stretch);
             b.content_transform()
         });
-        let matrix = solvable
-            .then(|| {
-                let (sin, cos) = zoom_box.turn.sin_cos();
-                let half = zoom_box.size.y / 2.0;
-                let top = zoom_box.center + Vec2D::new(half * sin, -half * cos);
-                let from_center = end.content.x / 2.0 * scales.x;
-                let target = Mat2D::new(
-                    cos * scales.x,
-                    sin * scales.x,
-                    -sin * scales.y,
-                    cos * scales.y,
-                    top.x - from_center * cos,
-                    top.y - from_center * sin,
-                );
+        let matrix = target
+            .map(|target| {
                 let (mut parent_inverse, mut content_inverse) =
                     (Mat2D::identity(), Mat2D::identity());
                 (parent_world.invert(&mut parent_inverse) && content.invert(&mut content_inverse))
@@ -404,19 +357,7 @@ impl Pair {
             });
         };
         self.last[version].set((matrix, stretch));
-        let clip = FlightClip {
-            width: end.content.x,
-            height: zoom_box.size.y / scales.y,
-            radii: zoom_box
-                .radii
-                .map(|r| Vec2D::new(r.x / scales.x, r.y / scales.y)),
-        };
-        let clip = (clip.height.is_finite()
-            && clip
-                .radii
-                .iter()
-                .all(|r| r.x.is_finite() && r.y.is_finite()))
-        .then_some(clip);
+        let clip = content_clip(end, zoom_box, scales);
         unit.with_artboard_mut(|b| b.set_flight_clip(clip));
         flight.apply_pose(ProjectedPose {
             matrix,
@@ -424,6 +365,96 @@ impl Pair {
             stretch,
         })
     }
+}
+
+/// The box by `rule` at clamped progress `p`. The center blends evenly
+/// and the turn the shorter way. Leaving the source, k is L's share of A
+/// on the axis where they differ least, width on a tie, and each size
+/// and corner radius is lerp(L / k, A, p) times lerp(k, 1, p). Returning,
+/// or where k is 0 or not finite, each is lerp(L, A, p) times r, and the
+/// center moves by t.
+pub(in crate::live_move) fn zoom_box(
+    rule: Rule,
+    [l, a]: &[End; 2],
+    p: f32,
+    (r, t): (f32, Vec2D),
+) -> ZoomBox {
+    let lerp = |l: f32, a: f32, p: f32| l + (a - l) * p;
+    let k = {
+        let (width, height) = (l.size.x / a.size.x, l.size.y / a.size.y);
+        if (width - 1.0).abs() <= (height - 1.0).abs() {
+            width
+        } else {
+            height
+        }
+    };
+    let leaves_the_source = rule == Rule::Leaving && k != 0.0 && k.is_finite();
+    let blend = |l: f32, a: f32| {
+        if leaves_the_source {
+            lerp(l / k, a, p) * lerp(k, 1.0, p)
+        } else {
+            lerp(l, a, p) * r
+        }
+    };
+    let apart = (a.turn - l.turn + PI).rem_euclid(2.0 * PI) - PI;
+    let mut radii = Radii::default();
+    for (corner, (from, to)) in radii.iter_mut().zip(l.radii.iter().zip(a.radii)) {
+        *corner = Vec2D::new(blend(from.x, to.x), blend(from.y, to.y));
+    }
+    ZoomBox {
+        center: Vec2D::lerp(l.center, a.center, p) + t,
+        turn: l.turn + apart * p,
+        size: Vec2D::new(blend(l.size.x, a.size.x), blend(l.size.y, a.size.y)),
+        radii,
+    }
+}
+
+/// Hangs a version's content from the box's top center at the box's turn,
+/// at λ times its end's axis scales: λ, those scales, and the content-to-page
+/// matrix, None when λ is not a positive finite number.
+pub(in crate::live_move) fn hang(end: &End, zoom_box: &ZoomBox) -> (f32, Vec2D, Option<Mat2D>) {
+    let lambda = if end.size.x > 0.0 {
+        zoom_box.size.x / end.size.x
+    } else if end.size.y > 0.0 {
+        zoom_box.size.y / end.size.y
+    } else {
+        0.0
+    };
+    let scales = end.scales * lambda;
+    let solvable = lambda > 0.0 && lambda.is_finite() && scales.x > 0.0 && scales.y > 0.0;
+    let target = solvable.then(|| {
+        let (sin, cos) = zoom_box.turn.sin_cos();
+        let half = zoom_box.size.y / 2.0;
+        let top = zoom_box.center + Vec2D::new(half * sin, -half * cos);
+        let from_center = end.content.x / 2.0 * scales.x;
+        Mat2D::new(
+            cos * scales.x,
+            sin * scales.x,
+            -sin * scales.y,
+            cos * scales.y,
+            top.x - from_center * cos,
+            top.y - from_center * sin,
+        )
+    });
+    (lambda, scales, target)
+}
+
+/// The box in a version's content space, the clip it draws in; None when
+/// it is not finite.
+pub(in crate::live_move) fn content_clip(end: &End, zoom_box: &ZoomBox, scales: Vec2D) -> Option<FlightClip> {
+    let clip = FlightClip {
+        width: end.content.x,
+        height: zoom_box.size.y / scales.y,
+        radii: zoom_box
+            .radii
+            .map(|r| Vec2D::new(r.x / scales.x, r.y / scales.y)),
+    };
+    (clip.height.is_finite()
+        && clip
+            .radii
+            .iter()
+            .all(|r| r.x.is_finite() && r.y.is_finite()))
+    .then_some(clip)
 }
 
 fn finite(matrix: Mat2D) -> bool {

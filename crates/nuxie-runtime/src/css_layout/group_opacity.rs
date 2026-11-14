@@ -9,6 +9,7 @@ use super::{
     keys::{ABOVE_RANK, FADE_OUTSIDE},
     record::{LayoutCssStyle, find_in},
 };
+use super::lift::{Lift, lift_of};
 use crate::live_move::records::LiveSlot;
 use crate::source::{
     artboard::Artboard,
@@ -321,7 +322,13 @@ pub(crate) fn holds_fade(element: &dyn CoreObject) -> bool {
 
 fn box_holds_fade(layout: &LayoutComponent) -> bool {
     let own = layout.opacity();
-    own > 0.0
+    // A zoomed copy flying in place leaves its own opacity out.
+    use crate::mechanical_port::source::generated::core_registry::CoreCapabilities;
+    let skips_own = layout
+        .as_transform_component()
+        .is_some_and(|transform| transform.opacity_root == super::lift::OpacityRoot::Nothing);
+    !skips_own
+        && own > 0.0
         && own < 1.0
         && layout.is_css_mode()
         && !layout.is_artboard()
@@ -777,7 +784,12 @@ impl ScreenList {
     /// after it, a plain one, `lifts`: under a draw visitor or a mesh bypass
     /// a mark of 3 answers as 2, at its own strength in place.
     fn of(screen: &CoreHandle, lifts: bool) -> Option<Self> {
-        let mut current = screen.with_downcast::<Artboard, _>(Artboard::first_drawable)?;
+        let (mut current, skip) = screen.with_downcast::<Artboard, _>(|artboard| {
+            (
+                artboard.first_drawable(),
+                Rc::clone(&artboard.lifts.borrow().skip),
+            )
+        })?;
         let mut marks = Marks::default();
         let (mut layers, mut ranks, mut above) = (HashMap::new(), HashMap::new(), Vec::new());
         let (mut past_first, mut outside) = (false, false);
@@ -786,7 +798,12 @@ impl ScreenList {
         let mut run: Option<(ScreenLayer, f32, usize)> = None;
         while let Some(entry) = current {
             current = entry.with(Drawable::prev_drawable).flatten();
-            let (layer, rank) = if holds_flight(&entry).is_some() {
+            // A copy flying in place draws in its lift, not here
+            // (css_layout/lift.rs): no mark of its counts for the step.
+            if skip.contains(&entry) {
+                continue;
+            }
+            let (layer, rank) = if holds_flight(&entry).is_some() || lift_of(&entry).is_some() {
                 past_first = true;
                 (ScreenLayer::OwnStrength, 0.0)
             } else if let Some((layer, rank, _)) = run {
@@ -948,7 +965,7 @@ pub(crate) fn marked_above(node: &CoreHandle) -> bool {
 
 /// Whether `entry` draws for `element`: it is the element, or the own paint
 /// of a box that is, or sits under it on the element's artboard.
-fn draws_for(entry: &RuntimeDrawableOccurrence, element: &CoreHandle) -> bool {
+pub(crate) fn draws_for(entry: &RuntimeDrawableOccurrence, element: &CoreHandle) -> bool {
     let mut node = entry_node(entry);
     while let Some(current) = node {
         if current == *element {
@@ -1536,6 +1553,90 @@ impl LoneContent {
 
     fn is_lone_picture(&self) -> bool {
         self.drawn == 1 && self.image
+    }
+}
+
+/// Draws a lift's entries into its picture, composited at `held`, when the
+/// copy has a box: where a unit's one root box stood, the copy stands, so the
+/// rule is a unit's (`box_term`, `one_root_box`, `one_hosted_component`), read
+/// on the copy's own entries in its Screen's space, under a zoom's clip
+/// `clip`. False, having drawn nothing, when it can't take one.
+pub(crate) fn draw_lift_picture(
+    lift: &Lift,
+    entries: &[RuntimeDrawableOccurrence],
+    clip: Option<Aabb>,
+    renderer: &mut Renderer,
+    held: f32,
+    content: &dyn Fn(&mut Renderer),
+) -> bool {
+    let (row, element) = {
+        let state = lift.0.borrow();
+        (state.row.clone(), state.element.clone())
+    };
+    let Some(host) = canvas_host(&row) else {
+        return false;
+    };
+    let Term::Area(area) = lift_term(&row, &element, entries, clip) else {
+        return false;
+    };
+    // Out of the lift for the draw: the renderer can reenter it.
+    let mut picture = std::mem::take(&mut lift.0.borrow_mut().picture);
+    let drew = picture
+        .draw(
+            &host,
+            renderer,
+            (Mat2D::identity(), area, GUARD_PIXELS),
+            held,
+            content,
+        )
+        .is_some();
+    lift.0.borrow_mut().picture = picture;
+    drew
+}
+
+/// What a lifted copy's entries reach, in its Screen's space: as a unit's
+/// root box reaches, its own paints and, when it clips both axes, its clip,
+/// else what it holds; and as a unit's lone component host, what the
+/// component reaches. Bounded by a zoom's clip.
+fn lift_term(
+    row: &CoreHandle,
+    element: &CoreHandle,
+    entries: &[RuntimeDrawableOccurrence],
+    clip: Option<Aabb>,
+) -> Term {
+    let has_rules = row
+        .with_downcast::<Artboard, _>(Artboard::has_draw_rules)
+        .unwrap_or(true);
+    let mut list = DrawList {
+        first: None,
+        last: None,
+        count: 0,
+        content: LoneContent::default(),
+    };
+    for drawable in entries {
+        if drawable.is_clip_start() || drawable.is_clip_end() {
+            continue;
+        }
+        list.count += 1;
+        list.content.add(drawable);
+        list.first.get_or_insert_with(|| drawable.clone());
+        list.last = Some(drawable.clone());
+    }
+    let content = if element
+        .with(|object| object.as_nested_artboard().is_some())
+        .unwrap_or(false)
+    {
+        (list.count == 1)
+            .then(|| one_hosted_component(&list))
+            .flatten()
+            .unwrap_or(Term::Unknown)
+    } else {
+        one_root_box(&list, has_rules).unwrap_or(Term::Unknown)
+    };
+    match (clip, content) {
+        (Some(clip), Term::Area(area)) => Term::of(overlap(area, clip)),
+        (Some(clip), Term::Unknown) => Term::of(clip),
+        (_, term) => term,
     }
 }
 

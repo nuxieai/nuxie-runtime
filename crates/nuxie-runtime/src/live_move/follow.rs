@@ -162,6 +162,80 @@ pub(super) struct FlightFrame {
     /// when the controls carry one (docs/live-moves.md).
     pub(super) shadow: Option<FlightShadow>,
 }
+impl FlightFrame {
+    /// One read of a flight's controls, a flight slot's or a flight
+    /// record's, with its two ends' sizes `a` and `b` blended at its
+    /// progress.
+    pub(super) fn read(values: &super::records::Values, a: Vec2D, b: Vec2D) -> Result<Self> {
+        let (progress, path_x, path_y, fade, corners, shadow) = (
+            values.progress,
+            values.path_x,
+            values.path_y,
+            values.fade,
+            values.corners,
+            values.shadow,
+        );
+        ensure!(
+            progress.is_finite()
+                && path_x.is_finite()
+                && path_y.is_finite()
+                && fade.is_finite()
+                && corners.iter().all(|corner| corner.is_finite())
+                && shadow.iter().all(|value| value.is_finite()),
+            "non-finite flight controls"
+        );
+        let t = progress.clamp(0.0, 1.0);
+        let mix = |a: f32, b: f32| a + (b - a) * t;
+        let blended_size = Vec2D::new(mix(a.x, b.x), mix(a.y, b.y));
+        ensure!(
+            blended_size.x.is_finite() && blended_size.y.is_finite(),
+            "non-finite flight size"
+        );
+        Ok(Self {
+            progress: t,
+            path: Vec2D::new(path_x, path_y),
+            fade,
+            blended_size,
+            // A corner below 0 (-1 by default) carries no corners: the unit
+            // draws its own.
+            corners: corners
+                .iter()
+                .all(|corner| *corner >= 0.0)
+                .then_some(corners),
+            shadow: flight_shadow(shadow),
+        })
+    }
+
+    /// The blend of two ends' sizes at this frame's progress.
+    pub(super) fn blended_size(&self) -> Vec2D {
+        self.blended_size
+    }
+
+    /// The flight's own fade control.
+    pub(super) fn fade(&self) -> f32 {
+        self.fade
+    }
+
+    /// The pose between two ends' page matrices at this frame's progress:
+    /// each decomposed, turned the short way round, scale, skew and place
+    /// blended, the path's offset added.
+    pub(super) fn blend(&self, a: Mat2D, b: Mat2D) -> Mat2D {
+        let t = self.progress;
+        let mix = |a: f32, b: f32| a + (b - a) * t;
+        let (ac, bc) = (a.decompose(), b.decompose());
+        let mut blended = ac;
+        let angle = (bc.rotation() - ac.rotation() + std::f32::consts::PI)
+            .rem_euclid(std::f32::consts::TAU)
+            - std::f32::consts::PI;
+        blended.set_rotation(ac.rotation() + angle * t);
+        blended.set_scale_x(mix(ac.scale_x(), bc.scale_x()));
+        blended.set_scale_y(mix(ac.scale_y(), bc.scale_y()));
+        blended.set_skew(mix(ac.skew(), bc.skew()));
+        blended.set_x(mix(ac.x(), bc.x()) + self.path.x);
+        blended.set_y(mix(ac.y(), bc.y()) + self.path.y);
+        Mat2D::compose(&blended)
+    }
+}
 pub(super) struct ProjectedPose {
     pub(super) matrix: Mat2D,
     pub(super) opacity: f32,
@@ -282,54 +356,18 @@ impl Flight {
         } else {
             self.to_pose.get().size
         };
-        let (progress, path_x, path_y, fade, corners, shadow) = self
+        let values = self
             .controls
-            .with_downcast::<LiveSlot, _>(|r| {
-                (
-                    r.values.progress,
-                    r.values.path_x,
-                    r.values.path_y,
-                    r.values.fade,
-                    r.values.corners,
-                    r.values.shadow,
-                )
-            })
+            .with_downcast::<LiveSlot, _>(|r| r.values.clone())
             .ok_or_else(|| anyhow::anyhow!("flight controls retired"))?;
-        ensure!(
-            progress.is_finite()
-                && path_x.is_finite()
-                && path_y.is_finite()
-                && fade.is_finite()
-                && corners.iter().all(|corner| corner.is_finite())
-                && shadow.iter().all(|value| value.is_finite()),
-            "non-finite flight controls"
-        );
-        let t = progress.clamp(0.0, 1.0);
-        let mix = |a: f32, b: f32| a + (b - a) * t;
-        let blended_size = Vec2D::new(mix(a.x, b.x), mix(a.y, b.y));
-        ensure!(
-            blended_size.x.is_finite() && blended_size.y.is_finite(),
-            "non-finite flight size"
-        );
+        let frame = FlightFrame::read(&values, a, b)?;
         if self.size_mode == SizeMode::Scale {
             ensure!(
                 self.departure_size.x > 0.0 && self.departure_size.y > 0.0,
                 "scale mode needs a nonzero box"
             );
         }
-        Ok(FlightFrame {
-            progress: t,
-            path: Vec2D::new(path_x, path_y),
-            fade,
-            blended_size,
-            // A corner below 0 (-1 by default) carries no corners: the unit
-            // draws its own.
-            corners: corners
-                .iter()
-                .all(|corner| *corner >= 0.0)
-                .then_some(corners),
-            shadow: flight_shadow(shadow),
-        })
+        Ok(frame)
     }
 
     /// The size a flight on its own lays its unit out at: the blend of its
@@ -382,17 +420,7 @@ impl Flight {
         let b = self.to_pose.get();
         let t = frame.progress;
         let mix = |a: f32, b: f32| a + (b - a) * t;
-        let (ac, bc) = (a.transform.decompose(), b.transform.decompose());
-        let mut blended = ac;
-        let angle = (bc.rotation() - ac.rotation() + std::f32::consts::PI)
-            .rem_euclid(std::f32::consts::TAU)
-            - std::f32::consts::PI;
-        blended.set_rotation(ac.rotation() + angle * t);
-        blended.set_scale_x(mix(ac.scale_x(), bc.scale_x()));
-        blended.set_scale_y(mix(ac.scale_y(), bc.scale_y()));
-        blended.set_skew(mix(ac.skew(), bc.skew()));
-        blended.set_x(mix(ac.x(), bc.x()) + frame.path.x);
-        blended.set_y(mix(ac.y(), bc.y()) + frame.path.y);
+        let blended = frame.blend(a.transform, b.transform);
         let stretch = if self.size_mode == SizeMode::Scale {
             // Scaling stretches the flying unit under its own transform: it can
             // use the settled endpoint sizes without changing the departure box
@@ -418,7 +446,7 @@ impl Flight {
             parent_opacity != 0.0 || opacity == 0.0,
             "opaque flight under transparent parent"
         );
-        let matrix = inverse * Mat2D::compose(&blended);
+        let matrix = inverse * blended;
         ensure!(
             (0..6).all(|i| matrix[i].is_finite()) && opacity.is_finite(),
             "non-finite flight pose"
@@ -713,14 +741,18 @@ impl Resting {
             component = component.with(|o| o.component_parent_handle()).flatten()?;
         }
         let world = self.world(&component)?;
-        let size = component
-            .with(|o| {
-                o.as_layout_component().map(|l| {
-                    let bounds = l.layout_bounds();
-                    Vec2D::new(bounds.width(), bounds.height())
+        // A box flying in place rests where its hold keeps it.
+        let size = match crate::css_layout::flight_hold::held_rest(&component) {
+            Some(rest) => Vec2D::new(rest.width(), rest.height()),
+            None => component
+                .with(|o| {
+                    o.as_layout_component().map(|l| {
+                        let bounds = l.layout_bounds();
+                        Vec2D::new(bounds.width(), bounds.height())
+                    })
                 })
-            })
-            .flatten()?;
+                .flatten()?,
+        };
         Some(transformed_box(world, size))
     }
 
@@ -760,6 +792,15 @@ impl Resting {
                 if let Some(layout) = o.as_layout_component() {
                     if !layout.is_css_mode() {
                         return None;
+                    }
+                    // A box flying in place rests where its hold keeps its
+                    // place, at its resting size.
+                    if let Some((moved, size)) = layout.flight_rest() {
+                        return Some((
+                            Mat2D::from_translation(layout.layout_translation() + moved)
+                                * layout.own_transform_at_rest_sized(size),
+                            layout.css_record()?,
+                        ));
                     }
                     return Some((
                         Mat2D::from_translation(layout.layout_translation())
@@ -815,10 +856,18 @@ impl Resting {
         if let Some(held) = self.held.get(item) {
             return *held;
         }
+        // A box flying in place counts by its own record alone, as a slot
+        // whose frame flies holds only its placeholder: a flown element's
+        // own keys reach no one at rest.
+        let flying = item
+            .with(|o| o.as_layout_component().map(|l| l.flight_rest().is_some()))
+            .flatten()
+            .unwrap_or(false);
         let held = css_record(item).is_some_and(|record| record::is_layout_keyed(&record))
-            || layout_children_in_flow(item)
-                .iter()
-                .any(|child| self.holds_keyed_layout(child));
+            || (!flying
+                && layout_children_in_flow(item)
+                    .iter()
+                    .any(|child| self.holds_keyed_layout(child)));
         self.held.insert(item.clone(), held);
         held
     }
@@ -836,6 +885,39 @@ impl Resting {
                 .iter()
                 .any(|sibling| sibling != level && self.holds_keyed_layout(sibling))
     }
+}
+
+/// What covers a lifted copy's anchor on the upper Screen `board`: walking
+/// its sorted list from the first entry that draws for the anchor toward the
+/// top, the first that draws something and covers the anchor's resting box.
+/// A lift entry, an entry of a lifted copy (`lifted`, which draws in its
+/// lift) and an entry of the anchor itself never cover it.
+pub(super) fn lift_cover(
+    board: &CoreHandle,
+    anchor: &CoreHandle,
+    lifted: &std::collections::HashSet<RuntimeDrawableOccurrence>,
+) -> Option<RuntimeDrawableOccurrence> {
+    use crate::css_layout::lift::{draws_for, lift_of};
+    let list = board
+        .with_downcast::<Artboard, _>(|board| board.drawables().to_vec())
+        .unwrap_or_default();
+    let at = list.iter().position(|item| draws_for(item, anchor, board))?;
+    let mut rest = Resting::new(board);
+    let anchor_box = rest.drawable_box(&RuntimeDrawableOccurrence::Authored(anchor.clone()));
+    list[..at]
+        .iter()
+        .rev()
+        .find(|item| {
+            lift_of(item).is_none()
+                && !lifted.contains(item)
+                && !draws_for(item, anchor, board)
+                && draws_something(item)
+                && match (anchor_box, rest.drawable_box(item)) {
+                    (Some(a), Some(b)) => overlaps(a, b),
+                    _ => true,
+                }
+        })
+        .cloned()
 }
 
 /// The matrix placement gives a CSS slot's frame at rest, in its Screen's

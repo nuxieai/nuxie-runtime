@@ -361,16 +361,28 @@ struct DrawRangeState {
     // Our layer: which of a Screen's draws this range is, for its own content
     // only (css_layout/group_opacity.rs). A nested range starts without one.
     screen: Option<crate::css_layout::group_opacity::ScreenPass>,
+    // Our layer: the entries of this Screen's copies that fly in place,
+    // which its own draw leaves out and their lifts draw
+    // (css_layout/lift.rs). None outside a step, and in a lift's own draw.
+    skip: Option<Rc<HashSet<RuntimeDrawableOccurrence>>>,
 }
 
 impl DrawRangeState {
     fn new(root: &CoreHandle) -> Self {
+        let runtime_receiver = root.runtime_artboard_instance();
+        let skip = Artboard::with_root(root, runtime_receiver.as_ref(), |artboard| {
+            (artboard.drawing_lift == 0)
+                .then(|| Rc::clone(&artboard.lifts.borrow().skip))
+                .filter(|skip| !skip.is_empty())
+        })
+        .flatten();
         Self {
-            runtime_receiver: root.runtime_artboard_instance(),
+            runtime_receiver,
             empty_clips: 0,
             pending_clip_operations: Vec::new(),
             has_visitor: None,
             screen: None,
+            skip,
         }
     }
 
@@ -456,6 +468,12 @@ pub struct Artboard {
     // row, set by that draw and taken by the list in the same draw
     // (css_layout/group_opacity.rs, `take_lifted`).
     pub(crate) lifted: std::cell::Cell<Option<crate::css_layout::group_opacity::ScreenList>>,
+    // Our layer: the lifts this Screen draws and those of its own copies
+    // while a step flies in place (css_layout/lift.rs). Empty otherwise.
+    pub(crate) lifts: RefCell<crate::css_layout::lift::ScreenLifts>,
+    // Our layer: how many lift draws of this Screen are running; while one
+    // is, its ranges keep what its own draw leaves out.
+    pub(crate) drawing_lift: u32,
     // Our layer, test builds: what a Screen's last draw read of its split, and
     // the content revision after it (css_layout/group_opacity.rs).
     #[cfg(any(test, feature = "testing"))]
@@ -475,7 +493,7 @@ pub struct Artboard {
     pub(crate) data_bind_container: DataBindContainer,
     scripting_vm: Option<RuntimeScriptingVmHandle>,
     file: RuntimeFileWeakHandle,
-    draw_visitor: Option<RuntimeDrawVisitor>,
+    pub(crate) draw_visitor: Option<RuntimeDrawVisitor>,
     draw_visitor_file: Option<RuntimeFileWeakHandle>,
     joysticks_apply_before_update: bool,
     dirty_state: RuntimeArtboardDirtyHandle,
@@ -584,6 +602,8 @@ impl Default for Artboard {
             group_picture: Default::default(),
             screen_pass: Default::default(),
             lifted: Default::default(),
+            lifts: RefCell::default(),
+            drawing_lift: 0,
             #[cfg(any(test, feature = "testing"))]
             split_seen: Cell::default(),
             scripted_objects: LazyVector::default(),
@@ -2137,13 +2157,40 @@ impl Artboard {
 
     fn sort_draw_order(&mut self) {
         let _relinking = self.draw_links.relinking();
+        // Nuxie: a lift entry is the runtime's own; this sort places today's.
+        // A sort after the step's lifts ended clears what they left.
+        let lifting = self.lifts.borrow().touched();
+        if lifting {
+            self.drawables
+                .retain(|item| crate::css_layout::lift::lift_of(item).is_none());
+        }
+        let lifts = self
+            .lifts
+            .borrow()
+            .drawn
+            .iter()
+            .map(|lift| {
+                let entry = lift.entry();
+                let state = lift.0.borrow();
+                crate::css_layout::paint_order::Lifted {
+                    entry,
+                    anchor: state.anchor.clone(),
+                    coverer: state.coverer.clone(),
+                }
+            })
+            .collect::<Vec<_>>();
         // Nuxie: a flight paints where its matched element paints at rest
         // (docs/CSS_LAYOUT.md, 4.4).
         if self.apply_css_paint_order()
             && let Some(root) =
                 crate::mechanical_port::source::core::CoreObject::core(self).handle()
         {
-            crate::css_layout::paint_order::place(&root, &mut self.drawables);
+            crate::css_layout::paint_order::place(&root, &mut self.drawables, lifts);
+        } else {
+            // Not a CSS list: a lift paints on top.
+            for lift in lifts.into_iter().rev() {
+                self.drawables.insert(0, lift.entry);
+            }
         }
         let counter = &self.dirty_state.0.draw_order_change_counter;
         counter.set(if counter.get() == u8::MAX {
@@ -2456,6 +2503,18 @@ impl Artboard {
         }
         self.interleave_layer_masks();
         self.clear_redundant_operations();
+        // Nuxie: which entries draw for each copy flying in place, read from
+        // the list just linked (css_layout/lift.rs).
+        if lifting
+            && let Some(root) =
+                crate::mechanical_port::source::core::CoreObject::core(self).handle()
+        {
+            crate::css_layout::lift::mark_entries(
+                &mut self.lifts.borrow_mut(),
+                self.first_drawable.clone(),
+                &root,
+            );
+        }
     }
 
     pub fn all_layer_masks(&self) -> &[CoreHandle] {
@@ -4692,8 +4751,12 @@ impl Artboard {
         if let Some(file) = keys_file {
             root.with_downcast_mut::<Artboard, _>(|a| a.draw_visitor_file = Some(file.downgrade()));
         }
+        // Our layer: a Screen with lifts draws past its cache for the step
+        // (css_layout/lift.rs).
         let has_cache = root
-            .with_downcast::<Artboard, _>(|artboard| artboard.bitmap_cache.is_some())
+            .with_downcast::<Artboard, _>(|artboard| {
+                artboard.bitmap_cache.is_some() && artboard.lifts.borrow().is_empty()
+            })
             .unwrap_or(false);
         if visitor.is_none() && has_cache && Self::draw_cached_as_bitmap_handle(root, renderer) {
             return;
@@ -4916,7 +4979,15 @@ impl Artboard {
             (artboard.first_drawable(), Rc::clone(&artboard.draw_links))
         })
         .map_or((None, None), |(first, links)| (first, Some(links)));
+        // Our layer: a Screen with lifts reads each entry (css_layout/lift.rs).
+        let lifting = Self::with_root(root, receiver, |artboard| {
+            !artboard.lifts.borrow().is_empty()
+        })
+        .unwrap_or(false);
         match (pass, links) {
+            (None, _) if lifting => {
+                Self::draw_drawable_range_handle(root, renderer, first_drawable, None)
+            }
             // A Screen's draw reads each entry, so it takes the range path.
             (Some(pass), _) => {
                 let mut state = DrawRangeState::new(root);
@@ -4995,6 +5066,22 @@ impl Artboard {
         // Our layer: where this entry draws in a Screen's draw, read for
         // every entry (css_layout/group_opacity.rs).
         let layer = state.screen.as_mut().map(|pass| pass.layer(current));
+        // Our layer: a copy flying in place leaves its own Screen's draw, and
+        // the upper Screen's lift entry draws it (css_layout/lift.rs).
+        if state.skip.as_ref().is_some_and(|skip| skip.contains(current)) {
+            return false;
+        }
+        if let Some(lift) = crate::css_layout::lift::lift_of(current) {
+            let step = match (state.screen.as_mut(), layer) {
+                (Some(pass), Some(layer)) => pass.step(layer, current),
+                _ => ScreenStep::Draw,
+            };
+            if matches!(step, ScreenStep::Draw) {
+                let visitor = Self::range_visitor(root, state);
+                Self::draw_lift(renderer, &lift, visitor);
+            }
+            return false;
+        }
         match current.draw_range_step(
             &mut state.empty_clips,
             !state.pending_clip_operations.is_empty(),
@@ -5033,6 +5120,84 @@ impl Artboard {
                 Self::draw_range_scoped(root, renderer, current, state, fade)
             }
             _ => Self::draw_range_drawable(root, renderer, current, state),
+        }
+    }
+
+    /// Our layer: a lift entry's draw (css_layout/lift.rs): the copy's own
+    /// entries of its own Screen's list, under the lift's transform, its
+    /// zoom clip and its opacity, as one picture when the copy has a box and
+    /// as a scope otherwise. A draw visitor reaches the copy's entries as it
+    /// reaches the upper Screen's, and takes no picture.
+    fn draw_lift(
+        renderer: &mut Renderer,
+        lift: &crate::css_layout::lift::Lift,
+        visitor: Option<RuntimeDrawVisitor>,
+    ) {
+        let (row, element, matrix, opacity, clip, entries) = {
+            let state = lift.0.borrow();
+            (
+                state.row.clone(),
+                state.element.clone(),
+                state.matrix,
+                state.opacity,
+                state.clip,
+                state.entries.clone(),
+            )
+        };
+        if entries.is_empty() || !(opacity > 0.0) {
+            return;
+        }
+        renderer.save();
+        renderer.transform(nuxie_render_api::Mat2D(*matrix.values()));
+        let clip_area = clip.and_then(|clip| {
+            crate::css_layout::lift::apply_clip(renderer, &element, &row, clip)
+        });
+        let plain = visitor.is_none();
+        let draw_entries = |renderer: &mut Renderer| {
+            crate::css_layout::lift::drawing_lift(&row, visitor.clone(), || {
+                Self::draw_lift_entries(&row, renderer, &entries);
+            });
+        };
+        if opacity >= 1.0 {
+            draw_entries(renderer);
+        } else if !(plain
+            && crate::css_layout::group_opacity::draw_lift_picture(
+                lift,
+                &entries,
+                clip_area,
+                renderer,
+                opacity,
+                &draw_entries,
+            ))
+        {
+            lift.0.borrow_mut().picture.release();
+            renderer.save();
+            renderer.modulate_opacity(opacity);
+            draw_entries(renderer);
+            renderer.restore();
+        }
+        renderer.restore();
+    }
+
+    /// A lifted copy's entries, in its Screen's draw order, as its Screen's
+    /// range walk draws them, with its ancestors' entries left out.
+    fn draw_lift_entries(
+        row: &CoreHandle,
+        renderer: &mut Renderer,
+        entries: &[RuntimeDrawableOccurrence],
+    ) {
+        let mut state = DrawRangeState::new(row);
+        let mut index = 0;
+        while let Some(entry) = entries.get(index) {
+            let mut current = entry.clone();
+            // A masked range or a box's picture moves to its end, which is
+            // the copy's too.
+            if Self::draw_range_entry(row, renderer, &mut current, &mut state)
+                && let Some(end) = entries[index..].iter().position(|e| *e == current)
+            {
+                index += end;
+            }
+            index += 1;
         }
     }
 

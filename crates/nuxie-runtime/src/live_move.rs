@@ -2,6 +2,7 @@
 pub(crate) mod collapse;
 mod drawn;
 pub(crate) mod frame;
+mod in_place;
 pub use frame::FrameScope;
 mod follow;
 pub(crate) mod plan;

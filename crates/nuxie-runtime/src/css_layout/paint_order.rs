@@ -360,6 +360,13 @@ fn spans(root: &CoreHandle, list: &[RuntimeDrawableOccurrence]) -> Vec<(usize, u
     spans
 }
 
+/// A lift entry to place: its anchor element and what covers it.
+pub(crate) struct Lifted {
+    pub(crate) entry: RuntimeDrawableOccurrence,
+    pub(crate) anchor: CoreHandle,
+    pub(crate) coverer: Option<RuntimeDrawableOccurrence>,
+}
+
 /// Paints each flight slot that carries a placement right where its anchor
 /// paints (docs/CSS_LAYOUT.md, 4.4), on the root's draw list after `order`:
 /// directly under its coverer, at the top when it has none, and directly
@@ -367,7 +374,15 @@ fn spans(root: &CoreHandle, list: &[RuntimeDrawableOccurrence]) -> Vec<(usize, u
 /// Flights keep their anchors' order among themselves, flights at one gap
 /// stack in placing order, and none goes inside a clip or mask span. A list
 /// with no placed flight is left untouched.
-pub(crate) fn place(root: &CoreHandle, drawables: &mut Vec<RuntimeDrawableOccurrence>) {
+///
+/// A lift entry of a copy flying in place (css_layout/lift.rs) is placed by
+/// the same rule, `lifts` in placing order. Its anchor is the upper Screen's
+/// own copy, an element of any kind: the first entry that draws for it.
+pub(crate) fn place(
+    root: &CoreHandle,
+    drawables: &mut Vec<RuntimeDrawableOccurrence>,
+    lifts: Vec<Lifted>,
+) {
     let placement = |item: &RuntimeDrawableOccurrence| match item {
         RuntimeDrawableOccurrence::Authored(slot) if slot != root => slot
             .with(|object| {
@@ -387,7 +402,7 @@ pub(crate) fn place(root: &CoreHandle, drawables: &mut Vec<RuntimeDrawableOccurr
         .iter()
         .map(|item| placement(item).filter(|(anchor, _)| has_anchor(anchor)))
         .collect();
-    if placements.iter().all(Option::is_none) {
+    if placements.iter().all(Option::is_none) && lifts.is_empty() {
         return;
     }
     // Take the placed flights out, keeping their relative order.
@@ -408,6 +423,14 @@ pub(crate) fn place(root: &CoreHandle, drawables: &mut Vec<RuntimeDrawableOccurr
             Some((item, anchor, coverer))
         })
         .collect();
+    // A lift whose anchor draws nothing paints on top.
+    flights.extend(lifts.into_iter().map(|lift| {
+        let anchor = rest
+            .iter()
+            .position(|item| super::lift::draws_for(item, &lift.anchor, root))
+            .unwrap_or(0);
+        (lift.entry, anchor, lift.coverer)
+    }));
     // By anchor, top first; flights that share an anchor keep file order.
     flights.sort_by_key(|(_, anchor, _)| *anchor);
     // The root's own top items stay above every unit and every flight.

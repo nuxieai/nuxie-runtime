@@ -30,6 +30,12 @@ pub mod live_move_fixture;
 pub fn in_place_holds_begun() -> usize {
     css_layout::flight_hold::holds_begun()
 }
+/// How many times a sort marked the entries of copies flying in place on
+/// this thread (css_layout/lift.rs).
+#[cfg(feature = "test-support")]
+pub fn in_place_lift_marks() -> usize {
+    css_layout::lift::lift_marks()
+}
 pub mod page_player;
 #[doc(hidden)]
 pub mod script_borrow_check;

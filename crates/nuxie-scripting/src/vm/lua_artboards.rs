@@ -639,11 +639,10 @@ impl UserData for ScriptedNode {
 
 /// Literal external-test entry point for scripting_artboard_test.cpp's render
 /// producer. Source compilation stays in the test tool; normal builds omit it.
-///
-/// # Safety
-/// `bytecode` must be trusted bytecode produced by the matching Luau compiler.
+/// `bytecode` is loaded through the VM's own bytecode validation, so it needs
+/// no trust marker.
 #[cfg(feature = "upstream-test-seams")]
-pub unsafe fn upstream_test_scripted_artboard_render(
+pub fn upstream_test_scripted_artboard_render(
     bytes: &[u8],
     bytecode: &[u8],
 ) -> Result<Vec<u8>> {

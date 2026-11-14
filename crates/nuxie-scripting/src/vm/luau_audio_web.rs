@@ -2,6 +2,7 @@
 //! Wasm instances; Lua values, Arc addresses and allocator state never do.
 use serde_json::Value;
 
+#[allow(unsafe_code)]
 mod host;
 pub use host::{alloc, free, kernel_request};
 

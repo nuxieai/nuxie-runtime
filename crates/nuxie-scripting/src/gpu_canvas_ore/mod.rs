@@ -192,6 +192,7 @@ pub(crate) fn image_texture_view(
         view
     } else {
         let mut ctx = context.borrow_mut();
+        #[allow(unsafe_code)]
         let view = if ctx.isRecording() {
             // Canvas provenance is authoritative: canvas backings can share
             // the same renderer type as decoded images. Recording must not

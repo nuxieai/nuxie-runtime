@@ -1003,6 +1003,7 @@ mod tests {
         );
         assert_eq!(f32::from_le_bytes(output[..4].try_into().unwrap()), 3.0);
     }
+    #[allow(unsafe_code)]
     fn compile(source: &str) -> Vec<u8> {
         use luaur_compiler::functions::luau_compile::luau_compile;
         luaur_common::set_all_flags(true);

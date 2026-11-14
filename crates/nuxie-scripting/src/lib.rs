@@ -11,6 +11,12 @@
 //!   Luau bytecode that `.riv` files actually carry, and call functions / read
 //!   results. Source compilation belongs to editor tooling.
 
+// `unsafe` is allowed only where an item says so: the browser audio host
+// (`vm::luau_audio_web::host`), the verified-shader constructors and canvas
+// texture wraps lane D4 left (`shader_asset`, `gpu_canvas_ore`), and test
+// helpers that call the compiler's C entry point (stage 2).
+#![deny(unsafe_code)]
+
 pub mod envelope;
 pub mod logging_scripting_context;
 pub use logging_scripting_context::make_logging_scripting_context_factory;

@@ -313,6 +313,7 @@ impl ShaderAsset {
     }
 
     #[cfg(any(feature = "android-authored-wgsl", test))]
+    #[allow(unsafe_code)]
     fn decode_vulkan_spirv(
         &self,
         name: &str,
@@ -372,6 +373,7 @@ impl ShaderAsset {
     }
 
     #[cfg(any(feature = "apple-authored-msl", test))]
+    #[allow(unsafe_code)]
     fn decode_apple_metal(
         &self,
         name: &str,
@@ -1408,6 +1410,7 @@ mod tests {
         )
     }
 
+    #[allow(unsafe_code)]
     fn provenance(payload: &[u8]) -> GpuCanvasShaderProvenance {
         // SAFETY: tests deliberately establish the same exact-byte trust
         // boundary that production's cryptographic verifier owns.

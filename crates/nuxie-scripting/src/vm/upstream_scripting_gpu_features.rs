@@ -75,9 +75,11 @@ impl ContextApi for FakeDeviceContext {
     fn beginFrame(&mut self, _: &FrameDescriptor) {}
     fn endFrame(&mut self) {}
     fn waitForGPU(&mut self) {}
+    #[allow(unsafe_code)]
     unsafe fn wrapCanvasTexture(&mut self, _: *mut std::ffi::c_void) -> Option<AnyResourceHandle> {
         None
     }
+    #[allow(unsafe_code)]
     unsafe fn wrapRiveTexture(
         &mut self,
         _: *mut std::ffi::c_void,

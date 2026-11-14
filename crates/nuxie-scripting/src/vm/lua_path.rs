@@ -749,6 +749,7 @@ mod upstream_scripted_path_tests {
         );
     }
 
+    #[allow(unsafe_code)]
     fn compile_source(source: &str) -> Vec<u8> {
         use luaur_compiler::functions::luau_compile::luau_compile;
 

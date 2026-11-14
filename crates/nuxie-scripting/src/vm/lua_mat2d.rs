@@ -9,26 +9,59 @@ use nuxie_render_api::Mat2D;
 #[derive(Clone, Copy)]
 pub(super) struct ScriptedMat2D(pub(super) Mat2D);
 
+/// One of a `Mat2D`'s six values, in storage order.
+#[derive(Clone, Copy)]
+enum Element {
+    Xx,
+    Xy,
+    Yx,
+    Yy,
+    Tx,
+    Ty,
+}
+
+impl Element {
+    /// Field name and element, in storage order (Lua index 1 to 6).
+    const ALL: [(&'static str, Element); 6] = [
+        ("xx", Element::Xx),
+        ("xy", Element::Xy),
+        ("yx", Element::Yx),
+        ("yy", Element::Yy),
+        ("tx", Element::Tx),
+        ("ty", Element::Ty),
+    ];
+
+    fn slot(self, values: &mut [f32; 6]) -> &mut f32 {
+        let [xx, xy, yx, yy, tx, ty] = values;
+        match self {
+            Element::Xx => xx,
+            Element::Xy => xy,
+            Element::Yx => yx,
+            Element::Yy => yy,
+            Element::Tx => tx,
+            Element::Ty => ty,
+        }
+    }
+
+    fn get(self, matrix: Mat2D) -> f32 {
+        let mut values = matrix.0;
+        *self.slot(&mut values)
+    }
+}
+
 impl UserData for ScriptedMat2D {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
-        for (name, index) in [
-            ("xx", 0usize),
-            ("xy", 1),
-            ("yx", 2),
-            ("yy", 3),
-            ("tx", 4),
-            ("ty", 5),
-        ] {
-            fields.add_field_method_get(name, move |_, this| Ok(this.0.0[index]));
+        for (name, element) in Element::ALL {
+            fields.add_field_method_get(name, move |_, this| Ok(element.get(this.0)));
             fields.add_field_method_set(name, move |_, this, value: f32| {
-                this.0.0[index] = value;
+                *element.slot(&mut this.0.0) = value;
                 Ok(())
             });
         }
-        for (lua_index, matrix_index) in (1i64..=6).zip(0usize..6) {
-            fields.add_field_index_method_get(lua_index, move |_, this| Ok(this.0.0[matrix_index]));
+        for (lua_index, (_, element)) in (1i64..).zip(Element::ALL) {
+            fields.add_field_index_method_get(lua_index, move |_, this| Ok(element.get(this.0)));
             fields.add_field_index_method_set(lua_index, move |_, this, value: f32| {
-                this.0.0[matrix_index] = value;
+                *element.slot(&mut this.0.0) = value;
                 Ok(())
             });
         }
@@ -66,15 +99,15 @@ impl UserData for ScriptedMat2D {
 }
 
 fn multiply_mat2d(lhs: Mat2D, rhs: Mat2D) -> Mat2D {
-    let a = lhs.0;
-    let b = rhs.0;
+    let [a0, a1, a2, a3, a4, a5] = lhs.0;
+    let [b0, b1, b2, b3, b4, b5] = rhs.0;
     Mat2D([
-        a[0].mul_add(b[0], a[2] * b[1]),
-        a[1].mul_add(b[0], a[3] * b[1]),
-        a[0].mul_add(b[2], a[2] * b[3]),
-        a[1].mul_add(b[2], a[3] * b[3]),
-        a[0].mul_add(b[4], a[2] * b[5]) + a[4],
-        a[1].mul_add(b[4], a[3] * b[5]) + a[5],
+        a0.mul_add(b0, a2 * b1),
+        a1.mul_add(b0, a3 * b1),
+        a0.mul_add(b2, a2 * b3),
+        a1.mul_add(b2, a3 * b3),
+        a0.mul_add(b4, a2 * b5) + a4,
+        a1.mul_add(b4, a3 * b5) + a5,
     ])
 }
 

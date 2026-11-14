@@ -300,42 +300,48 @@ fn write_vector_buffer(
     w: Option<f32>,
     method: &'static str,
 ) -> Result<()> {
-    let byte_len = if w.is_some() { 16 } else { 12 };
+    // The components as upstream copies them: native order, `w` last if given.
+    let bytes: Vec<u8> = [value.x(), value.y(), value.z()]
+        .into_iter()
+        .chain(w)
+        .flat_map(f32::to_ne_bytes)
+        .collect();
+    let byte_len = bytes.len();
     let error = || Error::runtime(format!("Vector:{method} offset out of range"));
     let offset = usize::try_from(offset).map_err(|_| error())?;
     if offset > buffer.len().saturating_sub(byte_len) || buffer.len() < byte_len {
         return Err(error());
     }
-
-    let mut bytes = [0_u8; 16];
-    for (index, component) in [value.x(), value.y(), value.z()].into_iter().enumerate() {
-        let start = index * 4;
-        bytes[start..start + 4].copy_from_slice(&component.to_ne_bytes());
-    }
-    if let Some(w) = w {
-        bytes[12..16].copy_from_slice(&w.to_ne_bytes());
-    }
-    buffer.write_bytes(offset, &bytes[..byte_len]);
+    buffer.write_bytes(offset, &bytes);
     Ok(())
 }
 
 fn vector_component(value: LuaVector, key: &Value) -> Result<Option<f32>> {
-    let index = match key {
+    enum Component {
+        X,
+        Y,
+        Z,
+    }
+    let component = match key {
         Value::String(name) => match name.to_str()?.as_str() {
-            "x" | "1" => Some(0),
-            "y" | "2" => Some(1),
-            "z" | "3" => Some(2),
+            "x" | "1" => Some(Component::X),
+            "y" | "2" => Some(Component::Y),
+            "z" | "3" => Some(Component::Z),
             _ => None,
         },
-        Value::Integer(1) => Some(0),
-        Value::Integer(2) => Some(1),
-        Value::Integer(3) => Some(2),
-        Value::Number(number) if *number == 1.0 => Some(0),
-        Value::Number(number) if *number == 2.0 => Some(1),
-        Value::Number(number) if *number == 3.0 => Some(2),
+        Value::Integer(1) => Some(Component::X),
+        Value::Integer(2) => Some(Component::Y),
+        Value::Integer(3) => Some(Component::Z),
+        Value::Number(number) if *number == 1.0 => Some(Component::X),
+        Value::Number(number) if *number == 2.0 => Some(Component::Y),
+        Value::Number(number) if *number == 3.0 => Some(Component::Z),
         _ => None,
     };
-    Ok(index.map(|index| [value.x(), value.y(), value.z()][index]))
+    Ok(component.map(|component| match component {
+        Component::X => value.x(),
+        Component::Y => value.y(),
+        Component::Z => value.z(),
+    }))
 }
 
 fn vector_index_name(key: &Value) -> String {

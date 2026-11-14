@@ -136,6 +136,15 @@ impl HostMemoryCharge {
             .is_none_or(|budget| growth <= budget.limit().saturating_sub(budget.used()))
     }
 
+    /// Refuses, with the budget's error, a charge of `bytes` that would not
+    /// fit; checked before copying something that is charged once copied.
+    pub(crate) fn check_fits(&self, bytes: usize) -> Result<()> {
+        match &self.budget {
+            Some(budget) if !self.fits(bytes) => Err(budget_exceeded(budget.limit())),
+            _ => Ok(()),
+        }
+    }
+
     /// Raises the charge to `bytes` if it is lower; never lowers it, since a
     /// container keeps the capacity it grew to.
     pub(crate) fn reserve_to(&mut self, bytes: usize) -> Result<()> {
@@ -590,7 +599,7 @@ mod binding_tests {
     // allocation (charged by capacity, or uncharged as a CoreString).
     #[test]
     fn a_data_value_string_cut_at_nul_keeps_only_its_bytes() {
-        let vm = Vm::with_budget(64 * 1024);
+        let vm = Vm::with_budget(256 * 1024);
         vm.vm
             .eval::<()>(
                 "d = DataValue.string() \
@@ -600,6 +609,21 @@ mod binding_tests {
             )
             .unwrap();
         assert_eq!(vm.used(), 1);
+    }
+
+    // Lane E2b review round 4: the whole string was copied out of the VM
+    // before the charge was checked, so a string over the budget made the
+    // host hold a copy of it first. It is now refused before the copy, even
+    // when what is kept (the bytes before a NUL) would fit.
+    #[test]
+    fn a_data_value_string_is_checked_before_it_is_copied() {
+        let vm = Vm::with_budget(64 * 1024);
+        vm.refused(
+            "local d = DataValue.string() \
+             local ok, err = pcall(function() d.value = '\\0' .. string.rep('x', 100000) end) \
+             return not ok, tostring(err)",
+        );
+        assert_eq!(vm.used(), 0);
     }
 
     // Codex review: alternating fonts across clears grew the Text's font

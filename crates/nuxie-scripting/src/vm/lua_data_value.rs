@@ -123,14 +123,27 @@ fn checked_integer(lua: &Lua, value: Value) -> Result<i32> {
 }
 
 pub(super) fn checked_string(lua: &Lua, value: Value) -> Result<Vec<u8>> {
+    Ok(string_prefix(&lua.unpack(value)?))
+}
+
+/// The string a data value keeps once `charge` is checked to have room for
+/// all of it: the copy is made only then.
+fn charged_string(lua: &Lua, charge: &mut HostMemoryCharge, value: Value) -> Result<Vec<u8>> {
     let value: LuaString = lua.unpack(value)?;
+    charge.attach(lua)?;
+    charge.check_fits(value.len())?;
+    Ok(string_prefix(&value))
+}
+
+/// The bytes before the first NUL.
+fn string_prefix(value: &LuaString) -> Vec<u8> {
     let mut bytes = value.as_bytes();
     if let Some(nul) = bytes.iter().position(|byte| *byte == 0) {
         // The value is kept, and charged by its capacity: drop the rest.
         bytes.truncate(nul);
         bytes.shrink_to_fit();
     }
-    Ok(bytes)
+    bytes
 }
 
 /// Sets a value, charging a new string before it replaces the old one.
@@ -142,14 +155,14 @@ fn set_value(
 ) -> Result<()> {
     let next = match current {
         ScriptValue::Number(_) => ScriptValue::Number(checked_number(lua, value)? as f32 as f64),
-        ScriptValue::String(_) => match String::from_utf8(checked_string(lua, value)?) {
+        ScriptValue::String(_) => match String::from_utf8(charged_string(lua, charge, value)?) {
             Ok(value) => ScriptValue::String(value),
             Err(error) => {
                 ScriptValue::CoreString(ScriptCoreString::from_bytes(error.into_bytes()))
             }
         },
         ScriptValue::CoreString(_) => {
-            ScriptValue::CoreString(ScriptCoreString::from_bytes(checked_string(lua, value)?))
+            ScriptValue::CoreString(ScriptCoreString::from_bytes(charged_string(lua, charge, value)?))
         }
         ScriptValue::Bool(_) => match value {
             Value::Boolean(value) => ScriptValue::Bool(value),

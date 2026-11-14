@@ -657,6 +657,11 @@ impl NativeScriptViewModel {
         let (Some(instance), Some(property)) = (&self.instance, self.property(name)) else {
             return false;
         };
+        if let Some(value) = value.native_instance()
+            && !may_hold(instance, &value)
+        {
+            return false;
+        }
         ViewModelInstance::replace_view_model_property_occurrence(
             instance,
             &property,
@@ -697,6 +702,12 @@ impl NativeScriptViewModel {
         let (Some(list), Some(instance)) = (self.property(name), value.native_instance()) else {
             return false;
         };
+        // Before the item is made: the arena would keep a refused one.
+        if let Some(holder) = &self.instance
+            && !may_hold(holder, &instance)
+        {
+            return false;
+        }
         let mut item = ViewModelInstanceListItem::default();
         item.set_view_model_instance(Some(instance));
         // The item lives in the list's arena from here, whether or not the
@@ -842,6 +853,16 @@ impl ScriptViewModel {
             .flatten()
     }
 
+    /// Whether this instance may hold `value` in a nested slot or a list: not
+    /// where that closes a cycle or nests the graph past 256 deep.
+    /// `set_view_model` and the list inserts refuse those too.
+    pub fn may_hold(&self, value: &ScriptViewModel) -> bool {
+        match (&self.native().instance, value.native_instance()) {
+            (Some(owner), Some(value)) => may_hold(owner, &value),
+            _ => true,
+        }
+    }
+
     /// `push_list_item` (no `index`) or `insert_list_item`, with `owner` kept
     /// by the new list item for as long as it lives: a removed item stays in
     /// the list's arena, so it keeps the owner.
@@ -874,6 +895,107 @@ impl ScriptViewModel {
             })
             .collect()
     }
+}
+
+/// The most a view-model graph nests below or above one instance: the depth
+/// `File::copy_view_model_instance` keeps.
+const MAX_NESTING: usize = 256;
+
+/// Whether `owner` may hold `value` in a nested slot or a list. Not when that
+/// closes a cycle, or nests the graph past [`MAX_NESTING`]: the runtime
+/// rebinds a changed graph recursively, up through each instance's parents
+/// and down through its slots, so either would overflow the stack
+/// (lane H2, from H4's hostile corpus: `main.chi = main`).
+fn may_hold(owner: &CoreHandle, value: &CoreHandle) -> bool {
+    let Some(above) = longest_walk(owner, parents_of, value) else {
+        return false;
+    };
+    let Some(below) = longest_walk(value, held_by, owner) else {
+        return false;
+    };
+    above + 1 + below <= MAX_NESTING
+}
+
+fn parents_of(instance: &CoreHandle) -> Vec<CoreHandle> {
+    instance
+        .with_downcast::<ViewModelInstance, _>(ViewModelInstance::parents)
+        .unwrap_or_default()
+}
+
+/// The instances `instance` holds: in its nested slots and its lists.
+fn held_by(instance: &CoreHandle) -> Vec<CoreHandle> {
+    let values = instance
+        .with_downcast::<ViewModelInstance, _>(|instance| instance.property_values().to_vec())
+        .unwrap_or_default();
+    let mut held = Vec::new();
+    for value in values {
+        if let Some(nested) = value
+            .with(|value| {
+                value
+                    .as_view_model_instance_view_model()
+                    .and_then(|value| value.reference_view_model_instance())
+            })
+            .flatten()
+        {
+            held.push(nested);
+            continue;
+        }
+        let items = value
+            .with_downcast::<ViewModelInstanceList, _>(|list| list.list_items().to_vec())
+            .unwrap_or_default();
+        held.extend(items.iter().filter_map(|item| {
+            item.with_downcast::<ViewModelInstanceListItem, _>(
+                ViewModelInstanceListItem::view_model_instance,
+            )
+            .flatten()
+        }));
+    }
+    held
+}
+
+/// The longest path from `start` along `next`; `None` past [`MAX_NESTING`],
+/// on a cycle, or where the path reaches `stop`. Each instance is walked once.
+fn longest_walk(
+    start: &CoreHandle,
+    next: fn(&CoreHandle) -> Vec<CoreHandle>,
+    stop: &CoreHandle,
+) -> Option<usize> {
+    use std::collections::{HashMap, HashSet};
+    if start == stop {
+        return None;
+    }
+    // Each frame: an instance, what it leads to, how many of those are
+    // walked, and the longest path below it so far.
+    let mut path = vec![(start.clone(), next(start), 0_usize, 0_usize)];
+    let mut on_path = HashSet::from([start.clone()]);
+    let mut walked: HashMap<CoreHandle, usize> = HashMap::new();
+    while let Some((_, after, index, longest)) = path.last_mut() {
+        if let Some(step) = after.get(*index).cloned() {
+            *index += 1;
+            if &step == stop || on_path.contains(&step) {
+                return None;
+            }
+            if let Some(&below) = walked.get(&step) {
+                *longest = (*longest).max(below + 1);
+                continue;
+            }
+            if path.len() >= MAX_NESTING {
+                return None;
+            }
+            on_path.insert(step.clone());
+            let after = next(&step);
+            path.push((step, after, 0, 0));
+            continue;
+        }
+        let (done, _, _, below) = path.pop()?;
+        on_path.remove(&done);
+        match path.last_mut() {
+            Some((_, _, _, longest)) => *longest = (*longest).max(below + 1),
+            None => return Some(below),
+        }
+        walked.insert(done, below);
+    }
+    None
 }
 
 fn copy_shape_of(file: &File, source: CoreHandle, max_instances: usize) -> CopyShape {

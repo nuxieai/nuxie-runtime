@@ -21,6 +21,7 @@ use std::rc::Rc;
 use super::conversion::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use super::error::{Error, Result};
 use super::handles::Table;
+use super::loan::Loan;
 use super::state::{BoxedCallback, Lua};
 use super::value::Value;
 use super::vm;
@@ -144,6 +145,14 @@ pub trait UserDataMethods<T> {
         A: FromLuaMulti,
         R: IntoLuaMulti;
 
+    /// [`UserDataMethods::add_method`] for a method that uses the loan its
+    /// call carries ([`Loan`]).
+    fn add_method_lent<M, A, R>(&mut self, name: impl Into<String>, method: M)
+    where
+        M: Fn(&Lua, &T, Loan<'_>, A) -> Result<R> + 'static,
+        A: FromLuaMulti,
+        R: IntoLuaMulti;
+
     fn add_function<F, A, R>(&mut self, name: impl Into<String>, function: F)
     where
         F: Fn(&Lua, A) -> Result<R> + 'static,
@@ -159,6 +168,14 @@ pub trait UserDataMethods<T> {
     fn add_meta_method_mut<M, A, R>(&mut self, name: impl Into<String>, method: M)
     where
         M: Fn(&Lua, &mut T, A) -> Result<R> + 'static,
+        A: FromLuaMulti,
+        R: IntoLuaMulti;
+
+    /// [`UserDataMethods::add_meta_method`] for a metamethod that uses, or
+    /// passes on, the loan its call carries ([`Loan`]).
+    fn add_meta_method_lent<M, A, R>(&mut self, name: impl Into<String>, method: M)
+    where
+        M: Fn(&Lua, &T, Loan<'_>, A) -> Result<R> + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti;
 }
@@ -444,12 +461,30 @@ where
     A: FromLuaMulti,
     R: IntoLuaMulti,
 {
-    Box::new(move |lua, mut args| {
+    Box::new(move |lua, _loan, mut args| {
         let this = args.pop_front().unwrap_or(Value::Nil);
         let cell = receiver::<T>(&this)?;
         let a = A::from_lua_multi(args, lua)?;
         let data = cell.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
         let r = method(lua, &data, a)?;
+        drop(data);
+        r.into_lua_multi(lua)
+    })
+}
+
+fn lent_method<T, M, A, R>(method: M) -> BoxedCallback
+where
+    T: 'static,
+    M: Fn(&Lua, &T, Loan<'_>, A) -> Result<R> + 'static,
+    A: FromLuaMulti,
+    R: IntoLuaMulti,
+{
+    Box::new(move |lua, loan, mut args| {
+        let this = args.pop_front().unwrap_or(Value::Nil);
+        let cell = receiver::<T>(&this)?;
+        let a = A::from_lua_multi(args, lua)?;
+        let data = cell.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
+        let r = method(lua, &data, loan, a)?;
         drop(data);
         r.into_lua_multi(lua)
     })
@@ -462,7 +497,7 @@ where
     A: FromLuaMulti,
     R: IntoLuaMulti,
 {
-    Box::new(move |lua, mut args| {
+    Box::new(move |lua, _loan, mut args| {
         let this = args.pop_front().unwrap_or(Value::Nil);
         let cell = receiver::<T>(&this)?;
         let a = A::from_lua_multi(args, lua)?;
@@ -481,7 +516,7 @@ where
     M: Fn(&Lua, &T) -> Result<R> + 'static,
     R: IntoLua,
 {
-    Box::new(move |lua, mut args| {
+    Box::new(move |lua, _loan, mut args| {
         let this = args.pop_front().unwrap_or(Value::Nil);
         let cell = receiver::<T>(&this)?;
         let data = cell.try_borrow().map_err(|_| Error::UserDataBorrowError)?;
@@ -497,7 +532,7 @@ where
     M: Fn(&Lua, &mut T, A) -> Result<()> + 'static,
     A: FromLua,
 {
-    Box::new(move |lua, mut args| {
+    Box::new(move |lua, _loan, mut args| {
         let this = args.pop_front().unwrap_or(Value::Nil);
         let cell = receiver::<T>(&this)?;
         let val = A::from_lua(args.pop_front().unwrap_or(Value::Nil), lua)?;
@@ -529,13 +564,22 @@ impl<T: 'static> UserDataMethods<T> for Collector<T> {
         self.method(name.into(), false, mut_method(method));
     }
 
+    fn add_method_lent<M, A, R>(&mut self, name: impl Into<String>, method: M)
+    where
+        M: Fn(&Lua, &T, Loan<'_>, A) -> Result<R> + 'static,
+        A: FromLuaMulti,
+        R: IntoLuaMulti,
+    {
+        self.method(name.into(), false, lent_method(method));
+    }
+
     fn add_function<F, A, R>(&mut self, name: impl Into<String>, function: F)
     where
         F: Fn(&Lua, A) -> Result<R> + 'static,
         A: FromLuaMulti,
         R: IntoLuaMulti,
     {
-        let callback: BoxedCallback = Box::new(move |lua, args| {
+        let callback: BoxedCallback = Box::new(move |lua, _loan, args| {
             let a = A::from_lua_multi(args, lua)?;
             function(lua, a)?.into_lua_multi(lua)
         });
@@ -559,6 +603,15 @@ impl<T: 'static> UserDataMethods<T> for Collector<T> {
     {
         self.method(name.into(), true, mut_method(method));
     }
+
+    fn add_meta_method_lent<M, A, R>(&mut self, name: impl Into<String>, method: M)
+    where
+        M: Fn(&Lua, &T, Loan<'_>, A) -> Result<R> + 'static,
+        A: FromLuaMulti,
+        R: IntoLuaMulti,
+    {
+        self.method(name.into(), true, lent_method(method));
+    }
 }
 
 impl<T: 'static> UserDataFields<T> for Collector<T> {
@@ -566,7 +619,7 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
     where
         V: IntoLua + Clone + 'static,
     {
-        let callback: BoxedCallback = Box::new(move |lua, _args| {
+        let callback: BoxedCallback = Box::new(move |lua, _loan, _args| {
             value.clone().into_lua(lua)?.into_lua_multi(lua)
         });
         self.field(FieldKey::Name(name.into()), true, callback);
@@ -609,7 +662,7 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
         F: Fn(&Lua, AnyUserData) -> Result<R> + 'static,
         R: IntoLua,
     {
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
+        let callback: BoxedCallback = Box::new(move |lua, _loan, mut args| {
             let this = args.pop_front().unwrap_or(Value::Nil);
             let ud = AnyUserData::from_lua(this, lua)?;
             function(lua, ud)?.into_lua_multi(lua)
@@ -622,7 +675,7 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
         F: Fn(&Lua, AnyUserData, A) -> Result<()> + 'static,
         A: FromLua,
     {
-        let callback: BoxedCallback = Box::new(move |lua, mut args| {
+        let callback: BoxedCallback = Box::new(move |lua, _loan, mut args| {
             let this = args.pop_front().unwrap_or(Value::Nil);
             let ud = AnyUserData::from_lua(this, lua)?;
             let val = A::from_lua(args.pop_front().unwrap_or(Value::Nil), lua)?;

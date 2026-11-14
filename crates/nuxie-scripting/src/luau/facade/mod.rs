@@ -47,6 +47,7 @@
 mod conversion;
 mod error;
 mod handles;
+mod loan;
 mod multi;
 mod state;
 mod userdata;
@@ -56,6 +57,7 @@ mod tests;
 
 pub use error::{CallbackCause, Error, ExternalError, ExternalResult, Result};
 pub use handles::{Buffer, Function, LuaString, Table, Thread, ThreadStatus};
+pub use loan::{Loan, ScriptLoan, ScriptLoans, reborrow as reborrow_loan};
 pub use multi::{MultiValue, Variadic};
 pub use state::{
     AppDataRef, AppDataRefMut, Debug, DebugWhat, InterruptGuard, Lua, RegistryKey, Scope, VmState,
@@ -75,5 +77,14 @@ pub use state::{Chunk, compile};
 
 /// The safe VM itself, for the code that needs what the old binding crate
 /// exposed only through raw hatches (seam rows R24 to R29: tagged plain-data
-/// userdata with direct fields). Reached through [`Lua::with_vm`].
-pub use nuxie_luau_vm as vm;
+/// userdata with direct fields). Reached through [`Lua::with_vm`]. Its `Vm`
+/// and `HostCtx` are the lending ones the facade holds ([`ScriptLoans`]).
+pub mod vm {
+    pub use nuxie_luau_vm::*;
+
+    /// The VM the facade holds: its calls can lend a [`ScriptLoan`](super::ScriptLoan).
+    pub type Vm = nuxie_luau_vm::Vm<super::ScriptLoans>;
+
+    /// A host function's context on that VM.
+    pub type HostCtx<'a> = nuxie_luau_vm::HostCtx<'a, super::ScriptLoans>;
+}

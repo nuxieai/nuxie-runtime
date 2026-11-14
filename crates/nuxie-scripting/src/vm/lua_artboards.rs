@@ -17,38 +17,14 @@ use nuxie_runtime::{
     ScriptAnimation, ScriptAnimationTime, ScriptArtboard, ScriptMethod, ScriptNode,
 };
 
-use nuxie_runtime::mechanical_port::source::math::{path_types::PathVerb, vec2d::Vec2D};
+use nuxie_runtime::mechanical_port::source::renderer::from_render_raw_path;
 
-use super::host_memory_budget::{HostMemoryCharge, bytes_of};
 use super::lua_mat2d::ScriptedMat2D;
 use super::lua_paint::ScriptedPaintData;
 use super::lua_path::{ScriptedPath, create_scripted_path};
 use super::lua_renderer::ScriptedRenderer;
 use super::lua_renderer_library::RendererBindings;
 use super::view_model::{create_scripted_view_model, model_from_table};
-
-/// Host bytes `lua_path.rs` charges a path of `verbs` verbs and `points`
-/// points (its private `path_bytes`; kept in step with it): two vectors at up
-/// to twice their length plus the render path built from them.
-fn scripted_path_bytes(verbs: usize, points: usize) -> usize {
-    bytes_of::<PathVerb>(verbs)
-        .saturating_add(bytes_of::<Vec2D>(points))
-        .saturating_mul(3)
-}
-
-/// Refuses growth of `path` by `verbs` verbs and `points` points unless the
-/// whole grown path would fit what the budget has free.
-///
-/// The path's own charge is private to `lua_path.rs`, which charges the
-/// growth at the path's next operation; this check, made as if the path held
-/// no charge yet, bounds what the path can reach before that.
-fn check_path_growth(lua: &Lua, path: &ScriptedPath, verbs: usize, points: usize) -> Result<()> {
-    let bytes = scripted_path_bytes(
-        path.raw_path.verbs().len().saturating_add(verbs),
-        path.raw_path.points().len().saturating_add(points),
-    );
-    HostMemoryCharge::for_lua(lua, bytes).map(drop)
-}
 
 impl RendererBindings {
     pub(crate) fn create_scripted_artboard(
@@ -228,14 +204,12 @@ impl UserData for ScriptedArtboard {
                     .retained_handle()
                     .add_to_path(&mut added, transform)
                     .map_err(|error| Error::runtime(error.to_string()))?;
-                check_path_growth(lua, &path, added.verbs().len(), added.points().len())?;
-                path.with_render_raw_path_mut(|raw_path| {
-                    this.owner
-                        .artboard
-                        .retained_handle()
-                        .add_to_path(raw_path, transform)
-                })
-                .map_err(|error| Error::runtime(error.to_string()))?;
+                // Charged and reserved before the path grows, as every path
+                // command is; the measured commands are then appended as they
+                // are, without rebuilding the path.
+                let added = from_render_raw_path(&added);
+                path.reserve(lua, added.verbs().len(), added.points().len())?;
+                path.raw_path.add_path(&added, None);
                 path.mark_dirty();
                 Ok(())
             },
@@ -1231,5 +1205,49 @@ end
         assert!(verbs_once > 0);
         assert!(!ok, "expected a refusal");
         assert!(error.contains("host memory budget"), "{error}");
+    }
+
+    // Lane H2: addToPath checked the grown path with a charge it dropped at
+    // once, so a path added to once and kept held its commands uncharged: a
+    // script keeping many such paths held many budgets' worth.
+    #[test]
+    fn a_path_added_to_keeps_the_charge_for_what_it_holds() {
+        let lua = Lua::new();
+        crate::vm::host_memory_budget::HostMemoryBudget::install(&lua, 256 * 1024).unwrap();
+        lua.globals()
+            .set(
+                "artboard",
+                fixture_userdata(&lua, "joel_v3.riv", Some("Character")),
+            )
+            .unwrap();
+        let used = || {
+            crate::vm::host_memory_budget::HostMemoryBudget::for_lua(&lua)
+                .unwrap()
+                .used()
+        };
+        lua.load("artboard:advance(0) kept = Path.new() artboard:addToPath(kept)")
+            .exec()
+            .unwrap();
+        let once = used();
+        assert!(once > 0, "one add is charged while the path keeps it");
+        let (ok, error, held): (bool, String, usize) = lua
+            .load(
+                r#"
+                held = {}
+                local ok, err = pcall(function()
+                  for i = 1, 4 * 256 * 1024 // math.max(1, #kept) do
+                    local path = Path.new()
+                    artboard:addToPath(path)
+                    held[i] = path
+                  end
+                end)
+                return ok, tostring(err), #held
+                "#,
+            )
+            .eval()
+            .unwrap();
+        assert!(!ok, "kept {held} paths past the budget");
+        assert!(error.contains("host memory budget"), "{error}");
+        assert!(used() <= 256 * 1024);
     }
 }

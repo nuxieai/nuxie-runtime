@@ -772,10 +772,6 @@ impl ArtboardComponentList {
         self.resource_pool.clear();
     }
 
-    fn create_artboard(&mut self, list_item: CoreHandle) -> Option<RuntimeArtboardInstanceHandle> {
-        Artboard::nested_instance_from_handle(&self.find_artboard(&list_item)?)
-    }
-
     fn create_state_machine_instance_occurrence(
         owner: &CoreHandle,
         artboard: &RuntimeArtboardInstanceHandle,
@@ -2484,14 +2480,14 @@ impl ArtboardComponentList {
         cloned
     }
 
-    fn create_artboard_for_index(
-        &mut self,
-        index: i32,
-    ) -> Option<(RuntimeArtboardInstanceHandle, Option<CoreHandle>)> {
+    /// The source artboard and the override for the item at `index`, read
+    /// so the instance (whose scripts hydrate as it is made) is created with
+    /// no borrow of this list open.
+    fn artboard_source_for_index(&mut self, index: i32) -> Option<(CoreHandle, Option<CoreHandle>)> {
         let item = self.list_item(index)?;
-        let artboard = self.create_artboard(item.clone())?;
+        let source = self.find_artboard(&item)?;
         let artboard_override = self.artboard_override_for_item(item);
-        Some((artboard, artboard_override))
+        Some((source, artboard_override))
     }
 
     pub fn create_artboard_at_occurrence(owner: &CoreHandle, index: i32, force_layout_sync: bool) {
@@ -2503,9 +2499,12 @@ impl ArtboardComponentList {
         force_layout_sync: bool,
         active_scroll: Option<&ScrollConstraint>,
     ) {
-        let artboard = owner
-            .with_downcast_mut::<Self, _>(|owner| owner.create_artboard_for_index(index))
+        let source = owner
+            .with_downcast_mut::<Self, _>(|owner| owner.artboard_source_for_index(index))
             .expect("live ArtboardComponentList");
+        let artboard = source.and_then(|(source, artboard_override)| {
+            Some((Artboard::nested_instance_from_handle(&source)?, artboard_override))
+        });
         if let Some((artboard, artboard_override)) = artboard {
             if let Some(artboard_override) = artboard_override {
                 // addArtboard reads the parent list's current main axis while

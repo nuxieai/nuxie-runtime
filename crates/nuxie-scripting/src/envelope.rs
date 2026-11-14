@@ -63,13 +63,12 @@ impl<'a> SignedContent<'a> {
             });
         }
 
-        if rest.len() < SIGNATURE_SIZE {
+        let Some((signature, content)) = rest.split_first_chunk::<SIGNATURE_SIZE>() else {
             return Err(EnvelopeError::TruncatedSignature);
-        }
-        let (signature, content) = rest.split_at(SIGNATURE_SIZE);
+        };
         Ok(SignedContent {
             version,
-            signature: Some(signature.try_into().expect("split_at length")),
+            signature: Some(signature),
             content,
         })
     }

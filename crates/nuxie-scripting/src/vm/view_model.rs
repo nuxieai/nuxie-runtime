@@ -185,12 +185,15 @@ impl ScriptedPropertyListenerOwner {
     }
 
     /// Track one more watch. When the list is full, the entries of watches
-    /// that are gone are dropped first, so the list grows only when its
-    /// live watches fill it (each entry is looked at once per doubling).
+    /// that are gone are dropped first, and the list keeps room for as many
+    /// pushes as it has live entries before it looks again, so each scan is
+    /// paid for by the pushes since the last one.
     fn track(&self, watch: TrackedScriptedPropertyWatch) {
         let mut watches = self.watches.borrow_mut();
         if watches.len() == watches.capacity() {
             watches.retain(TrackedScriptedPropertyWatch::is_live);
+            let live = watches.len();
+            watches.reserve(live.max(1));
         }
         watches.push(watch);
     }

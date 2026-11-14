@@ -115,6 +115,34 @@ enum TrackedScriptedPropertyWatch {
     Trigger(Weak<ScriptedTriggerWatch>),
 }
 
+impl TrackedScriptedPropertyWatch {
+    fn is_live(&self) -> bool {
+        match self {
+            Self::Property(watch) => watch.strong_count() > 0,
+            Self::Blob(watch) => watch.strong_count() > 0,
+            Self::Trigger(watch) => watch.strong_count() > 0,
+        }
+    }
+}
+
+/// Listeners one property wrapper holds at most; `addListener` past it is an
+/// ordinary script error.
+const MAX_LISTENERS_PER_PROPERTY: usize = 256;
+
+fn push_listener(
+    listeners: &RefCell<Vec<ScriptedListener>>,
+    listener: ScriptedListener,
+) -> crate::luau::Result<()> {
+    let mut listeners = listeners.borrow_mut();
+    if listeners.len() >= MAX_LISTENERS_PER_PROPERTY {
+        return Err(crate::luau::Error::runtime(format!(
+            "addListener: a property holds at most {MAX_LISTENERS_PER_PROPERTY} listeners"
+        )));
+    }
+    listeners.push(listener);
+    Ok(())
+}
+
 /// Owns the listener-registration lifetime for one scripted-object occurrence.
 ///
 /// Pinned `ScriptedObject::scriptDispose` visits an unordered tracking list and
@@ -145,21 +173,31 @@ impl ScriptedPropertyListenerOwner {
     }
 
     fn track_property(&self, watch: &Rc<ScriptedPropertyWatch>) {
-        self.watches
-            .borrow_mut()
-            .push(TrackedScriptedPropertyWatch::Property(Rc::downgrade(watch)));
+        self.track(TrackedScriptedPropertyWatch::Property(Rc::downgrade(watch)));
     }
 
     fn track_blob(&self, watch: &Rc<ScriptedBlobWatch>) {
-        self.watches
-            .borrow_mut()
-            .push(TrackedScriptedPropertyWatch::Blob(Rc::downgrade(watch)));
+        self.track(TrackedScriptedPropertyWatch::Blob(Rc::downgrade(watch)));
     }
 
     fn track_trigger(&self, watch: &Rc<ScriptedTriggerWatch>) {
-        self.watches
-            .borrow_mut()
-            .push(TrackedScriptedPropertyWatch::Trigger(Rc::downgrade(watch)));
+        self.track(TrackedScriptedPropertyWatch::Trigger(Rc::downgrade(watch)));
+    }
+
+    /// Track one more watch. When the list is full, the entries of watches
+    /// that are gone are dropped first, so the list grows only when its
+    /// live watches fill it (each entry is looked at once per doubling).
+    fn track(&self, watch: TrackedScriptedPropertyWatch) {
+        let mut watches = self.watches.borrow_mut();
+        if watches.len() == watches.capacity() {
+            watches.retain(TrackedScriptedPropertyWatch::is_live);
+        }
+        watches.push(watch);
+    }
+
+    #[cfg(test)]
+    fn tracked_watch_entries(&self) -> usize {
+        self.watches.borrow().len()
     }
 
     pub(super) fn dispose(&self) {
@@ -288,7 +326,11 @@ impl ScriptedPropertyState {
         if let Some(cleanup) = cleanup {
             cleanup();
         }
-        self.owning_model.borrow_mut().take();
+        // Take the model out, release the cell, then drop it: dropping it can
+        // release the last File lease and run arena and script-instance
+        // drops, which must not find this cell borrowed.
+        let model = self.owning_model.borrow_mut().take();
+        drop(model);
     }
 }
 
@@ -297,7 +339,12 @@ impl Drop for ScriptedPropertyState {
         let owner = self.owner_properties.get_mut().upgrade();
         let orphans = self.orphan_properties.get_mut().upgrade();
         for tracker in [owner, orphans].into_iter().flatten() {
-            untrack_scripted_property(&mut tracker.borrow_mut(), self);
+            // A drop must not panic. Every other borrow of a tracker is a
+            // statement temporary, so it is free here; were it not, the entry
+            // stays behind as a dead `Weak`, which every reader skips.
+            if let Ok(mut list) = tracker.try_borrow_mut() {
+                untrack_scripted_property(&mut list, self);
+            }
         }
     }
 }
@@ -308,7 +355,14 @@ pub(super) struct ScriptedPropertyOwnerScope {
 }
 impl Drop for ScriptedPropertyOwnerScope {
     fn drop(&mut self) {
-        *self.current.borrow_mut() = self.previous.take();
+        // Restore the previous owner, then drop the replaced one after the
+        // cell is released. A drop must not panic: if the cell were borrowed
+        // (no path does that today), the scope leaves it as it is.
+        let replaced = match self.current.try_borrow_mut() {
+            Ok(mut current) => std::mem::replace(&mut *current, self.previous.take()),
+            Err(_) => return,
+        };
+        drop(replaced);
     }
 }
 
@@ -1232,10 +1286,7 @@ fn add_property_listener(
             ));
         }
     };
-    watch
-        .listeners
-        .borrow_mut()
-        .push(ScriptedListener::new(lua, callback, userdata)?);
+    push_listener(&watch.listeners, ScriptedListener::new(lua, callback, userdata)?)?;
     ScriptViewModelFrameContext::for_lua(lua).register_property_watch(watch);
     Ok(())
 }
@@ -1809,10 +1860,10 @@ impl UserData for ScriptedPropertyBlob {
                     ));
                 }
             };
-            this.watch
-                .listeners
-                .borrow_mut()
-                .push(ScriptedListener::new(lua, callback, userdata)?);
+            push_listener(
+                &this.watch.listeners,
+                ScriptedListener::new(lua, callback, userdata)?,
+            )?;
             ScriptViewModelFrameContext::for_lua(lua).register_blob_watch(&this.watch);
             Ok(())
         });
@@ -2698,11 +2749,14 @@ impl UserData for ScriptedContext {
                     "videoGroup requires 2 to 64 video names".into(),
                 ));
             }
-            let source = this.source.borrow();
             let mut members = Vec::with_capacity(count);
             for index in 1..=count {
                 let name: String = names.raw_get(index)?;
-                let handle = source
+                // The source is borrowed for this lookup only, and released
+                // before any VM object is created.
+                let handle = this
+                    .source
+                    .borrow()
                     .as_ref()
                     .and_then(|source| source.read_video_named(&name))
                     .ok_or_else(|| {
@@ -2736,9 +2790,12 @@ impl UserData for ScriptedContext {
         });
         methods.add_method("image", |lua, this, name: String| {
             this.require_live("image")?;
-            if let Some(source) = this.source.borrow().as_ref() {
+            // Read what the lookup needs and release the source before any VM
+            // object is created.
+            let source_file = this.source.borrow().as_ref().map(ScriptedContextSource::current_file);
+            if let Some(file) = source_file {
                 let image = super::lua_scripted_context::find_file_asset(
-                    lua, &name, source.current_file(), |asset| {
+                    lua, &name, file, |asset| {
                         asset.with_downcast::<nuxie_runtime::source::assets::image_asset::ImageAsset, _>(|asset| {
                             Some((asset.base.name().to_owned(), asset.render_image()?.clone()))
                         }).flatten()
@@ -2771,9 +2828,11 @@ impl UserData for ScriptedContext {
         });
         methods.add_method("blob", |lua, this, name: String| {
             this.require_live("blob")?;
-            if let Some(source) = this.source.borrow().as_ref() {
+            // As `image`: release the source before creating the userdata.
+            let source_file = this.source.borrow().as_ref().map(ScriptedContextSource::current_file);
+            if let Some(file) = source_file {
                 let blob = super::lua_scripted_context::find_file_asset(
-                    lua, &name, source.current_file(), |asset| {
+                    lua, &name, file, |asset| {
                         asset.with_downcast::<nuxie_runtime::source::assets::blob_asset::BlobAsset, _>(|asset| {
                             (!asset.bytes().is_empty()).then(|| (asset.base.name().to_owned(), asset.script_asset()))
                         }).flatten()
@@ -3119,10 +3178,10 @@ impl UserData for ScriptedPropertyTrigger {
                     ));
                 }
             };
-            this.watch
-                .listeners
-                .borrow_mut()
-                .push(ScriptedListener::new(lua, callback, userdata)?);
+            push_listener(
+                &this.watch.listeners,
+                ScriptedListener::new(lua, callback, userdata)?,
+            )?;
             ScriptViewModelFrameContext::for_lua(lua).register_trigger_watch(&this.watch);
             Ok(())
         });
@@ -3731,6 +3790,61 @@ mod tests {
             .expect("script view model")
             .named_instance(Some(&instance_name))
             .expect("authored instance is selectable")
+    }
+
+    /// E1 section 5 row 21: `addListener` in a loop grew one property's list
+    /// without bound. Past the cap it is an ordinary error, and the
+    /// listeners already added still run.
+    #[test]
+    fn a_property_holds_a_bounded_number_of_listeners() {
+        let (model, property_name) = model_with_property(ScriptViewModelProperty::Number);
+        let lua = Lua::new();
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
+        lua.globals().set("model", table).unwrap();
+        lua.globals().set("propertyName", property_name.clone()).unwrap();
+        let (added, error): (i64, String) = lua
+            .load(
+                "calls = 0\n\
+                 local property = model:getNumber(propertyName)\n\
+                 local added, ok, err = 0, true, nil\n\
+                 for i = 1, 1000 do\n\
+                   ok, err = pcall(property.addListener, property, function() calls += 1 end)\n\
+                   if not ok then break end\n\
+                   added += 1\n\
+                 end\n\
+                 return added, tostring(err)",
+            )
+            .eval()
+            .expect("addListener loop returns");
+        assert_eq!(added, MAX_LISTENERS_PER_PROPERTY as i64);
+        assert!(
+            error.contains("addListener: a property holds at most 256 listeners"),
+            "{error}"
+        );
+        assert!(model.set_number(&property_name, 7.0));
+        assert_eq!(
+            lua.globals().get::<i64>("calls").unwrap(),
+            MAX_LISTENERS_PER_PROPERTY as i64
+        );
+    }
+
+    /// E1 section 5 row 22: an owner's watch list kept an entry for every
+    /// property wrapper created under it, live or not. Entries of watches
+    /// that are gone are dropped when the list fills.
+    #[test]
+    fn an_owner_drops_entries_of_watches_that_are_gone() {
+        let (model, property_name) = model_with_property(ScriptViewModelProperty::Number);
+        let owner = ScriptedPropertyListenerOwner::default();
+        let kept = property_watch(&model, &property_name, Some(&owner));
+        for _ in 0..10_000 {
+            drop(property_watch(&model, &property_name, Some(&owner)));
+        }
+        assert!(
+            owner.tracked_watch_entries() <= 8,
+            "{} entries for one live watch",
+            owner.tracked_watch_entries()
+        );
+        assert!(Rc::strong_count(&kept) >= 1);
     }
 
     #[test]

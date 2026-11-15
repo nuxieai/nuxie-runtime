@@ -472,6 +472,18 @@ fn compute_preliminary(
         inputs.sizing_mode,
     );
 
+    // nuxie-css: a wrapping column's min-content height is its max-content height: all its
+    // items in one column. Heights have one content size; only widths have a narrower one
+    // (Chrome: a wrapping column around a 60 and an 80 tall box, in a 100 tall column or
+    // grid, is 140 tall and does not wrap; with `min-height: 0` it is 100 tall and wraps).
+    // Stock gave it the height of its tallest item, as a wrapping row's min-content width
+    // is its widest item.
+    let available_space = if !constants.is_row && constants.is_wrap && available_space.height == AvailableSpace::MinContent {
+        Size { height: AvailableSpace::MaxContent, ..available_space }
+    } else {
+        available_space
+    };
+
     if inputs.sizing_mode == SizingMode::ContentSize && inputs.axis == RequestedAxis::Horizontal
         && tree.get_flexbox_container_style(node).size().width.tag() == CompactLength::FIT_CONTENT_KEYWORD_TAG
     {

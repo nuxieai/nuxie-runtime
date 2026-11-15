@@ -8623,7 +8623,8 @@ mod paint_order {
     /// same size; (8) a frame at rest's advance and follow, which (7) is
     /// held to. A stripped page has no step, so it times (1), (6) and (8)
     /// only. Also the layout passes of the last frame at rest and the last
-    /// of (7).
+    /// of (7). The steps' timings take both ways, "go" and "back", half the
+    /// frames each, so no step is played only to return.
     fn large_timings(shape: PaintShape) -> ([Option<f64>; 8], u64, Option<u64>) {
         use nuxie_runtime::source::artboard::Artboard;
         use std::time::{Duration, Instant};
@@ -8670,30 +8671,28 @@ mod paint_order {
         }
         let (mut begin, mut flying, mut draw, mut end) =
             (Vec::new(), Vec::new(), Vec::new(), Vec::new());
-        for _ in 0..FRAMES {
-            begin.push(time(&mut || s.begin("B", "go")));
-            flying.push(time(&mut || s.to(0.5)));
-            draw.push(time(&mut || draw_page(&s)));
-            s.to(1.0);
-            end.push(time(&mut || s.end("B", "go")));
-            s.begin("A", "back");
-            s.to(1.0);
-            s.end("A", "back");
+        for _ in 0..FRAMES / 2 {
+            for (screen, step) in [("B", "go"), ("A", "back")] {
+                begin.push(time(&mut || s.begin(screen, step)));
+                flying.push(time(&mut || s.to(0.5)));
+                draw.push(time(&mut || draw_page(&s)));
+                s.to(1.0);
+                end.push(time(&mut || s.end(screen, step)));
+            }
         }
         let mut same = PaintScene::shaped(PaintCase::Large { same_size: true }, shape);
         let mut alike: Vec<Duration> = Vec::new();
         let mut alike_passes = 0;
-        for _ in 0..FRAMES {
-            same.begin("B", "go");
-            same.to(0.4);
-            let passes = Artboard::layout_pass_count();
-            alike.push(time(&mut || same.to(0.5)));
-            alike_passes = Artboard::layout_pass_count() - passes;
-            same.to(1.0);
-            same.end("B", "go");
-            same.begin("A", "back");
-            same.to(1.0);
-            same.end("A", "back");
+        for _ in 0..FRAMES / 2 {
+            for (screen, step) in [("B", "go"), ("A", "back")] {
+                same.begin(screen, step);
+                same.to(0.4);
+                let passes = Artboard::layout_pass_count();
+                alike.push(time(&mut || same.to(0.5)));
+                alike_passes = Artboard::layout_pass_count() - passes;
+                same.to(1.0);
+                same.end(screen, step);
+            }
         }
         let times = [
             Some(median_us(rest)),

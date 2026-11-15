@@ -926,39 +926,77 @@ impl Resting {
     }
 }
 
-/// What covers a lifted copy's anchor on the upper Screen `board`: walking
-/// its sorted list from the first entry that draws for the anchor toward the
-/// top, the first that draws something and covers the anchor's resting box.
-/// A lift entry, an entry of a lifted copy (`lifted`, which draws in its
-/// lift) and an entry of the anchor itself never cover it.
-pub(super) fn lift_cover(
+/// What covers each of `anchors`, lifted copies' anchors on the upper Screen
+/// `board`: walking its sorted list from the first entry that draws for the
+/// anchor toward the top, the first that draws something and covers the
+/// anchor's resting box. A lift entry, an entry of a lifted copy (`lifted`,
+/// which draws in its lift) and an entry of the anchor itself never cover
+/// it. One frame reads every anchor on a Screen at once: the list, each
+/// entry's walk up to the Screen (`draws_for` for every anchor in one walk)
+/// and the resting boxes are read once for all of them.
+pub(super) fn lift_covers(
     board: &CoreHandle,
-    anchor: &CoreHandle,
+    anchors: &[CoreHandle],
     lifted: &std::collections::HashSet<RuntimeDrawableOccurrence>,
-) -> Option<RuntimeDrawableOccurrence> {
-    use crate::css_layout::lift::{draws_for, lift_of};
+) -> Vec<Option<RuntimeDrawableOccurrence>> {
+    use crate::css_layout::lift::lift_of;
     let list = board
         .with_downcast::<Artboard, _>(|board| board.drawables().to_vec())
         .unwrap_or_default();
-    let at = list
+    let index = anchors
         .iter()
-        .position(|item| draws_for(item, anchor, board))?;
-    let mut rest = Resting::new(board);
-    let anchor_box = anchor_box(&mut rest, anchor);
-    list[..at]
+        .enumerate()
+        .map(|(n, anchor)| (anchor, n))
+        .collect::<HashMap<_, _>>();
+    // For each entry, the anchors it draws for; None for a lift entry.
+    let draws = list
         .iter()
-        .rev()
-        .find(|item| {
-            lift_of(item).is_none()
-                && !lifted.contains(item)
-                && !draws_for(item, anchor, board)
-                && draws_something(item)
-                && match (anchor_box, rest.drawable_box(item)) {
-                    (Some(a), Some(b)) => overlaps(a, b),
-                    _ => true,
+        .map(|item| {
+            if lift_of(item).is_some() {
+                return None;
+            }
+            let mut found = Vec::new();
+            let mut node = Some(match item {
+                RuntimeDrawableOccurrence::Authored(handle) => handle.clone(),
+                RuntimeDrawableOccurrence::RuntimeProxy(proxy) => proxy.borrow().owner_handle(),
+            });
+            while let Some(current) = node {
+                if let Some(&n) = index.get(&current) {
+                    found.push(n);
                 }
+                if current == *board {
+                    break;
+                }
+                node = current
+                    .with(|object| object.component_parent_handle())
+                    .flatten();
+            }
+            Some(found)
         })
-        .cloned()
+        .collect::<Vec<_>>();
+    let mut rest = Resting::new(board);
+    (0..anchors.len())
+        .map(|n| {
+            let at = draws
+                .iter()
+                .position(|item| item.as_ref().is_some_and(|found| found.contains(&n)))?;
+            let anchor_box = anchor_box(&mut rest, &anchors[n]);
+            list[..at]
+                .iter()
+                .zip(&draws[..at])
+                .rev()
+                .find(|(item, found)| {
+                    found.as_ref().is_some_and(|found| !found.contains(&n))
+                        && !lifted.contains(item)
+                        && draws_something(item)
+                        && match (anchor_box, rest.drawable_box(item)) {
+                            (Some(a), Some(b)) => overlaps(a, b),
+                            _ => true,
+                        }
+                })
+                .map(|(item, _)| item.clone())
+        })
+        .collect()
 }
 
 /// A lifted copy's anchor's resting box on its Screen. An anchor that is

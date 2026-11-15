@@ -1973,3 +1973,24 @@ Of the 32,600 compared layouts, 387 differ from Chrome (409 before): 22 fixed, n
 regressed. Of 1,640 new probes (ratio items in set, automatic and flexible rows, with
 alignment, size, margin and limit variants), all match (98 differed before). Guard
 rows: 22.
+
+## A percentage height with no row height is automatic for a ratio item's rows
+
+A ratio grid item whose width is not stretched gives its rows the height its content
+width gives through the ratio (`block_contribution_known_dimensions`). That applied only
+with `height: auto`. A percentage height has nothing to resolve against while the rows
+are being sized, and CSS then treats it as automatic; the fork measured such an item at
+its content height instead and ignored the ratio. The row contribution now counts an
+unresolvable percentage height as automatic. The ratio height is then exact: content
+taller than it does not raise the row, since only a real `auto` height has the content
+floor.
+
+Example: a 400 wide grid with `justify-items: start`; `aspect-ratio: 2; height: 50%`
+around a 300 by 10 box. Chrome: the row is 150 tall (300 through the ratio) and the item
+300 by 75. Before: row 10, item 300 by 5. Around a 60 by 60 box Chrome's row is 30 tall;
+before, 60.
+
+Of the 32,600 compared layouts, 369 differ from Chrome (387 before): 18 fixed, none
+regressed. Of 1,008 new probes, 12 differ (320 before): a padded content-box item with
+`height: 100%` and a stretched width, where Chrome's item is taller than its row
+resolves to; left for later. Guard rows: 30.

@@ -359,9 +359,15 @@ impl GridItem {
     /// content keyword width, or an automatic width with `justify-self` other than stretch
     /// or with auto inline margins.
     fn ratio_width_is_not_stretched(&self) -> bool {
+        self.ratio_width_is_not_stretched_with(self.size.height.is_auto())
+    }
+
+    /// nuxie-css: [`Self::ratio_width_is_not_stretched`] where the caller says whether the
+    /// height is automatic.
+    fn ratio_width_is_not_stretched_with(&self, height_is_automatic: bool) -> bool {
         self.aspect_ratio.is_some()
             && !self.is_replaced
-            && self.size.height.is_auto()
+            && height_is_automatic
             && !self.size.width.is_stretch()
             && (self.size.width.is_sizing_keyword()
                 || (self.size.width.is_auto()
@@ -385,10 +391,13 @@ impl GridItem {
         grid_area_size: Size<Option<f32>>,
         available_space: Size<AvailableSpace>,
     ) -> Size<Option<f32>> {
+        // A percentage height with no row height to resolve against is an automatic one.
+        let height_is_automatic = self.size.height.is_auto()
+            || (grid_area_size.height.is_none() && self.size.height.into_raw().uses_percentage());
         if axis != AbstractAxis::Block
             || known_dimensions.width.is_some()
             || known_dimensions.height.is_some()
-            || !self.ratio_width_is_not_stretched()
+            || !self.ratio_width_is_not_stretched_with(height_is_automatic)
         {
             return known_dimensions;
         }

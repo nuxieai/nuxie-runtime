@@ -1394,16 +1394,19 @@ fn determine_flex_base_size(
             // its alignment is (Chrome: `aspect-ratio: 2; height: stretch` in a 100-tall
             // `align-items: center` row is 200 wide). Stock looked at the alignment only,
             // so the item was measured without the height and its width did not follow it.
-            // A picture's does so in a row that has a height, or once its container has
-            // its main size. Chrome measures such a row at the picture's natural width
+            // A picture's width does so in every column (Chrome: a 40 by 40 picture with
+            // `width: stretch` in a 200 wide `align-items: flex-start` column is 200 by
+            // 200). A picture's height does so in a row that has a height, or once its
+            // container has its main size. Chrome measures such a row at the picture's natural width
             // when the row is a column's item whose content height Chrome measured
             // first; the fork does not follow that (see `NUXIE_PATCH.md`, "Where the
             // fork does not follow Chrome").
             let keyword_stretches = child.size_style.cross(dir).is_stretch()
                 && child.align_self != AlignSelf::STRETCH
                 && (!child_style.is_compressible_replaced()
+                    || !constants.is_row
                     || constants.node_inner_size.main(dir).is_some()
-                    || (constants.is_row && constants.node_inner_size.height.is_some()));
+                    || constants.node_inner_size.height.is_some());
             if (keyword_stretches
                 || (child.align_self == AlignSelf::STRETCH
                     && !child.margin_is_auto.cross_start(constants.dir)

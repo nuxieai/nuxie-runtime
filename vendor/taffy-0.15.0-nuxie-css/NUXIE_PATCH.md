@@ -2068,3 +2068,22 @@ is 250 by 500 and overflows) and the second starts at 100. Before: the row was 5
 
 Of the 32,600 compared layouts, 334 differ from Chrome (341 before): 7 fixed, none
 regressed. Of 672 new probes, all match (176 differed before). Guard rows: 26.
+
+## A picture's `width: stretch` applies in every flex column
+
+A `stretch` keyword on an item's cross size stretches it whatever its alignment. For a
+picture the fork applied that only once the container had a main size, a limit meant for
+`height: stretch` in a row, where the row's height can be known late. In a column the
+cross size is the width, which the container has from the start, so the limit left a
+picture with `width: stretch` in an auto-height column measured at its natural size: it
+got the stretched width but kept its natural height.
+
+The keyword now stretches a picture's width in every column
+(`determine_flex_base_size`), so its height follows the stretched width through its
+ratio, as its flex base size and as its automatic minimum.
+
+Example: a 200 wide column with `align-items: flex-start` around a 40 by 40 picture with
+`width: stretch`. Chrome: 200 by 200. Before: 200 by 40.
+
+Of the 32,600 compared layouts, 326 differ from Chrome (334 before): 8 fixed, none
+regressed. Of 468 new probes, 9 differ (219 before). Guard rows: 30.

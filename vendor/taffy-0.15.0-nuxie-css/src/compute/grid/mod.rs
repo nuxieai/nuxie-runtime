@@ -469,55 +469,76 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     // column with `align-items: flex-start`, is 90 wide; a `minmax(0, 0.5fr)` column
     // around a 240 wide box leaves the grid 90 wide and the column 45; `100% 1fr` columns
     // around a 120 and a 100 wide box make the grid 220 wide).
-    if inner_node_size.width.is_none() {
-        if let AvailableSpace::Definite(space) = available_grid_space.width {
-            let space = space.maybe_max(inner_min_size.width);
-            if initial_column_sum > space && columns.iter().any(|track| track.max_track_sizing_function.is_fr()) {
-                let mut size_columns = |tree: &mut Tree,
-                                        columns: &mut Vec<GridTrack>,
-                                        rows: &mut Vec<GridTrack>,
-                                        items: &mut Vec<GridItem>,
-                                        available_width: AvailableSpace,
-                                        width: Option<f32>| {
-                    items.iter_mut().for_each(|item| {
-                        item.grid_area_size_cache = None;
-                        item.min_content_contribution_cache.width = None;
-                        item.max_content_contribution_cache.width = None;
-                        item.minimum_contribution_cache.width = None;
-                    });
-                    track_sizing_algorithm(
-                        tree,
-                        AbstractAxis::Inline,
-                        inner_min_size.get(AbstractAxis::Inline),
-                        inner_max_size.get(AbstractAxis::Inline),
-                        justify_content,
-                        align_content,
-                        Size { width: available_width, ..available_grid_space },
-                        Size { width, ..inner_node_size },
-                        columns,
-                        rows,
-                        items,
-                        |track: &GridTrack, parent_size: Option<f32>, tree: &Tree| {
-                            track.max_track_sizing_function.definite_value(parent_size, |val, basis| tree.calc(val, basis))
-                        },
-                        has_baseline_aligned_item,
-                    );
-                    columns.iter().map(|track| track.base_size).sum::<f32>()
-                };
-                let min_content_width =
-                    size_columns(tree, &mut columns, &mut rows, &mut items, AvailableSpace::MinContent, None);
-                let fit_content_width = f32_max(space, min_content_width);
-                size_columns(
-                    tree,
-                    &mut columns,
-                    &mut rows,
-                    &mut items,
-                    available_grid_space.width,
-                    Some(fit_content_width),
-                );
-                initial_column_sum = fit_content_width;
-            }
+    let width_is_from_content = inner_node_size.width.is_none();
+    let shrink_columns_to_fit = move |tree: &mut Tree,
+                                      columns: &mut Vec<GridTrack>,
+                                      rows: &mut Vec<GridTrack>,
+                                      items: &mut Vec<GridItem>,
+                                      node_height: Option<f32>,
+                                      rows_are_sized: bool,
+                                      column_sum: f32|
+          -> Option<f32> {
+        let AvailableSpace::Definite(space) = available_grid_space.width else { return None };
+        let space = space.maybe_max(inner_min_size.width);
+        if !width_is_from_content
+            || column_sum <= space
+            || !columns.iter().any(|track| track.max_track_sizing_function.is_fr())
+        {
+            return None;
         }
+        // Rows that are already sized give their sizes; before that only a definite track
+        // sizing function does.
+        let row_size_estimate: fn(&GridTrack, Option<f32>, &Tree) -> Option<f32> = if rows_are_sized {
+            |track, _, _| Some(track.base_size)
+        } else {
+            |track, parent_size, tree| {
+                track.max_track_sizing_function.definite_value(parent_size, |val, basis| tree.calc(val, basis))
+            }
+        };
+        let mut size_columns = |tree: &mut Tree,
+                                columns: &mut Vec<GridTrack>,
+                                rows: &mut Vec<GridTrack>,
+                                items: &mut Vec<GridItem>,
+                                available_width: AvailableSpace,
+                                width: Option<f32>| {
+            items.iter_mut().for_each(|item| {
+                item.grid_area_size_cache = None;
+                item.min_content_contribution_cache.width = None;
+                item.max_content_contribution_cache.width = None;
+                item.minimum_contribution_cache.width = None;
+            });
+            track_sizing_algorithm(
+                tree,
+                AbstractAxis::Inline,
+                inner_min_size.get(AbstractAxis::Inline),
+                inner_max_size.get(AbstractAxis::Inline),
+                justify_content,
+                align_content,
+                Size { width: available_width, ..available_grid_space },
+                Size { width, height: node_height },
+                columns,
+                rows,
+                items,
+                row_size_estimate,
+                has_baseline_aligned_item,
+            );
+            columns.iter().map(|track| track.base_size).sum::<f32>()
+        };
+        let min_content_width = size_columns(tree, columns, rows, items, AvailableSpace::MinContent, None);
+        let fit_content_width = f32_max(space, min_content_width);
+        size_columns(tree, columns, rows, items, available_grid_space.width, Some(fit_content_width));
+        Some(fit_content_width)
+    };
+    if let Some(fit_content_width) = shrink_columns_to_fit(
+        tree,
+        &mut columns,
+        &mut rows,
+        &mut items,
+        inner_node_size.height,
+        false,
+        initial_column_sum,
+    ) {
+        initial_column_sum = fit_content_width;
     }
     inner_node_size.width = inner_node_size.width.or_else(|| initial_column_sum.into());
 
@@ -535,15 +556,6 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     // (a min-content measurement) follows the rows, and only with a single row (Chrome:
     // `height: 100px; aspect-ratio: 2` around that item is 400 wide in a flex row; with two
     // automatic rows it stays 200 wide).
-    // `picture_follows_rows`: a picture whose height or `max-height` is a percentage, for
-    // the column rerun below (Chrome: a grid in an `align-items: flex-start` column, around
-    // a 120 by 60 picture with `max-height: 50%`, is 60 wide; the picture is 60 by 30).
-    let picture_follows_rows = outer_node_size.width.is_none()
-        && items.iter().any(|item| {
-            item.is_compressible_replaced
-                && (item.size.height.into_raw().uses_percentage()
-                    || item.max_size.height.into_raw().uses_percentage())
-        });
     let columns_follow_rows = outer_node_size.width.is_none()
         && (tree.get_grid_container_style(node).aspect_ratio().is_none()
             || (available_grid_space.width == AvailableSpace::MinContent
@@ -694,14 +706,18 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     }
 
     if rerun_column_sizing {
-        // nuxie-css: a grid as wide as its content, around a picture that follows its row,
-        // finds its columns again without the first width: held to it, an automatic
-        // column would stretch back to the picture's natural width.
-        let rerun_node_size = if picture_follows_rows && !has_percentage_column {
-            Size { width: None, ..inner_node_size }
-        } else {
-            inner_node_size
-        };
+        // nuxie-css: a grid as wide as its content finds its columns again as it found them
+        // first, without the first width, now that items whose width follows their row
+        // know it. Held to the first width, an automatic column would stretch back to it
+        // and flexible columns would not share the new content (Chrome: a grid in an
+        // `align-items: flex-start` column, around a 120 by 60 picture with
+        // `max-height: 50%`, is 60 wide and the picture 60 by 30; a `width: max-content`
+        // grid with `1fr 1fr` columns, a 50 by 200 box and an `aspect-ratio: 0.5` item is
+        // 200 wide with two 100 wide columns). If the columns are then wider than the
+        // space, the grid shrinks to fit as after the first pass.
+        let rerun_without_width = parent_width_indefinite && !has_percentage_column;
+        let rerun_node_size =
+            if rerun_without_width { Size { width: None, ..inner_node_size } } else { inner_node_size };
         // Re-run track sizing algorithm for Inline axis
         track_sizing_algorithm(
             tree,
@@ -718,6 +734,18 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
             |track: &GridTrack, _, _| Some(track.base_size),
             has_baseline_aligned_item,
         );
+        if rerun_without_width {
+            let column_sum = columns.iter().map(|track| track.base_size).sum::<f32>();
+            shrink_columns_to_fit(
+                tree,
+                &mut columns,
+                &mut rows,
+                &mut items,
+                inner_node_size.height,
+                true,
+                column_sum,
+            );
+        }
 
         // The column widths may have changed, so the items' intrinsic height contributions need to be recomputed
         // (unless row sizing is being re-run anyway, in which case the caches have already been cleared).

@@ -72,6 +72,33 @@ fn build_vmi_list(primary: Option<CoreHandle>, globals: &[CoreHandle]) -> Vec<Co
     list
 }
 
+/// One upstream `bindStateful`, taken out of its host
+/// ([`NestedArtboard::take_stateful_bind`]) so it runs with no borrow of the
+/// host open.
+struct StatefulBind {
+    instance: RuntimeArtboardInstanceHandle,
+    list: Vec<CoreHandle>,
+    parent: Option<RuntimeDataContextHandle>,
+    animations: Vec<CoreHandle>,
+}
+
+impl StatefulBind {
+    /// Binds the instance, then gives the host's nested state machines its
+    /// new context.
+    fn run(self) {
+        self.instance
+            .bind_view_model_instances(self.list, self.parent);
+        let Some(context) = self.instance.data_context() else {
+            return;
+        };
+        for animation in &self.animations {
+            animation.with_downcast_mut::<NestedStateMachine, _>(|state_machine| {
+                state_machine.data_context(context.clone());
+            });
+        }
+    }
+}
+
 pub struct NestedArtboard {
     pub base: NestedArtboardBase,
     pub artboard_referencer: ArtboardReferencer,
@@ -217,15 +244,6 @@ impl NestedArtboard {
     pub(crate) fn restore_artboard_instance(&mut self, instance: RuntimeArtboardInstanceHandle) {
         debug_assert!(self.instance.is_none());
         self.instance = Some(instance);
-    }
-
-    /// Nuxie live-move hook: run a stateful bind this host has scheduled now,
-    /// as its next advance would (upstream `advanceComponent`). With no
-    /// mounted instance, `bind_stateful` only drops the schedule.
-    pub(crate) fn flush_pending_stateful_binding(&mut self) {
-        if self.has_host_flag(NestedArtboardHostFlags::PENDING_STATEFUL_BINDING) {
-            self.bind_stateful();
-        }
     }
 
     pub const TYPE_KEY: u16 = NestedArtboardBase::TYPE_KEY;
@@ -536,20 +554,44 @@ impl NestedArtboard {
     }
 
     fn bind_stateful(&mut self) {
+        if let Some(bind) = self.take_stateful_bind() {
+            bind.run();
+        }
+    }
+
+    /// Upstream `bindStateful`, read out of this host so the bind (which can
+    /// run converter and other scripts in the instance) runs with no borrow
+    /// of the host open: the host's schedule is cleared here, and the bind
+    /// is the caller's to run once its borrow ends. Nothing when no instance
+    /// is mounted, which leaves only the cleared schedule, as upstream.
+    fn take_stateful_bind(&mut self) -> Option<StatefulBind> {
         self.clear_host_flag(NestedArtboardHostFlags::PENDING_STATEFUL_BINDING);
-        let Some(instance) = self.instance.clone() else {
-            return;
-        };
+        let instance = self.instance.clone()?;
         let primary = self.active_view_model_instance.clone();
-        let list = build_vmi_list(primary, &self.global_view_model_instances);
-        instance.bind_view_model_instances(list, self.data_context.clone());
-        let nested_data_context = instance.data_context();
-        for animation in &self.nested_animations {
-            animation.with_downcast_mut::<NestedStateMachine, _>(|state_machine| {
-                if let Some(context) = nested_data_context.clone() {
-                    state_machine.data_context(context);
+        Some(StatefulBind {
+            instance,
+            list: build_vmi_list(primary, &self.global_view_model_instances),
+            parent: self.data_context.clone(),
+            animations: self.nested_animations.clone(),
+        })
+    }
+
+    /// Nuxie live-move hook: runs a stateful bind `owner` has scheduled now,
+    /// as its next advance would (upstream `advanceComponent`), with no
+    /// borrow of the host open while it binds. With no mounted instance it
+    /// only drops the schedule.
+    pub(crate) fn flush_pending_stateful_binding_occurrence(owner: &CoreHandle) {
+        let bind = owner
+            .with_downcast_mut::<Self, _>(|host| {
+                if host.has_host_flag(NestedArtboardHostFlags::PENDING_STATEFUL_BINDING) {
+                    host.take_stateful_bind()
+                } else {
+                    None
                 }
-            });
+            })
+            .flatten();
+        if let Some(bind) = bind {
+            bind.run();
         }
     }
 
@@ -731,7 +773,7 @@ impl NestedArtboard {
             })
             .collect::<Vec<_>>();
         let pristine = authored.into_iter().next().map(pristine);
-        owner
+        let stateful = owner
             .with_mut(|owner| {
                 let nested = owner.as_nested_artboard_mut().expect("NestedArtboard host");
                 for global in &globals {
@@ -750,13 +792,20 @@ impl NestedArtboard {
                     nested.set_active_view_model_instance(None, false);
                 }
                 if nested.try_schedule_bind_stateful() {
-                    nested.bind_stateful();
-                } else if nested.data_context.is_some() && nested.view_model_instance.is_none() {
+                    return nested.take_stateful_bind();
+                }
+                if nested.data_context.is_some() && nested.view_model_instance.is_none() {
                     nested.internal_data_context(nested.data_context.clone());
                 }
-                nested.add_dirt(ComponentDirt::FILTHY);
+                None
             })
             .expect("live NestedArtboard");
+        // The bind runs with no borrow of the host open, then the host is
+        // marked as after a swap.
+        if let Some(bind) = stateful {
+            bind.run();
+        }
+        owner.with_downcast_mut::<Self, _>(|nested| nested.add_dirt(ComponentDirt::FILTHY));
         Some(instance)
     }
 
@@ -2018,9 +2067,10 @@ impl NestedArtboard {
         elapsed_seconds: f32,
         flags: AdvanceFlags,
     ) -> bool {
-        // The stop checks, a pending stateful bind and the frame's local time
-        // share one borrow: nothing else runs between them.
-        let advance = owner
+        // The stop checks, then a pending stateful bind, then the frame's
+        // local time, in upstream's order. The bind runs between two borrows
+        // of the host, since its scripts may reach the host.
+        let stateful = owner
             .with_mut(|owner| {
                 let owner = owner
                     .as_nested_artboard_mut()
@@ -2032,18 +2082,31 @@ impl NestedArtboard {
                     owner.inactive_change_sequence.mark_latest();
                     return None;
                 }
-                if owner.has_host_flag(NestedArtboardHostFlags::PENDING_STATEFUL_BINDING) {
-                    owner.bind_stateful();
-                }
-                Some((
-                    owner.calculate_local_elapsed_seconds(elapsed_seconds),
-                    owner.base.quantize(),
-                ))
+                Some(
+                    owner
+                        .has_host_flag(NestedArtboardHostFlags::PENDING_STATEFUL_BINDING)
+                        .then(|| owner.take_stateful_bind())
+                        .flatten(),
+                )
             })
             .expect("live NestedArtboard owner");
-        let Some((local_elapsed_seconds, quantize)) = advance else {
+        let Some(stateful) = stateful else {
             return false;
         };
+        if let Some(bind) = stateful {
+            bind.run();
+        }
+        let (local_elapsed_seconds, quantize) = owner
+            .with_mut(|owner| {
+                let owner = owner
+                    .as_nested_artboard_mut()
+                    .expect("NestedArtboard owner");
+                (
+                    owner.calculate_local_elapsed_seconds(elapsed_seconds),
+                    owner.base.quantize(),
+                )
+            })
+            .expect("live NestedArtboard owner");
         let mut keep_going = false;
         let advance_nested =
             flags.0 & AdvanceFlags::ADVANCE_NESTED.0 == AdvanceFlags::ADVANCE_NESTED.0;

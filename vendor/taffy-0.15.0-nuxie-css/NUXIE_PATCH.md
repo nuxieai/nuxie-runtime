@@ -2025,3 +2025,28 @@ justify-self: start` ratio item in its own row, left for later. Of 1,200 probes 
 same items in content-width grids, 267 differ before and after: 246 are `1fr 1fr`
 columns in a content-width grid (Chrome makes them equal), left for later. Guard rows:
 24.
+
+## A content-width grid finds its columns again without its first width
+
+A grid with no width of its own sizes its columns from its content, sizes its rows, and
+sizes the columns again when an item's width contribution changed with the rows (a ratio
+item, or a picture with a percentage height). Stock ran that second column pass inside
+the width of the first. Flexible columns then could not share the new content: with
+`1fr 1fr`, the column whose item grew became wider than the other.
+
+Chrome finds a grid's content width with the whole algorithm and then lays it out at
+that width, so the content width already reflects the rows. The rerun now sizes the
+columns as the first pass did, with no width, for every content-width grid without
+percentage columns (the fork did this for one case, a picture with a percentage height;
+`picture_follows_rows` is removed). The shrink-to-fit step that follows the first pass
+(`shrink_columns_to_fit`) now follows the rerun as well, so columns that outgrow the
+space are clamped to the grid's fit-content width.
+
+Example: a `width: max-content` grid with `1fr 1fr` columns, a 50 by 200 box and an
+`aspect-ratio: 0.5` item. Chrome: 200 wide, two 100 wide columns. Before: 150 wide,
+columns 50 and 100. With `aspect-ratio: 2` and `width: fit-content` in a 400 wide block
+Chrome's grid is 450 wide with columns 50 and 400, before and now.
+
+Of the 32,600 compared layouts, 341 differ from Chrome (343 before): 2 fixed, none
+regressed. Of 1,200 probes of content-width grids, 25 differ (267 before). Guard rows:
+30.

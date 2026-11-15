@@ -68,18 +68,8 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
     ) -> crate::source::data_bind::converters::data_converter::ConverterAdvanceHandler {
         |owner, elapsed| {
             let binds_advanced = crate::source::data_bind::converters::data_converter::DataConverter::advance_base_handle(owner, elapsed);
-            owner
-                .with_mut(|owner| {
-                    owner
-                        .as_data_converter_capability_mut()
-                        .is_some_and(|converter| converter.advance_after_binds(elapsed))
-                })
-                .unwrap_or(false)
-                || binds_advanced
+            ScriptedDataConverter::advance_script_occurrence(owner, elapsed) || binds_advanced
         }
-    }
-    fn advance_after_binds(&mut self, elapsed: f32) -> bool {
-        self.advance_script(elapsed)
     }
     fn advance(&mut self, elapsed: f32) -> bool {
         Self::advance(self, elapsed)
@@ -333,6 +323,30 @@ impl ScriptedDataConverter {
     pub fn advance(&mut self, elapsed: f32) -> bool {
         let binds_advanced = self.base.base.advance(elapsed);
         self.advance_script(elapsed) || binds_advanced
+    }
+
+    /// [`Self::advance_script`] at handle level: the script's advance runs
+    /// with no borrow of the converter open, since user code may reach it,
+    /// and the converter is marked dirty under a new one.
+    fn advance_script_occurrence(owner: &CoreHandle, elapsed: f32) -> bool {
+        if elapsed == 0.0 {
+            return false;
+        }
+        let Some(instance) = owner
+            .with_downcast::<Self, _>(|converter| converter.scripted.advance_instance())
+            .flatten()
+        else {
+            return false;
+        };
+        // This non-component owner inherits the empty markNeedsUpdate, so an
+        // update request is dropped, as `advance_script` drops it.
+        let (advanced, _requested) = ScriptedObject::call_advance_instance(&instance, elapsed);
+        if advanced {
+            owner.with_downcast_mut::<Self, _>(|converter| {
+                converter.base.base.mark_converter_dirty()
+            });
+        }
+        advanced
     }
 
     fn advance_script(&mut self, elapsed: f32) -> bool {

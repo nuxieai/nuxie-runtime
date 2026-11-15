@@ -2050,3 +2050,21 @@ Chrome's grid is 450 wide with columns 50 and 400, before and now.
 Of the 32,600 compared layouts, 341 differ from Chrome (343 before): 2 fixed, none
 regressed. Of 1,200 probes of content-width grids, 25 differ (267 before). Guard rows:
 30.
+
+## A scrolling ratio item has no transferred minimum height in its row
+
+A grid item's automatic minimum is zero when the item is a scroll container. The fork
+still gave such an item, when it has a ratio, the minimum height its `min-width` gives
+through the ratio. Chrome does not (`CalculateIntrinsicMinimumContribution` resolves
+only the `min-height` length for a scroll container and carries a TODO about transferred
+sizes), so its row can stay shorter than the item, which then overflows the row.
+
+The ratio's floor on the row minimum (`minimum_contribution`) now applies only to an
+item that is not a scroll container in the block axis.
+
+Example: a 400 by 100 grid with two automatic rows; `aspect-ratio: 0.5; min-width:
+250px; overflow: hidden` and an empty item. Chrome: the first row is 100 tall (the item
+is 250 by 500 and overflows) and the second starts at 100. Before: the row was 500 tall.
+
+Of the 32,600 compared layouts, 334 differ from Chrome (341 before): 7 fixed, none
+regressed. Of 672 new probes, all match (176 differed before). Guard rows: 26.

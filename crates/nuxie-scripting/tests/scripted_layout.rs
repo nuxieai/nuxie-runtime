@@ -4,6 +4,7 @@ use nuxie_scripting::luau::{Function, Table, Value, Vector};
 use nuxie_render_api::{NullFactory, PersistentFactory, SerializingFactory};
 use nuxie_runtime::source::{
     core::CoreArena,
+    intrinsically_sizeable::control_size_handle,
     lua::scripting_vm::RuntimeScriptingVmHandle,
     scripted::scripted_layout::{LayoutDirection, LayoutScaleType, ScriptedLayout, Vec2},
 };
@@ -138,16 +139,15 @@ end
 
     vm.set_display_scale(3.0);
     assert_eq!(resize_getter::<f64>(&vm, "getResizeCallCount"), 0.0);
-    layout
-        .with_mut(|object| {
-            object.as_scripted_layout_mut().unwrap().control_size(
-                Vec2::new(240.0, 120.0),
-                LayoutScaleType::Fixed,
-                LayoutScaleType::Fixed,
-                LayoutDirection::Inherit,
-            );
-        })
-        .unwrap();
+    // Layout sizes the layout through its handle, so the resize script runs
+    // with no borrow of the layout open.
+    assert!(control_size_handle(
+        &layout,
+        Vec2::new(240.0, 120.0),
+        LayoutScaleType::Fixed,
+        LayoutScaleType::Fixed,
+        LayoutDirection::Inherit,
+    ));
     assert_eq!(resize_getter::<f64>(&vm, "getResizeCallCount"), 1.0);
 
     vm.set_display_scale(4.0);

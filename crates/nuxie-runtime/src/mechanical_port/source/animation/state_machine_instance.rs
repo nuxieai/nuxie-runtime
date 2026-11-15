@@ -1786,6 +1786,28 @@ impl Drop for HostDispatchScope {
     }
 }
 
+/// Nuxie: where a hit inside a copy flying in place finds it
+/// (css_layout/lift.rs). The copy's hits stay on its own Screen, and a
+/// pointer there reaches the copy where its lift draws it: set while the
+/// hits sort, the lift maps the pointer back to the place the copy rests.
+#[derive(Default)]
+pub struct HitLift(RefCell<Option<crate::css_layout::lift::Lift>>);
+
+impl HitLift {
+    fn set(&self, lift: Option<crate::css_layout::lift::Lift>) {
+        *self.0.borrow_mut() = lift;
+    }
+
+    /// `position` where the copy rests, itself outside a lift; None when
+    /// the lift draws nothing, which no pointer reaches.
+    pub(crate) fn at(&self, position: Vec2D) -> Option<Vec2D> {
+        match &*self.0.borrow() {
+            None => Some(position),
+            Some(lift) => lift.hit_position(position),
+        }
+    }
+}
+
 pub trait HitComponent {
     fn has_capture_listeners(&self) -> bool {
         false
@@ -1807,6 +1829,9 @@ pub trait HitComponent {
     fn as_hit_drawable(&self) -> Option<&HitDrawable> {
         None
     }
+    /// Nuxie: where this hit finds a copy flying in place, set as hits sort
+    /// (css_layout/lift.rs).
+    fn hit_lift(&self) -> &HitLift;
     #[cfg(any(test, feature = "tools"))]
     fn early_out_count(&self) -> i32 {
         0
@@ -1901,7 +1926,12 @@ fn nested_is_paused(component: &CoreHandle) -> bool {
         .expect("a nested hit target is a NestedArtboard")
 }
 
-fn nested_mapping(component: &CoreHandle, position: Vec2D) -> Option<(Vec2D, bool, Mat2D)> {
+fn nested_mapping(
+    component: &CoreHandle,
+    lift: &HitLift,
+    position: Vec2D,
+) -> Option<(Vec2D, bool, Mat2D)> {
+    let position = lift.at(position)?;
     component
         .with(|component| {
             let nested = component.as_nested_artboard()?;
@@ -1914,11 +1944,11 @@ fn nested_mapping(component: &CoreHandle, position: Vec2D) -> Option<(Vec2D, boo
         })
         .flatten()
 }
-fn nested_world_to_local(component: &CoreHandle, position: Vec2D) -> Option<Vec2D> {
-    nested_mapping(component, position).map(|(local, _, _)| local)
+fn nested_world_to_local(component: &CoreHandle, lift: &HitLift, position: Vec2D) -> Option<Vec2D> {
+    nested_mapping(component, lift, position).map(|(local, _, _)| local)
 }
-fn nested_drawn_position(component: &CoreHandle, position: Vec2D) -> Option<Vec2D> {
-    nested_mapping(component, position).and_then(|(local, off, _)| (!off).then_some(local))
+fn nested_drawn_position(component: &CoreHandle, lift: &HitLift, position: Vec2D) -> Option<Vec2D> {
+    nested_mapping(component, lift, position).and_then(|(local, off, _)| (!off).then_some(local))
 }
 fn is_missable_event(kind: ListenerType) -> bool {
     matches!(
@@ -1954,9 +1984,11 @@ fn component_list_indices(component: &CoreHandle) -> Vec<i32> {
 
 fn component_list_world_to_local(
     component: &CoreHandle,
+    lift: &HitLift,
     position: Vec2D,
     index: i32,
 ) -> Option<Vec2D> {
+    let position = lift.at(position)?;
     component
         .with_downcast_mut::<ArtboardComponentList, _>(|list| {
             let mut local = Vec2D::new(0.0, 0.0);
@@ -1997,6 +2029,8 @@ pub struct HitDrawable {
     /// A listener here hears the pointer move, enter or leave, not only
     /// press: a CSS box with one is hovered from inside it (4.5).
     hears_hover: Cell<bool>,
+    /// Inside a copy flying in place: the lift that draws it.
+    lift: HitLift,
     #[cfg(any(test, feature = "tools"))]
     early_out_count: Cell<i32>,
 }
@@ -2056,6 +2090,7 @@ impl HitDrawable {
             css_boxes_around,
             in_css,
             hears_hover: Cell::new(false),
+            lift: HitLift::default(),
             #[cfg(any(test, feature = "tools"))]
             early_out_count: Cell::new(0),
         }
@@ -2130,6 +2165,12 @@ impl HitDrawable {
         if self.early_outs(hit_type) {
             return HitResult::None;
         }
+        // Inside a copy flying in place, the listeners hear the pointer
+        // where the copy rests; a lift that draws nothing takes no hit.
+        let (position, can_hit) = match self.lift.at(position) {
+            Some(position) => (position, can_hit),
+            None => (position, false),
+        };
         if bubbled && can_hit && hit_type != ListenerType::Exit && !self.is_hovered.get() {
             self.is_hovered.set(true);
             for listener in self.listeners.borrow().iter() {
@@ -2226,6 +2267,9 @@ impl ScrollReach {
 }
 
 impl HitComponent for HitDrawable {
+    fn hit_lift(&self) -> &HitLift {
+        &self.lift
+    }
     fn listens_to_button_at(&self, position: Vec2D, button: PointerButton) -> bool {
         self.listens_to_button(position, button, false)
     }
@@ -2300,6 +2344,9 @@ impl HitComponent for HitDrawable {
     }
 
     fn hit_test(&self, position: Vec2D) -> bool {
+        let Some(position) = self.lift.at(position) else {
+            return false;
+        };
         if let Some(style) = &self.text_style {
             let Some(style) = style.upgrade() else {
                 return false;
@@ -2380,6 +2427,7 @@ impl HitComponent for HitDrawable {
 
 struct HitTextStyleRuns {
     component: CoreHandle,
+    lift: HitLift,
 }
 impl HitTextStyleRuns {
     fn hidden(&self) -> bool {
@@ -2399,10 +2447,16 @@ impl HitTextStyleRuns {
     }
 }
 impl HitComponent for HitTextStyleRuns {
+    fn hit_lift(&self) -> &HitLift {
+        &self.lift
+    }
     fn component(&self) -> RuntimeDrawableOccurrence {
         RuntimeDrawableOccurrence::Authored(self.component.clone())
     }
     fn hit_test(&self, position: Vec2D) -> bool {
+        let Some(position) = self.lift.at(position) else {
+            return false;
+        };
         !self.hidden()
             && self
                 .state_machines()
@@ -2410,6 +2464,9 @@ impl HitComponent for HitTextStyleRuns {
                 .any(|sm| sm.with_instance(|sm| sm.hit_test(position)))
     }
     fn listens_to_button_at(&self, position: Vec2D, button: PointerButton) -> bool {
+        let Some(position) = self.lift.at(position) else {
+            return false;
+        };
         !self.hidden()
             && self
                 .state_machines()
@@ -2427,6 +2484,11 @@ impl HitComponent for HitTextStyleRuns {
         button: PointerButton,
     ) -> HitResult {
         let mut hit_result = HitResult::None;
+        // Inside a copy flying in place, as `HitDrawable::process_listeners`.
+        let (position, can_hit) = match self.lift.at(position) {
+            Some(position) => (position, can_hit),
+            None => (position, false),
+        };
         let mut running_can_hit = can_hit && !self.hidden();
         // Retain the collected machines, never a Text/style borrow, across listeners.
         let state_machines = self.state_machines();
@@ -2510,11 +2572,15 @@ impl HostedPointersOff {
 struct HitNestedArtboard {
     component: CoreHandle,
     pointers_off: HostedPointersOff,
+    lift: HitLift,
 }
 
 impl HitComponent for HitNestedArtboard {
+    fn hit_lift(&self) -> &HitLift {
+        &self.lift
+    }
     fn yield_drag(&self, pointer_id: i32, position: Vec2D, timestamp: f32) {
-        let Some(local) = nested_world_to_local(&self.component, position) else {
+        let Some(local) = nested_world_to_local(&self.component, &self.lift, position) else {
             return;
         };
         for machine in nested_animations(&self.component)
@@ -2539,7 +2605,7 @@ impl HitComponent for HitNestedArtboard {
         {
             return false;
         }
-        let Some(local) = nested_drawn_position(&self.component, position) else {
+        let Some(local) = nested_drawn_position(&self.component, &self.lift, position) else {
             return false;
         };
         for animation in nested_animations(&self.component) {
@@ -2556,7 +2622,7 @@ impl HitComponent for HitNestedArtboard {
         if component_is_collapsed(&self.component) || nested_is_paused(&self.component) {
             return false;
         }
-        let Some((local, off_mesh, to_nested)) = nested_mapping(&self.component, position) else {
+        let Some((local, off_mesh, to_nested)) = nested_mapping(&self.component, &self.lift, position) else {
             return false;
         };
         if off_mesh {
@@ -2580,7 +2646,7 @@ impl HitComponent for HitNestedArtboard {
         if component_is_collapsed(&self.component) || nested_is_paused(&self.component) {
             return false;
         }
-        let Some(local) = nested_drawn_position(&self.component, position) else {
+        let Some(local) = nested_drawn_position(&self.component, &self.lift, position) else {
             return false;
         };
         for animation in nested_animations(&self.component) {
@@ -2597,7 +2663,7 @@ impl HitComponent for HitNestedArtboard {
         if component_is_collapsed(&self.component) || nested_is_paused(&self.component) {
             return false;
         }
-        let Some(local) = nested_drawn_position(&self.component, position) else {
+        let Some(local) = nested_drawn_position(&self.component, &self.lift, position) else {
             return false;
         };
         for animation in nested_animations(&self.component) {
@@ -2635,7 +2701,7 @@ impl HitComponent for HitNestedArtboard {
         timestamp: f32,
         pointer_id: i32,
     ) -> HitResult {
-        let Some((local, off_mesh, to_nested)) = nested_mapping(&self.component, position) else {
+        let Some((local, off_mesh, to_nested)) = nested_mapping(&self.component, &self.lift, position) else {
             return HitResult::None;
         };
         let mapped = ScrollEvent {
@@ -2677,7 +2743,7 @@ impl HitComponent for HitNestedArtboard {
         {
             return false;
         }
-        let Some(local) = nested_drawn_position(&self.component, position) else {
+        let Some(local) = nested_drawn_position(&self.component, &self.lift, position) else {
             return false;
         };
         nested_animations(&self.component)
@@ -2696,7 +2762,7 @@ impl HitComponent for HitNestedArtboard {
         {
             return false;
         }
-        let Some(local) = nested_drawn_position(&self.component, position) else {
+        let Some(local) = nested_drawn_position(&self.component, &self.lift, position) else {
             return false;
         };
         nested_animations(&self.component)
@@ -2728,7 +2794,7 @@ impl HitComponent for HitNestedArtboard {
         {
             return HitResult::None;
         }
-        let Some((local, off_mesh, _)) = nested_mapping(&self.component, position) else {
+        let Some((local, off_mesh, _)) = nested_mapping(&self.component, &self.lift, position) else {
             return HitResult::None;
         };
         let past_mesh = can_hit && off_mesh;
@@ -2832,7 +2898,7 @@ impl HitComponent for HitNestedArtboard {
         {
             return false;
         }
-        let Some(local) = nested_drawn_position(&self.component, position) else {
+        let Some(local) = nested_drawn_position(&self.component, &self.lift, position) else {
             return false;
         };
         nested_animations(&self.component)
@@ -2854,7 +2920,7 @@ impl HitComponent for HitNestedArtboard {
         {
             return HitResult::None;
         }
-        let Some((local, off_mesh, _)) = nested_mapping(&self.component, position) else {
+        let Some((local, off_mesh, _)) = nested_mapping(&self.component, &self.lift, position) else {
             return HitResult::None;
         };
         let hit_type = if off_mesh && is_missable_event(hit_type) {
@@ -2880,12 +2946,16 @@ impl HitComponent for HitNestedArtboard {
 struct HitComponentList {
     component: CoreHandle,
     pointers_off: HostedPointersOff,
+    lift: HitLift,
 }
 
 impl HitComponent for HitComponentList {
+    fn hit_lift(&self) -> &HitLift {
+        &self.lift
+    }
     fn yield_drag(&self, pointer_id: i32, position: Vec2D, timestamp: f32) {
         for index in component_list_indices(&self.component) {
-            let Some(local) = component_list_world_to_local(&self.component, position, index)
+            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -2907,7 +2977,7 @@ impl HitComponent for HitComponentList {
             return false;
         }
         for index in component_list_indices(&self.component).into_iter().rev() {
-            let Some(local) = component_list_world_to_local(&self.component, position, index)
+            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -2925,7 +2995,7 @@ impl HitComponent for HitComponentList {
             return false;
         }
         for index in component_list_indices(&self.component).into_iter().rev() {
-            let Some(local) = component_list_world_to_local(&self.component, position, index)
+            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -2933,7 +3003,7 @@ impl HitComponent for HitComponentList {
                 continue;
             };
             let Some(shifted) =
-                component_list_world_to_local(&self.component, position + event.delta, index)
+                component_list_world_to_local(&self.component, &self.lift, position + event.delta, index)
             else {
                 continue;
             };
@@ -2955,7 +3025,7 @@ impl HitComponent for HitComponentList {
             return false;
         }
         for index in component_list_indices(&self.component).into_iter().rev() {
-            let Some(local) = component_list_world_to_local(&self.component, position, index)
+            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -2976,7 +3046,7 @@ impl HitComponent for HitComponentList {
             return false;
         }
         for index in component_list_indices(&self.component).into_iter().rev() {
-            let Some(local) = component_list_world_to_local(&self.component, position, index)
+            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -3033,12 +3103,12 @@ impl HitComponent for HitComponentList {
                 if pass == 0 && !machine.with_instance_mut(StateMachineInstance::has_scroll_latch) {
                     continue;
                 }
-                let Some(local) = component_list_world_to_local(&self.component, position, index)
+                let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
                 else {
                     continue;
                 };
                 let Some(shifted) =
-                    component_list_world_to_local(&self.component, position + event.delta, index)
+                    component_list_world_to_local(&self.component, &self.lift, position + event.delta, index)
                 else {
                     continue;
                 };
@@ -3068,7 +3138,7 @@ impl HitComponent for HitComponentList {
             return false;
         }
         for index in component_list_indices(&self.component).into_iter().rev() {
-            let Some(local) = component_list_world_to_local(&self.component, position, index)
+            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -3086,7 +3156,7 @@ impl HitComponent for HitComponentList {
             return false;
         }
         for index in component_list_indices(&self.component).into_iter().rev() {
-            let Some(local) = component_list_world_to_local(&self.component, position, index)
+            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -3118,7 +3188,7 @@ impl HitComponent for HitComponentList {
         let mut result = HitResult::None;
         let mut running_can_hit = can_hit;
         for index in component_list_indices(&self.component).into_iter().rev() {
-            let Some(local) = component_list_world_to_local(&self.component, position, index)
+            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -3244,7 +3314,7 @@ impl HitComponent for HitComponentList {
             return false;
         }
         for index in component_list_indices(&self.component) {
-            let Some(local) = component_list_world_to_local(&self.component, position, index)
+            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -3280,7 +3350,7 @@ impl HitComponent for HitComponentList {
             if !machine.with_instance(StateMachineInstance::has_capture_listeners) {
                 continue;
             }
-            let Some(local) = component_list_world_to_local(&self.component, position, index)
+            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -3288,7 +3358,7 @@ impl HitComponent for HitComponentList {
                 let above = order[count - 1 - tested];
                 if let Some(above_machine) = component_list_state_machine(&self.component, above) {
                     if let Some(above_position) =
-                        component_list_world_to_local(&self.component, position, above)
+                        component_list_world_to_local(&self.component, &self.lift, position, above)
                     {
                         if above_machine.with_instance_mut(|machine| {
                             machine.pointer_occluded_at(above_position)
@@ -4071,6 +4141,8 @@ pub struct StateMachineInstance {
     parent_nested_artboard: Option<CoreHandle>,
     pub(crate) data_bind_container: DataBindContainer,
     draw_order_change_counter: u8,
+    // Nuxie: some hit is inside a copy flying in place (`HitLift`).
+    lifted_hits: bool,
     reporting: Sidecar<SMIReporting>,
     bindables: Sidecar<SMIBindables>,
     // Shared cell preserves synchronous focus enqueue while the SMI is borrowed.
@@ -4182,6 +4254,7 @@ impl StateMachineInstance {
             parent_nested_artboard: None,
             data_bind_container: DataBindContainer::default(),
             draw_order_change_counter: 0,
+            lifted_hits: false,
             reporting: Sidecar::default(),
             bindables: Sidecar::default(),
             input_extras: Rc::new(RefCell::new(Sidecar::default())),
@@ -4781,6 +4854,7 @@ impl StateMachineInstance {
             self.hit_components.push(Rc::new(HitNestedArtboard {
                 pointers_off: HostedPointersOff::default(),
                 component: nested.clone(),
+                lift: HitLift::default(),
             }));
             for animation in nested_animations(&nested) {
                 if animation.is_type_of(crate::mechanical_port::source::generated::animation::nested_state_machine_base::NestedStateMachineBase::TYPE_KEY)
@@ -4812,6 +4886,7 @@ impl StateMachineInstance {
             self.hit_components.push(Rc::new(HitComponentList {
                 component: list,
                 pointers_off: HostedPointersOff::default(),
+                lift: HitLift::default(),
             }));
         }
     }
@@ -4877,7 +4952,10 @@ impl StateMachineInstance {
             .expect("a state machine retains its ArtboardInstance");
         for component in texts {
             self.hit_components
-                .push(Rc::new(HitTextStyleRuns { component }));
+                .push(Rc::new(HitTextStyleRuns {
+                    component,
+                    lift: HitLift::default(),
+                }));
         }
     }
 
@@ -5771,6 +5849,67 @@ impl StateMachineInstance {
         hit
     }
 
+    /// Puts the hits that sort at `drawable` next, from `sorted` on.
+    fn sort_hits_at(&mut self, drawable: &RuntimeDrawableOccurrence, sorted: &mut usize) {
+        for index in *sorted..self.hit_components.len() {
+            // A CSS-content hit sorts where its drawable draws, as hits
+            // follow paint order there (docs/CSS_LAYOUT.md, 4.5): a text
+            // run's hit sits at its Text. Only a run's hit has the two
+            // differ. Translated content keeps upstream's order, where a
+            // run is no drawable and its hit stays at the end.
+            let hit = &self.hit_components[index];
+            let draws_here = match hit.as_hit_drawable() {
+                Some(hit) if hit.in_css => hit.drawable.ptr_eq(drawable),
+                _ => hit.component().ptr_eq(drawable),
+            };
+            if draws_here {
+                self.hit_components.swap(*sorted, index);
+                *sorted += 1;
+            }
+        }
+    }
+
+    /// Nuxie: links each hit inside a copy of this Screen flying in place to
+    /// the copy's lift, and unlinks the rest (`HitLift`). Returns the lifts
+    /// this Screen draws of its own copies, whose hits sort at their lift
+    /// entries.
+    fn link_lifted_hits(&mut self) -> Vec<crate::css_layout::lift::Lift> {
+        let root = self.artboard_instance.upgrade().map(|artboard| artboard.core_handle());
+        let (away, here) = self
+            .artboard_instance
+            .with_artboard(|artboard| {
+                let lifts = artboard.lifts.borrow();
+                let here = lifts
+                    .drawn
+                    .iter()
+                    .filter(|lift| Some(&lift.0.borrow().row) == root.as_ref())
+                    .cloned()
+                    .collect::<Vec<_>>();
+                (lifts.away.clone(), here)
+            })
+            .expect("a state machine retains its ArtboardInstance");
+        if away.is_empty() && !self.lifted_hits {
+            return here;
+        }
+        let Some(root) = root else {
+            return here;
+        };
+        let mut lifted = false;
+        for hit in &self.hit_components {
+            let component = hit.component();
+            let lift = away
+                .iter()
+                .find(|lift| {
+                    crate::css_layout::lift::draws_for(&component, &lift.0.borrow().element, &root)
+                })
+                .cloned();
+            lifted |= lift.is_some();
+            hit.hit_lift().set(lift);
+        }
+        self.lifted_hits = lifted;
+        here
+    }
+
     fn sort_hit_components(&mut self) {
         let count = self.hit_components.len();
         let mut sorted = 0;
@@ -5796,22 +5935,25 @@ impl StateMachineInstance {
         }) {
             last = Some(previous);
         }
+        // Nuxie: a copy flying in place hits where its lift draws it
+        // (css_layout/lift.rs). On the upper Screen, which draws its own
+        // copy's lift, the copy's hits sort at the lift entry, in the order
+        // its entries draw, and not at those entries; the lower Screen's
+        // copy, drawn by the upper Screen, keeps its own Screen's order.
+        let lifted_here = self.link_lifted_hits();
         while let Some(drawable) = last {
-            for index in sorted..count {
-                // A CSS-content hit sorts where its drawable draws, as hits
-                // follow paint order there (docs/CSS_LAYOUT.md, 4.5): a text
-                // run's hit sits at its Text. Only a run's hit has the two
-                // differ. Translated content keeps upstream's order, where a
-                // run is no drawable and its hit stays at the end.
-                let hit = &self.hit_components[index];
-                let draws_here = match hit.as_hit_drawable() {
-                    Some(hit) if hit.in_css => hit.drawable.ptr_eq(&drawable),
-                    _ => hit.component().ptr_eq(&drawable),
-                };
-                if draws_here {
-                    self.hit_components.swap(sorted, index);
-                    sorted += 1;
+            if let Some(lift) = crate::css_layout::lift::lift_of(&drawable)
+                .filter(|lift| lifted_here.iter().any(|here| here.ptr_eq(lift)))
+            {
+                let entries = lift.0.borrow().entries.clone();
+                for entry in entries.iter().rev() {
+                    self.sort_hits_at(entry, &mut sorted);
                 }
+            } else if !lifted_here
+                .iter()
+                .any(|lift| lift.0.borrow().entries.iter().any(|e| e.ptr_eq(&drawable)))
+            {
+                self.sort_hits_at(&drawable, &mut sorted);
             }
             if sorted == count {
                 break;

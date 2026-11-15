@@ -1029,6 +1029,10 @@ pub struct Component {
     // Runtime layout context, inherited by drawing groups and pictures.
     // Recorded once when attachment completes, before layout or drawing.
     picture_css_layout: Option<bool>,
+    // Nuxie: a copy flying in place (css_layout/lift.rs). Its lift draws
+    // none of its ancestors, so a hit inside it stops here, and none of
+    // their clips bounds it.
+    pub(crate) lift_root: bool,
 }
 
 impl Default for Component {
@@ -1045,6 +1049,7 @@ impl Default for Component {
             collapsed_run_skip: 0,
             runtime_occurrence: None,
             picture_css_layout: None,
+            lift_root: false,
         }
     }
 }
@@ -1489,6 +1494,9 @@ impl Component {
         skip_on_unclipped: bool,
         _is_primary_hit: bool,
     ) -> bool {
+        if self.lift_root {
+            return true;
+        }
         self.parent
             .with(|parent| {
                 parent

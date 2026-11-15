@@ -1229,14 +1229,16 @@ impl NestedArtboard {
         bounds: crate::source::math::aabb::Aabb,
         self_transform: Option<Mat2D>,
     ) -> bool {
-        let Some((mesh_host, transform, parent, has_instance)) = owner
+        let Some((mesh_host, transform, parent, has_instance, lift_root)) = owner
             .with(|owner| {
+                let lift_root = owner.as_component().is_some_and(|c| c.lift_root);
                 owner.as_nested_artboard().map(|nested| {
                     (
                         nested.mesh_host_if_any(),
                         nested.world_transform(),
                         nested.parent(),
                         nested.instance.is_some(),
+                        lift_root,
                     )
                 })
             })
@@ -1244,6 +1246,11 @@ impl NestedArtboard {
         else {
             return false;
         };
+        // Nuxie: a placement flying in place hits inside its own lift, which
+        // draws none of its host's ancestors (css_layout/lift.rs).
+        if lift_root {
+            return true;
+        }
         let mut world = Vec2D::default();
         if !(has_instance
             && mesh_host.is_some_and(|host| {
@@ -1297,6 +1304,12 @@ impl NestedArtboard {
         });
         if !mapped {
             mounted_position = world * *position;
+        }
+        // Nuxie: as `hit_test_host_handle`, a placement flying in place.
+        if crate::mechanical_port::source::generated::core_registry::CoreCapabilities::as_component(self)
+            .is_some_and(|c| c.lift_root)
+        {
+            return true;
         }
         self.parent().is_some_and(|parent| {
             parent

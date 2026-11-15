@@ -196,7 +196,9 @@ impl SemanticManager {
             artboard::Artboard,
             generated::component_base::ComponentBase,
             semantic::{
-                semantic_provider::{root_transform_aabb, semantic_bounds},
+                semantic_provider::{
+                    legacy_lifted, lifted_bounds, root_transform_aabb, semantic_bounds,
+                },
                 semantic_snapshot::Bounds,
             },
         };
@@ -216,7 +218,10 @@ impl SemanticManager {
                     max_x: artboard.width(),
                     max_y: artboard.height(),
                 })?;
-                Some(root_transform_aabb(&artboard, rect))
+                // Our layer: a placement flying in place is where its lift
+                // draws it.
+                let lifted = legacy_lifted(&artboard);
+                Some(lifted_bounds(&lifted, root_transform_aabb(&artboard, rect)))
             })
         } else {
             owner

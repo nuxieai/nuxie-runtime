@@ -659,7 +659,7 @@ impl InPlaceFlight {
         &self,
         frame: &FlightFrame,
         active: Option<&HashSet<CoreHandle>>,
-    ) -> Result<(Mat2D, f32)> {
+    ) -> Result<LiftPose> {
         let (a, b) = self.ends(active)?;
         let pose = frame.blend(a.place, b.place);
         let own = self.flying.place(When::Live)?;
@@ -681,17 +681,23 @@ impl InPlaceFlight {
         Ok(match matrix {
             Some(matrix) => {
                 self.last.set(matrix);
-                (matrix, opacity)
+                (matrix, opacity, drawn_map(upper, matrix, row))
             }
-            None => (self.last.get(), 0.0),
+            None => (self.last.get(), 0.0, None),
         })
     }
 
     /// The Pose barrier's write: only the lift's, which no layout reads.
-    pub(super) fn apply_pose(&self, (matrix, opacity): (Mat2D, f32)) {
-        let mut lift = self.lift.0.borrow_mut();
-        lift.matrix = matrix;
-        lift.opacity = opacity;
+    pub(super) fn apply_pose(&self, (matrix, opacity, drawn): LiftPose) {
+        let moved = {
+            let mut lift = self.lift.0.borrow_mut();
+            lift.matrix = matrix;
+            lift.opacity = opacity;
+            lift.set_drawn(drawn)
+        };
+        if moved {
+            crate::css_layout::lift::semantics_moved(&self.element);
+        }
     }
 
     /// A zoomed version's clip: the pair's box in the copy's box, and the
@@ -764,6 +770,8 @@ impl InPlaceFlight {
             changed(row);
         }
         self.lift.0.borrow_mut().picture.release();
+        // Its nodes are where it rests again.
+        crate::css_layout::lift::semantics_moved(&self.element);
     }
 
     /// Whether the copy, its Screen and its record are all still there, and
@@ -909,10 +917,10 @@ impl InPlacePair {
             match matrix {
                 Some(matrix) => {
                     self.last[version].set(matrix);
-                    copy.apply_pose((matrix, rules[version]));
+                    copy.apply_pose((matrix, rules[version], drawn_map(upper, matrix, row)));
                     copy.apply_clip(zoom::content_clip(&ends[version], &zoom_box, scales));
                 }
-                None => copy.apply_pose((self.last[version].get(), 0.0)),
+                None => copy.apply_pose((self.last[version].get(), 0.0, None)),
             }
         }
         Ok(())
@@ -977,6 +985,26 @@ pub(super) fn is_inside(inner: &CoreHandle, outer: &CoreHandle) -> bool {
             .flatten();
     }
     false
+}
+
+/// A lift's pose: its transform, its opacity, and where it draws the copy
+/// in the copy's own Screen (`drawn_map`), None while it can't be solved.
+pub(super) type LiftPose = (Mat2D, f32, Option<(Mat2D, Mat2D)>);
+
+/// Where a lift draws its copy, from a point of the copy at rest to the
+/// point the lift draws it at: in the copy's own Screen's drawing space,
+/// `row⁻¹ · upper · lift`, which a hit reads, and in the page's,
+/// `upper · lift · row⁻¹`, which a semantic bound or a field's geometry
+/// reads (css_layout/lift.rs). None when the row can't be inverted.
+fn drawn_map(upper: Mat2D, lift: Mat2D, row: Mat2D) -> Option<(Mat2D, Mat2D)> {
+    let row_inverse = Wide::of(row).inverse()?;
+    let on = Wide::of(upper) * Wide::of(lift);
+    let drawn = (row_inverse * on).narrow();
+    let page = (on * row_inverse).narrow();
+    [drawn, page]
+        .iter()
+        .all(|map| map.values().iter().all(|v| v.is_finite()))
+        .then_some((drawn, page))
 }
 
 /// A lift's transform, `upper⁻¹ · pose · own⁻¹ · row`: from the copy's own

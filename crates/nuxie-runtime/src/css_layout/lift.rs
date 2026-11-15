@@ -19,7 +19,7 @@ use crate::source::{
     artboard::{Artboard, FlightClip},
     core::CoreHandle,
     drawable::{DrawableProxy, ProxyDrawing, RuntimeDrawableOccurrence},
-    math::mat2d::Mat2D,
+    math::{mat2d::Mat2D, vec2d::Vec2D},
     renderer::Renderer,
 };
 use std::{cell::RefCell, collections::HashSet, rc::Rc};
@@ -49,6 +49,17 @@ pub(crate) struct LiftState {
     /// The copy's entries in its Screen's draw order, set by its sort.
     pub(crate) entries: Vec<RuntimeDrawableOccurrence>,
     pub(crate) picture: GroupPicture,
+    /// Where the lift draws the copy, in the copy's own Screen's drawing
+    /// space: from a point of the copy at rest to where it is drawn now.
+    /// None while the lift can't be solved and draws nothing.
+    drawn: Option<Mat2D>,
+    /// `drawn`'s inverse: from where a pointer is on the copy's own Screen
+    /// to the point of the copy at rest under it.
+    hit: Option<Mat2D>,
+    /// `drawn` in the page's space: from where the page shows a point of the
+    /// copy at rest to where it shows it drawn, which a semantic bound or a
+    /// field's geometry, read through its Screen's root, takes last.
+    page: Option<Mat2D>,
     /// This lift's entry in the upper Screen's list.
     entry: Option<RuntimeDrawableOccurrence>,
 }
@@ -56,7 +67,67 @@ pub(crate) struct LiftState {
 #[derive(Clone)]
 pub(crate) struct Lift(pub(crate) Rc<RefCell<LiftState>>);
 
+impl LiftState {
+    /// The Pose barrier's map of where the lift draws its copy
+    /// (live_move/in_place.rs, `drawn_map`).
+    /// Returns whether where the lift draws the copy changed.
+    pub(crate) fn set_drawn(&mut self, maps: Option<(Mat2D, Mat2D)>) -> bool {
+        self.hit = maps.and_then(|(drawn, _)| {
+            let mut hit = Mat2D::default();
+            drawn.invert(&mut hit).then_some(hit)
+        });
+        let maps = maps.filter(|_| self.hit.is_some());
+        let before = self.drawn;
+        self.drawn = maps.map(|(drawn, _)| drawn);
+        self.page = maps.map(|(_, page)| page);
+        self.drawn != before
+    }
+}
+
+/// Asks the semantic tree to read again where `element`'s nodes are, as a
+/// lift starts drawing it elsewhere, moves it or stops: the nearest node at
+/// or above the element and every node under that. Nothing else tells it,
+/// since the copy's own world never moves.
+pub(crate) fn semantics_moved(element: &CoreHandle) {
+    use crate::mechanical_port::source::semantic::semantic_data::SemanticData;
+    let Some(node) = SemanticData::find_closest_semantic_node_handle(Some(element.clone())) else {
+        return;
+    };
+    let (manager, id) = {
+        let node = node.borrow();
+        (node.manager(), node.id())
+    };
+    if let Some(manager) = manager {
+        manager.with_semantic_manager_mut(|manager| manager.mark_boundary_dirty(id));
+    }
+}
+
 impl Lift {
+    /// The point of the copy at rest under `position`, a pointer on its own
+    /// Screen; None while the lift draws nothing.
+    pub(crate) fn hit_position(&self, position: Vec2D) -> Option<Vec2D> {
+        self.0.borrow().hit.map(|hit| hit * position)
+    }
+
+    /// Where the lift draws the copy, in the page's space: None while it
+    /// draws nothing.
+    pub(crate) fn page(&self) -> Option<Mat2D> {
+        self.0.borrow().page
+    }
+
+    /// Where the lift draws the copy, in its own Screen's drawing space:
+    /// None while it draws nothing.
+    pub(crate) fn drawn(&self) -> Option<Mat2D> {
+        self.0.borrow().drawn
+    }
+
+    /// Whether the lift draws its copy now: it is solved, at an opacity
+    /// above 0.
+    pub(crate) fn shows(&self) -> bool {
+        let state = self.0.borrow();
+        state.drawn.is_some() && state.opacity > 0.0
+    }
+
     pub(crate) fn new(row: CoreHandle, element: CoreHandle, anchor: CoreHandle) -> Self {
         Self(Rc::new(RefCell::new(LiftState {
             row,
@@ -69,6 +140,9 @@ impl Lift {
             clip_space: Mat2D::identity(),
             entries: Vec::new(),
             picture: GroupPicture::default(),
+            drawn: None,
+            hit: None,
+            page: None,
             entry: None,
         })))
     }
@@ -124,6 +198,83 @@ pub(crate) fn lift_of(entry: &RuntimeDrawableOccurrence) -> Option<Lift> {
     entry
         .with_proxy(|proxy| proxy.proxy_drawing().lift())
         .flatten()
+}
+
+/// The lift that draws `component`, a copy flying in place or a part of
+/// one, read from its Screen's lifts and, inside a placement, its hosts';
+/// None outside a step's lifts, at the cost of one look at each artboard
+/// above it.
+pub(crate) fn lift_around(component: &CoreHandle) -> Option<Lift> {
+    let mut node = Some(component.clone());
+    let mut visited = 0;
+    while let Some(current) = node {
+        visited += 1;
+        if visited > 64 {
+            return None;
+        }
+        let artboard = current
+            .with(|object| match object.as_artboard() {
+                Some(_) => Some(current.clone()),
+                None => object.as_component()?.artboard_handle(),
+            })
+            .flatten()?;
+        let away = artboard
+            .with_downcast::<Artboard, _>(|artboard| {
+                let lifts = artboard.lifts.try_borrow().ok()?;
+                (!lifts.away.is_empty()).then(|| lifts.away.clone())
+            })
+            .flatten();
+        if let Some(away) = away {
+            let mut inner = Some(current.clone());
+            while let Some(here) = inner {
+                if here == artboard {
+                    break;
+                }
+                if let Some(lift) = away.iter().find(|lift| lift.0.borrow().element == here) {
+                    return Some(lift.clone());
+                }
+                inner = here
+                    .with(|object| object.component_parent_handle())
+                    .flatten();
+            }
+        }
+        // Past this artboard: its host, on the artboard that places it.
+        node = artboard
+            .with_downcast::<Artboard, _>(Artboard::host)
+            .flatten();
+    }
+    None
+}
+
+/// What a lift does to where the page shows `component`: nothing, outside
+/// one; its page map, inside one that draws; or nothing shown, inside one
+/// that draws nothing.
+pub(crate) enum Lifted {
+    No,
+    Drawn(Mat2D),
+    Hidden,
+}
+
+impl Lifted {
+    pub(crate) fn of(component: &CoreHandle) -> Self {
+        match lift_around(component) {
+            None => Self::No,
+            Some(lift) => match lift.page() {
+                Some(page) => Self::Drawn(page),
+                None => Self::Hidden,
+            },
+        }
+    }
+
+    /// Where the page shows `point`, a point it shows of the copy at rest;
+    /// None when the lift draws nothing.
+    pub(crate) fn point(&self, point: Vec2D) -> Option<Vec2D> {
+        match self {
+            Self::No => Some(point),
+            Self::Drawn(page) => Some(*page * point),
+            Self::Hidden => None,
+        }
+    }
 }
 
 /// Whether `entry` draws for `element`, an element of the artboard `root`:
@@ -242,6 +393,9 @@ pub(crate) fn set_opacity_root(element: &CoreHandle, root: OpacityRoot) {
     use crate::source::component_dirt::ComponentDirt;
     let changed = element
         .with_mut(|object| {
+            if let Some(component) = object.as_component_mut() {
+                component.lift_root = root != OpacityRoot::None;
+            }
             let transform = object.as_transform_component_mut()?;
             let changed = transform.opacity_root != root;
             transform.opacity_root = root;

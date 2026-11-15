@@ -3165,3 +3165,398 @@ fn a_video_in_a_mask_run_reads_as_the_marks_around_its_run() {
         scene.close();
     }
 }
+
+/// `InPlaceFixture::Field` played on its page: a card flying in place from
+/// A to B by step "t1", each copy holding a field "edit a" or "edit b", a
+/// button and a video "clip a" or "clip b"; B also holds a plain video
+/// "plain". B's card rests 100 right and 60 down in its Screen, so its
+/// copy moves as it flies; each copy's field and button sit at its card's
+/// corner, so half way both copies' are midway between where they rest.
+unsafe fn in_place_field_page() -> (LiveScene, nuxie::RuntimeArtboardInstanceHandle) {
+    unsafe {
+        let scene = LiveScene::from_bytes_named(
+            &fixture::in_place_fixture(fixture::InPlaceFixture::Field),
+            "Page",
+        );
+        let root = page_root(&scene);
+        (scene, root)
+    }
+}
+/// Writes `progress` to every flight record on the page's Screens.
+fn set_in_place_progress(root: &nuxie::RuntimeArtboardInstanceHandle, progress: f32) {
+    for row in nuxie::live_move::screens(root).unwrap().values() {
+        for record in
+            row.with_artboard(|b| b.find_all_handles::<nuxie::live_move::records::LiveFlight>())
+        {
+            assert!(
+                nuxie::runtime::generated::core_registry::CoreRegistry::set_double_handle(
+                    &record, 62033, progress
+                )
+            );
+        }
+    }
+}
+/// The semantic node of role `role` on Screen `screen`'s card.
+fn in_place_node(
+    root: &nuxie::RuntimeArtboardInstanceHandle,
+    screen: &str,
+    role: u32,
+) -> nuxie::runtime::semantic::semantic_node::SemanticNodeRef {
+    use nuxie::runtime::semantic::semantic_data::SemanticData;
+    let rows = nuxie::live_move::screens(root).unwrap();
+    rows[screen]
+        .with_artboard(|b| b.find_all_handles::<SemanticData>())
+        .iter()
+        .find_map(|h| {
+            h.with_downcast::<SemanticData, _>(|d| d.existing_semantic_node())
+                .flatten()
+                .filter(|n| n.borrow().role == role)
+        })
+        .unwrap_or_else(|| panic!("no node of role {role} on {screen}"))
+}
+/// The page's semantic snapshot, presented: each node's id, parent, role
+/// and state.
+unsafe fn in_place_snapshot(player: *mut NuxPlayer) -> (*mut NuxSemanticSnapshot, Vec<NuxSemanticNodeView>) {
+    unsafe {
+        let revision = (&(*player).artboard).render_revision.get();
+        assert_eq!(
+            nux_player_acknowledge_presented(player, revision),
+            NuxStatus::Ok
+        );
+        let mut snapshot = ptr::null_mut();
+        assert_eq!(
+            nux_player_semantic_snapshot(player, &mut snapshot),
+            NuxStatus::Ok
+        );
+        let mut info = NuxSemanticSnapshotInfo {
+            struct_size: std::mem::size_of::<NuxSemanticSnapshotInfo>() as u32,
+            ..Default::default()
+        };
+        assert_eq!(
+            nux_semantic_snapshot_info(snapshot, &mut info),
+            NuxStatus::Ok
+        );
+        let nodes = (0..info.node_count)
+            .map(|i| {
+                let mut node = NuxSemanticNodeView {
+                    struct_size: std::mem::size_of::<NuxSemanticNodeView>() as u32,
+                    ..Default::default()
+                };
+                assert_eq!(
+                    nux_semantic_snapshot_node(snapshot, i, &mut node),
+                    NuxStatus::Ok
+                );
+                node
+            })
+            .collect();
+        (snapshot, nodes)
+    }
+}
+
+/// In place, design T21: a video in a lifted copy reads visible with its
+/// Screen at 0, at take-off, held at progress 0 and at the step's end, on
+/// both Screens; B's plain video reads hidden with B at 0.
+#[test]
+fn in_place_a_video_in_a_flight_stays_visible_with_its_screen_at_zero() {
+    unsafe {
+        let (scene, root) = in_place_field_page();
+        step_ok(scene.player);
+        for clip in ["clip a", "clip b", "plain"] {
+            assert_eq!(
+                video_visible(scene.player, video_named(scene.player, clip)),
+                1,
+                "{clip} at rest, its Screen at 1"
+            );
+        }
+        let t = view("t1");
+        assert_eq!(
+            nux_player_step_begin(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        let visible = |when: &str| {
+            for clip in ["clip a", "clip b"] {
+                assert_eq!(
+                    video_visible(scene.player, video_named(scene.player, clip)),
+                    1,
+                    "{clip}, {when}"
+                );
+            }
+        };
+        visible("with its Screen at 1");
+        set_screen_opacity(&root, "A", 0.0);
+        set_screen_opacity(&root, "B", 0.0);
+        visible("at take-off, with its Screen at 0");
+        assert_eq!(
+            video_visible(scene.player, video_named(scene.player, "plain")),
+            0,
+            "the plain video, with Screen B at 0"
+        );
+        for frame in 0..3 {
+            set_in_place_progress(&root, 0.0);
+            step_ok(scene.player);
+            visible(&format!("held at progress 0, frame {frame}"));
+        }
+        set_in_place_progress(&root, 1.0);
+        step_ok(scene.player);
+        visible("at the step's end, progress 1");
+        assert_eq!(
+            nux_player_step_end(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        scene.close();
+    }
+}
+
+/// In place, design T21 below 0: a lifted copy's video reads visible with
+/// its Screen at any fade at or below 0, and B's plain video hidden.
+#[test]
+fn in_place_a_video_in_a_flight_stays_visible_with_its_screen_below_zero() {
+    unsafe {
+        let (scene, root) = in_place_field_page();
+        let t = view("t1");
+        assert_eq!(
+            nux_player_step_begin(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        step_ok(scene.player);
+        let clip = video_named(scene.player, "clip b");
+        let plain = video_named(scene.player, "plain");
+        for fade in [-0.25, f32::NEG_INFINITY] {
+            set_screen_opacity(&root, "B", fade);
+            assert_eq!(video_visible(scene.player, clip), 1, "clip b, B at {fade}");
+            assert_eq!(video_visible(scene.player, plain), 0, "plain, B at {fade}");
+        }
+        scene.close();
+    }
+}
+
+/// In place, design T21: an action on a lifted copy stays eligible with its
+/// Screen at 0, on both Screens.
+#[test]
+fn in_place_an_action_on_a_flight_stays_eligible_with_its_screen_at_zero() {
+    use nuxie::runtime::semantic::semantic_node::SemanticNode;
+    unsafe {
+        let (scene, root) = in_place_field_page();
+        assert_eq!(nux_player_enable_semantics(scene.player), NuxStatus::Ok);
+        let t = view("t1");
+        assert_eq!(
+            nux_player_step_begin(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        step_ok(scene.player);
+        for screen in ["A", "B"] {
+            assert!(
+                SemanticNode::is_action_eligible(&in_place_node(&root, screen, 1)),
+                "{screen}'s button with its Screen at 1"
+            );
+            set_screen_opacity(&root, screen, 0.0);
+            assert!(
+                SemanticNode::is_action_eligible(&in_place_node(&root, screen, 1)),
+                "{screen}'s button with its Screen at 0"
+            );
+        }
+        scene.close();
+    }
+}
+
+/// In place the C API's snapshot keeps one field per copy and the focus:
+/// at rest, begun, half way and landed, every node has one id, both fields
+/// read as fields, A's focused field reads focused, and the tree (ids,
+/// parents, roles) never changes.
+#[test]
+fn in_place_live_moves_semantic_snapshot_keeps_one_field_and_focus() {
+    use nuxie::runtime::{focus_data::FocusData, text::text_input::TextInput};
+    use std::collections::HashSet;
+    unsafe {
+        for focused in [false, true] {
+            let (scene, root) = in_place_field_page();
+            assert_eq!(nux_player_enable_semantics(scene.player), NuxStatus::Ok);
+            step_ok(scene.player);
+            let rows = nuxie::live_move::screens(&root).unwrap();
+            let field_id = in_place_node(&root, "A", 6).borrow().id();
+            if focused {
+                let node = rows["A"].with_artboard(|b| b.find_all_handles::<FocusData>())[0]
+                    .with_downcast::<FocusData, _>(|f| f.existing_focus_node())
+                    .flatten()
+                    .unwrap();
+                let manager = rows["A"].with_artboard(|b| b.focus_manager()).unwrap();
+                manager.with_focus_manager_mut(|m| m.set_focus(node));
+                let text = rows["A"]
+                    .with_artboard(|b| b.find_handle::<TextInput>("edit a"))
+                    .unwrap();
+                assert!(text.with_downcast::<TextInput, _>(|t| t.is_focused()).unwrap());
+                step_ok(scene.player);
+            }
+            let tree = |when: &str| {
+                let (snapshot, nodes) = in_place_snapshot(scene.player);
+                assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+                let unique: HashSet<_> = nodes.iter().map(|n| n.id).collect();
+                assert_eq!(unique.len(), nodes.len(), "{when}: duplicate ids");
+                assert_eq!(
+                    nodes
+                        .iter()
+                        .filter(|n| n.role == NUX_SEMANTIC_ROLE_TEXT_FIELD)
+                        .count(),
+                    2,
+                    "{when}: one field per copy"
+                );
+                assert_eq!(
+                    nodes.iter().find(|n| n.id == field_id).unwrap().state_flags
+                        & NUX_SEMANTIC_STATE_FOCUSED
+                        != 0,
+                    focused,
+                    "{when}: A's field's focus"
+                );
+                let mut tree: Vec<_> = nodes.iter().map(|n| (n.id, n.parent_id, n.role)).collect();
+                tree.sort();
+                tree
+            };
+            let at_rest = tree("at rest");
+            let t = view("t1");
+            assert_eq!(
+                nux_player_step_begin(scene.player, view("B"), &t),
+                NuxStatus::Ok
+            );
+            step_ok(scene.player);
+            assert_eq!(tree("begun"), at_rest, "begun");
+            set_in_place_progress(&root, 0.5);
+            step_ok(scene.player);
+            assert_eq!(tree("half way"), at_rest, "half way");
+            set_in_place_progress(&root, 1.0);
+            step_ok(scene.player);
+            assert_eq!(
+                nux_player_step_end(scene.player, view("B"), &t),
+                NuxStatus::Ok
+            );
+            step_ok(scene.player);
+            assert_eq!(tree("landed"), at_rest, "landed");
+            scene.close();
+        }
+    }
+}
+
+/// In place each video keeps its C API id through a step and back: nothing
+/// is remounted, so the page's three videos have the same ids at rest,
+/// begun, half way, landed, and through a cut back to A.
+#[test]
+fn in_place_live_moves_keep_the_c_api_video_id_reachable() {
+    unsafe {
+        let (scene, root) = in_place_field_page();
+        let mut original = video_ids(scene.player);
+        original.sort();
+        assert_eq!(original.len(), 3, "clip a, clip b and plain");
+        let ids = || {
+            let mut ids = video_ids(scene.player);
+            ids.sort();
+            ids
+        };
+        let t = view("t1");
+        assert_eq!(
+            nux_player_step_begin(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        assert_eq!(ids(), original, "begun");
+        set_in_place_progress(&root, 0.5);
+        step_ok(scene.player);
+        assert_eq!(ids(), original, "half way");
+        set_in_place_progress(&root, 1.0);
+        step_ok(scene.player);
+        assert_eq!(
+            nux_player_step_end(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        assert_eq!(ids(), original, "landed");
+        assert_eq!(
+            nux_player_step_begin(scene.player, view("A"), ptr::null()),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_player_step_end(scene.player, view("A"), ptr::null()),
+            NuxStatus::Ok
+        );
+        assert_eq!(ids(), original, "a cut back to A");
+        scene.close();
+    }
+}
+
+/// In place a field's geometry for the native overlay follows its copy:
+/// half way, each field and its layout ancestor are midway between where
+/// the two rest, at the same size; landed, both are where they rest.
+#[test]
+fn in_place_a_fields_geometry_follows_its_copy_mid_flight() {
+    unsafe {
+        let (scene, root) = in_place_field_page();
+        assert_eq!(nux_player_enable_semantics(scene.player), NuxStatus::Ok);
+        step_ok(scene.player);
+        let geometry = |screen: &str| {
+            let id = in_place_node(&root, screen, 6).borrow().id();
+            let (snapshot, _) = in_place_snapshot(scene.player);
+            let mut out = NuxTextInputGeometry {
+                struct_size: std::mem::size_of::<NuxTextInputGeometry>() as u32,
+                ..Default::default()
+            };
+            let name = format!("edit {}", screen.to_lowercase());
+            assert_eq!(
+                nux_player_text_input_geometry(scene.player, snapshot, id, view(&name), &mut out),
+                NuxStatus::Ok,
+                "{name}'s geometry"
+            );
+            assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+            out
+        };
+        let rest = ["A", "B"].map(geometry);
+        let t = view("t1");
+        assert_eq!(
+            nux_player_step_begin(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        set_in_place_progress(&root, 0.5);
+        step_ok(scene.player);
+        let midway = |of: fn(&NuxTextInputGeometry) -> f32| (of(&rest[0]) + of(&rest[1])) / 2.0;
+        for (index, screen) in ["A", "B"].into_iter().enumerate() {
+            let at = &rest[index];
+            let dx = midway(|g| g.world_transform[4]) - at.world_transform[4];
+            let dy = midway(|g| g.world_transform[5]) - at.world_transform[5];
+            assert!(dx.abs() > 1.0 && dy.abs() > 1.0, "{screen}'s field moves");
+            let now = geometry(screen);
+            let near = |got: f32, want: f32, what: &str| {
+                assert!(
+                    (got - want).abs() < 0.01,
+                    "{screen}'s {what}: {got}, want {want}"
+                );
+            };
+            near(now.world_transform[4], at.world_transform[4] + dx, "field x");
+            near(now.world_transform[5], at.world_transform[5] + dy, "field y");
+            for i in 0..4 {
+                near(now.world_transform[i], at.world_transform[i], "field scale");
+            }
+            near(now.max_x - now.min_x, at.max_x - at.min_x, "field width");
+            near(now.max_y - now.min_y, at.max_y - at.min_y, "field height");
+            assert_eq!(now.has_layout_ancestor, at.has_layout_ancestor);
+            if at.has_layout_ancestor != 0 {
+                near(
+                    now.layout_ancestor_transform[4],
+                    at.layout_ancestor_transform[4] + dx,
+                    "layout ancestor x",
+                );
+                near(
+                    now.layout_ancestor_transform[5],
+                    at.layout_ancestor_transform[5] + dy,
+                    "layout ancestor y",
+                );
+            }
+        }
+        set_in_place_progress(&root, 1.0);
+        step_ok(scene.player);
+        assert_eq!(
+            nux_player_step_end(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        step_ok(scene.player);
+        for (index, screen) in ["A", "B"].into_iter().enumerate() {
+            let now = geometry(screen);
+            assert_eq!(now.world_transform, rest[index].world_transform, "{screen} landed");
+        }
+        scene.close();
+    }
+}

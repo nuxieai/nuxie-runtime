@@ -1512,9 +1512,16 @@ fn determine_flex_base_size(
         }
 
         // nuxie-css: see `column_item_keyword_width`.
+        // nuxie-css: a width the keyword gave from the item's content is the width its
+        // automatic minimum height is found at, so that minimum has the ratio's floor for
+        // that width (Chrome: `width: min-content; aspect-ratio: 0.5; flex-basis: 70px`
+        // around a 40 wide box is 80 tall). A keyword width that came from the item's own
+        // height through its ratio does not give that height back as a minimum.
+        let mut has_keyword_width = false;
         if let Some(width) = column_item_keyword_width(tree, child, constants, available_space) {
             child_known_dimensions.set_cross(dir, Some(width));
             provisional_stretch = false;
+            has_keyword_width = child.size.height.is_none();
         }
         // nuxie-css: a stretched cross size that is not definite is not a size to transfer
         // through the item's ratio (CSS Box Sizing 4 §5.1): the item is measured, and its
@@ -1585,8 +1592,9 @@ fn determine_flex_base_size(
             && (!child.size_style.height.is_stretch() || stretch_height_is_own);
         child.replaced_stretch_awaits_width =
             replaced_without_definite_stretch && !constants.is_row && (!constants.is_wrap || wrapped_line_awaits_width);
-        let probe_known_dimensions = if (child.ratio.is_some() && !child_cross_size_is_definite)
-            || replaced_without_definite_stretch
+        let probe_known_dimensions = if ((child.ratio.is_some() && !child_cross_size_is_definite)
+            || replaced_without_definite_stretch)
+            && !has_keyword_width
         {
             child_known_dimensions.with_cross(dir, child.size.cross(dir))
         } else {

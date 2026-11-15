@@ -582,7 +582,10 @@ impl NestedArtboard {
     /// only drops the schedule.
     pub(crate) fn flush_pending_stateful_binding_occurrence(owner: &CoreHandle) {
         let bind = owner
-            .with_downcast_mut::<Self, _>(|host| {
+            .with_mut(|host| {
+                // Any host kind: a layout or leaf placement is a
+                // NestedArtboard too.
+                let host = host.as_nested_artboard_mut()?;
                 if host.has_host_flag(NestedArtboardHostFlags::PENDING_STATEFUL_BINDING) {
                     host.take_stateful_bind()
                 } else {
@@ -805,7 +808,12 @@ impl NestedArtboard {
         if let Some(bind) = stateful {
             bind.run();
         }
-        owner.with_downcast_mut::<Self, _>(|nested| nested.add_dirt(ComponentDirt::FILTHY));
+        owner.with_mut(|owner| {
+            owner
+                .as_nested_artboard_mut()
+                .expect("NestedArtboard host")
+                .add_dirt(ComponentDirt::FILTHY);
+        });
         Some(instance)
     }
 

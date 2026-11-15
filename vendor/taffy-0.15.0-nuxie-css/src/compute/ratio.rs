@@ -271,7 +271,10 @@ pub(crate) fn minimum_ratio_width_with_keywords(
 /// [`minimum_ratio_width_at`] for a grid item. `area_height` is the border-box height an
 /// automatic height stretches to in its grid area, where that is known: it transfers as a
 /// height of the item's own does. `keyword_width` is as in
-/// [`minimum_ratio_width_with_keywords`].
+/// [`minimum_ratio_width_with_keywords`]; with it, a percentage width with no width to
+/// resolve against is an automatic one (Chrome: in a 60 tall row and a `min-content`
+/// column, `aspect-ratio: 2; align-self: stretch; width: 50%` around a 300 wide box makes
+/// the column 300 wide).
 pub(crate) fn minimum_ratio_width_in(
     tree: &mut impl crate::LayoutPartialTree,
     node: crate::NodeId,
@@ -286,7 +289,8 @@ pub(crate) fn minimum_ratio_width_in(
     let overflow = style.overflow();
     if style.aspect_ratio().is_none()
         || !(style.size().width.is_auto()
-            || (keyword_width && style.size().width.is_sizing_keyword() && !style.size().width.is_stretch()))
+            || (keyword_width && style.size().width.is_sizing_keyword() && !style.size().width.is_stretch())
+            || (keyword_width && parent.width.is_none() && style.size().width.into_raw().uses_percentage()))
         || !style.min_size().width.is_auto()
         || style.is_compressible_replaced()
         || overflow.x.is_scroll_container()

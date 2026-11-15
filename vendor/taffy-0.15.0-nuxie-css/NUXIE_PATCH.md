@@ -1945,3 +1945,31 @@ differences and that were taken out again (`h0430`, `h0669`, `h1966`, `h2396`, `
 `min-height: 0` wrapping column in a container with a `max-height`, left for later.
 Guard rows: 43.
 
+## A ratio item stretched in a row is as wide as its content
+
+A ratio box with a height and no width is at least as wide as its content (the automatic
+minimum of CSS Sizing 4). The fork gave a grid item that minimum for a height of its own
+but not for the height `align-self: stretch` gives it. Chrome counts an explicit
+`stretch` as a height (`may_apply_aspect_ratio` in `ComputeInlineSizeForFragmentInternal`:
+the block size is the item's own or comes from an explicit stretch), and `normal`
+alignment as none: there the width stretches and the ratio gives the height.
+
+Three changes, one rule:
+
+- Final size (`align_and_position_item`): the height an explicit `align-self: stretch`
+  gives goes into the automatic minimum width.
+- Row contribution (`block_contribution_known_dimensions`): a ratio item whose width is
+  not stretched gives its rows the height its content width gives through the ratio for
+  every block alignment. Explicit `stretch` was the one alignment left out.
+- Column contribution (`minimum_ratio_width_in`): a percentage width with no width to
+  resolve against is automatic, so it has the minimum.
+
+Example: a 400 wide grid with a 60 tall row; `aspect-ratio: 2; align-self: stretch`
+around a 300 wide box. Chrome: 300 by 60. Before: 120 by 60. With `justify-self: start`
+and an automatic row in an 80 tall grid, Chrome makes the row and the item 150 tall
+(300 wide content through the ratio); before, 80.
+
+Of the 32,600 compared layouts, 387 differ from Chrome (409 before): 22 fixed, none
+regressed. Of 1,640 new probes (ratio items in set, automatic and flexible rows, with
+alignment, size, margin and limit variants), all match (98 differed before). Guard
+rows: 22.

@@ -344,16 +344,6 @@ impl GridItem {
         self.size.height.is_auto() && self.ratio_floors_unsized_height
     }
 
-    /// nuxie-css: whether the item's width follows the height of its area through its ratio
-    /// (`ratio_stretched_width` in `alignment.rs`): a ratio item with `normal` block
-    /// alignment, an automatic height and a width that is not stretched.
-    fn width_follows_area_height(&self) -> bool {
-        self.align_self.keyword == AlignItemsKeyword::Normal
-            && !self.margin.top.is_auto()
-            && !self.margin.bottom.is_auto()
-            && self.ratio_width_is_not_stretched()
-    }
-
     /// nuxie-css: whether the item's own content gives its width and its ratio then gives
     /// its height: a ratio item with an automatic height that is stretched in neither axis
     /// (Chrome: `aspect-ratio: 2; align-self: start; justify-self: start` around a 300-wide
@@ -380,12 +370,13 @@ impl GridItem {
                         || self.margin.right.is_auto())))
     }
 
-    /// nuxie-css: the known dimensions for a block-axis contribution. An item whose width
-    /// follows its area's height gives its rows the height its own content width gives
-    /// through the ratio (Chrome: `aspect-ratio: 2; width: max-content` around a 300-wide
-    /// child makes a `max-content` row 150 tall). Its area is then at least that tall where
-    /// the rows take the contribution, and the width the area gives is at least the content
-    /// width.
+    /// nuxie-css: the known dimensions for a block-axis contribution. A ratio item with an
+    /// automatic height and a width that is not stretched gives its rows the height its own
+    /// content width gives through the ratio, whatever its block alignment (Chrome:
+    /// `aspect-ratio: 2; width: max-content` around a 300-wide child makes a `max-content`
+    /// row 150 tall, with `align-self: stretch` too). Its area is then at least that tall
+    /// where the rows take the contribution, and the width the area gives is at least the
+    /// content width.
     fn block_contribution_known_dimensions(
         &self,
         axis: AbstractAxis,
@@ -397,7 +388,7 @@ impl GridItem {
         if axis != AbstractAxis::Block
             || known_dimensions.width.is_some()
             || known_dimensions.height.is_some()
-            || !(self.width_follows_area_height() || self.ratio_follows_content_width())
+            || !self.ratio_width_is_not_stretched()
         {
             return known_dimensions;
         }

@@ -468,8 +468,19 @@ pub(super) fn align_and_position_item(
 
     // nuxie-css: a ratio box with a height and no width is at least as wide as its content
     // (`minimum_ratio_width`, Exact's patch 58), above what a `max-height` transfers.
+    // A height an explicit `align-self: stretch` gives counts as a height of the item's
+    // own (Chrome: in a 60 tall row, `aspect-ratio: 2; align-self: stretch` around a 300
+    // wide box is 300 wide; with `normal` alignment the width stretches instead).
     let ratio_min = if stretch_width.is_none() {
-        crate::compute::ratio::minimum_ratio_width_with_keywords(tree, node, containing_block_size.map(Some), None)
+        crate::compute::ratio::minimum_ratio_width_in(
+            tree,
+            node,
+            containing_block_size.map(Some),
+            None,
+            None,
+            stretch_height,
+            true,
+        )
     } else {
         None
     };

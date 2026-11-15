@@ -1921,3 +1921,27 @@ changed, so the grid keeps the width of the first pass.
 The 32,600 compared layouts are unchanged. Of the shrink-to-fit grid probes, 10 more
 match (flex factors below one around boxes); none moves away. Guard rows: 10.
 
+## A wrapping column has one content height
+
+Stock gives a wrapping column asked for its min-content height the height of its tallest
+item (every item on its own line), as a wrapping row's min-content width is its widest
+item. A flex or grid container uses that as the column's automatic minimum height, so a
+wrapping column with no height of its own shrank to its container's height and wrapped
+there.
+
+In CSS only widths have a narrower content size; a box's min-content height is its
+max-content height. The min-content height request is now answered as a max-content one
+for a wrapping column (`compute_preliminary`): all items in one column. Chrome's
+automatic minimum then keeps the column at that height.
+
+Example: a wrapping column around a 60 and an 80 tall box, inside a 100 tall column or
+grid. Chrome: 140 tall, one column, overflowing. Before: 100 tall, two columns. With
+`min-height: 0` on it Chrome shrinks it to 100 and wraps, as before and now.
+
+Of the 32,600 compared layouts, 409 differ from Chrome (432 before): 23 fixed, none
+regressed. Six of them are rows that an earlier change had recorded as deliberate
+differences and that were taken out again (`h0430`, `h0669`, `h1966`, `h2396`, `h2600`,
+`h3626`). Of 630 new probes, 23 differ (144 before): 14 are sub-pixel and 9 are a
+`min-height: 0` wrapping column in a container with a `max-height`, left for later.
+Guard rows: 43.
+

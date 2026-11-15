@@ -2145,3 +2145,22 @@ Before: 40 by 40.
 Of the 32,600 compared layouts, 311 differ from Chrome (315 before): 4 fixed, none
 regressed. Of 1,485 new probes, 45 differ (132 before); of the 1,910 probes of the
 sections above, 8 differ (44 before). Guard rows: 30.
+
+## A column item's minimum height counts its ratio at a keyword width
+
+A column item with `width: min-content`, `max-content` or `fit-content` has its width
+from its content before its height is found. Its automatic minimum height is its
+content height at that width, and with an `aspect-ratio` that is at least the height
+the ratio gives the width. The fork measured the minimum without the keyword width when
+the item had a ratio, so the ratio's floor was missing and a smaller `flex-basis` made
+the item shorter than Chrome does.
+
+The minimum is now measured at the keyword width (`determine_flex_base_size`) unless
+the item has a height of its own, where the keyword width itself comes from that height.
+
+Example: a column around `width: min-content; aspect-ratio: 0.5; flex-basis: 70px`
+holding a 40 by 40 box. Chrome: the item is 40 by 80. Before: 40 by 70.
+
+Of the 32,600 compared layouts, 311 differ from Chrome, as before: none fixed, none
+regressed. Of the 1,485 probes of the section above, 27 differ (45 before). Guard
+rows: 18.

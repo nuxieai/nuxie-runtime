@@ -8525,6 +8525,10 @@ fn cpp_custom_import_methods_are_tracked_by_binary_import_model() {
         // import outcome is unchanged; nuxie-runtime owns the features.
         "Text",
         "TextStyle",
+        // Upstream 0238f2995: needs a BackboardImporter, registers as an
+        // artboard referencer (cpp_artboard_referencer_index), then imports
+        // as a Component.
+        "TextStyleGlobal",
         "TransitionComparator",
         "TransitionCondition",
         "TransitionInputCondition",
@@ -8876,10 +8880,19 @@ fn cpp_data_converter_bind_context_methods_are_tracked_by_binary_import_model() 
             .contains("voidbindFromContext(DataContext*dataContext,DataBind*dataBind)override;"),
         "DataConverterGroup bindFromContext override changed; audit RuntimeFile::data_converter_bind_context_effect"
     );
-    assert!(
-        compact_cpp_source(&operation_view_model_header)
-            .contains("voidbindFromContext(DataContext*dataContext,DataBind*dataBind)override;"),
-        "DataConverterOperationViewModel bindFromContext override changed; audit RuntimeFile::data_converter_bind_context_effect"
+    // Upstream 832825dbf: the operation converter holds its operand by
+    // reference, subscribes to it as itself and leaves it on unbind.
+    assert_compact_contains_in_order(
+        &compact_cpp_source(&operation_view_model_header),
+        &[
+            "classDataConverterOperationViewModel:publicDataConverterOperationViewModelBase,publicViewModelValueDependent{",
+            "voidclearSource();",
+            "rcp<ViewModelInstanceNumber>m_source=nullptr;",
+            "voidbindFromContext(DataContext*dataContext,DataBind*dataBind)override;",
+            "voidunbind()override;",
+            "voidaddDirt(ComponentDirtvalue,boolrecurse)override;",
+        ],
+        "DataConverterOperationViewModel bindFromContext, unbind or operand surface changed; audit RuntimeFile::data_converter_bind_context_effect and data_converter_unbind_effect",
     );
     assert!(
         compact_cpp_source(&formula_header)
@@ -8954,16 +8967,72 @@ fn cpp_data_converter_bind_context_methods_are_tracked_by_binary_import_model() 
             operation_view_model_source_path.display()
         )
     });
+    // Upstream 832825dbf: a null context resolves no operand, an operand the
+    // bind still resolves is kept, and any other is left before the new one
+    // is held (RuntimeDataConverterHeldSource). The converter, not the bind,
+    // is the dependent.
     assert_compact_contains_in_order(
         &operation_view_model_bind,
         &[
             "DataConverter::bindFromContext(dataContext,dataBind);",
+            "ViewModelInstanceNumber*source=nullptr;",
+            "if(dataContext!=nullptr){",
             "autopropertyValue=dataContext->getViewModelProperty(m_SourcePathIdsBuffer);",
             "if(propertyValue!=nullptr&&propertyValue->is<ViewModelInstanceNumber>()){",
-            "m_source=propertyValue->as<ViewModelInstanceNumber>();",
-            "m_source->addDependent(dataBind);",
+            "source=propertyValue->as<ViewModelInstanceNumber>();",
+            "if(source==m_source.get()){return;}",
+            "clearSource();",
+            "m_source=ref_rcp(source);",
+            "if(m_source!=nullptr){",
+            "m_source->addDependent(this);",
         ],
         "DataConverterOperationViewModel::bindFromContext changed; audit RuntimeFile::data_converter_bind_context_effect",
+    );
+    let operation_view_model_clear_source = compact_cpp_function_body(
+        &compact_operation_view_model_source,
+        "DataConverterOperationViewModel::clearSource()",
+    )
+    .unwrap_or_else(|| {
+        panic!(
+            "missing DataConverterOperationViewModel::clearSource in {}",
+            operation_view_model_source_path.display()
+        )
+    });
+    assert_eq!(
+        operation_view_model_clear_source,
+        "if(m_source!=nullptr){m_source->removeDependent(this);m_source=nullptr;}",
+        "DataConverterOperationViewModel::clearSource changed; audit RuntimeFile::data_converter_bind_context_effect and data_converter_unbind_effect"
+    );
+    let operation_view_model_unbind = compact_cpp_function_body(
+        &compact_operation_view_model_source,
+        "DataConverterOperationViewModel::unbind()",
+    )
+    .unwrap_or_else(|| {
+        panic!(
+            "missing DataConverterOperationViewModel::unbind in {}",
+            operation_view_model_source_path.display()
+        )
+    });
+    assert_eq!(
+        operation_view_model_unbind, "clearSource();DataConverter::unbind();",
+        "DataConverterOperationViewModel::unbind changed; audit RuntimeFile::data_converter_unbind_effect"
+    );
+    // The operand's dirt reaches the parent bind as before, now through the
+    // converter.
+    let operation_view_model_add_dirt = compact_cpp_function_body(
+        &compact_operation_view_model_source,
+        "DataConverterOperationViewModel::addDirt(ComponentDirtvalue,boolrecurse)",
+    )
+    .unwrap_or_else(|| {
+        panic!(
+            "missing DataConverterOperationViewModel::addDirt in {}",
+            operation_view_model_source_path.display()
+        )
+    });
+    assert_eq!(
+        operation_view_model_add_dirt,
+        "if(m_parentDataBind!=nullptr){m_parentDataBind->addDirt(value,recurse);}",
+        "DataConverterOperationViewModel::addDirt changed; audit operand dirt propagation to the parent bind"
     );
 
     let formula_source = std::fs::read_to_string(&formula_source_path)
@@ -8979,13 +9048,17 @@ fn cpp_data_converter_bind_context_methods_are_tracked_by_binary_import_model() 
             formula_source_path.display()
         )
     });
+    // Upstream 832825dbf: the formula keeps a source the bind still has and
+    // leaves any other before holding the bind's (or null).
     assert_compact_contains_in_order(
         &formula_bind,
         &[
             "DataConverter::bindFromContext(dataContext,dataBind);",
-            "if(dataBind&&dataBind->source()){",
-            "m_source=ref_rcp<ViewModelInstanceValue>(dataBind->source());",
-            "m_source->addDependent(this);",
+            "autosource=dataBind!=nullptr?dataBind->source():nullptr;",
+            "if(source==m_source.get()){return;}",
+            "if(m_source){m_source->removeDependent(this);}",
+            "m_source=ref_rcp(source);",
+            "if(m_source){m_source->addDependent(this);}",
         ],
         "DataConverterFormula::bindFromContext changed; audit RuntimeFile::data_converter_bind_context_effect",
     );
@@ -10125,7 +10198,10 @@ fn cpp_data_bind_container_update_queues_are_tracked_by_binary_import_model() {
     assert_compact_contains_in_order(
         &advance_data_binds,
         &[
-            "if(m_dataBinds.size()==0){returnfalse;}",
+            // Upstream d58a8df9b: walks nothing unless some bind's converter
+            // may advance; RuntimeDataBindContainerAdvanceEffect takes each
+            // bind's mayAdvance answer.
+            "if(!mayAdvanceDataBinds()){returnfalse;}",
             "booldidUpdate=false;",
             "for(auto&dataBind:m_dataBinds){",
             "if(dataBind->advance(elapsedSeconds)){",
@@ -10133,6 +10209,36 @@ fn cpp_data_bind_container_update_queues_are_tracked_by_binary_import_model() {
             "returndidUpdate;",
         ],
         "DataBindContainer::advanceDataBinds changed; audit RuntimeFile::data_bind_container_advance_effect",
+    );
+
+    // Upstream d58a8df9b caches the answer against a global epoch. The effect
+    // model is stateless and takes the current answer per bind, so only the
+    // walk it caches is pinned.
+    let may_advance_data_binds = compact_cpp_function_body(
+        &compact_source,
+        "DataBindContainer::mayAdvanceDataBinds()const",
+    )
+    .unwrap_or_else(|| {
+        panic!(
+            "missing DataBindContainer::mayAdvanceDataBinds in {}",
+            source_path.display()
+        )
+    });
+    assert_compact_contains_in_order(
+        &may_advance_data_binds,
+        &[
+            "autoepoch=sm_mayAdvanceEpoch.load(std::memory_order_relaxed);",
+            "if(m_mayAdvanceEpoch!=epoch){",
+            "m_mayAdvanceDataBinds=false;",
+            "for(autodataBind:m_dataBinds){",
+            "autoconverter=dataBind->converter();",
+            "if(converter!=nullptr&&converter->mayAdvance()){",
+            "m_mayAdvanceDataBinds=true;",
+            "break;",
+            "m_mayAdvanceEpoch=epoch;",
+            "returnm_mayAdvanceDataBinds;",
+        ],
+        "DataBindContainer::mayAdvanceDataBinds changed; audit RuntimeFile::data_bind_container_advance_effect",
     );
 
     let add_data_bind = compact_cpp_function_body(
@@ -10517,6 +10623,9 @@ fn cpp_custom_on_added_methods_are_tracked_by_binary_import_model() {
         "TextStyleAxis::onAddedDirty",
         "TextStyleBackground::onAddedDirty",
         "TextStyleFeature::onAddedDirty",
+        // Upstream 0238f2995: instances the style on artboard instances only;
+        // returns its Super, so always Ok on the file's artboards.
+        "TextStyleGlobal::onAddedClean",
         "TextTargetModifier::onAddedDirty",
         "TextValueRun::onAddedClean",
         "TextValueRun::onAddedDirty",
@@ -11382,6 +11491,10 @@ fn cpp_file_read_loop_matches_import_stack_model() {
         "StateMachineListener::typeKey",
         "StateMachineListenerSingle::typeKey",
         "StateTransition::typeKey",
+        // Upstream 0238f2995: both only take the File (global text styles);
+        // no stack object, so CppImportStack is unchanged.
+        "TextBase::typeKey",
+        "TextStyleGlobalBase::typeKey",
         "TransitionArtboardCondition::typeKey",
         "TransitionFocusCondition::typeKey",
         "TransitionViewModelCondition::typeKey",
@@ -11403,6 +11516,9 @@ fn cpp_file_read_loop_matches_import_stack_model() {
             "caseKeyedProperty::typeKey:{autoimporter=importStack.latest<LinearAnimationImporter>(LinearAnimation::typeKey);if(importer==nullptr){returnImportResult::malformed;}",
             "caseStateMachineLayer::typeKey:{autoartboardImporter=importStack.latest<ArtboardImporter>(ArtboardBase::typeKey);if(artboardImporter==nullptr){returnImportResult::malformed;}",
             "caseDataConverterNumberToList::typeKey:object->as<DataConverterNumberToList>()->file(this);break;",
+            "caseTextStyleGlobalBase::typeKey:object->as<TextStyleGlobal>()->file(this);break;",
+            "caseTextBase::typeKey:",
+            "object->as<Text>()->file(this);break;",
             "caseScriptInputArtboard::typeKey:object->as<ScriptInputArtboard>()->file(this);break;",
             "if(importStack.makeLatest(stackType,std::move(stackObject))!=StatusCode::Ok){",
             "returnImportResult::malformed;}",

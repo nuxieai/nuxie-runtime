@@ -257,6 +257,10 @@ pub struct RuntimeDataBindContainerUnbindEffect {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeDataBindContainerAdvanceEffect {
+    /// Upstream d58a8df9b: `mayAdvanceDataBinds()`, whether some bind's
+    /// converter may advance. When none can, advanceDataBinds returns false
+    /// before walking the binds.
+    pub may_advance_data_binds: bool,
     pub advances_data_bind_ids: Vec<usize>,
     pub did_update: bool,
 }
@@ -304,6 +308,20 @@ pub struct RuntimeDataBindContainerAddDirtyEffect {
     pub sets_dirty_list_flag: bool,
 }
 
+/// What a DataConverterOperationViewModel or DataConverterFormula holds in
+/// `m_source` when `bindFromContext` runs, compared with the value the bind
+/// now resolves (upstream 832825dbf). Other converters hold no source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RuntimeDataConverterHeldSource {
+    /// `m_source` is null.
+    None,
+    /// `m_source` is the value the bind resolves to.
+    Resolved,
+    /// `m_source` is some other value.
+    Other,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeDataConverterBindContextEffect {
@@ -311,10 +329,16 @@ pub struct RuntimeDataConverterBindContextEffect {
     pub owned_data_bind_context_effect: RuntimeDataBindContainerBindContextEffect,
     pub group_child_bind_from_context_converter_ids: Vec<usize>,
     pub operation_view_model_uses_source_path_lookup: bool,
+    pub operation_view_model_keeps_source: bool,
+    pub operation_view_model_removes_previous_source_dependent: bool,
     pub operation_view_model_sets_number_source: bool,
-    pub operation_view_model_adds_data_bind_dependent: bool,
+    pub operation_view_model_clears_source: bool,
+    pub operation_view_model_adds_converter_dependent: bool,
     pub formula_checks_parent_data_bind_source: bool,
+    pub formula_keeps_source: bool,
+    pub formula_removes_previous_source_dependent: bool,
     pub formula_sets_source_from_parent: bool,
+    pub formula_clears_source: bool,
     pub formula_adds_source_dependent: bool,
 }
 
@@ -323,6 +347,8 @@ pub struct RuntimeDataConverterBindContextEffect {
 pub struct RuntimeDataConverterUnbindEffect {
     pub owned_data_bind_unbind_effect: Option<RuntimeDataBindContainerUnbindEffect>,
     pub group_child_unbind_converter_ids: Vec<usize>,
+    pub operation_view_model_removes_source_dependent: bool,
+    pub operation_view_model_clears_source: bool,
     pub formula_removes_source_dependent: bool,
     pub formula_clears_source: bool,
 }
@@ -1225,6 +1251,7 @@ impl RuntimeFile {
         self.cpp_data_converter_output_type(data_converter, &mut BTreeSet::new())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn data_converter_bind_context_effect(
         &self,
         data_converter_index: usize,
@@ -1233,6 +1260,7 @@ impl RuntimeFile {
         has_parent_data_bind: bool,
         parent_has_source: bool,
         operation_view_model_lookup_type: Option<RuntimeDataType>,
+        held_source: RuntimeDataConverterHeldSource,
     ) -> Option<RuntimeDataConverterBindContextEffect> {
         let data_converter = self.data_converter(data_converter_index)?;
         self.data_converter_bind_context_effect_for_object(
@@ -1242,9 +1270,11 @@ impl RuntimeFile {
             has_parent_data_bind,
             parent_has_source,
             operation_view_model_lookup_type,
+            held_source,
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn data_converter_bind_context_effect_for_object(
         &self,
         data_converter: &RuntimeObject,
@@ -1253,6 +1283,7 @@ impl RuntimeFile {
         has_parent_data_bind: bool,
         parent_has_source: bool,
         operation_view_model_lookup_type: Option<RuntimeDataType>,
+        held_source: RuntimeDataConverterHeldSource,
     ) -> Option<RuntimeDataConverterBindContextEffect> {
         self.validate_data_converter(data_converter)?;
 
@@ -1266,28 +1297,29 @@ impl RuntimeFile {
             }
         }
 
-        Some(cpp_data_converter_bind_context_effect(
+        cpp_data_converter_bind_context_effect(
             data_converter,
             &owned_data_bind_context_ids,
             has_data_context,
             has_parent_data_bind,
             parent_has_source,
             operation_view_model_lookup_type,
+            held_source,
             self.cpp_data_converter_group_child_converter_ids(data_converter),
-        ))
+        )
     }
 
     pub fn data_converter_unbind_effect(
         &self,
         data_converter_index: usize,
         owned_data_bind_ids: &[usize],
-        has_formula_source: bool,
+        has_held_source: bool,
     ) -> Option<RuntimeDataConverterUnbindEffect> {
         let data_converter = self.data_converter(data_converter_index)?;
         self.data_converter_unbind_effect_for_object(
             data_converter,
             owned_data_bind_ids,
-            has_formula_source,
+            has_held_source,
         )
     }
 
@@ -1295,20 +1327,21 @@ impl RuntimeFile {
         &self,
         data_converter: &RuntimeObject,
         owned_data_bind_ids: &[usize],
-        has_formula_source: bool,
+        has_held_source: bool,
     ) -> Option<RuntimeDataConverterUnbindEffect> {
         self.validate_data_converter(data_converter)?;
         // Every DataConverter::unbind reaches the base unbindDataBinds; the
-        // Group and Formula overrides call it last since upstream 6951a4b3d.
+        // Group, Formula and (upstream 832825dbf) OperationViewModel
+        // overrides call it last since upstream 6951a4b3d.
         let owned_data_bind_unbind_effect =
             Some(self.data_bind_container_unbind_effect(owned_data_bind_ids)?);
 
-        Some(cpp_data_converter_unbind_effect(
+        cpp_data_converter_unbind_effect(
             data_converter,
             owned_data_bind_unbind_effect,
             self.cpp_data_converter_group_child_converter_ids(data_converter),
-            has_formula_source,
-        ))
+            has_held_source,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2824,12 +2857,29 @@ impl RuntimeFile {
         Some(cpp_data_bind_container_unbind_effect(data_bind_ids))
     }
 
+    /// `converter_may_advance[i]` is whether bind `i` has a converter whose
+    /// `mayAdvance()` holds; `advance_results[i]` is what its `advance` returns
+    /// if the walk runs.
     pub fn data_bind_container_advance_effect(
         &self,
         data_bind_ids: &[usize],
+        converter_may_advance: &[bool],
         advance_results: &[bool],
     ) -> Option<RuntimeDataBindContainerAdvanceEffect> {
-        if data_bind_ids.len() != advance_results.len() {
+        if data_bind_ids.len() != advance_results.len()
+            || data_bind_ids.len() != converter_may_advance.len()
+        {
+            return None;
+        }
+        // A bind whose converter may not advance never reports an advance:
+        // every converter advance override (interpolator, scripted, group)
+        // also answers mayAdvance, and the base advance is advanceDataBinds,
+        // which upstream d58a8df9b gates on the same answer.
+        if converter_may_advance
+            .iter()
+            .zip(advance_results)
+            .any(|(may_advance, did_update)| !*may_advance && *did_update)
+        {
             return None;
         }
         for data_bind_id in data_bind_ids {
@@ -2838,6 +2888,7 @@ impl RuntimeFile {
         }
         Some(cpp_data_bind_container_advance_effect(
             data_bind_ids,
+            converter_may_advance,
             advance_results,
         ))
     }
@@ -6680,12 +6731,24 @@ fn cpp_data_bind_container_unbind_effect(
 
 fn cpp_data_bind_container_advance_effect(
     data_bind_ids: &[usize],
+    converter_may_advance: &[bool],
     advance_results: &[bool],
 ) -> RuntimeDataBindContainerAdvanceEffect {
+    // Upstream d58a8df9b: mayAdvanceDataBinds asks whether some bind's
+    // converter may advance. An empty container has none, so this also
+    // covers the size()==0 exit it replaced.
+    let may_advance_data_binds = converter_may_advance.iter().any(|may_advance| *may_advance);
+    if !may_advance_data_binds {
+        return RuntimeDataBindContainerAdvanceEffect {
+            may_advance_data_binds,
+            advances_data_bind_ids: Vec::new(),
+            did_update: false,
+        };
+    }
     RuntimeDataBindContainerAdvanceEffect {
+        may_advance_data_binds,
         advances_data_bind_ids: data_bind_ids.to_vec(),
-        did_update: !data_bind_ids.is_empty()
-            && advance_results.iter().any(|did_update| *did_update),
+        did_update: advance_results.iter().any(|did_update| *did_update),
     }
 }
 
@@ -6728,6 +6791,38 @@ fn cpp_data_bind_container_add_dirty_effect(
     }
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+struct CppDataConverterSourceRebind {
+    keeps: bool,
+    removes_previous: bool,
+    sets: bool,
+    clears: bool,
+}
+
+/// The source swap DataConverterOperationViewModel and DataConverterFormula
+/// run in bindFromContext since upstream 832825dbf: return early when the
+/// held value is the one the bind resolves; otherwise leave the held value,
+/// then hold the resolved one (or null) and subscribe the converter to it.
+fn cpp_data_converter_source_rebind(
+    held_source: RuntimeDataConverterHeldSource,
+    resolves_source: bool,
+) -> Option<CppDataConverterSourceRebind> {
+    use RuntimeDataConverterHeldSource as Held;
+    let keeps = match (held_source, resolves_source) {
+        // Nothing resolved, so the held value can't be the resolved one.
+        (Held::Resolved, false) => return None,
+        (Held::Resolved, true) | (Held::None, false) => true,
+        (Held::None, true) | (Held::Other, _) => false,
+    };
+    Some(CppDataConverterSourceRebind {
+        keeps,
+        removes_previous: !keeps && held_source == Held::Other,
+        sets: !keeps && resolves_source,
+        clears: !keeps && !resolves_source,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
 fn cpp_data_converter_bind_context_effect(
     data_converter: &RuntimeObject,
     owned_data_bind_context_ids: &[usize],
@@ -6735,17 +6830,36 @@ fn cpp_data_converter_bind_context_effect(
     has_parent_data_bind: bool,
     parent_has_source: bool,
     operation_view_model_lookup_type: Option<RuntimeDataType>,
+    held_source: RuntimeDataConverterHeldSource,
     group_child_converter_ids: Vec<usize>,
-) -> RuntimeDataConverterBindContextEffect {
-    let operation_view_model_uses_source_path_lookup =
-        has_data_context && data_converter.type_name == "DataConverterOperationViewModel";
-    let operation_view_model_sets_number_source = operation_view_model_uses_source_path_lookup
-        && operation_view_model_lookup_type == Some(RuntimeDataType::Number);
+) -> Option<RuntimeDataConverterBindContextEffect> {
+    let is_operation_view_model = data_converter.type_name == "DataConverterOperationViewModel";
     let formula_checks_parent_data_bind_source = data_converter.type_name == "DataConverterFormula";
-    let formula_sets_source_from_parent =
-        formula_checks_parent_data_bind_source && has_parent_data_bind && parent_has_source;
+    if !is_operation_view_model
+        && !formula_checks_parent_data_bind_source
+        && held_source != RuntimeDataConverterHeldSource::None
+    {
+        return None;
+    }
+    // A null context resolves no operand: the converter leaves the one it
+    // held (upstream 832825dbf).
+    let operation_view_model_uses_source_path_lookup = has_data_context && is_operation_view_model;
+    let operation_view_model = if is_operation_view_model {
+        cpp_data_converter_source_rebind(
+            held_source,
+            operation_view_model_uses_source_path_lookup
+                && operation_view_model_lookup_type == Some(RuntimeDataType::Number),
+        )?
+    } else {
+        CppDataConverterSourceRebind::default()
+    };
+    let formula = if formula_checks_parent_data_bind_source {
+        cpp_data_converter_source_rebind(held_source, has_parent_data_bind && parent_has_source)?
+    } else {
+        CppDataConverterSourceRebind::default()
+    };
 
-    RuntimeDataConverterBindContextEffect {
+    Some(RuntimeDataConverterBindContextEffect {
         stores_parent_data_bind: true,
         owned_data_bind_context_effect: cpp_data_bind_container_bind_context_effect(
             owned_data_bind_context_ids,
@@ -6753,28 +6867,46 @@ fn cpp_data_converter_bind_context_effect(
         ),
         group_child_bind_from_context_converter_ids: group_child_converter_ids,
         operation_view_model_uses_source_path_lookup,
-        operation_view_model_sets_number_source,
-        operation_view_model_adds_data_bind_dependent: operation_view_model_sets_number_source,
+        operation_view_model_keeps_source: operation_view_model.keeps,
+        operation_view_model_removes_previous_source_dependent: operation_view_model
+            .removes_previous,
+        operation_view_model_sets_number_source: operation_view_model.sets,
+        operation_view_model_clears_source: operation_view_model.clears,
+        // Upstream 832825dbf subscribes the converter, not the bind; its
+        // addDirt forwards to the parent bind.
+        operation_view_model_adds_converter_dependent: operation_view_model.sets,
         formula_checks_parent_data_bind_source,
-        formula_sets_source_from_parent,
-        formula_adds_source_dependent: formula_sets_source_from_parent,
-    }
+        formula_keeps_source: formula.keeps,
+        formula_removes_previous_source_dependent: formula.removes_previous,
+        formula_sets_source_from_parent: formula.sets,
+        formula_clears_source: formula.clears,
+        formula_adds_source_dependent: formula.sets,
+    })
 }
 
 fn cpp_data_converter_unbind_effect(
     data_converter: &RuntimeObject,
     owned_data_bind_unbind_effect: Option<RuntimeDataBindContainerUnbindEffect>,
     group_child_converter_ids: Vec<usize>,
-    has_formula_source: bool,
-) -> RuntimeDataConverterUnbindEffect {
-    let formula_clears_source =
-        data_converter.type_name == "DataConverterFormula" && has_formula_source;
-    RuntimeDataConverterUnbindEffect {
+    has_held_source: bool,
+) -> Option<RuntimeDataConverterUnbindEffect> {
+    let is_operation_view_model = data_converter.type_name == "DataConverterOperationViewModel";
+    let is_formula = data_converter.type_name == "DataConverterFormula";
+    if has_held_source && !is_operation_view_model && !is_formula {
+        return None;
+    }
+    // Both leave their held source before the base unbind; the
+    // OperationViewModel override is upstream 832825dbf.
+    let operation_view_model_clears_source = is_operation_view_model && has_held_source;
+    let formula_clears_source = is_formula && has_held_source;
+    Some(RuntimeDataConverterUnbindEffect {
         owned_data_bind_unbind_effect,
         group_child_unbind_converter_ids: group_child_converter_ids,
+        operation_view_model_removes_source_dependent: operation_view_model_clears_source,
+        operation_view_model_clears_source,
         formula_removes_source_dependent: formula_clears_source,
         formula_clears_source,
-    }
+    })
 }
 
 fn cpp_data_converter_update_effect(

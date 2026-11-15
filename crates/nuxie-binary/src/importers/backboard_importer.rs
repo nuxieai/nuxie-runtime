@@ -622,10 +622,13 @@ impl RuntimeFile {
     }
 }
 
+/// `ArtboardReferencer::from`'s types. TextStyleGlobal (upstream 0238f2995)
+/// registers in its import and has no nesting artboard.
 fn cpp_artboard_referencer_index(object: &RuntimeObject) -> Option<u64> {
     let definition = definition_by_type_key(object.type_key)?;
-    (cpp_artboard_referencer_has_nesting_artboard(definition)
-        || definition.name == "ScriptInputArtboard")
+    let is_referencer = cpp_artboard_referencer_has_nesting_artboard(definition)
+        || matches!(definition.name, "ScriptInputArtboard" | "TextStyleGlobal");
+    is_referencer
         .then(|| object.uint_property("artboardId"))
         .flatten()
 }

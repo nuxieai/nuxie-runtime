@@ -433,10 +433,10 @@ fn discard(host: &CoreHandle) {
         s.live_move_mut().origin_home = None;
         s.live_move_mut().mounted = None;
         s.reset_mesh_raster();
-        // The mount is gone, so this drops the stateful bind it scheduled.
-        // Kept, it would rebuild the next transported unit's data context.
-        s.flush_pending_stateful_binding();
     });
+    // The mount is gone, so this drops the stateful bind it scheduled.
+    // Kept, it would rebuild the next transported unit's data context.
+    NestedArtboard::flush_pending_stateful_binding_occurrence(host);
 }
 fn sync_layout(host: &CoreHandle) {
     if let Some(parent) = owning_layout(host.with(|o| o.component_parent_handle()).flatten()) {
@@ -558,7 +558,7 @@ fn move_with_props(
     validate_move(from, to)?;
     // A unit whose slot never advanced has not had the bind its mount
     // scheduled. It leaves bound, as that advance would have left it.
-    write(from, NestedArtboard::flush_pending_stateful_binding);
+    NestedArtboard::flush_pending_stateful_binding_occurrence(from);
     let instance = child(from)?.ok_or_else(|| anyhow::anyhow!("source slot is empty"))?;
     remember(from)?;
     remember(to)?;

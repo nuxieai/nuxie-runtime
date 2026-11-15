@@ -363,18 +363,7 @@ pub(super) fn compare_scene(
     ));
     let expected =
         pixel_compare::RgbaImage::read_png(&path).expect("pinned C++ additive GM capture");
-    let report = pixel_compare::compare(&expected, &actual, pixel_compare::Tolerance::EXACT)
-        .expect("matching dimensions");
-    if !report.within_tolerance {
-        let diagnostic = std::env::temp_dir().join(format!("nuxie-{name}-actual.png"));
-        actual.write_png(&diagnostic).expect("GM diagnostic PNG");
-        eprintln!("actual GM pixels: {}", diagnostic.display());
-    }
-    assert!(
-        report.within_tolerance,
-        "{name}: {} differing pixels, max channel delta {}",
-        report.different_pixels, report.max_channel_delta
-    );
+    super::ore_gm_helper::assert_matches_metal_reference(name, &expected, &actual);
 }
 
 #[test]

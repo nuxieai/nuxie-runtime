@@ -181,16 +181,5 @@ fn image_paint() {
         .expect("C++ image_paint reference with approved Metal FMA adaptation");
     let actual = pixel_compare::RgbaImage::new(WIDTH, HEIGHT, render_image_paint())
         .expect("live Rust Metal image_paint frame");
-    let report = pixel_compare::compare(&expected, &actual, pixel_compare::Tolerance::EXACT)
-        .expect("image_paint dimensions");
-    if !report.within_tolerance {
-        let path = std::env::temp_dir().join("nuxie-image_paint-actual.png");
-        actual.write_png(&path).expect("image_paint diagnostic PNG");
-        eprintln!("actual GM pixels: {}", path.display());
-    }
-    assert!(
-        report.within_tolerance,
-        "image_paint differs from C++ reference with approved Metal FMA adaptation: {} pixels, max channel delta {}",
-        report.different_pixels, report.max_channel_delta
-    );
+    super::ore_gm_helper::assert_matches_metal_reference("image_paint", &expected, &actual);
 }

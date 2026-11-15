@@ -46,18 +46,7 @@ pub(super) fn check_position_scene(name: &str, draw: impl Fn(&mut dyn Factory, &
         "../../fixtures/renderer/reference/metal/gm/{name}.png"
     ));
     let expected = pixel_compare::RgbaImage::read_png(reference).expect("pinned C++ GM capture");
-    let result = pixel_compare::compare(&expected, &actual, pixel_compare::Tolerance::EXACT)
-        .expect("same GM dimensions");
-    if !result.within_tolerance {
-        let diagnostic = std::env::temp_dir().join(format!("nuxie-{name}-actual.png"));
-        actual.write_png(&diagnostic).expect("GM diagnostic PNG");
-        eprintln!("actual GM pixels: {}", diagnostic.display());
-    }
-    assert!(
-        result.within_tolerance,
-        "{name}: {} differing pixels, max channel delta {}",
-        result.different_pixels, result.max_channel_delta
-    );
+    super::ore_gm_helper::assert_matches_metal_reference(name, &expected, &actual);
 }
 
 fn draw_position(f: &mut dyn Factory, r: &mut dyn Renderer, clipped: bool) {

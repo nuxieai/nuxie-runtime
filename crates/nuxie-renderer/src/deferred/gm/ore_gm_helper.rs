@@ -69,18 +69,27 @@ pub(super) fn assert_cpp_gm_pixels_with_size(name: &str, width: u32, height: u32
         "../../fixtures/renderer/reference/metal/gm/{name}.png"
     ));
     let expected = pixel_compare::RgbaImage::read_png(path).expect("pinned C++ GM capture");
-    let result = pixel_compare::compare(&expected, &actual, pixel_compare::Tolerance::EXACT)
-        .expect("same GM dimensions");
-    if !result.within_tolerance {
+    assert_matches_metal_reference(name, &expected, &actual);
+}
+
+/// A live Metal frame against its checked-in Metal reference. The references
+/// were captured on one Apple GPU and the frame may be drawn on another, so
+/// this is the shared cross-GPU rule (`GpuTolerance::GPU_EDGES`, UNIV-6384),
+/// not an exact match. Comparisons within one run stay exact.
+pub(super) fn assert_matches_metal_reference(
+    name: &str,
+    expected: &pixel_compare::RgbaImage,
+    actual: &pixel_compare::RgbaImage,
+) {
+    let report =
+        pixel_compare::compare_gpu(expected, actual, pixel_compare::GpuTolerance::GPU_EDGES)
+            .expect("same GM dimensions");
+    if !report.within_tolerance {
         let diagnostic = std::env::temp_dir().join(format!("nuxie-{name}-actual.png"));
         actual.write_png(&diagnostic).expect("GM diagnostic PNG");
         eprintln!("actual GM pixels: {}", diagnostic.display());
     }
-    assert!(
-        result.within_tolerance,
-        "{name}: {} differing pixels, max channel delta {}",
-        result.different_pixels, result.max_channel_delta
-    );
+    assert!(report.within_tolerance, "{name}: {report}");
 }
 
 enum Frame {

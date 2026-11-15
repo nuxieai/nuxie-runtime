@@ -487,7 +487,24 @@ fn compute_preliminary(
     if inputs.sizing_mode == SizingMode::ContentSize && inputs.axis == RequestedAxis::Horizontal
         && tree.get_flexbox_container_style(node).size().width.tag() == CompactLength::FIT_CONTENT_KEYWORD_TAG
     {
-        constants.min_size.width = None;
+        // nuxie-css: the width limits left out here are the authored ones, which the
+        // parent applies after measuring. The width a supplied height gives through the
+        // container's ratio is not one of them: it stays the least content width, as it
+        // is for a `min-content` or `max-content` width (Chrome: a `width: fit-content;
+        // aspect-ratio: 2` row that a column made 40 tall is 80 wide).
+        let style = tree.get_flexbox_container_style(node);
+        let padding = style.padding().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
+        let border = style.border().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
+        let (_, ratio_min_size, _) = container_sizes_through_ratio(
+            &style,
+            padding.sum_axes() + border.sum_axes(),
+            known_dimensions,
+            Size::NONE,
+            Size::NONE,
+            inputs.sizing_mode,
+        );
+        drop(style);
+        constants.min_size.width = ratio_min_size.width;
         constants.max_size.width = None;
     }
 

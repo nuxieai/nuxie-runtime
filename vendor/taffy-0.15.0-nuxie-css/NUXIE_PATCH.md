@@ -2124,3 +2124,24 @@ the picture was 100 by 60 and the column 100 by 60.
 Of the 32,600 compared layouts, 315 differ from Chrome, as before: none fixed, none
 regressed. Of the 1,910 probes of the section above, 44 differ (72 before). Guard
 rows: 28.
+
+## A `fit-content` row keeps the width its height gives through its ratio
+
+A flex container with `width: fit-content` is measured without its authored width
+limits, which its parent applies afterwards. The fork dropped every width minimum for
+that measurement, among them the width a supplied height gives through the container's
+own `aspect-ratio`. So a `fit-content` container with a ratio, given a height by a
+column, stayed as narrow as its content, where the same container with `min-content`
+or `max-content` (and a block or a grid with any of the three) was as wide as the
+ratio made that height.
+
+The measurement (`compute_preliminary`) now keeps that ratio width as the least content
+width and still leaves the authored limits out.
+
+Example: a 300 wide `align-items: flex-start` column around `display: flex; width:
+fit-content; aspect-ratio: 2` holding a 40 by 40 box. Chrome: the row is 80 by 40.
+Before: 40 by 40.
+
+Of the 32,600 compared layouts, 311 differ from Chrome (315 before): 4 fixed, none
+regressed. Of 1,485 new probes, 45 differ (132 before); of the 1,910 probes of the
+sections above, 8 differ (44 before). Guard rows: 30.

@@ -8243,7 +8243,10 @@ mod paint_order {
                         None => Heard(self.screen_machine(row), format!("{unit} hits")),
                     }
                 }
-                _ => Heard(machine(&self.slot(row, flying.unwrap_or(unit))), "hits".into()),
+                _ => Heard(
+                    machine(&self.slot(row, flying.unwrap_or(unit))),
+                    "hits".into(),
+                ),
             }
         }
         /// Taps the page at (x, y) in a frame after an advance, since a
@@ -8518,7 +8521,10 @@ mod paint_order {
         set_row_collapsed(&list, 0, true).unwrap();
         s.advance(0.0);
         let slept = e_draws(&s);
-        assert!(of(&slept, ea).is_empty(), "A's copy sleeps with it: {slept:?}");
+        assert!(
+            of(&slept, ea).is_empty(),
+            "A's copy sleeps with it: {slept:?}"
+        );
         assert_eq!(
             of(&slept, eb),
             [box_outline(40.0, 0.0, 290.0, 100.0)],
@@ -13719,9 +13725,7 @@ fn field_fly_to(page: &InPlacePage, moves: &mut LiveMoves, p: f32) {
 }
 
 /// Every focus node under `roots`, with its parent.
-fn focus_tree(
-    roots: &[source::input::focus_node::FocusNodeRef],
-) -> Vec<(usize, Option<usize>)> {
+fn focus_tree(roots: &[source::input::focus_node::FocusNodeRef]) -> Vec<(usize, Option<usize>)> {
     let mut tree = Vec::new();
     let mut nodes = roots.to_vec();
     while let Some(node) = nodes.pop() {
@@ -13832,7 +13836,10 @@ fn in_place_semantic_subtree_has_one_stable_occurrence_at_every_move_boundary() 
     field_fly_to(&page, &mut moves, 0.5);
     let half_way = snapshot();
     assert_eq!(tree(&half_way), at_rest, "half way");
-    for node in rest.iter().filter(|n| n.label == "button" || n.label == "field") {
+    for node in rest
+        .iter()
+        .filter(|n| n.label == "button" || n.label == "field")
+    {
         let twin = rest
             .iter()
             .find(|n| n.label == node.label && n.id != node.id)

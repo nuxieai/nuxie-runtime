@@ -3216,7 +3216,9 @@ fn in_place_node(
 }
 /// The page's semantic snapshot, presented: each node's id, parent, role
 /// and state.
-unsafe fn in_place_snapshot(player: *mut NuxPlayer) -> (*mut NuxSemanticSnapshot, Vec<NuxSemanticNodeView>) {
+unsafe fn in_place_snapshot(
+    player: *mut NuxPlayer,
+) -> (*mut NuxSemanticSnapshot, Vec<NuxSemanticNodeView>) {
     unsafe {
         let revision = (&(*player).artboard).render_revision.get();
         assert_eq!(
@@ -3429,7 +3431,10 @@ fn in_place_live_moves_semantic_snapshot_keeps_one_field_and_focus() {
                 let text = rows["A"]
                     .with_artboard(|b| b.find_handle::<TextInput>("edit a"))
                     .unwrap();
-                assert!(text.with_downcast::<TextInput, _>(|t| t.is_focused()).unwrap());
+                assert!(
+                    text.with_downcast::<TextInput, _>(|t| t.is_focused())
+                        .unwrap()
+                );
                 step_ok(scene.player);
             }
             let tree = |when: &str| {
@@ -3570,8 +3575,16 @@ fn in_place_a_fields_geometry_follows_its_copy_mid_flight() {
                     "{screen}'s {what}: {got}, want {want}"
                 );
             };
-            near(now.world_transform[4], at.world_transform[4] + dx, "field x");
-            near(now.world_transform[5], at.world_transform[5] + dy, "field y");
+            near(
+                now.world_transform[4],
+                at.world_transform[4] + dx,
+                "field x",
+            );
+            near(
+                now.world_transform[5],
+                at.world_transform[5] + dy,
+                "field y",
+            );
             for i in 0..4 {
                 near(now.world_transform[i], at.world_transform[i], "field scale");
             }
@@ -3600,7 +3613,10 @@ fn in_place_a_fields_geometry_follows_its_copy_mid_flight() {
         step_ok(scene.player);
         for (index, screen) in ["A", "B"].into_iter().enumerate() {
             let now = geometry(screen);
-            assert_eq!(now.world_transform, rest[index].world_transform, "{screen} landed");
+            assert_eq!(
+                now.world_transform, rest[index].world_transform,
+                "{screen} landed"
+            );
         }
         scene.close();
     }

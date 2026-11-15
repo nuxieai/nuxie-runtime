@@ -2639,7 +2639,9 @@ impl HitComponent for HitNestedArtboard {
         if component_is_collapsed(&self.component) || nested_is_paused(&self.component) {
             return false;
         }
-        let Some((local, off_mesh, to_nested)) = nested_mapping(&self.component, &self.lift, position) else {
+        let Some((local, off_mesh, to_nested)) =
+            nested_mapping(&self.component, &self.lift, position)
+        else {
             return false;
         };
         if off_mesh {
@@ -2718,7 +2720,9 @@ impl HitComponent for HitNestedArtboard {
         timestamp: f32,
         pointer_id: i32,
     ) -> HitResult {
-        let Some((local, off_mesh, to_nested)) = nested_mapping(&self.component, &self.lift, position) else {
+        let Some((local, off_mesh, to_nested)) =
+            nested_mapping(&self.component, &self.lift, position)
+        else {
             return HitResult::None;
         };
         let mapped = ScrollEvent {
@@ -2811,7 +2815,8 @@ impl HitComponent for HitNestedArtboard {
         {
             return HitResult::None;
         }
-        let Some((local, off_mesh, _)) = nested_mapping(&self.component, &self.lift, position) else {
+        let Some((local, off_mesh, _)) = nested_mapping(&self.component, &self.lift, position)
+        else {
             return HitResult::None;
         };
         let past_mesh = can_hit && off_mesh;
@@ -2937,7 +2942,8 @@ impl HitComponent for HitNestedArtboard {
         {
             return HitResult::None;
         }
-        let Some((local, off_mesh, _)) = nested_mapping(&self.component, &self.lift, position) else {
+        let Some((local, off_mesh, _)) = nested_mapping(&self.component, &self.lift, position)
+        else {
             return HitResult::None;
         };
         let hit_type = if off_mesh && is_missable_event(hit_type) {
@@ -2972,7 +2978,8 @@ impl HitComponent for HitComponentList {
     }
     fn yield_drag(&self, pointer_id: i32, position: Vec2D, timestamp: f32) {
         for index in component_list_indices(&self.component) {
-            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
+            let Some(local) =
+                component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -2994,7 +3001,8 @@ impl HitComponent for HitComponentList {
             return false;
         }
         for index in component_list_indices(&self.component).into_iter().rev() {
-            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
+            let Some(local) =
+                component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -3012,16 +3020,20 @@ impl HitComponent for HitComponentList {
             return false;
         }
         for index in component_list_indices(&self.component).into_iter().rev() {
-            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
+            let Some(local) =
+                component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
             let Some(machine) = component_list_state_machine(&self.component, index) else {
                 continue;
             };
-            let Some(shifted) =
-                component_list_world_to_local(&self.component, &self.lift, position + event.delta, index)
-            else {
+            let Some(shifted) = component_list_world_to_local(
+                &self.component,
+                &self.lift,
+                position + event.delta,
+                index,
+            ) else {
                 continue;
             };
             let mapped = ScrollEvent {
@@ -3042,7 +3054,8 @@ impl HitComponent for HitComponentList {
             return false;
         }
         for index in component_list_indices(&self.component).into_iter().rev() {
-            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
+            let Some(local) =
+                component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -3063,7 +3076,8 @@ impl HitComponent for HitComponentList {
             return false;
         }
         for index in component_list_indices(&self.component).into_iter().rev() {
-            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
+            let Some(local) =
+                component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -3120,13 +3134,17 @@ impl HitComponent for HitComponentList {
                 if pass == 0 && !machine.with_instance_mut(StateMachineInstance::has_scroll_latch) {
                     continue;
                 }
-                let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
+                let Some(local) =
+                    component_list_world_to_local(&self.component, &self.lift, position, index)
                 else {
                     continue;
                 };
-                let Some(shifted) =
-                    component_list_world_to_local(&self.component, &self.lift, position + event.delta, index)
-                else {
+                let Some(shifted) = component_list_world_to_local(
+                    &self.component,
+                    &self.lift,
+                    position + event.delta,
+                    index,
+                ) else {
                     continue;
                 };
                 let mapped = ScrollEvent {
@@ -3155,7 +3173,8 @@ impl HitComponent for HitComponentList {
             return false;
         }
         for index in component_list_indices(&self.component).into_iter().rev() {
-            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
+            let Some(local) =
+                component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -3173,7 +3192,8 @@ impl HitComponent for HitComponentList {
             return false;
         }
         for index in component_list_indices(&self.component).into_iter().rev() {
-            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
+            let Some(local) =
+                component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -3205,7 +3225,8 @@ impl HitComponent for HitComponentList {
         let mut result = HitResult::None;
         let mut running_can_hit = can_hit;
         for index in component_list_indices(&self.component).into_iter().rev() {
-            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
+            let Some(local) =
+                component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -3331,7 +3352,8 @@ impl HitComponent for HitComponentList {
             return false;
         }
         for index in component_list_indices(&self.component) {
-            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
+            let Some(local) =
+                component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -3367,7 +3389,8 @@ impl HitComponent for HitComponentList {
             if !machine.with_instance(StateMachineInstance::has_capture_listeners) {
                 continue;
             }
-            let Some(local) = component_list_world_to_local(&self.component, &self.lift, position, index)
+            let Some(local) =
+                component_list_world_to_local(&self.component, &self.lift, position, index)
             else {
                 continue;
             };
@@ -4968,11 +4991,10 @@ impl StateMachineInstance {
             })
             .expect("a state machine retains its ArtboardInstance");
         for component in texts {
-            self.hit_components
-                .push(Rc::new(HitTextStyleRuns {
-                    component,
-                    lift: HitLift::default(),
-                }));
+            self.hit_components.push(Rc::new(HitTextStyleRuns {
+                component,
+                lift: HitLift::default(),
+            }));
         }
     }
 
@@ -5891,7 +5913,10 @@ impl StateMachineInstance {
     /// this Screen draws of its own copies, whose hits sort at their lift
     /// entries.
     fn link_lifted_hits(&mut self) -> Vec<crate::css_layout::lift::Lift> {
-        let root = self.artboard_instance.upgrade().map(|artboard| artboard.core_handle());
+        let root = self
+            .artboard_instance
+            .upgrade()
+            .map(|artboard| artboard.core_handle());
         let (away, here) = self
             .artboard_instance
             .with_artboard(|artboard| {

@@ -1306,8 +1306,10 @@ impl NestedArtboard {
             mounted_position = world * *position;
         }
         // Nuxie: as `hit_test_host_handle`, a placement flying in place.
-        if crate::mechanical_port::source::generated::core_registry::CoreCapabilities::as_component(self)
-            .is_some_and(|c| c.lift_root)
+        if crate::mechanical_port::source::generated::core_registry::CoreCapabilities::as_component(
+            self,
+        )
+        .is_some_and(|c| c.lift_root)
         {
             return true;
         }

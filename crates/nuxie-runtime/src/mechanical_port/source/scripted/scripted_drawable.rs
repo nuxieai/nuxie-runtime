@@ -527,7 +527,9 @@ impl crate::mechanical_port::source::animation::state_machine_instance::HitCompo
             .at(position)
             .is_some_and(|position| self.within_bounds(position))
     }
-    fn hit_lift(&self) -> &crate::mechanical_port::source::animation::state_machine_instance::HitLift {
+    fn hit_lift(
+        &self,
+    ) -> &crate::mechanical_port::source::animation::state_machine_instance::HitLift {
         &self.lift
     }
     fn prepare_event(

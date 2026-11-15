@@ -605,15 +605,14 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
             &[("parentId", U(id + 3)), ("colorValue", Color(color))],
         );
     };
-    let boxed_in = |b: &mut Vec<u8>,
-                    parent: u64,
-                    id: u64,
-                    name: &str,
-                    size: (f32, f32),
-                    key: u64,
-                    color: u32| {
-        boxed_turned(b, parent, id, name, size, key, color, 0.0)
-    };
+    let boxed_in =
+        |b: &mut Vec<u8>,
+         parent: u64,
+         id: u64,
+         name: &str,
+         size: (f32, f32),
+         key: u64,
+         color: u32| { boxed_turned(b, parent, id, name, size, key, color, 0.0) };
     let boxed = |b: &mut Vec<u8>, id: u64, name: &str, size: (f32, f32), key: u64, color: u32| {
         boxed_in(b, 0, id, name, size, key, color)
     };
@@ -680,7 +679,11 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
             ); // 4 or 5
             if participant { 6 } else { 5 }
         } else {
-            let turn = if kind == FieldTurned && screen == "A" { 0.4 } else { 0.0 };
+            let turn = if kind == FieldTurned && screen == "A" {
+                0.4
+            } else {
+                0.0
+            };
             boxed_turned(
                 &mut b,
                 0,
@@ -6457,7 +6460,9 @@ impl PaintSpec {
     /// no unit keys, so in place no flight keys or records.
     fn stripped(mut self) -> Self {
         fn strip(els: &mut Vec<PaintEl>) {
-            els.retain(|el| !matches!(el.kind, PaintKind::Flight { .. } | PaintKind::Native { .. }));
+            els.retain(|el| {
+                !matches!(el.kind, PaintKind::Flight { .. } | PaintKind::Native { .. })
+            });
             for el in els.iter_mut() {
                 if let PaintKind::Slot { key, .. } = &mut el.kind {
                     *key = 0;
@@ -7474,10 +7479,21 @@ fn large_spec(same_size: bool) -> PaintSpec {
     const WORDS: &str = "Roasted squash";
     // The font is the file's second asset, after the pictures' one.
     let words = |name: String, css: Css| {
-        PaintEl::new(&name, PaintKind::Words { words: WORDS, font: 1 }, css)
+        PaintEl::new(
+            &name,
+            PaintKind::Words {
+                words: WORDS,
+                font: 1,
+            },
+            css,
+        )
     };
     let name = |text: String| -> &'static str { Box::leak(text.into_boxed_str()) };
-    let tile = if same_size { (24.0, 24.0) } else { (128.0, 48.0) };
+    let tile = if same_size {
+        (24.0, 24.0)
+    } else {
+        (128.0, 48.0)
+    };
     let mut units = Vec::new();
     let (mut rows, mut tiles, mut flights) = (Vec::new(), Vec::new(), Vec::new());
     let (mut go, mut back) = (Vec::new(), Vec::new());
@@ -7489,14 +7505,24 @@ fn large_spec(same_size: bool) -> PaintSpec {
         let mut row = vec![rest(a, a_key, css_at(4.0, 0.0, 24.0, 24.0))];
         let mut cell = vec![rest(b, b_key, css_at(2.0, 2.0, tile.0, tile.1))];
         if i < TEXTS {
-            row.push(words(format!("row text {i}"), css_at(32.0, 3.0, 300.0, 18.0)));
-            cell.push(words(format!("tile text {i}"), css_at(2.0, 52.0, 128.0, 18.0)));
+            row.push(words(
+                format!("row text {i}"),
+                css_at(32.0, 3.0, 300.0, 18.0),
+            ));
+            cell.push(words(
+                format!("tile text {i}"),
+                css_at(2.0, 52.0, 128.0, 18.0),
+            ));
         }
         let top = 25.0 * i as f32;
         rows.push(bx(&format!("row {i}"), css_at(0.0, top, 402.0, 24.0)).kids(row));
         let (column, line) = ((i % 3) as f32, (i / 3) as f32);
         tiles.push(
-            bx(&format!("tile {i}"), css_at(134.0 * column, 76.0 * line, 132.0, 74.0)).kids(cell),
+            bx(
+                &format!("tile {i}"),
+                css_at(134.0 * column, 76.0 * line, 132.0, 74.0),
+            )
+            .kids(cell),
         );
         flights.extend([
             flight_slot(&format!("{a} go"), a, a_key, flight, 1),

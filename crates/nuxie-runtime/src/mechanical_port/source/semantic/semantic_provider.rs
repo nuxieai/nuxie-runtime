@@ -92,8 +92,12 @@ pub(crate) fn legacy_lifted(component: &CoreHandle) -> crate::css_layout::lift::
         return Lifted::No;
     };
     let Some([origin, x, y]) = row.with_downcast_mut::<Artboard, _>(|row| {
-        [Vec2D::new(0.0, 0.0), Vec2D::new(1.0, 0.0), Vec2D::new(0.0, 1.0)]
-            .map(|point| row.root_transform(point))
+        [
+            Vec2D::new(0.0, 0.0),
+            Vec2D::new(1.0, 0.0),
+            Vec2D::new(0.0, 1.0),
+        ]
+        .map(|point| row.root_transform(point))
     }) else {
         return Lifted::No;
     };
@@ -224,7 +228,11 @@ pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
     }
     let lifted = lift.map(|lift| {
         let state = lift.0.borrow();
-        (state.element.clone(), state.row.clone(), state.board.clone())
+        (
+            state.element.clone(),
+            state.row.clone(),
+            state.board.clone(),
+        )
     });
     // Between the copy and its Screen, the Screen included.
     let mut above_lift = false;
@@ -515,7 +523,10 @@ fn walk_rendered_clips(
                 return false;
             };
             let state = lift.0.borrow();
-            (Some(page), Some((state.element.clone(), state.board.clone())))
+            (
+                Some(page),
+                Some((state.element.clone(), state.board.clone())),
+            )
         }
     };
     let mut current = Some(component.clone());

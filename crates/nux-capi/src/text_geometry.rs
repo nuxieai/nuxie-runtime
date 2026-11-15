@@ -223,8 +223,7 @@ pub unsafe extern "C" fn nux_player_text_input_geometry(
             false,
             |occurrence, input| {
                 use nuxie::runtime::{
-                    math::vec2d::Vec2D,
-                    semantic::semantic_provider::drawn_root_transform_point,
+                    math::vec2d::Vec2D, semantic::semantic_provider::drawn_root_transform_point,
                     text::text_input::TextInput,
                 };
                 // A field in a copy flying in place is where its lift draws

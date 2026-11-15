@@ -71,6 +71,9 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
             ScriptedDataConverter::advance_script_occurrence(owner, elapsed) || binds_advanced
         }
     }
+    fn as_scripted_data_converter_mut(&mut self) -> Option<&mut ScriptedDataConverter> {
+        Some(self)
+    }
     fn advance(&mut self, elapsed: f32) -> bool {
         Self::advance(self, elapsed)
     }
@@ -332,9 +335,9 @@ impl ScriptedDataConverter {
         if elapsed == 0.0 {
             return false;
         }
-        let Some(instance) = owner
-            .with_downcast::<Self, _>(|converter| converter.scripted.advance_instance())
-            .flatten()
+        let Some(instance) =
+            Self::with_occurrence(owner, |converter| converter.scripted.advance_instance())
+                .flatten()
         else {
             return false;
         };
@@ -342,11 +345,27 @@ impl ScriptedDataConverter {
         // update request is dropped, as `advance_script` drops it.
         let (advanced, _requested) = ScriptedObject::call_advance_instance(&instance, elapsed);
         if advanced {
-            owner.with_downcast_mut::<Self, _>(|converter| {
+            Self::with_occurrence(owner, |converter| {
                 converter.base.base.mark_converter_dirty()
             });
         }
         advanced
+    }
+
+    /// Borrows the scripted converter `owner` is or projects through its
+    /// converter capability.
+    fn with_occurrence<R>(
+        owner: &CoreHandle,
+        use_converter: impl FnOnce(&mut Self) -> R,
+    ) -> Option<R> {
+        owner
+            .with_mut(|owner| {
+                owner
+                    .as_data_converter_capability_mut()?
+                    .as_scripted_data_converter_mut()
+                    .map(use_converter)
+            })
+            .flatten()
     }
 
     fn advance_script(&mut self, elapsed: f32) -> bool {

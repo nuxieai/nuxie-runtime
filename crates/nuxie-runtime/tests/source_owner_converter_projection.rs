@@ -399,3 +399,114 @@ fn projected_operation_forwards_operand_dirt_and_unsubscribes_before_self_observ
         assert_eq!(context.debugging_refcnt(), 1);
     }
 }
+
+/// A script whose advance counts its calls and reports an advance.
+struct CountsAdvances(std::rc::Rc<std::cell::Cell<u32>>);
+impl nuxie_runtime::ScriptInstance for CountsAdvances {
+    fn has_method(
+        &self,
+        method: nuxie_runtime::ScriptMethod,
+    ) -> Result<bool, nuxie_runtime::ScriptError> {
+        Ok(method == nuxie_runtime::ScriptMethod::Advance)
+    }
+    fn call_method(
+        &mut self,
+        method: nuxie_runtime::ScriptMethod,
+        _: &[nuxie_runtime::ScriptValue],
+        _: &mut dyn nuxie_runtime::ScriptHost,
+    ) -> Result<nuxie_runtime::ScriptValue, nuxie_runtime::ScriptError> {
+        assert_eq!(method, nuxie_runtime::ScriptMethod::Advance);
+        self.0.set(self.0.get() + 1);
+        Ok(nuxie_runtime::ScriptValue::Bool(true))
+    }
+    fn get_input(&self, _: &str) -> Result<nuxie_runtime::ScriptValue, nuxie_runtime::ScriptError> {
+        Ok(nuxie_runtime::ScriptValue::Nil)
+    }
+    fn set_input(
+        &mut self,
+        _: &str,
+        _: nuxie_runtime::ScriptValue,
+    ) -> Result<(), nuxie_runtime::ScriptError> {
+        Ok(())
+    }
+}
+
+/// A VM that only hosts an installed instance; nothing here makes one.
+struct InstalledOnlyVm(nuxie_runtime::source::scripted::script_backend::ScriptBackend);
+impl nuxie_runtime::ScriptingVm for InstalledOnlyVm {
+    fn script_backend(&self) -> &nuxie_runtime::source::scripted::script_backend::ScriptBackend {
+        &self.0
+    }
+    fn instantiate_program(
+        &self,
+        _: &nuxie_runtime::RuntimeScriptProgram,
+        _: bool,
+        _: Option<nuxie_runtime::ScriptedContextSource>,
+        _: Option<nuxie_runtime::ScriptViewModel>,
+        _: Vec<Option<nuxie_runtime::ScriptViewModel>>,
+        _: &mut dyn nuxie_runtime::ScriptHost,
+    ) -> Result<Box<dyn nuxie_runtime::ScriptInstance>, nuxie_runtime::ScriptError> {
+        unreachable!()
+    }
+    fn install_native_file_assets(
+        &self,
+        _: nuxie_runtime::source::file::RuntimeFileWeakHandle,
+    ) -> Result<(), nuxie_runtime::ScriptError> {
+        unreachable!()
+    }
+    fn initialize_data_global(
+        &self,
+        _: std::collections::BTreeMap<String, nuxie_runtime::ScriptViewModel>,
+    ) -> Result<(), nuxie_runtime::ScriptError> {
+        unreachable!()
+    }
+    fn install_render_factory(
+        &self,
+        _: &mut dyn nuxie_render_api::Factory,
+    ) -> Result<(), nuxie_runtime::ScriptError> {
+        unreachable!()
+    }
+    fn install_rive_globals(&self) -> Result<(), nuxie_runtime::ScriptError> {
+        unreachable!()
+    }
+    fn register_module(&self, _: &str, _: &[u8]) -> Result<(), nuxie_runtime::ScriptError> {
+        unreachable!()
+    }
+    fn register_script_assets(
+        &self,
+        _: &[nuxie_runtime::ScriptAssetRegistration<'_>],
+    ) -> Vec<nuxie_runtime::ScriptAssetRegistrationResult> {
+        unreachable!()
+    }
+    fn instantiate_script(
+        &self,
+        _: &str,
+        _: &[u8],
+        _: &mut dyn nuxie_runtime::ScriptHost,
+    ) -> Result<Box<dyn nuxie_runtime::ScriptInstance>, nuxie_runtime::ScriptError> {
+        unreachable!()
+    }
+}
+
+#[test]
+fn projected_scripted_converter_advances_its_embedded_script() {
+    use nuxie_runtime::source::{
+        lua::scripting_vm::RuntimeScriptingVmHandle, scripted::scripted_object::ADVANCES_BIT,
+    };
+    let arena = CoreArena::default();
+    let owner = arena.insert(Projected {
+        inner: ScriptedDataConverter::default(),
+    });
+    let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+    let vm = RuntimeScriptingVmHandle::new(Box::new(InstalledOnlyVm(Default::default())));
+    owner
+        .with_downcast_mut::<Projected<ScriptedDataConverter>, _>(|owner| {
+            let scripted = &mut owner.inner.scripted;
+            scripted.install_script_instance(Box::new(CountsAdvances(calls.clone())), vm);
+            scripted.set_implemented_methods(ADVANCES_BIT);
+        })
+        .unwrap();
+    // The outer owner is not a ScriptedDataConverter; its capability is.
+    assert!(DataConverter::advance_handle(&owner, 0.016));
+    assert_eq!(calls.get(), 1);
+}

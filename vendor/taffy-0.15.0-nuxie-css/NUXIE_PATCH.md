@@ -2162,5 +2162,6 @@ Example: a column around `width: min-content; aspect-ratio: 0.5; flex-basis: 70p
 holding a 40 by 40 box. Chrome: the item is 40 by 80. Before: 40 by 70.
 
 Of the 32,600 compared layouts, 311 differ from Chrome, as before: none fixed, none
-regressed. Of the 1,485 probes of the section above, 27 differ (45 before). Guard
-rows: 18.
+regressed. Of the 1,485 probes of the section above, 27 differ (45 before). The flex
+base size keeps its own measurement: 360 probes of growing and shrinking items of this
+kind all match. Guard rows: 42.

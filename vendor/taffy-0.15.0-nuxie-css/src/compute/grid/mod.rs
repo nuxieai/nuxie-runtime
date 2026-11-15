@@ -728,25 +728,24 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
                 && tree.get_grid_container_style(node).aspect_ratio().is_none()
                 && !items.iter().any(|item| item.size.height.into_raw().uses_percentage());
             // Note: every item must be visited (no short-circuiting) as the closure updates each item's caches
-            let mut kept_height_item_changed = false;
             intrinsic_row_contribution_changed =
                 items.iter_mut().filter(|item| item.crosses_intrinsic_row).fold(false, |any_changed, item| {
                     // nuxie-css: a ratio item with neither size of its own gave the rows its
-                    // height at the first column widths. Its width then followed that row
-                    // height into the columns; the grid's own height does not follow it back
-                    // (Chrome: in a 400 wide grid with two automatic columns, one
-                    // `aspect-ratio: 1` item is 300 by 300 and the grid 200 tall).
-                    // The row itself does follow when the item's minimum height is automatic
-                    // (its ratio height at the new width is its minimum): there the row is
-                    // 300 tall inside the 200 tall grid, and an item stretched to it, or a
-                    // neighbor in it, is 300 tall. With an authored `min-height`, even 0,
-                    // the row keeps its first height as well.
-                    let keeps_container_height = rows_keep_first_ratio_heights
+                    // height at the first column widths, and its width then followed that
+                    // row height into the columns. With an authored `min-height`, even 0,
+                    // its row keeps that first height (Chrome: in a 400 wide grid with two
+                    // automatic columns, an `aspect-ratio: 1; min-height: 0` item leaves
+                    // the row 200 tall). With an automatic minimum height the row follows:
+                    // the ratio height at the new width is the item's minimum, so the row
+                    // is 300 tall inside the 200 tall grid (see the container height
+                    // below), and an item stretched to it, or a neighbor in it, is 300 tall.
+                    let row_keeps_first_height = rows_keep_first_ratio_heights
                         && item.aspect_ratio.is_some()
                         && !item.is_compressible_replaced
                         && item.size.width.is_auto()
-                        && item.size.height.is_auto();
-                    if keeps_container_height && !item.ratio_floors_unsized_height {
+                        && item.size.height.is_auto()
+                        && !item.ratio_floors_unsized_height;
+                    if row_keeps_first_height {
                         return any_changed;
                     }
                     let grid_area_size = item.grid_area_size(
@@ -768,13 +767,9 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
                     item.max_content_contribution_cache.height = None;
                     item.minimum_contribution_cache.height = None;
 
-                    if keeps_container_height {
-                        kept_height_item_changed |= has_changed;
-                        return any_changed;
-                    }
                     any_changed | has_changed
                 });
-            rerun_row_sizing = intrinsic_row_contribution_changed || kept_height_item_changed;
+            rerun_row_sizing = intrinsic_row_contribution_changed;
         }
     }
 
@@ -800,31 +795,33 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
         );
     }
 
-    if (intrinsic_column_contribution_changed && !has_percentage_column)
-        || (intrinsic_row_contribution_changed && !has_percentage_row)
-    {
+    // nuxie-css: the grid's own automatic height is the sum of its rows after the first row
+    // pass at its final width: the rows are then sized again inside that height, and rows
+    // that grow overflow it (Blink's `ComputeGridGeometry` takes the intrinsic block size
+    // before its additional pass; Chrome: a 400 wide grid with two automatic columns, a 50
+    // by 200 box and an `aspect-ratio: 0.5; height: stretch` item is 350 tall around a 525
+    // tall item). Stock took the sum of the rerun rows.
+    // A grid that found its width from its content had its first passes at that content
+    // measurement: its rerun is the first pass at its final width, so its height follows it.
+    if intrinsic_column_contribution_changed && !has_percentage_column {
         let final_column_sum = columns.iter().map(|track| track.base_size).sum::<f32>();
+        container_border_box.width = resolved_style_size
+            .get(AbstractAxis::Inline)
+            .unwrap_or_else(|| final_column_sum + content_box_inset.horizontal_axis_sum())
+            .maybe_clamp(min_size.width, max_size.width)
+            .max(padding_border_size.width);
+        container_content_box.width =
+            f32_max(0.0, container_border_box.width - content_box_inset.horizontal_axis_sum());
+    }
+    if intrinsic_row_contribution_changed && !has_percentage_row && parent_width_indefinite {
         let final_row_sum = rows.iter().map(|track| track.base_size).sum::<f32>();
-
-        if intrinsic_column_contribution_changed && !has_percentage_column {
-            container_border_box.width = resolved_style_size
-                .get(AbstractAxis::Inline)
-                .unwrap_or_else(|| final_column_sum + content_box_inset.horizontal_axis_sum())
-                .maybe_clamp(min_size.width, max_size.width)
-                .max(padding_border_size.width);
-            container_content_box.width =
-                f32_max(0.0, container_border_box.width - content_box_inset.horizontal_axis_sum());
-        }
-
-        if intrinsic_row_contribution_changed && !has_percentage_row {
-            container_border_box.height = resolved_style_size
-                .get(AbstractAxis::Block)
-                .unwrap_or_else(|| final_row_sum + content_box_inset.vertical_axis_sum())
-                .maybe_clamp(min_size.height, max_size.height)
-                .max(padding_border_size.height);
-            container_content_box.height =
-                f32_max(0.0, container_border_box.height - content_box_inset.vertical_axis_sum());
-        }
+        container_border_box.height = resolved_style_size
+            .get(AbstractAxis::Block)
+            .unwrap_or_else(|| final_row_sum + content_box_inset.vertical_axis_sum())
+            .maybe_clamp(min_size.height, max_size.height)
+            .max(padding_border_size.height);
+        container_content_box.height =
+            f32_max(0.0, container_border_box.height - content_box_inset.vertical_axis_sum());
     }
 
     // If only the container's size has been requested

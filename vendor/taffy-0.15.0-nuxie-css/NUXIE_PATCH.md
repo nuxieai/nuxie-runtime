@@ -1994,3 +1994,34 @@ Of the 32,600 compared layouts, 369 differ from Chrome (387 before): 18 fixed, n
 regressed. Of 1,008 new probes, 12 differ (320 before): a padded content-box item with
 `height: 100%` and a stretched width, where Chrome's item is taller than its row
 resolves to; left for later. Guard rows: 30.
+
+## A grid's automatic height is its rows after the first pass
+
+A grid sizes its columns, then its rows, and may size both again when an item's
+contribution changed. Stock gave a grid with no height of its own the sum of the rerun
+rows. Chrome takes the grid's height before that second pass (`ComputeGridGeometry`
+calculates the intrinsic block size after the first column and row pass, then reruns the
+tracks inside it): rows that grow in the rerun overflow the grid.
+
+The fork had this for one case only, a ratio item with neither size of its own, by
+keeping such items out of the height. The rule is now general (`compute_grid_layout`): a
+grid whose width is known before layout keeps the height of its first row pass. The
+one-case bookkeeping is removed; what stays is that such an item's row keeps its first
+height when the item has an authored `min-height`.
+
+A grid that finds its width from its content is different: its first passes are the
+content measurement, and the rerun is its first pass at the final width. Its height
+still follows the rerun, as in stock (Chrome: the guard rows `hv-k0404` and `hv-k1420`,
+a `width: fit-content` grid around a column holding a `height: 100%` picture).
+
+Example: a 400 wide grid with two automatic columns, a 50 by 200 box and an
+`aspect-ratio: 0.5; height: stretch` item. Chrome: the grid is 350 tall and the item
+262.5 by 525. Before: the grid was 525 tall. The same holds for `width: stretch`, a
+percentage height and padded items.
+
+Of the 32,600 compared layouts, 343 differ from Chrome (369 before): 26 fixed, none
+regressed. Of 720 new probes, 4 differ (78 before): a `height: stretch;
+justify-self: start` ratio item in its own row, left for later. Of 1,200 probes of the
+same items in content-width grids, 267 differ before and after: 246 are `1fr 1fr`
+columns in a content-width grid (Chrome makes them equal), left for later. Guard rows:
+24.

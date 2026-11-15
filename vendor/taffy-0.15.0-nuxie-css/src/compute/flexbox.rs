@@ -1553,10 +1553,11 @@ fn determine_flex_base_size(
             && !compressed_contribution
             // A container sized through its own ratio is measured before that size is
             // known, and its ratio's content floor comes from that measurement: as before.
-            // A wrapping row's lines are not sized by its height, from a ratio or set, so
-            // there a picture is measured at its natural size (Chrome: a 40 by 40 picture
-            // in a 300 wide wrapping row with `aspect-ratio: 2` is 40 by 150).
-            && (!constants.has_own_ratio || (constants.is_row && constants.is_wrap));
+            // A wrapping container's lines are not sized by its cross size, from a ratio or
+            // set, so there a picture is measured at its natural size (Chrome: a 40 by 40
+            // picture in a 300 wide wrapping row with `aspect-ratio: 2` is 40 by 150; a
+            // 120 by 60 picture in a 100 wide wrapping column with one is 120 by 60).
+            && (!constants.has_own_ratio || constants.is_wrap);
         // nuxie-css: a wrapping column finds its width the same way while that width is
         // unknown: each line is as wide as its pictures are at their own heights, and the
         // pictures then take the width of their flexed heights in the second pass (Chrome).

@@ -2105,3 +2105,22 @@ Chrome: the picture is 40 by 150. Before: 150 by 150.
 
 Of the 32,600 compared layouts, 315 differ from Chrome (326 before): 11 fixed, none
 regressed. Of 1,910 new probes, 72 differ (268 before). Guard rows: 32.
+
+## A picture in a wrapping column sized by its ratio keeps its natural width
+
+The same rule as the section above, for columns. A wrapping column's lines are as wide
+as their items, so the column's width does not size a stretched picture before the lines
+are known. With a ratio on the column the fork still measured the picture at the
+column's width, so a picture wider than the column was narrowed to it and the column's
+content height came out too short.
+
+The exception for a container with its own ratio (`determine_flex_base_size`) now
+covers single-line containers only.
+
+Example: a 100 wide wrapping column with `aspect-ratio: 2` around a 120 by 60 picture
+with 10 of padding. Chrome: the picture is 140 by 80 and the column 100 by 80. Before:
+the picture was 100 by 60 and the column 100 by 60.
+
+Of the 32,600 compared layouts, 315 differ from Chrome, as before: none fixed, none
+regressed. Of the 1,910 probes of the section above, 44 differ (72 before). Guard
+rows: 28.

@@ -10,12 +10,13 @@ use nuxie_binary::{
     RuntimeDataBindSourceEffect, RuntimeDataBindTargetEffect, RuntimeDataBindUnbindEffect,
     RuntimeDataBindUpdateEffect, RuntimeDataBindUpdateQueue,
     RuntimeDataConverterAddDirtyDataBindEffect, RuntimeDataConverterBindContextEffect,
-    RuntimeDataConverterFormulaAddDirtEffect, RuntimeDataConverterMarkDirtyEffect,
-    RuntimeDataConverterPropertyChangeEffect, RuntimeDataConverterResetEffect,
-    RuntimeDataConverterUnbindEffect, RuntimeDataConverterUpdateEffect, RuntimeDataType,
-    RuntimeFile, RuntimeImportDropReason, RuntimeImportStatus, RuntimeReadErrorKind,
-    SUPPORTED_MAJOR_VERSION, SUPPORTED_MINOR_VERSION, SkipReason, SkippedBitmaskPassthrough,
-    read_runtime_file, read_runtime_file_with_error_kind, read_runtime_file_with_scripting,
+    RuntimeDataConverterFormulaAddDirtEffect, RuntimeDataConverterHeldSource,
+    RuntimeDataConverterMarkDirtyEffect, RuntimeDataConverterPropertyChangeEffect,
+    RuntimeDataConverterResetEffect, RuntimeDataConverterUnbindEffect,
+    RuntimeDataConverterUpdateEffect, RuntimeDataType, RuntimeFile, RuntimeImportDropReason,
+    RuntimeImportStatus, RuntimeReadErrorKind, SUPPORTED_MAJOR_VERSION, SUPPORTED_MINOR_VERSION,
+    SkipReason, SkippedBitmaskPassthrough, read_runtime_file, read_runtime_file_with_error_kind,
+    read_runtime_file_with_scripting,
 };
 use nuxie_schema::definition_by_name;
 use std::path::{Path, PathBuf};
@@ -3105,6 +3106,42 @@ fn runtime_data_converter_bind_from_context_effect_matches_cpp_overrides() {
     }))
     .expect("synthetic data-converter bind-from-context stream imports");
 
+    use RuntimeDataConverterHeldSource as Held;
+    let no_source_work = |effect: RuntimeDataConverterBindContextEffect| {
+        (
+            effect.operation_view_model_keeps_source,
+            effect.operation_view_model_removes_previous_source_dependent,
+            effect.operation_view_model_sets_number_source,
+            effect.operation_view_model_clears_source,
+            effect.operation_view_model_adds_converter_dependent,
+            effect.formula_keeps_source,
+            effect.formula_removes_previous_source_dependent,
+            effect.formula_sets_source_from_parent,
+            effect.formula_clears_source,
+            effect.formula_adds_source_dependent,
+        )
+    };
+    let operation_view_model_rebind = |effect: RuntimeDataConverterBindContextEffect| {
+        (
+            effect.operation_view_model_uses_source_path_lookup,
+            effect.operation_view_model_keeps_source,
+            effect.operation_view_model_removes_previous_source_dependent,
+            effect.operation_view_model_sets_number_source,
+            effect.operation_view_model_clears_source,
+            effect.operation_view_model_adds_converter_dependent,
+        )
+    };
+    let formula_rebind = |effect: RuntimeDataConverterBindContextEffect| {
+        (
+            effect.formula_checks_parent_data_bind_source,
+            effect.formula_keeps_source,
+            effect.formula_removes_previous_source_dependent,
+            effect.formula_sets_source_from_parent,
+            effect.formula_clears_source,
+            effect.formula_adds_source_dependent,
+        )
+    };
+
     assert_eq!(
         file.data_converter_bind_context_effect_for_object(
             file.object(3).expect("DataBindContext object"),
@@ -3113,22 +3150,28 @@ fn runtime_data_converter_bind_from_context_effect_matches_cpp_overrides() {
             true,
             true,
             None,
+            Held::None,
         ),
         None,
         "DataConverter::bindFromContext effect only applies to DataConverter objects"
     );
     assert_eq!(
-        file.data_converter_bind_context_effect(2, &[2], true, true, false, None),
+        file.data_converter_bind_context_effect(2, &[2], true, true, false, None, Held::None),
         None,
         "converter-owned bind context modeling validates owned DataBind ids"
     );
     assert_eq!(
-        file.data_converter_bind_context_effect(4, &[], true, true, false, None),
+        file.data_converter_bind_context_effect(4, &[], true, true, false, None, Held::None),
         None
+    );
+    assert_eq!(
+        file.data_converter_bind_context_effect(2, &[3, 4], true, true, false, None, Held::Other),
+        None,
+        "only DataConverterOperationViewModel and DataConverterFormula hold a source"
     );
 
     assert_eq!(
-        file.data_converter_bind_context_effect(2, &[3, 4], true, true, false, None),
+        file.data_converter_bind_context_effect(2, &[3, 4], true, true, false, None, Held::None),
         Some(RuntimeDataConverterBindContextEffect {
             stores_parent_data_bind: true,
             owned_data_bind_context_effect: RuntimeDataBindContainerBindContextEffect {
@@ -3138,33 +3181,44 @@ fn runtime_data_converter_bind_from_context_effect_matches_cpp_overrides() {
             },
             group_child_bind_from_context_converter_ids: Vec::new(),
             operation_view_model_uses_source_path_lookup: false,
+            operation_view_model_keeps_source: false,
+            operation_view_model_removes_previous_source_dependent: false,
             operation_view_model_sets_number_source: false,
-            operation_view_model_adds_data_bind_dependent: false,
+            operation_view_model_clears_source: false,
+            operation_view_model_adds_converter_dependent: false,
             formula_checks_parent_data_bind_source: false,
+            formula_keeps_source: false,
+            formula_removes_previous_source_dependent: false,
             formula_sets_source_from_parent: false,
+            formula_clears_source: false,
             formula_adds_source_dependent: false,
         }),
         "C++ DataConverter::bindFromContext stores the parent DataBind and binds owned DataBindContext children"
     );
     assert_eq!(
-        file.data_converter_bind_context_effect(2, &[3, 4], false, false, false, None),
-        Some(RuntimeDataConverterBindContextEffect {
-            stores_parent_data_bind: true,
-            owned_data_bind_context_effect: RuntimeDataBindContainerBindContextEffect {
+        file.data_converter_bind_context_effect(2, &[3, 4], false, false, false, None, Held::None)
+            .map(|effect| {
+                (
+                    effect.owned_data_bind_context_effect.clone(),
+                    no_source_work(effect),
+                )
+            }),
+        Some((
+            RuntimeDataBindContainerBindContextEffect {
                 bind_from_context_data_bind_ids: vec![3],
                 stores_data_context: false,
                 clears_data_context: true,
             },
-            group_child_bind_from_context_converter_ids: Vec::new(),
-            operation_view_model_uses_source_path_lookup: false,
-            operation_view_model_sets_number_source: false,
-            operation_view_model_adds_data_bind_dependent: false,
-            formula_checks_parent_data_bind_source: false,
-            formula_sets_source_from_parent: false,
-            formula_adds_source_dependent: false,
-        }),
+            (
+                false, false, false, false, false, false, false, false, false, false
+            ),
+        )),
         "C++ DataConverter::bindFromContext delegates null data contexts through DataBindContainer::bindDataBindsFromContext"
     );
+
+    // Upstream 832825dbf: DataConverterOperationViewModel keeps an operand
+    // the bind still resolves, otherwise leaves the one it held, and
+    // subscribes itself (not the bind) to the new one.
     assert_eq!(
         file.data_converter_bind_context_effect(
             0,
@@ -3173,6 +3227,7 @@ fn runtime_data_converter_bind_from_context_effect_matches_cpp_overrides() {
             true,
             false,
             Some(RuntimeDataType::Number),
+            Held::None,
         ),
         Some(RuntimeDataConverterBindContextEffect {
             stores_parent_data_bind: true,
@@ -3183,13 +3238,47 @@ fn runtime_data_converter_bind_from_context_effect_matches_cpp_overrides() {
             },
             group_child_bind_from_context_converter_ids: Vec::new(),
             operation_view_model_uses_source_path_lookup: true,
+            operation_view_model_keeps_source: false,
+            operation_view_model_removes_previous_source_dependent: false,
             operation_view_model_sets_number_source: true,
-            operation_view_model_adds_data_bind_dependent: true,
+            operation_view_model_clears_source: false,
+            operation_view_model_adds_converter_dependent: true,
             formula_checks_parent_data_bind_source: false,
+            formula_keeps_source: false,
+            formula_removes_previous_source_dependent: false,
             formula_sets_source_from_parent: false,
+            formula_clears_source: false,
             formula_adds_source_dependent: false,
         }),
-        "C++ DataConverterOperationViewModel::bindFromContext stores number lookup results and adds the parent bind as a dependent"
+        "C++ DataConverterOperationViewModel::bindFromContext holds a number lookup result and subscribes itself to it"
+    );
+    assert_eq!(
+        file.data_converter_bind_context_effect(
+            0,
+            &[3],
+            true,
+            true,
+            false,
+            Some(RuntimeDataType::Number),
+            Held::Resolved,
+        )
+        .map(operation_view_model_rebind),
+        Some((true, true, false, false, false, false)),
+        "C++ DataConverterOperationViewModel::bindFromContext returns early when it already holds the resolved operand"
+    );
+    assert_eq!(
+        file.data_converter_bind_context_effect(
+            0,
+            &[3],
+            true,
+            true,
+            false,
+            Some(RuntimeDataType::Number),
+            Held::Other,
+        )
+        .map(operation_view_model_rebind),
+        Some((true, false, true, true, false, true)),
+        "C++ DataConverterOperationViewModel::bindFromContext leaves the previous operand before holding the new one"
     );
     assert_eq!(
         file.data_converter_bind_context_effect(
@@ -3199,19 +3288,50 @@ fn runtime_data_converter_bind_from_context_effect_matches_cpp_overrides() {
             true,
             false,
             Some(RuntimeDataType::String),
+            Held::None,
         )
-        .map(|effect| {
-            (
-                effect.operation_view_model_uses_source_path_lookup,
-                effect.operation_view_model_sets_number_source,
-                effect.operation_view_model_adds_data_bind_dependent,
-            )
-        }),
-        Some((true, false, false)),
+        .map(operation_view_model_rebind),
+        Some((true, true, false, false, false, false)),
         "C++ DataConverterOperationViewModel::bindFromContext ignores non-number lookup results"
     );
     assert_eq!(
-        file.data_converter_bind_context_effect(1, &[], true, true, true, None),
+        file.data_converter_bind_context_effect(
+            0,
+            &[3],
+            true,
+            true,
+            false,
+            Some(RuntimeDataType::String),
+            Held::Other,
+        )
+        .map(operation_view_model_rebind),
+        Some((true, false, true, false, true, false)),
+        "C++ DataConverterOperationViewModel::bindFromContext leaves an operand that no longer resolves"
+    );
+    assert_eq!(
+        file.data_converter_bind_context_effect(0, &[3], false, true, false, None, Held::Other)
+            .map(operation_view_model_rebind),
+        Some((false, false, true, false, true, false)),
+        "C++ DataConverterOperationViewModel::bindFromContext with no data context resolves no operand"
+    );
+    assert_eq!(
+        file.data_converter_bind_context_effect(
+            0,
+            &[3],
+            true,
+            true,
+            false,
+            Some(RuntimeDataType::String),
+            Held::Resolved,
+        ),
+        None,
+        "an operand that resolves to nothing can't be the held one"
+    );
+
+    // Upstream 832825dbf: DataConverterFormula leaves its previous source
+    // whenever the bind's source changes.
+    assert_eq!(
+        file.data_converter_bind_context_effect(1, &[], true, true, true, None, Held::None),
         Some(RuntimeDataConverterBindContextEffect {
             stores_parent_data_bind: true,
             owned_data_bind_context_effect: RuntimeDataBindContainerBindContextEffect {
@@ -3221,43 +3341,70 @@ fn runtime_data_converter_bind_from_context_effect_matches_cpp_overrides() {
             },
             group_child_bind_from_context_converter_ids: Vec::new(),
             operation_view_model_uses_source_path_lookup: false,
+            operation_view_model_keeps_source: false,
+            operation_view_model_removes_previous_source_dependent: false,
             operation_view_model_sets_number_source: false,
-            operation_view_model_adds_data_bind_dependent: false,
+            operation_view_model_clears_source: false,
+            operation_view_model_adds_converter_dependent: false,
             formula_checks_parent_data_bind_source: true,
+            formula_keeps_source: false,
+            formula_removes_previous_source_dependent: false,
             formula_sets_source_from_parent: true,
+            formula_clears_source: false,
             formula_adds_source_dependent: true,
         }),
         "C++ DataConverterFormula::bindFromContext binds to the parent DataBind source when one exists"
     );
     assert_eq!(
-        file.data_converter_bind_context_effect(1, &[], true, true, false, None)
-            .map(|effect| {
-                (
-                    effect.formula_checks_parent_data_bind_source,
-                    effect.formula_sets_source_from_parent,
-                    effect.formula_adds_source_dependent,
-                )
-            }),
-        Some((true, false, false)),
-        "C++ DataConverterFormula::bindFromContext skips source/dependent work when the parent bind has no source"
+        file.data_converter_bind_context_effect(1, &[], true, true, false, None, Held::None)
+            .map(formula_rebind),
+        Some((true, true, false, false, false, false)),
+        "C++ DataConverterFormula::bindFromContext skips source/dependent work when neither it nor the parent bind has a source"
     );
     assert_eq!(
-        file.data_converter_bind_context_effect(3, &[3], true, true, true, None),
-        Some(RuntimeDataConverterBindContextEffect {
-            stores_parent_data_bind: true,
-            owned_data_bind_context_effect: RuntimeDataBindContainerBindContextEffect {
+        file.data_converter_bind_context_effect(1, &[], true, true, true, None, Held::Resolved)
+            .map(formula_rebind),
+        Some((true, true, false, false, false, false)),
+        "C++ DataConverterFormula::bindFromContext returns early when it already holds the parent bind's source"
+    );
+    assert_eq!(
+        file.data_converter_bind_context_effect(1, &[], true, true, true, None, Held::Other)
+            .map(formula_rebind),
+        Some((true, false, true, true, false, true)),
+        "C++ DataConverterFormula::bindFromContext leaves its previous source before holding the parent bind's"
+    );
+    assert_eq!(
+        file.data_converter_bind_context_effect(1, &[], true, false, false, None, Held::Other)
+            .map(formula_rebind),
+        Some((true, false, true, false, true, false)),
+        "C++ DataConverterFormula::bindFromContext leaves its source when the parent bind has none"
+    );
+    assert_eq!(
+        file.data_converter_bind_context_effect(1, &[], true, true, false, None, Held::Resolved),
+        None,
+        "a parent bind with no source can't resolve the held one"
+    );
+
+    assert_eq!(
+        file.data_converter_bind_context_effect(3, &[3], true, true, true, None, Held::None)
+            .map(|effect| {
+                (
+                    effect.owned_data_bind_context_effect.clone(),
+                    effect.group_child_bind_from_context_converter_ids.clone(),
+                    no_source_work(effect),
+                )
+            }),
+        Some((
+            RuntimeDataBindContainerBindContextEffect {
                 bind_from_context_data_bind_ids: vec![3],
                 stores_data_context: true,
                 clears_data_context: false,
             },
-            group_child_bind_from_context_converter_ids: vec![5, 6],
-            operation_view_model_uses_source_path_lookup: false,
-            operation_view_model_sets_number_source: false,
-            operation_view_model_adds_data_bind_dependent: false,
-            formula_checks_parent_data_bind_source: false,
-            formula_sets_source_from_parent: false,
-            formula_adds_source_dependent: false,
-        }),
+            vec![5, 6],
+            (
+                false, false, false, false, false, false, false, false, false, false
+            ),
+        )),
         "C++ DataConverterGroup::bindFromContext calls bindFromContext on each non-null item converter after the base binding"
     );
 }
@@ -3334,10 +3481,17 @@ fn runtime_data_converter_lifecycle_effects_match_cpp_overrides() {
                 clears_data_context: true,
             }),
             group_child_unbind_converter_ids: Vec::new(),
+            operation_view_model_removes_source_dependent: false,
+            operation_view_model_clears_source: false,
             formula_removes_source_dependent: false,
             formula_clears_source: false,
         }),
         "C++ base DataConverter::unbind delegates to DataBindContainer::unbindDataBinds"
+    );
+    assert_eq!(
+        file.data_converter_unbind_effect(3, &[3, 5], true),
+        None,
+        "only DataConverterOperationViewModel and DataConverterFormula hold a source"
     );
     // Upstream 6951a4b3d: DataConverterFormula::unbind and
     // DataConverterGroup::unbind finish with the base DataConverter::unbind,
@@ -3351,6 +3505,8 @@ fn runtime_data_converter_lifecycle_effects_match_cpp_overrides() {
         Some(RuntimeDataConverterUnbindEffect {
             owned_data_bind_unbind_effect: owned_unbind.clone(),
             group_child_unbind_converter_ids: Vec::new(),
+            operation_view_model_removes_source_dependent: false,
+            operation_view_model_clears_source: false,
             formula_removes_source_dependent: true,
             formula_clears_source: true,
         }),
@@ -3368,11 +3524,39 @@ fn runtime_data_converter_lifecycle_effects_match_cpp_overrides() {
         Some((owned_unbind.clone(), false, false)),
         "C++ DataConverterFormula::unbind without a bound source still calls base unbindDataBinds"
     );
+    // Upstream 832825dbf: the operation converter takes itself off its
+    // operand on unbind, then runs the base unbind.
+    assert_eq!(
+        file.data_converter_unbind_effect(0, &[3], true),
+        Some(RuntimeDataConverterUnbindEffect {
+            owned_data_bind_unbind_effect: owned_unbind.clone(),
+            group_child_unbind_converter_ids: Vec::new(),
+            operation_view_model_removes_source_dependent: true,
+            operation_view_model_clears_source: true,
+            formula_removes_source_dependent: false,
+            formula_clears_source: false,
+        }),
+        "C++ DataConverterOperationViewModel::unbind clears its operand, then calls base unbindDataBinds"
+    );
+    assert_eq!(
+        file.data_converter_unbind_effect(0, &[3], false)
+            .map(|effect| {
+                (
+                    effect.owned_data_bind_unbind_effect,
+                    effect.operation_view_model_removes_source_dependent,
+                    effect.operation_view_model_clears_source,
+                )
+            }),
+        Some((owned_unbind.clone(), false, false)),
+        "C++ DataConverterOperationViewModel::unbind without an operand still calls base unbindDataBinds"
+    );
     assert_eq!(
         file.data_converter_unbind_effect(4, &[3], false),
         Some(RuntimeDataConverterUnbindEffect {
             owned_data_bind_unbind_effect: owned_unbind,
             group_child_unbind_converter_ids: vec![6, 7],
+            operation_view_model_removes_source_dependent: false,
+            operation_view_model_clears_source: false,
             formula_removes_source_dependent: false,
             formula_clears_source: false,
         }),
@@ -4365,7 +4549,7 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
     );
     assert_eq!(file.data_bind_container_unbind_effect(&[2, 3]), None);
     assert_eq!(
-        file.data_bind_container_advance_effect(&[2, 3], &[false, true]),
+        file.data_bind_container_advance_effect(&[2, 3], &[true, true], &[false, true]),
         None
     );
     assert_eq!(
@@ -5542,33 +5726,73 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
         "C++ DataBindContainer::unbindDataBinds calls unbind on every data bind in container order and clears the context"
     );
     assert_eq!(
-        file.data_bind_container_advance_effect(&[], &[]),
+        file.data_bind_container_advance_effect(&[], &[], &[]),
         Some(RuntimeDataBindContainerAdvanceEffect {
+            may_advance_data_binds: false,
             advances_data_bind_ids: Vec::new(),
             did_update: false,
         }),
         "C++ DataBindContainer::advanceDataBinds exits false when the container has no data binds"
     );
+    // Upstream d58a8df9b: advanceDataBinds walks nothing unless some bind's
+    // converter may advance (mayAdvanceDataBinds).
     assert_eq!(
-        file.data_bind_container_advance_effect(&[3, 5, 21], &[false, true, false]),
+        file.data_bind_container_advance_effect(
+            &[3, 5, 21],
+            &[false, false, false],
+            &[false, false, false]
+        ),
         Some(RuntimeDataBindContainerAdvanceEffect {
+            may_advance_data_binds: false,
+            advances_data_bind_ids: Vec::new(),
+            did_update: false,
+        }),
+        "C++ DataBindContainer::advanceDataBinds exits false before advancing when no bind's converter may advance"
+    );
+    assert_eq!(
+        file.data_bind_container_advance_effect(
+            &[3, 5, 21],
+            &[false, true, false],
+            &[false, true, false]
+        ),
+        Some(RuntimeDataBindContainerAdvanceEffect {
+            may_advance_data_binds: true,
             advances_data_bind_ids: vec![3, 5, 21],
             did_update: true,
         }),
         "C++ DataBindContainer::advanceDataBinds visits every data bind and returns true if any child advances"
     );
     assert_eq!(
-        file.data_bind_container_advance_effect(&[3, 5, 21], &[false, false, false]),
+        file.data_bind_container_advance_effect(
+            &[3, 5, 21],
+            &[false, true, false],
+            &[false, false, false]
+        ),
         Some(RuntimeDataBindContainerAdvanceEffect {
+            may_advance_data_binds: true,
             advances_data_bind_ids: vec![3, 5, 21],
             did_update: false,
         }),
         "C++ DataBindContainer::advanceDataBinds returns false when no child advances"
     );
     assert_eq!(
-        file.data_bind_container_advance_effect(&[3, 5, 21], &[false, true]),
+        file.data_bind_container_advance_effect(
+            &[3, 5, 21],
+            &[true, false, false],
+            &[false, true, false]
+        ),
+        None,
+        "a bind whose converter may not advance can't report an advance"
+    );
+    assert_eq!(
+        file.data_bind_container_advance_effect(&[3, 5, 21], &[true, true, true], &[false, true]),
         None,
         "Rust requires one supplied advance result per validated data bind"
+    );
+    assert_eq!(
+        file.data_bind_container_advance_effect(&[3, 5, 21], &[true, true], &[false, true, false]),
+        None,
+        "Rust requires one supplied mayAdvance answer per validated data bind"
     );
     assert_eq!(
         file.data_bind_container_update_effect(
@@ -9155,6 +9379,59 @@ fn paint_images_resolve_their_artboard_and_image_asset_like_cpp() {
         file.resolved_file_asset_for_object(7).map(|asset| asset.id),
         None,
         "setAsset ignores a FontAsset"
+    );
+}
+
+/// TextStyleGlobal is an artboard referencer (upstream 0238f2995):
+/// `TextStyleGlobal::import` needs a BackboardImporter, registers with it and
+/// then imports as a Component; `BackboardImporter::resolve` assigns its
+/// `artboardId` through the artboard lookup. It has no nesting artboard, so
+/// it never joins the nested artboard cycle cut.
+#[test]
+fn text_style_globals_resolve_their_style_artboard_like_cpp() {
+    let file = read_runtime_file(&synthetic_runtime_file(4402, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "Artboard");
+        push_object_with_properties(bytes, "Text", |bytes| {
+            push_uint_property(bytes, "Text", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "TextStyleGlobal", |bytes| {
+            push_uint_property(bytes, "TextStyleGlobal", "parentId", 1);
+            push_uint_property(bytes, "TextStyleGlobal", "artboardId", 1);
+        });
+        push_object_with_properties(bytes, "TextStyleGlobal", |bytes| {
+            push_uint_property(bytes, "TextStyleGlobal", "parentId", 1);
+            push_uint_property(bytes, "TextStyleGlobal", "artboardId", 0);
+        });
+        push_object_with_properties(bytes, "TextStyleGlobal", |bytes| {
+            push_uint_property(bytes, "TextStyleGlobal", "parentId", 1);
+        });
+        push_empty_object(bytes, "Artboard");
+    }))
+    .expect("text style global stream imports");
+
+    assert_eq!(
+        file.import_statuses,
+        vec![RuntimeImportStatus::Imported; 7],
+        "every object imports"
+    );
+    assert_eq!(
+        file.resolved_artboard_for_referencer(3)
+            .map(|artboard| artboard.id),
+        Some(6),
+        "artboardId 1 names the second Artboard"
+    );
+    assert_eq!(
+        file.resolved_artboard_for_referencer(4)
+            .map(|artboard| artboard.id),
+        Some(1),
+        "a style naming its own host Artboard closes no cycle: TextStyleGlobal has no nesting artboard"
+    );
+    assert_eq!(
+        file.resolved_artboard_for_referencer(5)
+            .map(|artboard| artboard.id),
+        None,
+        "a TextStyleGlobal without an artboardId references no artboard"
     );
 }
 

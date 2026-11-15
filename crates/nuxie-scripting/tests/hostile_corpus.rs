@@ -191,6 +191,12 @@ fn new_vm(header: &Header) -> Result<(ScriptVm, PersistentFactory<NullFactory>),
     // deterministic bounds (interrupt safepoints, VM and host memory) stay
     // at their defaults, and the case's `within` bounds its wall time.
     vm.set_timeout_ms(MODULE_TIMEOUT_MS);
+    // A build with the editor's tools (a workspace test unifies them in)
+    // starts a VM with editor playback off, which refuses every Audio.start
+    // before its own checks. The corpus attacks a playing VM, as a player
+    // runs it.
+    #[cfg(feature = "tools")]
+    vm.set_is_playing(true);
     let mut factory = PersistentFactory::new(NullFactory::new());
     vm.install_render_factory(&mut factory)
         .map_err(|e| format!("factory: {e}"))?;

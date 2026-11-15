@@ -4773,6 +4773,14 @@ pub trait DataConverterCapability {
     {
         None
     }
+    /// The scripted converter behind this capability, for its handle-level
+    /// advance (an owner may project a scripted converter it is not).
+    fn as_scripted_data_converter_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::scripted::scripted_data_converter::ScriptedDataConverter>
+    {
+        None
+    }
     fn convert(
         &mut self,
         input: &dyn crate::mechanical_port::source::data_bind::data_values::data_value::DataValue,

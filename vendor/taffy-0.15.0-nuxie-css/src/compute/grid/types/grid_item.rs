@@ -925,8 +925,14 @@ impl GridItem {
         // A block size the ratio derives as a floor holds beside the automatic minimum
         // (`min-height: auto` as authored: a percentage with nothing to resolve against is
         // not automatic).
-        let ratio_minimum =
-            if axis == AbstractAxis::Block && self.min_size.height.is_auto() { min_size.height } else { None };
+        let ratio_minimum = if axis == AbstractAxis::Block
+            && self.min_size.height.is_auto()
+            && !self.overflow.y.is_scroll_container()
+        {
+            min_size.height
+        } else {
+            None
+        };
         // nuxie-css: a minimum width the ratio transfers from `min-height` is a floor under
         // the content-based minimum, not a replacement for it: the item's width still
         // follows its row's height through the ratio (Chrome: in a 400 by 300 grid,

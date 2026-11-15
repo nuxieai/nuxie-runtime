@@ -573,7 +573,7 @@ impl InPlaceFlight {
             );
         }
         Ok(Self {
-            lift: Lift::new(row.clone(), element.clone(), anchor),
+            lift: Lift::new(row.clone(), board.clone(), element.clone(), anchor),
             record,
             element,
             flying,

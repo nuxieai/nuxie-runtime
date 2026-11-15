@@ -3307,6 +3307,51 @@ fn in_place_a_video_in_a_flight_stays_visible_with_its_screen_at_zero() {
     }
 }
 
+/// In place, a lifted copy's video reads hidden while the Screen that draws
+/// its lift sleeps, as a flight slot's does: B put to sleep half way hides
+/// A's video too, though A is awake. Woken, both read visible again.
+#[test]
+fn in_place_a_video_in_a_flight_reads_hidden_while_its_upper_screen_sleeps() {
+    unsafe {
+        let (scene, root) = in_place_field_page();
+        step_ok(scene.player);
+        let t = view("t1");
+        assert_eq!(
+            nux_player_step_begin(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        set_in_place_progress(&root, 0.5);
+        step_ok(scene.player);
+        // A sleeping Screen's videos leave the visit but keep their ids.
+        let clips = ["clip a", "clip b"].map(|clip| (clip, video_named(scene.player, clip)));
+        let read = |when: &str, want: u32| {
+            for (clip, id) in clips {
+                assert_eq!(video_visible(scene.player, id), want, "{clip}, {when}");
+            }
+        };
+        read("half way", 1);
+        assert_eq!(
+            nux_player_set_row_collapsed(scene.player, view("screens"), 1, 1),
+            NuxStatus::Ok
+        );
+        step_ok(scene.player);
+        read("half way, B asleep", 0);
+        assert_eq!(
+            nux_player_set_row_collapsed(scene.player, view("screens"), 1, 0),
+            NuxStatus::Ok
+        );
+        step_ok(scene.player);
+        read("half way, B woken", 1);
+        set_in_place_progress(&root, 1.0);
+        step_ok(scene.player);
+        assert_eq!(
+            nux_player_step_end(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        scene.close();
+    }
+}
+
 /// In place, design T21 below 0: a lifted copy's video reads visible with
 /// its Screen at any fade at or below 0, and B's plain video hidden.
 #[test]

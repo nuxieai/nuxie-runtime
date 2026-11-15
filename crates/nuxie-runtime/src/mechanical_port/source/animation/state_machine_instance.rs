@@ -1806,6 +1806,15 @@ impl HitLift {
             Some(lift) => lift.hit_position(position),
         }
     }
+
+    /// `delta`, a pointer's move on its own Screen, as the copy at rest
+    /// moves under it: a scroll's delta goes back as its position does.
+    pub(crate) fn delta(&self, delta: Vec2D) -> Vec2D {
+        match self.0.borrow().as_ref().and_then(|lift| lift.hit()) {
+            None => delta,
+            Some(hit) => Vec2D::transform_dir(delta, &hit),
+        }
+    }
 }
 
 pub trait HitComponent {
@@ -2277,7 +2286,11 @@ impl HitComponent for HitDrawable {
         (self.is_opaque.get() || self.drawable.is_target_opaque()) && self.hit_test(position)
     }
     fn wants_scroll(&self, position: Vec2D, event: &ScrollEvent) -> bool {
-        self.hit_test(position) && self.scroll_proxy_for(event).is_some()
+        let event = ScrollEvent {
+            delta: self.lift.delta(event.delta),
+            ..*event
+        };
+        self.hit_test(position) && self.scroll_proxy_for(&event).is_some()
     }
     fn has_scroll_target(&self, position: Vec2D) -> bool {
         if !self.hit_test(position) {
@@ -2318,6 +2331,10 @@ impl HitComponent for HitDrawable {
         timestamp: f32,
         _pointer_id: i32,
     ) -> HitResult {
+        let event = &ScrollEvent {
+            delta: self.lift.delta(event.delta),
+            ..*event
+        };
         let Some(proxy) = self.scroll_proxy_for(event) else {
             return HitResult::None;
         };
@@ -2629,7 +2646,7 @@ impl HitComponent for HitNestedArtboard {
             return false;
         }
         let mapped = ScrollEvent {
-            delta: Vec2D::transform_dir(event.delta, &to_nested),
+            delta: Vec2D::transform_dir(self.lift.delta(event.delta), &to_nested),
             ..*event
         };
         for animation in nested_animations(&self.component) {
@@ -2705,7 +2722,7 @@ impl HitComponent for HitNestedArtboard {
             return HitResult::None;
         };
         let mapped = ScrollEvent {
-            delta: Vec2D::transform_dir(event.delta, &to_nested),
+            delta: Vec2D::transform_dir(self.lift.delta(event.delta), &to_nested),
             ..*event
         };
         for animation in nested_animations(&self.component) {

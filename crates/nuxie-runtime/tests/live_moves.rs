@@ -13700,7 +13700,11 @@ fn in_place_a_file_imports_and_draws_as_without_keys() {
 
 /// `InPlaceFixture::Field` loaded, with its moves prepared.
 fn field_page() -> (InPlacePage, LiveMoves) {
-    let page = InPlacePage::load(fixture::InPlaceFixture::Field);
+    field_page_of(fixture::InPlaceFixture::Field)
+}
+/// A field page, `Field` or `FieldTurned`, loaded with its moves prepared.
+fn field_page_of(kind: fixture::InPlaceFixture) -> (InPlacePage, LiveMoves) {
+    let page = InPlacePage::load(kind);
     let mut moves = LiveMoves::default();
     moves.prepare(&page.root).unwrap();
     (page, moves)
@@ -13866,6 +13870,76 @@ fn in_place_semantic_subtree_has_one_stable_occurrence_at_every_move_boundary() 
             (node.min_x, node.min_y, node.max_x, node.max_y),
             "landed where it rests"
         );
+    }
+}
+
+/// A copy's semantic bounds are those of what draws, not of its turned
+/// resting box: A's card is turned 0.4 and B's is not, so at the step's end,
+/// progress 1, A's copy draws exactly where B's card rests and each of A's
+/// card, field and button reads its twin's resting bounds on B. Bounding A's
+/// turned box at rest before the lift turns it back would read it larger.
+#[test]
+fn in_place_a_turned_copys_semantic_bounds_are_where_it_draws() {
+    use source::semantic::semantic_snapshot::SemanticsDiffNode;
+    let (page, mut moves) = field_page_of(fixture::InPlaceFixture::FieldTurned);
+    page.machine.with_instance_mut(|m| m.enable_semantics());
+    page.machine.advance_and_apply(0.0);
+    let manager = page
+        .machine
+        .with_instance(|m| m.semantic_manager())
+        .unwrap();
+    let snapshot = || manager.with_semantic_manager_mut(|m| m.snapshot().to_vec());
+    let named = |nodes: &[SemanticsDiffNode], label: &str| {
+        let mut found = nodes
+            .iter()
+            .filter(|n| n.label == label)
+            .cloned()
+            .collect::<Vec<_>>();
+        found.sort_by_key(|n| n.id);
+        found
+    };
+    let rest = snapshot();
+    let a_card = named(&rest, "card");
+    let wide = |n: &SemanticsDiffNode| (n.max_x - n.min_x, n.max_y - n.min_y);
+    let ((aw, ah), (bw, bh)) = (wide(&a_card[0]), wide(&a_card[1]));
+    assert!(
+        (aw - 120.0).abs() > 1.0 || (bw - 120.0).abs() > 1.0,
+        "one card is turned at rest: {aw}x{ah}, {bw}x{bh}"
+    );
+    moves.step_begin(&page.root, "B", Some("t1")).unwrap();
+    page.machine.advance_and_apply(0.0);
+    moves.after_advance(&page.root).unwrap();
+    field_fly_to(&page, &mut moves, 1.0);
+    let end = snapshot();
+    for label in ["card", "field", "button"] {
+        let at_rest = named(&rest, label);
+        let at_end = named(&end, label);
+        assert_eq!(at_rest.len(), 2, "{label}: one per Screen: {rest:#?}");
+        // Each copy at the end draws where B's twin rests: the one whose
+        // bounds did not change.
+        let still = at_rest
+            .iter()
+            .zip(&at_end)
+            .find(|(rest, end)| {
+                (rest.min_x, rest.min_y, rest.max_x, rest.max_y)
+                    == (end.min_x, end.min_y, end.max_x, end.max_y)
+            })
+            .map(|(rest, _)| rest.clone())
+            .unwrap_or_else(|| panic!("{label}: B's copy rests at the end: {end:#?}"));
+        for node in &at_end {
+            for (got, want) in [
+                (node.min_x, still.min_x),
+                (node.min_y, still.min_y),
+                (node.max_x, still.max_x),
+                (node.max_y, still.max_y),
+            ] {
+                assert!(
+                    (got - want).abs() < 0.01,
+                    "{label} {} at the end: {node:?}, B's at rest {still:?}\nat the end {end:#?}\nat rest {rest:#?}",
+                    node.id
+                );
+            }
+        }
     }
 }
 

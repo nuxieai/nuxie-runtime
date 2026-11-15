@@ -627,8 +627,9 @@ impl crate::mechanical_port::source::animation::state_machine_instance::HitCompo
             return HitResult::None;
         };
         let local = inverse * position;
+        let delta = self.lift.delta(event.delta);
         let mapped = ScrollEvent {
-            delta: inverse * (position + event.delta) - local,
+            delta: inverse * (position + delta) - local,
             ..*event
         };
         let mut host = ScriptUpdateRequestHost::default();

@@ -28,6 +28,8 @@ use std::{cell::RefCell, collections::HashSet, rc::Rc};
 pub(crate) struct LiftState {
     /// The Screen that holds the copy.
     pub(crate) row: CoreHandle,
+    /// The upper Screen, which draws the lift: `row` for the upper copy.
+    pub(crate) board: CoreHandle,
     /// The copy: the element whose entries the lift draws.
     pub(crate) element: CoreHandle,
     /// The upper Screen's own copy, where the lift paints.
@@ -121,6 +123,12 @@ impl Lift {
         self.0.borrow().drawn
     }
 
+    /// The pointer's way back to the copy at rest (`drawn`'s inverse): None
+    /// while the lift draws nothing.
+    pub(crate) fn hit(&self) -> Option<Mat2D> {
+        self.0.borrow().hit
+    }
+
     /// Whether the lift draws its copy now: it is solved, at an opacity
     /// above 0.
     pub(crate) fn shows(&self) -> bool {
@@ -128,9 +136,15 @@ impl Lift {
         state.drawn.is_some() && state.opacity > 0.0
     }
 
-    pub(crate) fn new(row: CoreHandle, element: CoreHandle, anchor: CoreHandle) -> Self {
+    pub(crate) fn new(
+        row: CoreHandle,
+        board: CoreHandle,
+        element: CoreHandle,
+        anchor: CoreHandle,
+    ) -> Self {
         Self(Rc::new(RefCell::new(LiftState {
             row,
+            board,
             element,
             anchor,
             coverer: None,

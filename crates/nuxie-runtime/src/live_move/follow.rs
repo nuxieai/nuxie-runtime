@@ -933,7 +933,8 @@ impl Resting {
 /// which draws in its lift) and an entry of the anchor itself never cover
 /// it. One frame reads every anchor on a Screen at once: the list, each
 /// entry's walk up to the Screen (`draws_for` for every anchor in one walk)
-/// and the resting boxes are read once for all of them.
+/// and the resting boxes are read once for all of them. Both copies of a
+/// pair share their upper Screen's anchor, so they share its cover.
 pub(super) fn lift_covers(
     board: &CoreHandle,
     anchors: &[CoreHandle],
@@ -943,11 +944,17 @@ pub(super) fn lift_covers(
     let list = board
         .with_downcast::<Artboard, _>(|board| board.drawables().to_vec())
         .unwrap_or_default();
-    let index = anchors
+    let mut index = HashMap::new();
+    let mut unique: Vec<&CoreHandle> = Vec::new();
+    let of = anchors
         .iter()
-        .enumerate()
-        .map(|(n, anchor)| (anchor, n))
-        .collect::<HashMap<_, _>>();
+        .map(|anchor| {
+            *index.entry(anchor).or_insert_with(|| {
+                unique.push(anchor);
+                unique.len() - 1
+            })
+        })
+        .collect::<Vec<_>>();
     // For each entry, the anchors it draws for; None for a lift entry.
     let draws = list
         .iter()
@@ -975,12 +982,12 @@ pub(super) fn lift_covers(
         })
         .collect::<Vec<_>>();
     let mut rest = Resting::new(board);
-    (0..anchors.len())
+    let covers = (0..unique.len())
         .map(|n| {
             let at = draws
                 .iter()
                 .position(|item| item.as_ref().is_some_and(|found| found.contains(&n)))?;
-            let anchor_box = anchor_box(&mut rest, &anchors[n]);
+            let anchor_box = anchor_box(&mut rest, unique[n]);
             list[..at]
                 .iter()
                 .zip(&draws[..at])
@@ -996,7 +1003,8 @@ pub(super) fn lift_covers(
                 })
                 .map(|(item, _)| item.clone())
         })
-        .collect()
+        .collect::<Vec<_>>();
+    of.into_iter().map(|n| covers[n].clone()).collect()
 }
 
 /// A lifted copy's anchor's resting box on its Screen. An anchor that is

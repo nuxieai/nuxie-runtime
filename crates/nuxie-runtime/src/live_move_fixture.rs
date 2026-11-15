@@ -502,6 +502,10 @@ pub enum InPlaceFixture {
     /// move as they fly; and B holding a plain video "plain" at (300, 200),
     /// outside every card.
     Field,
+    /// `Field` with A's card turned 0.4 about its own origin, so the flight
+    /// takes the turn off A's copy: at its end the copy draws unturned,
+    /// where B's card rests.
+    FieldTurned,
 }
 
 /// What `InPlaceFixture::Keyed` keys in place of a box.
@@ -523,12 +527,13 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
     let keyed = !matches!(kind, Stripped | SlotOnly);
     let slot = matches!(kind, WithSlot | SlotOnly);
     let records_on = if kind == FlightsOnA { "A" } else { "B" };
+    let field = matches!(kind, Field | FieldTurned);
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
         var(&mut b, n);
     }
     obj(&mut b, "Backboard", &[]);
-    if kind == Keyed(KeyedKind::Video) || kind == Field {
+    if kind == Keyed(KeyedKind::Video) || field {
         // A video names its asset, as a published file's does. The field
         // card's videos, not laid out, take the asset's size, so they have
         // an area to be seen in.
@@ -536,7 +541,7 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
             ("sourceKey", S("asset:card")),
             ("contentType", S("video/mp4")),
         ];
-        if kind == Field {
+        if field {
             asset.extend([("width", F(40.0)), ("height", F(40.0))]);
         }
         obj(&mut b, "VideoAsset", &asset);
@@ -561,24 +566,25 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
             &[("viewModelId", U(model)), ("viewModelInstanceId", U(0))],
         );
     }
-    // A box at `id`: the component, its style, its record, a Fill and its
-    // color (`id` to `id + 4`).
-    let boxed_in = |b: &mut Vec<u8>,
-                    parent: u64,
-                    id: u64,
-                    name: &str,
-                    size: (f32, f32),
-                    key: u64,
-                    color: u32| {
-        obj(
-            b,
-            "LayoutComponent",
-            &[
-                ("name", S(name)),
-                ("parentId", U(parent)),
-                ("styleId", U(id + 1)),
-            ],
-        );
+    // A box at `id`, turned by `turn`: the component, its style, its
+    // record, a Fill and its color (`id` to `id + 4`).
+    let boxed_turned = |b: &mut Vec<u8>,
+                        parent: u64,
+                        id: u64,
+                        name: &str,
+                        size: (f32, f32),
+                        key: u64,
+                        color: u32,
+                        turn: f32| {
+        let mut component = vec![
+            ("name", S(name)),
+            ("parentId", U(parent)),
+            ("styleId", U(id + 1)),
+        ];
+        if turn != 0.0 {
+            component.push(("rotation", F(turn)));
+        }
+        obj(b, "LayoutComponent", &component);
         obj(b, "LayoutComponentStyle", &[("parentId", U(id))]);
         let mut record = vec![
             ("parentId", U(id)),
@@ -598,6 +604,15 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
             "SolidColor",
             &[("parentId", U(id + 3)), ("colorValue", Color(color))],
         );
+    };
+    let boxed_in = |b: &mut Vec<u8>,
+                    parent: u64,
+                    id: u64,
+                    name: &str,
+                    size: (f32, f32),
+                    key: u64,
+                    color: u32| {
+        boxed_turned(b, parent, id, name, size, key, color, 0.0)
     };
     let boxed = |b: &mut Vec<u8>, id: u64, name: &str, size: (f32, f32), key: u64, color: u32| {
         boxed_in(b, 0, id, name, size, key, color)
@@ -620,7 +635,7 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
             ("display", U(1)),
             ("columnGap", F(10.0)),
         ];
-        if kind == Field && screen == "B" {
+        if field && screen == "B" {
             // B's card rests at (100, 60), so its copy moves as it flies.
             root.extend([("paddingLeft", F(100.0)), ("paddingTop", F(60.0))]);
         }
@@ -665,18 +680,21 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
             ); // 4 or 5
             if participant { 6 } else { 5 }
         } else {
-            boxed(
+            let turn = if kind == FieldTurned && screen == "A" { 0.4 } else { 0.0 };
+            boxed_turned(
                 &mut b,
+                0,
                 3,
                 "card",
                 card,
                 if keyed { key } else { 0 },
                 0xffcc3333,
+                turn,
             ); // 3 to 7
             8
         };
         boxed(&mut b, note, "note", (60.0, 40.0), 0, 0xff3333cc); // note to note + 4
-        if kind == Field {
+        if field {
             field_card(&mut b, screen); // 13 to 23
         }
         if screen == "A" && slot {

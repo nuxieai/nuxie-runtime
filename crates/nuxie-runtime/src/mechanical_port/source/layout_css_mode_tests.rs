@@ -22159,6 +22159,16 @@ const TAFFY_FORK_REPLACED_ROWS: &[(&str, &str, &str, &str)] = &[
     ("ie-gstart-frp50-pic2-pad", "display:grid;justify-items:start;width:90px", "2>1>display:grid;grid-template-columns:1fr 50%;padding:5px> & 3>2>picture:120x60;max-width:100%> & 4>2>width:30px;height:10px>", "1=0,0,90,30 2=0,0,90,30 3=5,5,40,20 4=45,5,30,10"),
     ("ie-abs-frp50-pic2-plain", "position:relative;width:90px", "2>1>display:grid;grid-template-columns:1fr 50%;position:absolute> & 3>2>picture:120x60;max-width:100%> & 4>2>width:30px;height:10px>", "1=0,0,90,0 2=0,0,90,22.5 3=0,0,45,22.5 4=45,0,30,10"),
     ("ie-abs-frp50-pic2-gap", "position:relative;width:90px", "2>1>display:grid;grid-template-columns:1fr 50%;gap:10px;position:absolute> & 3>2>picture:120x60;max-width:100%> & 4>2>width:30px;height:10px>", "1=0,0,90,0 2=0,0,90,17.5 3=0,0,35,17.5 4=45,0,30,10"),
+    ("id-fcol-hh-box60", "display:flex;flex-direction:column;align-items:flex-start;width:90px", "2>1>display:grid;grid-template-columns:0.25fr 0.25fr> & 3>2>width:60px;height:10px>", "1=0,0,90,10 2=0,0,75,10 3=0,0,60,10"),
+    ("id-fcol-hq-box60", "display:flex;flex-direction:column;align-items:flex-start;width:90px", "2>1>display:grid;grid-template-columns:0.5fr 0.2fr> & 3>2>width:60px;height:10px>", "1=0,0,90,10 2=0,0,72,10 3=0,0,60,10"),
+    ("id-gstart-hh-box60", "display:grid;justify-items:start;width:90px", "2>1>display:grid;grid-template-columns:0.25fr 0.25fr> & 3>2>width:60px;height:10px>", "1=0,0,90,10 2=0,0,75,10 3=0,0,60,10"),
+    ("id-gstart-hq-box60", "display:grid;justify-items:start;width:90px", "2>1>display:grid;grid-template-columns:0.5fr 0.2fr> & 3>2>width:60px;height:10px>", "1=0,0,90,10 2=0,0,72,10 3=0,0,60,10"),
+    ("id-abs-hh-box60", "position:relative;width:90px", "2>1>display:grid;grid-template-columns:0.25fr 0.25fr;position:absolute> & 3>2>width:60px;height:10px>", "1=0,0,90,0 2=0,0,75,10 3=0,0,60,10"),
+    ("id-abs-hq-box60", "position:relative;width:90px", "2>1>display:grid;grid-template-columns:0.5fr 0.2fr;position:absolute> & 3>2>width:60px;height:10px>", "1=0,0,90,0 2=0,0,72,10 3=0,0,60,10"),
+    ("id-wide-hh-box240", "display:flex;flex-direction:column;align-items:flex-start;width:400px", "2>1>display:grid;grid-template-columns:0.25fr 0.25fr> & 3>2>width:240px;height:10px>", "1=0,0,400,10 2=0,0,300,10 3=0,0,240,10"),
+    ("id-wide-hh-box60", "display:flex;flex-direction:column;align-items:flex-start;width:400px", "2>1>display:grid;grid-template-columns:0.25fr 0.25fr> & 3>2>width:60px;height:10px>", "1=0,0,400,10 2=0,0,75,10 3=0,0,60,10"),
+    ("id-wide-hq-box240", "display:flex;flex-direction:column;align-items:flex-start;width:400px", "2>1>display:grid;grid-template-columns:0.5fr 0.2fr> & 3>2>width:240px;height:10px>", "1=0,0,400,10 2=0,0,288,10 3=0,0,240,10"),
+    ("id-wide-hq-box60", "display:flex;flex-direction:column;align-items:flex-start;width:400px", "2>1>display:grid;grid-template-columns:0.5fr 0.2fr> & 3>2>width:60px;height:10px>", "1=0,0,400,10 2=0,0,72,10 3=0,0,60,10"),
 ];
 
 #[test]

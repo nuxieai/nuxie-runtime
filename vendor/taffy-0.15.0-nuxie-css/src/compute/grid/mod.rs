@@ -646,7 +646,8 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
                 let new_min_content_contribution =
                     item.min_content_contribution(AbstractAxis::Inline, tree, grid_area_size, available_space);
 
-                let has_changed = Some(new_min_content_contribution) != item.min_content_contribution_cache.width;
+                let has_changed =
+                    item.min_content_contribution_cache.width.is_some_and(|old| old != new_min_content_contribution);
                 // nuxie-css: a max-content contribution that was used and has changed needs
                 // the rerun as well. An item holding a picture with a percentage width keeps
                 // the same compressed min-content contribution while its max-content one

@@ -1903,3 +1903,21 @@ and the rest differed before for causes left for later: flex factors that sum be
 (30), a `minmax(50%, 1fr)` column (18), and the row height under a picture beside a
 percentage column (18). The test harness's column lists now accept percentages. Guard
 rows: 53.
+
+## Columns are sized again only when an item's contribution really changed
+
+After the rows are sized, the columns are sized again when an item's min-content
+contribution has changed. Stock compares the new contribution with the cached one, and an
+item whose contribution was never asked for (nothing cached) counted as changed. The
+rerun then sized the columns inside the width the first pass gave the grid, and the grid
+took the new column total as its width.
+
+That is wrong when flex factors sum below one: the columns fill only part of the grid.
+A grid with `0.25fr 0.25fr` columns around a 240 wide box is 300 wide in Chrome (240 and
+60 under an unknown width); its columns laid out in 300 are 240 and 15, and the fork
+then reported the grid 255 wide. An item with nothing cached now does not count as
+changed, so the grid keeps the width of the first pass.
+
+The 32,600 compared layouts are unchanged. Of the shrink-to-fit grid probes, 10 more
+match (flex factors below one around boxes); none moves away. Guard rows: 10.
+

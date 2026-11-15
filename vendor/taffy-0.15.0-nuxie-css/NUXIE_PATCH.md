@@ -2087,3 +2087,21 @@ Example: a 200 wide column with `align-items: flex-start` around a 40 by 40 pict
 
 Of the 32,600 compared layouts, 326 differ from Chrome (334 before): 8 fixed, none
 regressed. Of 468 new probes, 9 differ (219 before). Guard rows: 30.
+
+## A picture in a wrapping row sized by its ratio keeps its natural width
+
+A stretched picture in a row is as wide as its ratio makes the row's height only when
+that height is definite for the item, which it is not on a wrapping row: the line's
+height comes from its items. The fork measured the picture at its natural size in a
+wrapping row with a set height, but a row whose height came from its own
+`aspect-ratio` was left out of that rule, so the picture took the ratio height as its
+own and was as wide as that made it.
+
+The exception for a container with its own ratio (`determine_flex_base_size`) now
+covers single-line rows and columns only.
+
+Example: a 300 wide wrapping row with `aspect-ratio: 2` around a 40 by 40 picture.
+Chrome: the picture is 40 by 150. Before: 150 by 150.
+
+Of the 32,600 compared layouts, 315 differ from Chrome (326 before): 11 fixed, none
+regressed. Of 1,910 new probes, 72 differ (268 before). Guard rows: 32.

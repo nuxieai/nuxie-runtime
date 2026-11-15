@@ -1592,14 +1592,17 @@ fn determine_flex_base_size(
             && (!child.size_style.height.is_stretch() || stretch_height_is_own);
         child.replaced_stretch_awaits_width =
             replaced_without_definite_stretch && !constants.is_row && (!constants.is_wrap || wrapped_line_awaits_width);
-        let probe_known_dimensions = if ((child.ratio.is_some() && !child_cross_size_is_definite)
-            || replaced_without_definite_stretch)
-            && !has_keyword_width
+        let probe_known_dimensions = if (child.ratio.is_some() && !child_cross_size_is_definite)
+            || replaced_without_definite_stretch
         {
             child_known_dimensions.with_cross(dir, child.size.cross(dir))
         } else {
             child_known_dimensions
         };
+        // The flex base size keeps the measurement above; only the minimum is found at
+        // the keyword width.
+        let minimum_probe_known_dimensions =
+            if has_keyword_width { child_known_dimensions } else { probe_known_dimensions };
 
         // nuxie-css: a stand-in height that is not the item's stretched height (a wrapping
         // row's line is not sized yet) is a known size but not a definite one: a
@@ -1805,7 +1808,7 @@ fn determine_flex_base_size(
                 tree.compute_child_layout(
                     child.node,
                     LayoutInput {
-                        known_dimensions: probe_known_dimensions,
+                        known_dimensions: minimum_probe_known_dimensions,
                         known_dimensions_are_definite: probe_definiteness,
                         parent_size: child_parent_size,
                         available_space: child_available_space,

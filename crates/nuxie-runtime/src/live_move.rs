@@ -23,9 +23,9 @@ pub use plan::{
     zoom::{Ends, Pair},
 };
 #[cfg(feature = "test-support")]
-pub use transport::slot_placement;
+pub use transport::{refill_slot, slot_placement};
 pub(crate) use transport::{SlotState, reconcile_slot, settle_leaving_rows};
-pub use transport::{empty_slot, move_live, validate_move};
+pub use transport::{carry, empty_slot, move_live, validate_move};
 pub(crate) use values::ValueBlend;
 
 // Nuxie slots can carry the full local matrix produced by flight following.

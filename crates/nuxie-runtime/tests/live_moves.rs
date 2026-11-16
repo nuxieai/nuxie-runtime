@@ -14120,3 +14120,395 @@ fn in_place_a_pending_insert_is_applied_before_takeoff() {
     );
     assert_eq!(page.draw(), want, "the first draw after take-off");
 }
+
+/// The carry between two component placements of an in-place page, shaped
+/// as the compiler publishes one (`fixture::in_place_carry_fixture`): each
+/// Screen's keyed box "card" holds one placement "unit". Driven directly
+/// through `carry`, `empty_slot` and `refill_slot`, as the slot path's
+/// transport is tested above; no step flies here.
+mod in_place_carry {
+    use super::*;
+    use fixture::InPlaceCarry;
+
+    struct Page {
+        _file: RuntimeFileHandle,
+        factory: PersistentFactory<RecordingFactory>,
+        root: RuntimeArtboardInstanceHandle,
+        machine: RuntimeStateMachineInstanceHandle,
+        moves: LiveMoves,
+        a: RuntimeArtboardInstanceHandle,
+        b: RuntimeArtboardInstanceHandle,
+        /// A's and B's placements "unit".
+        pa: CoreHandle,
+        pb: CoreHandle,
+    }
+    impl Page {
+        fn new(kind: InPlaceCarry) -> Self {
+            let mut factory = PersistentFactory::new(RecordingFactory::new());
+            let file = File::import(
+                &fixture::in_place_carry_fixture(kind),
+                RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+                None,
+                None,
+                None,
+            )
+            .expect("the in-place page imports");
+            let root = file.with_file(|f| f.artboard_named("Page")).unwrap();
+            let model = file
+                .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+                .unwrap();
+            let machine = root.default_state_machine_handle().unwrap();
+            machine.with_instance_mut(|m| m.bind_view_model_instance(model));
+            machine.advance_and_apply(0.0);
+            let rows = screens(&root).unwrap();
+            let (a, b) = (rows["A"].clone(), rows["B"].clone());
+            let pa = placement(&a, "unit");
+            let pb = placement(&b, "unit");
+            let mut moves = LiveMoves::default();
+            moves.prepare(&root).unwrap();
+            Self {
+                _file: file,
+                factory,
+                root,
+                machine,
+                moves,
+                a,
+                b,
+                pa,
+                pb,
+            }
+        }
+        fn advance(&mut self, dt: f32) {
+            self.machine.advance_and_apply(dt);
+            self.moves.after_advance(&self.root).unwrap();
+        }
+        /// The `drawPath` lines `board` draws.
+        fn paths(&self, board: &RuntimeArtboardInstanceHandle) -> usize {
+            let mut renderer = self.factory.borrow().make_renderer();
+            self.factory.borrow_mut().clear();
+            board.draw(&mut renderer);
+            self.factory
+                .borrow()
+                .stream()
+                .lines()
+                .filter(|l| l.starts_with("drawPath "))
+                .count()
+        }
+    }
+    fn placement(board: &RuntimeArtboardInstanceHandle, name: &str) -> CoreHandle {
+        board
+            .with_artboard(|b| b.find_handle::<NestedArtboard>(name))
+            .unwrap_or_else(|| panic!("placement {name}"))
+    }
+    fn layout_x(board: &RuntimeArtboardInstanceHandle, name: &str) -> f32 {
+        board
+            .with_artboard(|b| b.find_handle::<source::layout_component::LayoutComponent>(name))
+            .unwrap()
+            .with_downcast::<source::layout_component::LayoutComponent, _>(|b| b.layout_x())
+            .unwrap()
+    }
+    fn keyed(unit: &RuntimeArtboardInstanceHandle) -> CoreHandle {
+        unit.with_artboard(|b| b.find_handle::<Node>("keyed"))
+            .unwrap()
+    }
+
+    /// The carry's own refusals, before anything is taken: a placement with
+    /// no flight key on it or on its box, a keyed box holding two
+    /// placements, the same placement twice, and an empty placement.
+    #[test]
+    fn in_place_the_carry_refuses_an_unkeyed_placement() {
+        let s = Page::new(InPlaceCarry::Unkeyed);
+        let spare = placement(&s.a, "spare unit");
+        let (a, b, unkeyed) = (holds(&s.pa), holds(&s.pb), holds(&spare));
+        assert!(carry(&spare, &s.pb, false).is_err());
+        assert!(carry(&s.pa, &spare, false).is_err());
+        assert!(empty_slot(&spare).is_err());
+        assert_eq!((holds(&s.pa), holds(&s.pb), holds(&spare)), (a, b, unkeyed));
+
+        let s = Page::new(InPlaceCarry::TwoInCard);
+        let second = placement(&s.a, "second unit");
+        let (a, b, two) = (holds(&s.pa), holds(&s.pb), holds(&second));
+        assert!(carry(&s.pa, &s.pb, false).is_err(), "a box holding two placements");
+        assert!(carry(&second, &s.pb, false).is_err());
+        assert_eq!((holds(&s.pa), holds(&s.pb), holds(&second)), (a, b, two));
+    }
+
+    /// Row 27: a refused or malformed carry changes nothing.
+    #[test]
+    fn in_place_a_refused_carry_changes_nothing() {
+        let s = Page::new(InPlaceCarry::Duo);
+        let (a, b) = (holds(&s.pa), holds(&s.pb));
+        assert!(carry(&s.pa, &s.pa, false).is_err());
+        assert!(move_live(&s.pa, &s.pa).is_err());
+        assert_eq!((holds(&s.pa), holds(&s.pb)), (a.clone(), b.clone()));
+        empty_slot(&s.pa).unwrap();
+        assert!(carry(&s.pa, &s.pb, false).is_err(), "an empty placement");
+        assert_eq!(holds(&s.pb), b);
+    }
+
+    /// Row 4: the carry discards the arriving placement's own instance and
+    /// releases it. Row 5: the emptied placement draws nothing.
+    #[test]
+    fn in_place_takeoff_discards_the_arriving_placements_instance() {
+        let mut s = Page::new(InPlaceCarry::Duo);
+        // A's note and A's unit's button; B's the same.
+        assert_eq!((s.paths(&s.a), s.paths(&s.b)), (2, 2));
+        let original = child(&s.pa).unwrap();
+        let fresh = child(&s.pb).unwrap().downgrade();
+        carry(&s.pa, &s.pb, false).unwrap();
+        s.advance(0.0);
+        assert!(child(&s.pa).is_none());
+        assert_eq!(holds(&s.pb), Some(original.core_handle()));
+        assert!(fresh.upgrade().is_none(), "the arriving placement's instance is released");
+        assert_eq!((s.paths(&s.a), s.paths(&s.b)), (1, 2));
+    }
+
+    #[test]
+    fn in_place_empty_source_draws_no_geometry() {
+        let mut s = Page::new(InPlaceCarry::Duo);
+        assert_eq!(s.paths(&s.a), 2);
+        empty_slot(&s.pa).unwrap();
+        s.advance(0.0);
+        assert_eq!(s.paths(&s.a), 1, "only A's note");
+    }
+
+    /// Row 6: the emptied placement keeps its box through its frozen
+    /// placeholder, so its neighbors do not move.
+    #[test]
+    fn in_place_an_emptied_placement_keeps_its_neighbors() {
+        let mut s = Page::new(InPlaceCarry::Duo);
+        let note = layout_x(&s.a, "note");
+        let bounds = |pa: &CoreHandle| {
+            pa.with_downcast::<source::nested_artboard_layout::NestedArtboardLayout, _>(|p| {
+                p.layout_bounds()
+            })
+            .unwrap()
+        };
+        let before = bounds(&s.pa);
+        close(before.width(), 100.0);
+        close(before.height(), 80.0);
+        carry(&s.pa, &s.pb, false).unwrap();
+        s.advance(0.0);
+        close(layout_x(&s.a, "note"), note);
+        let after = bounds(&s.pa);
+        close(after.width(), 100.0);
+        close(after.height(), 80.0);
+        carry(&s.pb, &s.pa, false).unwrap();
+        s.advance(0.0);
+        close(layout_x(&s.a, "note"), note);
+    }
+
+    /// Row 9: the instance takes the arriving placement's props, bound to
+    /// the arriving Screen, and keeps its private values and typed text.
+    #[test]
+    fn in_place_private_values_text_and_destination_prop_survive() {
+        let mut s = Page::new(InPlaceCarry::Duo);
+        let original = child(&s.pa).unwrap();
+        let model = vm(&original);
+        close(val(&property(&model, "prop"), 575), 10.0);
+        set(&property(&model, "count"), 575, 7.0);
+        let text = original
+            .with_artboard(|b| b.find_handle::<source::text::text_input::TextInput>("edit"))
+            .unwrap();
+        assert!(
+            text.with_downcast_mut::<source::text::text_input::TextInput, _>(|t| {
+                t.text_input("hello mascot")
+            })
+            .unwrap()
+        );
+        carry(&s.pa, &s.pb, false).unwrap();
+        s.advance(0.0);
+        assert_eq!(vm(&child(&s.pb).unwrap()), model);
+        close(val(&property(&model, "count"), 575), 7.0);
+        close(val(&property(&model, "prop"), 575), 200.0);
+        assert_eq!(
+            text.with_downcast::<source::text::text_input::TextInput, _>(|t| t.text().to_owned())
+                .unwrap(),
+            "hello mascot"
+        );
+        // It follows B's model, and A's no longer reaches it.
+        set(&property(&vm(&s.b), "offset"), 575, 321.0);
+        s.advance(0.0);
+        close(val(&property(&model, "prop"), 575), 321.0);
+        set(&property(&vm(&s.a), "offset"), 575, 999.0);
+        s.advance(0.0);
+        close(val(&property(&model, "prop"), 575), 321.0);
+    }
+
+    /// Row 7: a refill gives the emptied placement a fresh instance of its
+    /// own: entry state, its own Screen's props, its own listeners, in its
+    /// Screen's focus and accessibility trees, while the carried instance
+    /// runs on in B. Row 16: taps reach the carried instance in its new host.
+    #[test]
+    fn in_place_a_refill_gives_the_placement_it_left_its_own_copy() {
+        use source::{
+            focus_data::FocusData, math::vec2d::Vec2D, pointer_button::PointerButton,
+            semantic::semantic_data::SemanticData,
+        };
+        let mut s = Page::new(InPlaceCarry::Duo);
+        s.machine.with_instance_mut(|m| m.enable_semantics());
+        let manager = s.machine.with_instance(|m| m.semantic_manager()).unwrap();
+        let flown = child(&s.pa).unwrap();
+        let definition = flown.with_artboard(|b| b.artboard_source_handle());
+        let listeners = machine(&s.pa).with_instance(|m| m.nested_event_listeners());
+        let running = machine(&s.pa);
+        s.advance(0.3);
+        close(val(&keyed(&flown), 13), 30.0);
+        carry(&s.pa, &s.pb, false).unwrap();
+        refill_slot(&s.pa).unwrap();
+        let own = child(&s.pa).expect("A's placement holds a copy of its own");
+        assert_ne!(own.core_handle(), flown.core_handle());
+        assert_eq!(own.with_artboard(|b| b.artboard_source_handle()), definition);
+        assert!(machine(&s.pb).downgrade().ptr_eq(&running.downgrade()));
+        s.advance(0.0);
+        close(val(&keyed(&own), 13), 0.0);
+        close(val(&keyed(&flown), 13), 30.0);
+        close(val(&property(&vm(&own), "prop"), 575), 10.0);
+        close(val(&property(&vm(&flown), "prop"), 575), 200.0);
+        // Its listeners are the placement's own, on its new machine.
+        let restored = machine(&s.pa);
+        let actual = restored.with_instance(|m| m.nested_event_listeners());
+        assert_eq!(actual.len(), listeners.len());
+        assert!(actual.iter().zip(&listeners).all(|(a, b)| a.ptr_eq(b)));
+        // A tap on B's button reaches the carried instance, and one on A's
+        // reaches A's own copy.
+        let tap = |s: &Page, host: &CoreHandle, id| {
+            let p = slot_pose(host).unwrap().transform * Vec2D::new(20.0, 20.0);
+            s.machine
+                .with_instance_mut(|m| m.pointer_down(p, id, PointerButton::Primary));
+        };
+        tap(&s, &s.pb, 0);
+        close(running.with_instance(|m| m.get_number("hits").unwrap().value()), 9.0);
+        close(restored.with_instance(|m| m.get_number("hits").unwrap().value()), 0.0);
+        running.set_number("hits", 0.0);
+        tap(&s, &s.pa, 1);
+        close(restored.with_instance(|m| m.get_number("hits").unwrap().value()), 9.0);
+        close(running.with_instance(|m| m.get_number("hits").unwrap().value()), 0.0);
+        // A's copy is in A's focus tree, the carried one in B's.
+        let focus = own.with_artboard(|b| b.focus_manager()).unwrap();
+        assert!(focus.ptr_eq(&s.a.with_artboard(|b| b.focus_manager()).unwrap()));
+        let carried = flown.with_artboard(|b| b.focus_manager()).unwrap();
+        assert!(carried.ptr_eq(&s.b.with_artboard(|b| b.focus_manager()).unwrap()));
+        let node = own.with_artboard(|b| b.find_all_handles::<FocusData>())[0]
+            .with_downcast::<FocusData, _>(|f| f.existing_focus_node())
+            .flatten()
+            .unwrap();
+        focus.with_focus_manager_mut(|m| m.set_focus(node.clone()));
+        assert!(focus.with_focus_manager(|m| m.has_primary_focus(&node)));
+        // Each copy sits in the accessibility tree under its own placement.
+        for (unit, host) in [(&own, &s.pa), (&flown, &s.pb)] {
+            let boundary = unit.with_artboard(|b| b.semantic_boundary_node()).unwrap();
+            let parent = SemanticData::find_closest_semantic_node_handle(Some(host.clone()));
+            let parent = parent.map(|n| n.borrow().id());
+            assert_eq!(boundary.borrow().parent().map(|p| p.borrow().id()), parent);
+        }
+        let field = semantic_field_id(&own);
+        assert_ne!(field, semantic_field_id(&flown));
+        let snapshot = manager.with_semantic_manager_mut(|m| m.snapshot().to_vec());
+        assert!(snapshot.iter().any(|n| n.id == field));
+        assert!(snapshot.iter().any(|n| n.id == semantic_field_id(&flown)));
+    }
+
+    /// Row 14: a focused field moves to the arriving Screen's focus manager
+    /// without a blur, and home again.
+    #[test]
+    fn in_place_focus_scope_moves_without_blurring_the_field() {
+        use source::{focus_data::FocusData, text::text_input::TextInput};
+        let mut s = Page::new(InPlaceCarry::Duo);
+        let unit = child(&s.pa).unwrap();
+        let node = unit.with_artboard(|b| b.find_all_handles::<FocusData>())[0]
+            .with_downcast::<FocusData, _>(|f| f.existing_focus_node())
+            .flatten()
+            .unwrap();
+        let a_focus = s.a.with_artboard(|b| b.focus_manager()).unwrap();
+        let b_focus = s.b.with_artboard(|b| b.focus_manager()).unwrap();
+        a_focus.with_focus_manager_mut(|m| m.set_focus(node.clone()));
+        let text = unit.with_artboard(|b| b.find_handle::<TextInput>("edit")).unwrap();
+        let focused = || text.with_downcast::<TextInput, _>(|t| t.is_focused()).unwrap();
+        assert!(focused());
+        carry(&s.pa, &s.pb, false).unwrap();
+        assert!(b_focus.with_focus_manager(|m| m.has_primary_focus(&node)));
+        assert!(focused(), "no blur at the carry");
+        s.advance(0.1);
+        assert!(focused());
+        carry(&s.pb, &s.pa, false).unwrap();
+        assert!(a_focus.with_focus_manager(|m| m.has_primary_focus(&node)));
+        assert!(focused(), "no blur on the way home");
+    }
+
+    /// Row 15: the carried subtree keeps its semantic ids, with one
+    /// occurrence of each at every boundary: before, after the carry, after
+    /// the refill, and home again.
+    #[test]
+    fn in_place_semantic_subtree_has_one_stable_occurrence_at_every_carry() {
+        use source::semantic::semantic_data::SemanticData;
+        use std::collections::HashSet;
+        let mut s = Page::new(InPlaceCarry::Duo);
+        s.machine.with_instance_mut(|m| m.enable_semantics());
+        let manager = s.machine.with_instance(|m| m.semantic_manager()).unwrap();
+        s.advance(0.0);
+        let unit = child(&s.pa).unwrap();
+        let ids: HashSet<u32> = unit
+            .with_artboard(|b| b.find_all_handles::<SemanticData>())
+            .iter()
+            .map(|h| {
+                h.with_downcast::<SemanticData, _>(|d| {
+                    d.existing_semantic_node().unwrap().borrow().id()
+                })
+                .unwrap()
+            })
+            .collect();
+        assert_eq!(ids.len(), 3);
+        let check = |s: &mut Page, host: &CoreHandle| {
+            s.advance(0.0);
+            let snapshot = manager.with_semantic_manager_mut(|m| m.snapshot().to_vec());
+            let all: Vec<u32> = snapshot.iter().map(|n| n.id).collect();
+            let unique: HashSet<u32> = all.iter().copied().collect();
+            assert_eq!(all.len(), unique.len(), "every node occurs once");
+            assert!(ids.is_subset(&unique), "the carried ids stay");
+            let boundary = unit.with_artboard(|b| b.semantic_boundary_node()).unwrap();
+            let parent = SemanticData::find_closest_semantic_node_handle(Some(host.clone()));
+            assert_eq!(
+                boundary.borrow().parent().map(|p| p.borrow().id()),
+                parent.map(|n| n.borrow().id())
+            );
+        };
+        let (pa, pb) = (s.pa.clone(), s.pb.clone());
+        check(&mut s, &pa);
+        carry(&pa, &pb, false).unwrap();
+        check(&mut s, &pb);
+        refill_slot(&pa).unwrap();
+        check(&mut s, &pb);
+        empty_slot(&pa).unwrap();
+        carry(&pb, &pa, false).unwrap();
+        check(&mut s, &pa);
+    }
+
+    /// The caller says whether the carried instance is in the air: then the
+    /// arriving placement notes where it took off, and the removal of its
+    /// row carries it home there. Said not, removing the row takes the
+    /// instance with it, as a landing would have.
+    #[test]
+    fn in_place_the_caller_says_where_a_carried_instance_came_from() {
+        for in_the_air in [true, false] {
+            let mut s = Page::new(InPlaceCarry::Duo);
+            let original = child(&s.pa).unwrap().core_handle();
+            carry(&s.pa, &s.pb, in_the_air).unwrap();
+            let list = s
+                .root
+                .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+                .unwrap();
+            let a = list
+                .with_downcast::<ArtboardComponentList, _>(|l| l.list_item(0))
+                .flatten()
+                .unwrap();
+            ArtboardComponentList::update_list_occurrence(&list, &[a]);
+            s.advance(0.0);
+            assert_eq!(
+                holds(&s.pa) == Some(original.clone()),
+                in_the_air,
+                "home only when the caller said it was in the air"
+            );
+        }
+    }
+}

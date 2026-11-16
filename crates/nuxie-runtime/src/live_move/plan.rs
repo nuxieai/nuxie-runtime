@@ -324,10 +324,7 @@ impl Plan {
                 let to = find_slot(&incoming_row, unit.incoming_unit_key, 0)?;
                 let two_versions = !unit.transfers();
                 let holder = from.node.clone();
-                ensure!(
-                    child(&holder)?.is_some(),
-                    "leaving copy has no instance"
-                );
+                ensure!(child(&holder)?.is_some(), "leaving copy has no instance");
                 let outgoing_flight =
                     find_flight(outgoing, &incoming_row, unit.outgoing_flight_key)?;
                 let incoming_flight =
@@ -366,10 +363,7 @@ impl Plan {
                     // The incoming version takes off from its own Screen.
                     // Both versions follow the outgoing-to-incoming poses;
                     // file object order alone determines which draws above.
-                    ensure!(
-                        child(&to.node)?.is_some(),
-                        "arriving copy has no instance"
-                    );
+                    ensure!(child(&to.node)?.is_some(), "arriving copy has no instance");
                     let arriving = make_flight(incoming_flight, to.node.clone(), &to.node)?;
                     // A zoom keeps the two together: one box, one entry
                     // (docs/live-moves.md).

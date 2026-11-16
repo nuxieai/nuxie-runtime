@@ -478,14 +478,10 @@ impl ScriptedDrawable {
 }
 pub struct HitScriptedDrawable {
     drawable: CoreHandle,
-    lift: crate::mechanical_port::source::animation::state_machine_instance::HitLift,
 }
 impl HitScriptedDrawable {
     pub fn new(drawable: CoreHandle) -> Self {
-        Self {
-            drawable,
-            lift: Default::default(),
-        }
+        Self { drawable }
     }
 
     /// Box test shared by pointer hits and scroll.
@@ -522,11 +518,6 @@ impl crate::mechanical_port::source::animation::state_machine_instance::HitCompo
             return false;
         }
         self.within_bounds(position)
-    }
-    fn hit_lift(
-        &self,
-    ) -> &crate::mechanical_port::source::animation::state_machine_instance::HitLift {
-        &self.lift
     }
     fn prepare_event(
         &self,

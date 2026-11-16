@@ -123,7 +123,7 @@ pub(super) struct QueuedSemanticEvent {
 
 #[derive(Clone)]
 pub(super) struct CaptureHit {
-    pub hit: Rc<dyn super::state_machine_instance::HitComponent>,
+    pub hit: Rc<super::state_machine_instance::HitGate>,
     pub group: crate::source::listener_group::RuntimeListenerGroupHandle,
     pub target: CoreHandle,
     pub depth: u32,

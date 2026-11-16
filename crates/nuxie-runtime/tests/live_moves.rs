@@ -2255,7 +2255,10 @@ fn a_transferred_landing_refills_the_screen_it_left() {
     assert_eq!(holds(&s.d), Some(flown.core_handle()));
     let own = child(&s.s).expect("the Screen left holds a copy of its own");
     assert_ne!(own.core_handle(), flown.core_handle());
-    assert_eq!(own.with_artboard(|b| b.artboard_source_handle()), definition);
+    assert_eq!(
+        own.with_artboard(|b| b.artboard_source_handle()),
+        definition
+    );
     // The first frame after landing: its entry state and its own Screen's
     // props (A's offset is 10, B's 200).
     s.advance(0.0);
@@ -2426,7 +2429,11 @@ fn a_cancel_puts_every_instance_back_before_the_next_frame() {
     s.advance(0.1);
     let (list, a) = screens_item(&s, 0);
     ArtboardComponentList::update_list_occurrence(&list, &[a]);
-    assert_eq!(holds(&s.s), Some(leaving.clone()), "back before any plan call");
+    assert_eq!(
+        holds(&s.s),
+        Some(leaving.clone()),
+        "back before any plan call"
+    );
     s.moves.after_advance(&s.root).unwrap();
     assert_eq!(holds(&s.s), Some(leaving));
     assert!(
@@ -8525,7 +8532,11 @@ mod paint_order {
                 m.pointer_move(Vec2D::new(x, y), 0.0, id);
                 m.pointer_down(Vec2D::new(x, y), id, PointerButton::Primary);
                 for step in 1..=6 {
-                    m.pointer_move(Vec2D::new(x, y - 10.0 * step as f32), step as f32 / 60.0, id);
+                    m.pointer_move(
+                        Vec2D::new(x, y - 10.0 * step as f32),
+                        step as f32 / 60.0,
+                        id,
+                    );
                 }
                 m.pointer_up(Vec2D::new(x, y - 60.0), id, PointerButton::Primary);
             });
@@ -8553,11 +8564,19 @@ mod paint_order {
         });
         assert_eq!(half_way.len(), 4, "half way ran");
         for (at, wheel, moved) in &half_way {
-            assert_eq!(*wheel, (false, false, false), "half way at {at:?}: the wheel");
+            assert_eq!(
+                *wheel,
+                (false, false, false),
+                "half way at {at:?}: the wheel"
+            );
             assert_eq!(*moved, 0.0, "half way at {at:?}: b scrolled");
         }
         let before = offset();
-        assert_eq!(wheel(&mut s, (200.0, 100.0)), (true, true, true), "landed: the wheel");
+        assert_eq!(
+            wheel(&mut s, (200.0, 100.0)),
+            (true, true, true),
+            "landed: the wheel"
+        );
         assert_ne!(offset(), before, "landed: the wheel scrolls b");
         let before = offset();
         drag(&mut s, (200.0, 100.0));
@@ -8631,6 +8650,207 @@ mod paint_order {
                 "half way a is listed at {:?}, its fill draws from {lo:?} to {hi:?}",
                 boxes[0]
             );
+        }
+    }
+
+    /// A capture listener inside a copy flying in place hears nothing for
+    /// the step, as one in the bubble phase does: the copy's hits hand
+    /// capture only an exit (`HitGate`), a placement's own machine included,
+    /// whose hits know nothing of the lift. In `ElementCase::TappedCapture`
+    /// half way forward, neither (110, 100), where b's copy draws, nor (274,
+    /// 154), where it rests, is heard; landed, (274, 154) is.
+    #[test]
+    fn hits_a_capture_listener_inside_a_copy_flying_in_place_hears_nothing_until_it_lands() {
+        use fixture::{ElementCase, ElementKind};
+        for kind in [ElementKind::Text, ElementKind::Placement] {
+            let mut s = PaintScene::shaped(
+                PaintCase::Element(kind, ElementCase::TappedCapture),
+                PaintShape::InPlace,
+            );
+            let mut half_way = None;
+            s.fly(Way::Go, |s, p| {
+                if p == 0.5 {
+                    let b = s.heard_on("B", "b", None);
+                    let drawn = s.tap_heard(110.0, 100.0, &b);
+                    let rests = s.tap_heard(274.0, 154.0, &b);
+                    half_way = Some((drawn, rests));
+                }
+            });
+            assert_eq!(half_way, Some((0.0, 0.0)), "{kind:?}: half way");
+            let b = s.heard_on("B", "b", None);
+            assert_eq!(s.tap_heard(274.0, 154.0, &b), 9.0, "{kind:?}: landed");
+        }
+    }
+
+    /// Whether `hit` is inside the object `local` of list row `item`'s
+    /// Screen (A 0, B 1): its path through that row reaches the object.
+    fn inside(hit: &RuntimeGeometryHit, item: usize, local: usize) -> bool {
+        if hit.occurrence.first().map(|row| row.item_index) != Some(item) {
+            return false;
+        }
+        let page = hit.path[0].artboard_global_id;
+        let Some(screen) = hit
+            .path
+            .iter()
+            .map(|part| part.artboard_global_id)
+            .find(|&id| id != page)
+        else {
+            return false;
+        };
+        hit.path
+            .iter()
+            .any(|part| part.artboard_global_id == screen && part.local_id == local)
+    }
+
+    /// A host's point test is input: it reads a copy flying in place by the
+    /// one predicate the machine's `HitGate` reads (css_layout/lift.rs,
+    /// `takes_input`), so where the machine sends a press the point test
+    /// reports the same. On Match in place, the red after the panel: half
+    /// way back at (200, 180), on the red's copy over the panel, the machine
+    /// hands the press to the panel, and the point test lists the panel and
+    /// no red; half way forward at (200, 205), on the red's copy over
+    /// nothing that listens, the machine hands it to nothing, and the point
+    /// test lists neither; landed forward at (25, 100), both reach the red.
+    #[test]
+    fn hits_a_host_point_test_agrees_with_the_machine_over_a_copy_flying_in_place() {
+        let mut s = PaintScene::shaped(PaintCase::Match { red_above: true }, PaintShape::InPlace);
+        let index = s
+            ._file
+            .with_file(|f| (0..f.artboard_count()).find(|&i| f.artboard_name_at(i) == "Page"))
+            .unwrap();
+        let mut host = ArtboardInstance::from_native_handle(s._file.clone(), index, s.root.clone());
+        let local = |row: &str, name: &str| {
+            let element = s.layout(row, name);
+            s.row(row).with_artboard(|r| {
+                r.objects()
+                    .iter()
+                    .position(|object| object.as_ref() == Some(&element))
+                    .expect("one of its Screen's objects")
+            })
+        };
+        let marks = [
+            ("red", 0, local("A", "red")),
+            ("red", 1, local("B", "red")),
+            ("panel", 1, local("B", "panel")),
+        ];
+        // Which of the reds and the panel the point test at (x, y) lists.
+        let listed = move |host: &mut ArtboardInstance, x: f32, y: f32| {
+            let hits = host.hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(x, y));
+            let mut found: Vec<&str> = marks
+                .iter()
+                .filter(|(_, item, id)| hits.iter().any(|hit| inside(hit, *item, *id)))
+                .map(|(name, _, _)| *name)
+                .collect();
+            found.dedup();
+            found
+        };
+        let mut over_nothing = None;
+        s.fly(Way::Go, |s, p| {
+            if p == 0.5 {
+                s.advance(0.0);
+                let point = listed(&mut host, 200.0, 205.0);
+                let red = s.heard_on("B", "red", None);
+                let red = s.tap_heard(200.0, 205.0, &red);
+                let panel = s.tap(200.0, 205.0);
+                over_nothing = Some((point, red, panel));
+            }
+        });
+        assert_eq!(
+            over_nothing,
+            Some((vec![], 0.0, 0.0)),
+            "half way forward over nothing: (point test, red, panel)"
+        );
+        s.advance(0.0);
+        let landed = listed(&mut host, 25.0, 100.0);
+        let red = s.heard_on("B", "red", None);
+        assert_eq!(
+            (landed, s.tap_heard(25.0, 100.0, &red)),
+            (vec!["red"], 9.0),
+            "landed: (point test, red)"
+        );
+        let mut over_panel = None;
+        s.fly(Way::Back, |s, p| {
+            if p == 0.5 {
+                s.advance(0.0);
+                let point = listed(&mut host, 200.0, 180.0);
+                let red = s.heard_on("B", "red", None);
+                red.clear();
+                let panel = s.tap(200.0, 180.0);
+                over_panel = Some((point, red.read(), panel));
+            }
+        });
+        assert_eq!(
+            over_panel,
+            Some((vec!["panel"], 0.0, 9.0)),
+            "half way back over the panel: (point test, red, panel)"
+        );
+    }
+
+    /// A host geometry query rooted inside a copy flying in place reads it
+    /// unmoved, clips with geometry (css_layout/lift.rs, `query_place`,
+    /// `Inside`): the query's root flies with the copy, so nothing in it
+    /// moves against the root, and no clip is moved apart from what it cuts.
+    /// In `ZoomCase::ClippedPlacement`, a query rooted at a's placed artboard
+    /// (80 by 60, its child box 30 by 20 at (40, 30)): at rest the clipping
+    /// shape above a cuts it to its left 40 points and cuts the child away,
+    /// the control; half way, as drawing leaves that clip out of the lift,
+    /// it lists the artboard whole and the child where it is in it.
+    #[test]
+    fn hits_a_query_rooted_inside_a_copy_flying_in_place_reads_it_unmoved() {
+        let mut s = PaintScene::shaped(
+            PaintCase::Zoom(fixture::ZoomCase::ClippedPlacement),
+            PaintShape::InPlace,
+        );
+        let placement = s
+            .row("A")
+            .with_artboard(|r| r.find_handle::<NestedArtboard>("a"))
+            .expect("a's placement");
+        let inner = child(&placement).expect("a's placed artboard");
+        let index = s
+            ._file
+            .with_file(|f| (0..f.artboard_count()).find(|&i| f.artboard_name_at(i) == "a inner"))
+            .expect("a's placed artboard in the file");
+        let mut host = ArtboardInstance::from_native_handle(s._file.clone(), index, inner);
+        let listed = |host: &mut ArtboardInstance| {
+            host.visible_geometry_with_bounds()
+                .into_iter()
+                .map(|hit| {
+                    let b = hit.bounds;
+                    (hit.path, [b.min_x, b.min_y, b.max_x, b.max_y])
+                })
+                .collect::<Vec<_>>()
+        };
+        let rest = listed(&mut host);
+        assert!(
+            !rest.is_empty(),
+            "a's placed artboard lists something at rest"
+        );
+        let mut half_way = None;
+        s.fly(Way::Go, |_, p| {
+            if p == 0.5 {
+                half_way = Some(listed(&mut host));
+            }
+        });
+        let half_way = half_way.expect("half way ran");
+        assert_eq!(
+            rest.len(),
+            1,
+            "at rest the clip cuts the child away: {rest:?}"
+        );
+        assert!(
+            rest[0].1[2] < 79.0,
+            "at rest the clip cuts the artboard: {rest:?}"
+        );
+        let want = [[0.0, 0.0, 80.0, 60.0], [40.0, 30.0, 70.0, 50.0]];
+        assert_eq!(half_way.len(), 2, "half way {half_way:?}");
+        assert_eq!(
+            half_way[0].0, rest[0].0,
+            "half way {half_way:?}, at rest {rest:?}"
+        );
+        for ((_, got), want) in half_way.iter().zip(&want) {
+            for (got, want) in got.iter().zip(want) {
+                assert!((got - want).abs() < 0.01, "half way {half_way:?}");
+            }
         }
     }
 
@@ -8964,7 +9184,10 @@ mod paint_order {
         println!(
             "layout passes a frame: in place at rest {:?}, flying with ends the same size {:?}, stripped at rest {:?}; slots at rest {:?}, flying with ends the same size {:?}",
             in_place.iter().map(|run| run.1).collect::<Vec<_>>(),
-            in_place.iter().map(|run| run.2.unwrap()).collect::<Vec<_>>(),
+            in_place
+                .iter()
+                .map(|run| run.2.unwrap())
+                .collect::<Vec<_>>(),
             stripped.iter().map(|run| run.1).collect::<Vec<_>>(),
             slots.iter().map(|run| run.1).collect::<Vec<_>>(),
             slots.iter().map(|run| run.2.unwrap()).collect::<Vec<_>>(),
@@ -8979,7 +9202,9 @@ mod paint_order {
             let bare = stats(&stripped, line);
             println!(
                 "{name} | {slot:.1} | {noise:.1} | {place:.1} | {place_spread:.1} | {}",
-                bare.map_or(" | ".to_owned(), |(t, spread)| format!("{t:.1} | {spread:.1}"))
+                bare.map_or(" | ".to_owned(), |(t, spread)| format!(
+                    "{t:.1} | {spread:.1}"
+                ))
             );
             if place > slot + noise {
                 misses.push(format!(
@@ -9009,7 +9234,11 @@ mod paint_order {
                 ));
             }
         }
-        assert!(misses.is_empty(), "4.5's bar is missed:\n{}", misses.join("\n"));
+        assert!(
+            misses.is_empty(),
+            "4.5's bar is missed:\n{}",
+            misses.join("\n")
+        );
     }
 
     /// Test 3, Calmly welcome: `#lake` and `#scrim` absolute and full
@@ -11275,10 +11504,9 @@ mod drawn {
         // flight slots at that run's end: landed, the path offset, the
         // leaving copy faded out and the arriving one in.
         let mut s = Scene::from_bytes(&fixture::flight_animation_fixture(FlightWindow::Whole));
-        let header = s
-            .b
-            .with_artboard(|b| b.find_handle::<Node>("header"))
-            .unwrap();
+        let header =
+            s.b.with_artboard(|b| b.find_handle::<Node>("header"))
+                .unwrap();
         set(&header, 13, 250.0);
         let (leaving, arriving) = (record(&s, 11), record(&s, 12));
         writes(&leaving, &[(PROGRESS, 1.0), (PATH_X, 12.0), (FADE, 0.0)]);
@@ -11316,7 +11544,11 @@ mod drawn {
             writes(r, &[(PROGRESS, 1.0), (FADE, 0.0)]);
         }
         s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
-        reads(&leaving, "back's leaving copy", &[(PROGRESS, 0.0), (FADE, 1.0)]);
+        reads(
+            &leaving,
+            "back's leaving copy",
+            &[(PROGRESS, 0.0), (FADE, 1.0)],
+        );
         reads(&held, "back's held copy", &[(PROGRESS, 0.0), (FADE, 1.0)]);
 
         // A transferred flight: nothing keys its fade, so it keeps the
@@ -11325,7 +11557,11 @@ mod drawn {
         let flight = record(&s, 2);
         writes(&flight, &[(PROGRESS, 0.6)]);
         s.begin();
-        reads(&flight, "the transferred flight", &[(PROGRESS, 0.0), (FADE, 1.0)]);
+        reads(
+            &flight,
+            "the transferred flight",
+            &[(PROGRESS, 0.0), (FADE, 1.0)],
+        );
 
         // A zero-length flight begins at its end; a delayed window at its
         // first keys.
@@ -14144,8 +14380,24 @@ fn in_place_semantic_subtree_has_one_stable_occurrence_at_every_move_boundary() 
 /// turned box at rest before the lift turns it back would read it larger.
 #[test]
 fn in_place_a_turned_copys_semantic_bounds_are_where_it_draws() {
+    copys_semantic_bounds_end_on_its_twin(fixture::InPlaceFixture::FieldTurned);
+}
+
+/// A copy's semantic bounds are read in its own Screen's root by the one
+/// map the lift draws by (css_layout/lift.rs, `DrawnMap::in_space`), whatever
+/// the two Screens' roots: B's Screen is scaled by 0.8 and A's is not, so at
+/// the step's end each of A's card, field and button reads its twin's
+/// resting bounds on B, scaled.
+#[test]
+fn in_place_a_copys_semantic_bounds_follow_both_screens_roots() {
+    copys_semantic_bounds_end_on_its_twin(fixture::InPlaceFixture::FieldScaled);
+}
+
+/// At the step's end, progress 1, each of A's card, field and button reads
+/// its twin's bounds on B, and those are where B's twin rests once landed.
+fn copys_semantic_bounds_end_on_its_twin(kind: fixture::InPlaceFixture) {
     use source::semantic::semantic_snapshot::SemanticsDiffNode;
-    let (page, mut moves) = field_page_of(fixture::InPlaceFixture::FieldTurned);
+    let (page, mut moves) = field_page_of(kind);
     page.machine.with_instance_mut(|m| m.enable_semantics());
     page.machine.advance_and_apply(0.0);
     let manager = page
@@ -14166,62 +14418,80 @@ fn in_place_a_turned_copys_semantic_bounds_are_where_it_draws() {
     let a_card = named(&rest, "card");
     let wide = |n: &SemanticsDiffNode| (n.max_x - n.min_x, n.max_y - n.min_y);
     let ((aw, ah), (bw, bh)) = (wide(&a_card[0]), wide(&a_card[1]));
-    assert!(
-        (aw - 120.0).abs() > 1.0 || (bw - 120.0).abs() > 1.0,
-        "one card is turned at rest: {aw}x{ah}, {bw}x{bh}"
-    );
+    if kind == fixture::InPlaceFixture::FieldTurned {
+        assert!(
+            (aw - 120.0).abs() > 1.0 || (bw - 120.0).abs() > 1.0,
+            "one card is turned at rest: {aw}x{ah}, {bw}x{bh}"
+        );
+    }
     moves.step_begin(&page.root, "B", Some("t1")).unwrap();
     page.machine.advance_and_apply(0.0);
     moves.after_advance(&page.root).unwrap();
     field_fly_to(&page, &mut moves, 1.0);
     let end = snapshot();
+    moves.step_end(&page.root, "B", Some("t1")).unwrap();
+    page.machine.advance_and_apply(0.0);
+    moves.after_advance(&page.root).unwrap();
+    let landed = snapshot();
+    let near = |a: &SemanticsDiffNode, b: &SemanticsDiffNode| {
+        [
+            (a.min_x, b.min_x),
+            (a.min_y, b.min_y),
+            (a.max_x, b.max_x),
+            (a.max_y, b.max_y),
+        ]
+        .iter()
+        .all(|(a, b)| (a - b).abs() < 0.01)
+    };
     for label in ["card", "field", "button"] {
-        let at_rest = named(&rest, label);
+        assert_eq!(
+            named(&rest, label).len(),
+            2,
+            "{label}: one per Screen: {rest:#?}"
+        );
         let at_end = named(&end, label);
-        assert_eq!(at_rest.len(), 2, "{label}: one per Screen: {rest:#?}");
-        // Each copy at the end draws where B's twin rests: the one whose
-        // bounds did not change.
-        let still = at_rest
-            .iter()
-            .zip(&at_end)
-            .find(|(rest, end)| {
-                (rest.min_x, rest.min_y, rest.max_x, rest.max_y)
-                    == (end.min_x, end.min_y, end.max_x, end.max_y)
-            })
-            .map(|(rest, _)| rest.clone())
-            .unwrap_or_else(|| panic!("{label}: B's copy rests at the end: {end:#?}"));
-        for node in &at_end {
-            for (got, want) in [
-                (node.min_x, still.min_x),
-                (node.min_y, still.min_y),
-                (node.max_x, still.max_x),
-                (node.max_y, still.max_y),
-            ] {
-                assert!(
-                    (got - want).abs() < 0.01,
-                    "{label} {} at the end: {node:?}, B's at rest {still:?}\nat the end {end:#?}\nat rest {rest:#?}",
-                    node.id
-                );
-            }
-        }
+        assert_eq!(at_end.len(), 2, "{label}: both copies at the end: {end:#?}");
+        assert!(
+            near(&at_end[0], &at_end[1]),
+            "{label}: A's copy at the end reads its twin's bounds\nat the end {end:#?}"
+        );
+        assert!(
+            named(&landed, label)
+                .iter()
+                .any(|node| near(node, &at_end[0])),
+            "{label}: at the end it reads where B's twin rests once landed\nat the end {end:#?}\nlanded {landed:#?}"
+        );
     }
 }
 
-/// Host geometry reads a copy flying in place where it draws, and its point
-/// test hits it there and not where it rests (css_layout/lift.rs,
-/// `DrawnMap`). On `Field` at the step's end, progress 1, A's copy draws
+/// Host geometry lists a copy flying in place where it draws
+/// (css_layout/lift.rs, `DrawnMap`), and its point test, which is input,
+/// hits neither copy for the step (`takes_input`), as the machine hands
+/// them no press. On `Field` at the step's end, progress 1, A's copy draws
 /// where B's card rests, so A's button is listed with B's button's resting
-/// bounds, a point at their center hits it, and its own resting center
-/// does not.
+/// bounds; a point at their center hits neither button, nor does A's own
+/// resting center. Landed, the point hits B's button where it rests.
 #[test]
 fn in_place_host_geometry_reads_a_copy_where_it_draws() {
+    host_geometry_lists_a_copy_where_it_draws(fixture::InPlaceFixture::Field);
+}
+
+/// `in_place_host_geometry_reads_a_copy_where_it_draws` with B's Screen
+/// scaled by 0.8 and A's not: the listing reads both Screens' roots.
+#[test]
+fn in_place_host_geometry_follows_both_screens_roots() {
+    host_geometry_lists_a_copy_where_it_draws(fixture::InPlaceFixture::FieldScaled);
+}
+
+fn host_geometry_lists_a_copy_where_it_draws(kind: fixture::InPlaceFixture) {
     use nuxie_render_api::{Aabb, Vec2D};
-    let (page, mut moves) = field_page_of(fixture::InPlaceFixture::Field);
+    let (page, mut moves) = field_page_of(kind);
     let index = page
         ._file
         .with_file(|f| (0..f.artboard_count()).find(|&i| f.artboard_name_at(i) == "Page"))
         .unwrap();
-    let mut host = ArtboardInstance::from_native_handle(page._file.clone(), index, page.root.clone());
+    let mut host =
+        ArtboardInstance::from_native_handle(page._file.clone(), index, page.root.clone());
     // Each Screen's button, local id 15 (`field_card`), by its path.
     let buttons = |host: &mut ArtboardInstance| {
         let mut found: Vec<_> = host
@@ -14258,10 +14528,13 @@ fn in_place_host_geometry_reads_a_copy_where_it_draws() {
             b.bounds
         );
     }
-    let hits_a = |host: &mut ArtboardInstance, at: Vec2D| {
-        host.hit_test_segments_with_bounds(at)
-            .iter()
-            .any(|hit| hit.path == a.path)
+    // Which buttons the point test at `at` hits: A's, B's.
+    let hit = |host: &mut ArtboardInstance, at: Vec2D| {
+        let hits = host.hit_test_segments_with_bounds(at);
+        (
+            hits.iter().any(|hit| hit.path == a.path),
+            hits.iter().any(|hit| hit.path == b.path),
+        )
     };
     let center = |bounds: &Aabb| {
         Vec2D::new(
@@ -14269,8 +14542,23 @@ fn in_place_host_geometry_reads_a_copy_where_it_draws() {
             (bounds.min_y + bounds.max_y) / 2.0,
         )
     };
-    assert!(hits_a(&mut host, center(&b.bounds)), "where A's copy draws");
-    assert!(!hits_a(&mut host, center(&a.bounds)), "where A's button rests");
+    assert_eq!(
+        hit(&mut host, center(&b.bounds)),
+        (false, false),
+        "where A's copy draws"
+    );
+    assert_eq!(
+        hit(&mut host, center(&a.bounds)),
+        (false, false),
+        "where A's button rests"
+    );
+    moves.step_end(&page.root, "B", Some("t1")).unwrap();
+    page.machine.advance_and_apply(0.0);
+    moves.after_advance(&page.root).unwrap();
+    assert!(
+        hit(&mut host, center(&b.bounds)).1,
+        "landed: B's button where it rests"
+    );
 }
 
 /// In an in-place file a step unit flies two copies: `transfers` is

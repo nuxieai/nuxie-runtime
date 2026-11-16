@@ -77,22 +77,11 @@ pub fn drawn_root_transform_point(
     lifted.point(root_transform_point(artboard, point)?)
 }
 
-/// Our layer: where a copy flying in place draws, in the legacy
-/// root-transform space the native bounds contract reads (`semantic_bounds`,
-/// `root_transform_aabb`): the lift's one map (css_layout/lift.rs,
-/// `DrawnMap`) there, by its own Screen's legacy root transform. None outside
-/// a lift, and while it draws nothing, which keeps the copy's bounds where
-/// it rests.
-pub(crate) fn legacy_drawn(component: &CoreHandle) -> Option<Mat2D> {
-    let crate::css_layout::lift::Lifted::Drawn(map) = crate::css_layout::lift::Lifted::of(component)
-    else {
-        return None;
-    };
-    map.in_space(legacy_root(&map.screen)?)
-}
-
-/// `artboard`'s legacy root transform as a matrix.
-fn legacy_root(artboard: &CoreHandle) -> Option<Mat2D> {
+/// `artboard`'s legacy root transform as a matrix: where the native bounds
+/// contract (`semantic_bounds`, `root_transform_aabb`) places each Screen,
+/// which a copy flying in place reads the lift's map by
+/// (css_layout/lift.rs, `drawn_in`).
+pub(crate) fn legacy_root(artboard: &CoreHandle) -> Option<Mat2D> {
     let [origin, x, y] = artboard.with_downcast_mut::<Artboard, _>(|row| {
         [
             Vec2D::new(0.0, 0.0),
@@ -112,7 +101,7 @@ fn legacy_root(artboard: &CoreHandle) -> Option<Mat2D> {
 }
 
 /// Our layer: the bounds of `points`, points in `artboard`'s space of a
-/// copy at rest, where `map` (`legacy_drawn`) shows it: each point goes
+/// copy at rest, where `map` (the lift's, by `legacy_root`) shows it: each point goes
 /// through the artboard's legacy root transform, the space `map` is in, and
 /// the lift before the bounds are taken, so a turn the flight takes off the
 /// copy is not bounded twice.
@@ -353,13 +342,17 @@ fn walk_geometry_clips(
     // query's spaces may not hold, a sibling of the copy's own Screen: its
     // space is the copy's Screen's through the pose
     // (`DrawingScreen::to_copy_screen`). The copy's own clips are where it
-    // draws, by the lift's one map in the query's space (`DrawnMap`); a query
-    // rooted inside the copy moves with it.
+    // draws as its geometry is, by one answer for the query
+    // (css_layout/lift.rs, `query_place`): the lift's map in the query's
+    // space when the query is rooted at or above the copy's Screen, nothing
+    // when it is rooted inside the copy, which moves with it.
     let drawing = crate::css_layout::lift::lift_around(component).and_then(|lift| {
         let row = lift.0.borrow().row.clone();
         let drawing = lift.drawing_screen();
         Some((row, drawing.screen.clone(), drawing.to_copy_screen()?))
     });
+    use crate::css_layout::lift::QueryPlace;
+    let place = crate::css_layout::lift::query_place(component, spaces);
     walk_rendered_clips(component, false, |artboard, clip, drawn| {
         let find = |spaces: &[(CoreHandle, Mat2D)], owner: &CoreHandle| {
             spaces
@@ -384,10 +377,10 @@ fn walk_geometry_clips(
         } else {
             clip
         };
-        let clip = match drawn.map(|map| space(&map.screen).map(|to| map.in_space(to))) {
-            None | Some(None) => clip,
-            Some(Some(Some(lifted))) => clip.mapped(|point| lifted * point),
-            Some(Some(None)) => return false,
+        let clip = match (drawn, &place) {
+            (None, _) | (Some(_), QueryPlace::Plain | QueryPlace::Inside) => clip,
+            (Some(_), QueryPlace::Above(map)) => clip.mapped(|point| *map * point),
+            (Some(_), QueryPlace::Hidden) => return false,
         };
         visit(clip)
     })
@@ -717,7 +710,7 @@ pub fn semantic_bounds(component: Option<&CoreHandle>) -> Bounds {
         return Bounds::default();
     };
     // Our layer: a copy flying in place is where its lift draws it.
-    match legacy_drawn(component) {
+    match crate::css_layout::lift::drawn_in(component, legacy_root) {
         Some(map) => lifted_semantic_bounds(component, &map),
         None => resting_semantic_bounds(component),
     }

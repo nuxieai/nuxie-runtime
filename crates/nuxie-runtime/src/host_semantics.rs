@@ -809,25 +809,30 @@ fn css_box_paints(
 }
 
 /// Our layer: `to_root`, which takes a drawable's world into the query's
-/// root, moved to where it draws: inside a copy flying in place, after the
-/// lift's one map in the root's space (css_layout/lift.rs, `DrawnMap`), read
-/// through the copy's own Screen's entry in `spaces`. A query rooted inside
-/// the copy moves with it, so there it is `to_root`. None while the lift
-/// draws nothing, except for retained geometry, which counts it at rest.
+/// root, moved to where it draws: inside a copy flying in place, by the
+/// query's one answer for geometry and clips together (css_layout/lift.rs,
+/// `query_place`): after the lift's map in the root's space when the query
+/// is rooted at or above the copy's Screen, unmoved when it is rooted inside
+/// the copy, which moves with it. None while the lift draws nothing, except
+/// for retained geometry, which counts it at rest. A point test is input: a
+/// copy flying in place takes none for its step, by the rule a state
+/// machine's hits read (`lift::takes_input`), so it is not hit there and
+/// what is beneath it is, as the machine hands that pointer.
 fn drawn_to_root(
     handle: &CoreHandle,
     to_root: NativeMat2D,
     spaces: &[(CoreHandle, NativeMat2D)],
     visibility: GeometryVisibility,
+    point_test: bool,
 ) -> Option<NativeMat2D> {
-    use crate::css_layout::lift::Lifted;
-    match Lifted::of(handle) {
-        Lifted::No => Some(to_root),
-        Lifted::Hidden => (visibility == GeometryVisibility::Retained).then_some(to_root),
-        Lifted::Drawn(map) => match spaces.iter().find(|(owner, _)| *owner == map.screen) {
-            None => Some(to_root),
-            Some((_, screen)) => Some(map.in_space(*screen)? * to_root),
-        },
+    use crate::css_layout::lift::{QueryPlace, query_place, takes_input};
+    if point_test && !takes_input(handle) {
+        return None;
+    }
+    match query_place(handle, spaces) {
+        QueryPlace::Plain | QueryPlace::Inside => Some(to_root),
+        QueryPlace::Hidden => (visibility == GeometryVisibility::Retained).then_some(to_root),
+        QueryPlace::Above(map) => Some(map * to_root),
     }
 }
 
@@ -1043,6 +1048,7 @@ fn collect_geometry(
         drawing_to_root,
         &spaces,
         visibility,
+        query.is_some(),
     ) && let Some((handle, painted, covers)) = artboard.with_artboard(|instance| {
         let root = &instance.base;
         let layout = &root.base.base;
@@ -1145,8 +1151,13 @@ fn collect_geometry(
         });
 
         if painted_box {
-            let Some(box_to_root) = drawn_to_root(&handle, drawing_to_root, &spaces, visibility)
-            else {
+            let Some(box_to_root) = drawn_to_root(
+                &handle,
+                drawing_to_root,
+                &spaces,
+                visibility,
+                query.is_some(),
+            ) else {
                 continue;
             };
             let render_bounds = |bounds: NativeAabb| {
@@ -1283,7 +1294,13 @@ fn collect_geometry(
         else {
             continue;
         };
-        let Some(to_root) = drawn_to_root(&handle, drawing_to_root, &spaces, visibility) else {
+        let Some(to_root) = drawn_to_root(
+            &handle,
+            drawing_to_root,
+            &spaces,
+            visibility,
+            query.is_some(),
+        ) else {
             continue;
         };
         let root_transform = to_root * world;
@@ -1502,6 +1519,7 @@ fn collect_semantic_text(
             artboard_to_root,
             &spaces,
             GeometryVisibility::Visible,
+            false,
         ) else {
             continue;
         };

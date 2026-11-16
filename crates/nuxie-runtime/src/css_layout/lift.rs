@@ -265,6 +265,16 @@ pub(crate) fn lift_around(component: &CoreHandle) -> Option<Lift> {
     None
 }
 
+/// Whether a pointer may enter `component`: not inside a copy flying in
+/// place, which takes no input for its step, as the devices turn input off
+/// for one (iOS `ExperiencePageStep.swift`, Android `ExperiencePageStep.kt`).
+/// The one rule a state machine's hit gate
+/// (animation/state_machine_instance.rs, `HitGate`) and the host's point
+/// tests (host_semantics.rs) read.
+pub(crate) fn takes_input(component: &CoreHandle) -> bool {
+    lift_around(component).is_none()
+}
+
 /// Where a lift draws its copy: the one map that every reader of where a
 /// lifted copy draws reads, in whatever space it works in, instead of the
 /// copy's resting world, which never moves (`Lifted::of`).
@@ -275,8 +285,14 @@ pub(crate) struct DrawnMap {
     drawn: Mat2D,
     /// The same in the page's space, which the pose writes beside it.
     page: Mat2D,
+    /// The lift's matrix, from the copy's own Screen's drawing space to the
+    /// upper Screen's: `drawn` is `row⁻¹ · upper · lift`
+    /// (live_move/in_place.rs, `drawn_map`).
+    lift: Mat2D,
     /// The copy's own Screen, whose drawing space `drawn` is in.
     pub(crate) screen: CoreHandle,
+    /// The upper Screen, which draws the copy.
+    upper: CoreHandle,
 }
 
 impl DrawnMap {
@@ -285,13 +301,74 @@ impl DrawnMap {
         self.page
     }
 
-    /// The map in a reader's own space, given the copy's own Screen's
-    /// drawing space in it (`to_space`): `to_space · drawn · to_space⁻¹`.
-    pub(crate) fn in_space(&self, to_space: Mat2D) -> Option<Mat2D> {
-        let mut inverse = Mat2D::default();
-        to_space
-            .invert(&mut inverse)
-            .then(|| to_space * self.drawn * inverse)
+    /// The map in a reader's own space, the one way every reader takes it:
+    /// `to_upper · lift · to_row⁻¹`, where `place` says where the reader
+    /// puts each Screen's drawing space, the copy's own (`to_row`) and the
+    /// upper one (`to_upper`). A reader whose space places the two Screens
+    /// differently from drawing, a frame origin or a row's scale apart,
+    /// still sees the copy where its upper twin is at the end. A reader
+    /// that does not place the upper Screen reads it where drawing does,
+    /// from the copy's own Screen: `to_row · drawn · lift⁻¹`. None when a
+    /// Screen's place or the lift can't be undone.
+    pub(crate) fn in_space(&self, place: impl Fn(&CoreHandle) -> Option<Mat2D>) -> Option<Mat2D> {
+        let to_row = place(&self.screen)?;
+        let to_upper = match place(&self.upper) {
+            Some(to_upper) => to_upper,
+            None => {
+                let mut lift = Mat2D::default();
+                self.lift.invert(&mut lift).then_some(())?;
+                to_row * self.drawn * lift
+            }
+        };
+        let mut row = Mat2D::default();
+        to_row.invert(&mut row).then(|| to_upper * self.lift * row)
+    }
+}
+
+/// Where a lift puts `component` for a reader that places Screens by
+/// `place` (`DrawnMap::in_space`). None outside a lift and while it draws
+/// nothing, which keeps the component where it rests.
+pub(crate) fn drawn_in(
+    component: &CoreHandle,
+    place: impl Fn(&CoreHandle) -> Option<Mat2D>,
+) -> Option<Mat2D> {
+    match Lifted::of(component) {
+        Lifted::Drawn(map) => map.in_space(place),
+        Lifted::No | Lifted::Hidden => None,
+    }
+}
+
+/// Where a query rooted at the first of `spaces`, each artboard's drawing
+/// space in the query's root, reads `component`: one answer for its
+/// geometry and the copy's own clips together, so both take the lift's map
+/// or neither does.
+pub(crate) enum QueryPlace {
+    /// Outside any lift: where it rests.
+    Plain,
+    /// The query is rooted inside the copy, its own Screen out of
+    /// `spaces`: the root moves with the copy, so nothing is mapped.
+    Inside,
+    /// The query is rooted at or above the copy's own Screen: the lift's
+    /// map in the query's space.
+    Above(Mat2D),
+    /// Inside a lift that draws nothing.
+    Hidden,
+}
+
+pub(crate) fn query_place(component: &CoreHandle, spaces: &[(CoreHandle, Mat2D)]) -> QueryPlace {
+    let place = |screen: &CoreHandle| {
+        spaces
+            .iter()
+            .find(|(owner, _)| owner == screen)
+            .map(|(_, to_root)| *to_root)
+    };
+    match Lifted::of(component) {
+        Lifted::No => QueryPlace::Plain,
+        Lifted::Hidden => QueryPlace::Hidden,
+        Lifted::Drawn(map) if place(&map.screen).is_none() => QueryPlace::Inside,
+        Lifted::Drawn(map) => map
+            .in_space(place)
+            .map_or(QueryPlace::Hidden, QueryPlace::Above),
     }
 }
 
@@ -319,7 +396,9 @@ impl Lifted {
             (Some(drawn), Some(page)) => Self::Drawn(DrawnMap {
                 drawn,
                 page,
+                lift: state.matrix,
                 screen: state.row.clone(),
+                upper: state.board.clone(),
             }),
             _ => Self::Hidden,
         }

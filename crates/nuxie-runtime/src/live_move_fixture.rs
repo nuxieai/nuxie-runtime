@@ -506,6 +506,10 @@ pub enum InPlaceFixture {
     /// takes the turn off A's copy: at its end the copy draws unturned,
     /// where B's card rests.
     FieldTurned,
+    /// `Field` with B's Screen scaled by 0.8, its artboard's own scale, so
+    /// the two Screens' roots differ: at the step's end A's copy draws where
+    /// B's card draws, scaled.
+    FieldScaled,
 }
 
 /// What `InPlaceFixture::Keyed` keys in place of a box.
@@ -527,7 +531,7 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
     let keyed = !matches!(kind, Stripped | SlotOnly);
     let slot = matches!(kind, WithSlot | SlotOnly);
     let records_on = if kind == FlightsOnA { "A" } else { "B" };
-    let field = matches!(kind, Field | FieldTurned);
+    let field = matches!(kind, Field | FieldTurned | FieldScaled);
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
         var(&mut b, n);
@@ -617,18 +621,18 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
         boxed_in(b, 0, id, name, size, key, color)
     };
     for (screen, card, key) in [("A", (120.0, 80.0), 1), ("B", (200.0, 140.0), 2)] {
-        obj(
-            &mut b,
-            "Artboard",
-            &[
-                ("name", S(screen)),
-                ("viewModelId", U(u64::from(screen == "B"))),
-                ("width", F(400.0)),
-                ("height", F(300.0)),
-                ("styleId", U(2)),
-                ("clip", B(false)),
-            ],
-        ); // 0
+        let mut screen_props = vec![
+            ("name", S(screen)),
+            ("viewModelId", U(u64::from(screen == "B"))),
+            ("width", F(400.0)),
+            ("height", F(300.0)),
+            ("styleId", U(2)),
+            ("clip", B(false)),
+        ];
+        if kind == FieldScaled && screen == "B" {
+            screen_props.extend([("scaleX", F(0.8)), ("scaleY", F(0.8))]);
+        }
+        obj(&mut b, "Artboard", &screen_props); // 0
         let mut root = vec![
             ("parentId", U(0)),
             ("display", U(1)),
@@ -5091,6 +5095,8 @@ pub enum ElementCase {
     /// machine to 9 in place (a placement's root's "hits"), and "hits" on
     /// its flight slot's machine in slots.
     Tapped,
+    /// `Tapped` with each target's listener in the capture phase.
+    TappedCapture,
 }
 
 /// A zoomed pair: unit "a", 80 by 60 with corners of 4, at (36, 20) on A, and
@@ -5117,6 +5123,9 @@ pub enum ZoomCase {
     /// ClippingShape whose source, a paintless shape at (28, 100) of a 56 by
     /// 200 rectangle, keeps about its left 56 points: at rest it cuts a.
     ClippedAbove,
+    /// `ClippedAbove` with a and b each a placement
+    /// (`ElementKind::Placement`) in place of a box with a child.
+    ClippedPlacement,
     /// Each home slot's own turn: 0.3 on a's and 0.4 on b's.
     SlotTurn,
     /// Each frame's own scale keyed from 0.5 to 1 about its center.
@@ -5490,6 +5499,8 @@ struct PaintUnit {
     origin: Option<(f32, f32)>,
     opacity: f32,
     tappable: bool,
+    /// Its tap target's listener is in the capture phase.
+    captures: bool,
     keyed: Option<UnitKey>,
     /// Its fill, in place of `paint_color` of its name.
     color: Option<u32>,
@@ -5559,6 +5570,7 @@ fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
         origin: None,
         opacity: 1.0,
         tappable: false,
+        captures: false,
         keyed: None,
         color: None,
         cached: false,
@@ -5808,7 +5820,7 @@ fn placed_root(b: &mut Vec<u8>, u: &PaintUnit) {
             ],
         ); // 11
         machine(b, false);
-        hit_listener(b, 10);
+        unit_hit_listener(b, 10, u.captures);
     }
 }
 
@@ -5926,6 +5938,10 @@ impl PaintUnit {
         self.tappable = true;
         self
     }
+    fn captures(mut self) -> Self {
+        self.captures = true;
+        self.tappable()
+    }
     fn keyed(mut self, keyed: UnitKey) -> Self {
         self.keyed = Some(keyed);
         self
@@ -5946,17 +5962,25 @@ fn hit_listener(b: &mut Vec<u8>, target: u64) {
 /// A number `name`, the machine's input `input`, which a pointer down on
 /// object `target` sets to 9.
 fn named_hit_listener(b: &mut Vec<u8>, target: u64, name: &str, input: u64) {
+    phased_hit_listener(b, target, name, input, false);
+}
+/// A tappable unit's target's "hits", in the capture phase when `captures`.
+fn unit_hit_listener(b: &mut Vec<u8>, target: u64, captures: bool) {
+    phased_hit_listener(b, target, "hits", 0, captures);
+}
+/// `named_hit_listener`, its listener in the capture phase when `captures`.
+fn phased_hit_listener(b: &mut Vec<u8>, target: u64, name: &str, input: u64, captures: bool) {
     use V::*;
     obj(
         b,
         "StateMachineNumber",
         &[("name", S(name)), ("value", F(0.0))],
     );
-    obj(
-        b,
-        "StateMachineListenerSingle",
-        &[("targetId", U(target)), ("listenerTypeValue", U(2))],
-    );
+    let mut listener = vec![("targetId", U(target)), ("listenerTypeValue", U(2))];
+    if captures {
+        listener.push(("phaseValue", U(1)));
+    }
+    obj(b, "StateMachineListenerSingle", &listener);
     obj(
         b,
         "ListenerNumberChange",
@@ -6054,7 +6078,7 @@ fn element_unit(b: &mut Vec<u8>, u: &PaintUnit, inner: u64) {
             ],
         );
         machine(b, false);
-        hit_listener(b, target);
+        unit_hit_listener(b, target, u.captures);
     }
 }
 
@@ -6210,7 +6234,7 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
             ],
         );
         machine(b, false);
-        hit_listener(b, 5);
+        unit_hit_listener(b, 5, u.captures);
     }
     if let Some(keyed) = u.keyed {
         let mut art = PaintArt {
@@ -6543,7 +6567,7 @@ struct PaintArt<'a> {
     /// In place, each tappable unit's target inline, and the name of the
     /// number on its Screen's machine that a pointer down on it sets to 9:
     /// "`unit` hits".
-    taps: Vec<(String, u64)>,
+    taps: Vec<(String, u64, bool)>,
 }
 impl PaintArt<'_> {
     fn add(&mut self, kind: &str, props: &[(&str, V<'_>)]) -> u64 {
@@ -6626,7 +6650,8 @@ impl PaintArt<'_> {
                 ("height", F(u.size.1)),
             ],
         );
-        self.taps.push((format!("{} hits", u.name), shape));
+        self.taps
+            .push((format!("{} hits", u.name), shape, u.captures));
     }
     /// The wrapper that holds a tappable or keyed unit's machine.
     fn unit_machine(&mut self, u: PaintUnit, slot: u64) {
@@ -6909,10 +6934,8 @@ impl PaintArt<'_> {
                     self.emit(kid, id);
                 }
                 if let Some((x, y, w, h)) = el.clip_shape {
-                    let source = self.add(
-                        "Shape",
-                        &[("parentId", U(id)), ("x", F(x)), ("y", F(y))],
-                    );
+                    let source =
+                        self.add("Shape", &[("parentId", U(id)), ("x", F(x)), ("y", F(y))]);
                     self.add(
                         "Rectangle",
                         &[("parentId", U(source)), ("width", F(w)), ("height", F(h))],
@@ -7377,8 +7400,8 @@ fn paint_screen(
         hit_listener(b, names[target]);
         input += 1;
     }
-    for (name, target) in &taps {
-        named_hit_listener(b, *target, name, input);
+    for (name, target, captures) in &taps {
+        phased_hit_listener(b, *target, name, input, *captures);
         input += 1;
     }
     Ok(())
@@ -7628,8 +7651,10 @@ fn element_spec(kind: ElementKind, case: ElementCase) -> PaintSpec {
     };
     let mut a = unit("a", 80.0, 60.0).element(kind);
     let mut b = unit("b", b_size.0, b_size.1).element(kind);
-    if case == Tapped {
-        (a, b) = (a.tappable(), b.tappable());
+    match case {
+        Tapped => (a, b) = (a.tappable(), b.tappable()),
+        TappedCapture => (a, b) = (a.captures(), b.captures()),
+        _ => {}
     }
     match case {
         TurnedRoot => (a, b) = (a.root(0.3, 1.25), b.root(-0.2, 1.25)),
@@ -7723,6 +7748,13 @@ fn zoom_spec(case: ZoomCase) -> PaintSpec {
         ClippedAbove => zoom_pair(
             unit_a(),
             unit_b(),
+            vec![card_a().clip_shape(28.0, 100.0, 56.0, 200.0)],
+            vec![home_b()],
+            zoom_flights(1),
+        ),
+        ClippedPlacement => zoom_pair(
+            unit("a", 80.0, 60.0).element(ElementKind::Placement),
+            unit("b", 160.0, 120.0).element(ElementKind::Placement),
             vec![card_a().clip_shape(28.0, 100.0, 56.0, 200.0)],
             vec![home_b()],
             zoom_flights(1),

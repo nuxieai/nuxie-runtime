@@ -182,26 +182,80 @@ pub(crate) fn is_screen(board: &CoreHandle) -> bool {
         .unwrap_or(false)
 }
 pub(crate) fn is_live_slot(slot: &CoreHandle) -> bool {
-    let Some(board) = slot
-        .with(|o| {
-            o.as_nested_artboard()
-                .filter(|s| {
-                    s.children()
-                        .iter()
-                        .any(|c| c.is_type_of(crate::live_move::records::LiveSlot::TYPE_KEY))
-                })
-                .and_then(|s| s.parent_artboard_handle())
+    slot.with(|o| {
+        o.as_nested_artboard().is_some_and(|s| {
+            s.children()
+                .iter()
+                .any(|c| c.is_type_of(crate::live_move::records::LiveSlot::TYPE_KEY))
         })
+    })
+    .unwrap_or(false)
+        && in_screen_row(slot)
+}
+/// A nested artboard the live-move carry takes an instance from or gives one
+/// to: a slot (`is_live_slot`), or the component placement of an element a
+/// Screen keys to fly in place (docs/live-moves.md, Flying in place). That
+/// placement is the keyed nested artboard itself, or the one nested artboard
+/// directly inside a keyed box, the shape the compiler publishes.
+pub(crate) fn is_carry_host(host: &CoreHandle) -> bool {
+    is_live_slot(host) || (is_keyed_placement(host) && in_screen_row(host))
+}
+fn is_keyed_placement(host: &CoreHandle) -> bool {
+    if !host.with(|o| o.as_nested_artboard().is_some()).unwrap_or(false) {
+        return false;
+    }
+    if is_keyed(host) {
+        return true;
+    }
+    let Some(element) = host.with(|o| o.component_parent_handle()).flatten() else {
+        return false;
+    };
+    let placements = element
+        .with(|o| {
+            let boxed = o.as_layout_component().is_some_and(|l| !l.is_artboard());
+            o.as_container_component().filter(|_| boxed).map(|c| {
+                c.children()
+                    .iter()
+                    .filter(|c| c.with(|o| o.as_nested_artboard().is_some()).unwrap_or(false))
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+        })
+        .flatten()
+        .unwrap_or_default();
+    placements.len() == 1 && placements[0] == *host && is_keyed(&element)
+}
+/// Whether `element`'s own CSS record carries a flight key.
+fn is_keyed(element: &CoreHandle) -> bool {
+    element
+        .with(|o| match o.as_layout_component() {
+            Some(layout) => layout.css_record(),
+            None => o
+                .as_container_component()
+                .and_then(|c| crate::css_layout::record::find_in(c.children())),
+        })
+        .flatten()
+        .and_then(|record| {
+            record.with_downcast::<crate::css_layout::record::LayoutCssStyle, _>(|r| {
+                r.flight_key() != 0
+            })
+        })
+        .unwrap_or(false)
+}
+/// Whether `host` sits directly on a mounted row of the Page's screens list.
+fn in_screen_row(host: &CoreHandle) -> bool {
+    let Some(board) = host
+        .with(|o| o.as_nested_artboard().and_then(|s| s.parent_artboard_handle()))
         .flatten()
     else {
         return false;
     };
-    let Some(host) = board.with_downcast::<Artboard, _>(Artboard::host).flatten() else {
+    let Some(list) = board.with_downcast::<Artboard, _>(Artboard::host).flatten() else {
         return false;
     };
     is_screen(&board)
-        && is_screen_list(&host)
-        && host
+        && is_screen_list(&list)
+        && list
             .with_downcast::<ArtboardComponentList, _>(|list| {
                 (0..list.artboard_count()).any(|i| {
                     list.artboard_instance(i as i32)

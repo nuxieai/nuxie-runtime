@@ -810,6 +810,280 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
     machine(&mut b, false);
     b
 }
+/// What `in_place_carry_fixture` adds to its page.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InPlaceCarry {
+    /// The page as described.
+    Duo,
+    /// A also holds a box "spare", with no flight key, holding a placement
+    /// "spare unit" of the same component.
+    Unkeyed,
+    /// A's card holds a second placement, "second unit", beside "unit".
+    TwoInCard,
+}
+
+/// An in-place page shaped as the compiler publishes a matched component
+/// placement (Duo's mascot and progress bar): on Screens A and B, a box
+/// "card" whose CSS record carries the flight key (1 on A, 2 on B) holds one
+/// `NestedArtboardLayout` "unit", of component "unit x" at a fixed instance
+/// size of 100 by 80, with its nested state machine and an inline model of
+/// view model "Unit": `count` written 0 and bound to nothing, `prop` bound to
+/// its Screen's `offset` (A's 10, B's 200), `label` written "label". Beside
+/// each card a painted box "note"; B's row is padded 150 on the left. The
+/// component is a CSS artboard holding a node "keyed" its timeline "walk"
+/// moves, a text field "edit" with focus data, a painted shape "button" whose
+/// pointer down sets the machine's "hits" to 9, and semantics on itself
+/// ("unit"), the field and the button. B holds flight records 11 and 12, and
+/// step t1 flies the two cards as two copies, as in-place files do until
+/// they transfer.
+pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
+    use V::*;
+    let mut b = b"RIVE".to_vec();
+    for n in [7, 0, 0, 0] {
+        var(&mut b, n);
+    }
+    obj(&mut b, "Backboard", &[]);
+    for (name, offset) in [("A", 10.0), ("B", 200.0)] {
+        obj(&mut b, "ViewModel", &[("name", S(name))]);
+        obj(&mut b, "ViewModelPropertyNumber", &[("name", S("offset"))]);
+        obj(&mut b, "ViewModelInstance", &[("viewModelId", U(u64::from(name == "B")))]);
+        obj(
+            &mut b,
+            "ViewModelInstanceNumber",
+            &[("viewModelPropertyId", U(0)), ("propertyValue", F(offset))],
+        );
+    }
+    obj(&mut b, "ViewModel", &[("name", S("Page"))]);
+    obj(&mut b, "ViewModelPropertyList", &[("name", S("screens"))]);
+    obj(&mut b, "ViewModelInstance", &[("viewModelId", U(2))]);
+    obj(&mut b, "ViewModelInstanceList", &[("viewModelPropertyId", U(0))]);
+    for model in [0, 1] {
+        obj(
+            &mut b,
+            "ViewModelInstanceListItem",
+            &[("viewModelId", U(model)), ("viewModelInstanceId", U(0))],
+        );
+    }
+    obj(&mut b, "ViewModel", &[("name", S("Unit"))]);
+    for name in ["count", "prop"] {
+        obj(&mut b, "ViewModelPropertyNumber", &[("name", S(name))]);
+    }
+    obj(&mut b, "ViewModelPropertyString", &[("name", S("label"))]);
+    obj(&mut b, "ViewModelInstance", &[("viewModelId", U(3))]);
+    for id in [0, 1] {
+        obj(
+            &mut b,
+            "ViewModelInstanceNumber",
+            &[("viewModelPropertyId", U(id)), ("propertyValue", F(0.0))],
+        );
+    }
+    obj(
+        &mut b,
+        "ViewModelInstanceString",
+        &[("viewModelPropertyId", U(2)), ("propertyValue", S(""))],
+    );
+    // A placement of "unit x" at `id`, under `parent`, as the compiler
+    // writes one (`id` to `id + 5`): the host, its machine, its inline
+    // model and the model's three values, `prop` bound to `screen`'s model.
+    let placement = |b: &mut Vec<u8>, parent: u64, id: u64, name: &str, screen: u8| {
+        obj(
+            b,
+            "NestedArtboardLayout",
+            &[
+                ("name", S(name)),
+                ("parentId", U(parent)),
+                ("artboardId", U(2)),
+                ("instanceWidth", F(100.0)),
+                ("instanceHeight", F(80.0)),
+                ("instanceWidthScaleType", U(0)),
+                ("instanceHeightScaleType", U(0)),
+                ("isStateful", B(true)),
+            ],
+        );
+        obj(b, "NestedStateMachine", &[("parentId", U(id)), ("animationId", U(0))]);
+        obj(b, "ViewModelInstance", &[("viewModelId", U(3)), ("parentId", U(id))]);
+        for property in [0, 1] {
+            obj(
+                b,
+                "ViewModelInstanceNumber",
+                &[
+                    ("parentId", U(id + 2)),
+                    ("viewModelPropertyId", U(property)),
+                    ("propertyValue", F(0.0)),
+                ],
+            );
+        }
+        bind(b, 575, &[screen, 0]);
+        obj(
+            b,
+            "ViewModelInstanceString",
+            &[
+                ("parentId", U(id + 2)),
+                ("viewModelPropertyId", U(2)),
+                ("propertyValue", S("label")),
+            ],
+        );
+    };
+    // A box at `id` under the Screen: the component, its style and its
+    // record (`id` to `id + 2`), then a Fill and its color when painted.
+    let boxed = |b: &mut Vec<u8>, id: u64, name: &str, size: (f32, f32), key: u64, paint: Option<u32>| {
+        obj(
+            b,
+            "LayoutComponent",
+            &[("name", S(name)), ("parentId", U(0)), ("styleId", U(id + 1))],
+        );
+        obj(b, "LayoutComponentStyle", &[("parentId", U(id))]);
+        let mut record = vec![
+            ("parentId", U(id)),
+            ("flexShrink", F(0.0)),
+            ("widthKind", U(1)),
+            ("width", F(size.0)),
+            ("heightKind", U(1)),
+            ("height", F(size.1)),
+        ];
+        if key != 0 {
+            record.push(("flightKey", U(key)));
+        }
+        obj(b, "LayoutCssStyle", &record);
+        if let Some(color) = paint {
+            obj(b, "Fill", &[("parentId", U(id))]);
+            obj(b, "SolidColor", &[("parentId", U(id + 3)), ("colorValue", Color(color))]);
+        }
+    };
+    for (screen, card, key) in [("A", (120.0, 90.0), 1), ("B", (200.0, 140.0), 2)] {
+        let model = u8::from(screen == "B");
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S(screen)),
+                ("viewModelId", U(u64::from(model))),
+                ("width", F(400.0)),
+                ("height", F(300.0)),
+                ("styleId", U(2)),
+                ("clip", B(false)),
+            ],
+        ); // 0
+        // B's card rests at (150, 0), so no point is on both Screens' units.
+        let mut root = vec![("parentId", U(0)), ("display", U(1)), ("columnGap", F(10.0))];
+        if screen == "B" {
+            root.push(("paddingLeft", F(150.0)));
+        }
+        obj(&mut b, "LayoutCssStyle", &root); // 1
+        obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+        boxed(&mut b, 3, "card", card, key, None); // 3 to 5
+        placement(&mut b, 3, 6, "unit", model); // 6 to 11
+        boxed(&mut b, 12, "note", (60.0, 40.0), 0, Some(0xff3333cc)); // 12 to 16
+        if screen == "B" {
+            for record in [11, 12] {
+                obj(
+                    &mut b,
+                    "LiveFlight",
+                    &[("parentId", U(0)), ("key", U(record)), ("sizeMode", U(1))],
+                );
+            } // 17, 18
+        }
+        if screen == "A" {
+            match kind {
+                InPlaceCarry::Duo => {}
+                InPlaceCarry::Unkeyed => {
+                    boxed(&mut b, 17, "spare", (100.0, 80.0), 0, None); // 17 to 19
+                    placement(&mut b, 17, 20, "spare unit", model); // 20 to 25
+                }
+                InPlaceCarry::TwoInCard => placement(&mut b, 3, 17, "second unit", model),
+            }
+        }
+    }
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("unit x")),
+            ("width", F(100.0)),
+            ("height", F(80.0)),
+            ("viewModelId", U(3)),
+            ("styleId", U(2)),
+            ("clip", B(false)),
+            ("defaultStateMachineId", U(0)),
+        ],
+    ); // 0
+    obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+    obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+    obj(&mut b, "Node", &[("name", S("keyed")), ("parentId", U(0))]); // 3
+    obj(
+        &mut b,
+        "TextInput",
+        &[("name", S("edit")), ("parentId", U(0)), ("text", S(""))],
+    ); // 4
+    obj(&mut b, "FocusData", &[("parentId", U(4))]); // 5
+    obj(&mut b, "Shape", &[("name", S("button")), ("parentId", U(0))]); // 6
+    obj(
+        &mut b,
+        "Rectangle",
+        &[
+            ("parentId", U(6)),
+            ("width", F(40.0)),
+            ("height", F(40.0)),
+            ("x", F(20.0)),
+            ("y", F(20.0)),
+        ],
+    ); // 7
+    obj(&mut b, "Fill", &[("parentId", U(6))]); // 8
+    obj(&mut b, "SolidColor", &[("parentId", U(8)), ("colorValue", Color(0xffff0000))]); // 9
+    for (parent, role, label) in [(0, 9, "unit"), (4, 6, "field"), (6, 1, "button")] {
+        obj(
+            &mut b,
+            "SemanticData",
+            &[("parentId", U(parent)), ("role", U(role)), ("label", S(label))],
+        ); // 10 to 12
+    }
+    timeline(&mut b, "walk", 3, 13, 0.0, 100.0);
+    machine(&mut b, true);
+    obj(&mut b, "StateMachineNumber", &[("name", S("hits")), ("value", F(0.0))]);
+    obj(
+        &mut b,
+        "StateMachineListenerSingle",
+        &[("targetId", U(6)), ("listenerTypeValue", U(2))],
+    );
+    obj(&mut b, "ListenerNumberChange", &[("inputId", U(0)), ("value", F(9.0))]);
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("Page")),
+            ("viewModelId", U(2)),
+            ("width", F(400.0)),
+            ("height", F(300.0)),
+            ("defaultStateMachineId", U(0)),
+        ],
+    ); // 0
+    obj(&mut b, "ArtboardComponentList", &[("name", S("screens")), ("parentId", U(0))]); // 1
+    bind(&mut b, 800, &[2, 0]);
+    obj(
+        &mut b,
+        "LiveStep",
+        &[
+            ("parentId", U(0)),
+            ("name", S("t1")),
+            ("fromArtboard", S("A")),
+            ("toArtboard", S("B")),
+        ],
+    ); // 2
+    obj(
+        &mut b,
+        "LiveStepUnit",
+        &[
+            ("parentId", U(2)),
+            ("outgoingUnitKey", U(1)),
+            ("incomingUnitKey", U(2)),
+            ("outgoingFlightKey", U(11)),
+            ("incomingFlightKey", U(12)),
+        ],
+    ); // 3
+    machine(&mut b, false);
+    b
+}
+
 /// `InPlaceFixture::Field`'s contents of Screen `screen`'s card, object 3,
 /// from object 13 on.
 fn field_card(b: &mut Vec<u8>, screen: &str) {

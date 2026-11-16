@@ -36,8 +36,8 @@ pub(crate) struct SlotState {
     source: Option<CoreHandle>,
     mounted: Option<CoreHandle>,
     listeners: Option<Vec<Vec<RuntimeStateMachineInstanceWeakHandle>>>,
-    /// On a flight slot holding an instance in the air: the slot it took off
-    /// from. Any landing clears it.
+    /// On a host holding an instance in the air: the host it took off from,
+    /// as the carry's caller says. Any landing clears it.
     origin_home: Option<CoreHandle>,
     /// On a flight slot: where it paints on its Screen while it flies.
     pub(crate) paint: Option<FlightPaint>,
@@ -261,8 +261,9 @@ pub fn validate_move(from: &CoreHandle, to: &CoreHandle) -> Result<()> {
     let scene = crate::hosted_scene::scene_for_operation(from)
         .ok_or_else(|| anyhow::anyhow!("file has no live-move records"))?;
     ensure!(
-        crate::hosted_scene::is_live_slot(from) && crate::hosted_scene::is_live_slot(to),
-        "live moves require slots in Page.screens Screen artboards"
+        crate::hosted_scene::is_carry_host(from) && crate::hosted_scene::is_carry_host(to),
+        "live moves require slots or keyed component placements in Page.screens Screen \
+         artboards"
     );
     scene.reconcile();
     ensure!(from != to, "source and destination are the same slot");
@@ -334,8 +335,9 @@ fn wrapper_listeners(wrapper: &CoreHandle) -> Vec<RuntimeStateMachineInstanceWea
 }
 fn remember(host: &CoreHandle) -> Result<()> {
     ensure!(
-        crate::hosted_scene::is_live_slot(host),
-        "live moves require a slot in a Page.screens Screen artboard"
+        crate::hosted_scene::is_carry_host(host),
+        "live moves require a slot or a keyed component placement in a Page.screens Screen \
+         artboard"
     );
     reconcile_native_child(host);
     if read(host, |s| {
@@ -448,8 +450,8 @@ pub fn empty_slot(host: &CoreHandle) -> Result<()> {
     let scene = crate::hosted_scene::scene_for_operation(host)
         .ok_or_else(|| anyhow::anyhow!("file has no live-move records"))?;
     ensure!(
-        crate::hosted_scene::is_live_slot(host),
-        "live moves require a Screen slot"
+        crate::hosted_scene::is_carry_host(host),
+        "live moves require a Screen slot or a keyed component placement"
     );
     scene.reconcile();
     remember(host)?;
@@ -480,10 +482,10 @@ fn is_flight_slot(host: &CoreHandle) -> Result<bool> {
 /// bound at once (`NestedArtboard::live_move_refill_occurrence`), then takes
 /// the slot's props, listeners, focus scope and semantic place, and the
 /// slot's laid-out box, as a landing does.
-pub(super) fn refill_slot(host: &CoreHandle) -> Result<()> {
+pub fn refill_slot(host: &CoreHandle) -> Result<()> {
     ensure!(
-        crate::hosted_scene::is_live_slot(host),
-        "live moves require a Screen slot"
+        crate::hosted_scene::is_carry_host(host),
+        "live moves require a Screen slot or a keyed component placement"
     );
     ensure!(child(host)?.is_none(), "slot already holds an instance");
     let source = read(host, |s| {
@@ -536,8 +538,22 @@ pub(super) fn refill_slot(host: &CoreHandle) -> Result<()> {
 /// occurrence guard. A stateful bind the source slot has scheduled runs
 /// first, as its next advance would; otherwise no mount, machine
 /// initialization, or user callback runs.
+///
+/// `to` notes where the instance took off exactly when it is a flight slot,
+/// as the slot path's caller says; `carry` lets its caller say.
 pub fn move_live(from: &CoreHandle, to: &CoreHandle) -> Result<()> {
-    move_with_props(from, to, to, None)
+    validate_move(from, to)?;
+    let in_the_air = is_flight_slot(to)?;
+    move_with_props(from, to, to, None, in_the_air)
+}
+
+/// `move_live`, where the caller says whether the instance is in the air in
+/// `to`: then `to` notes `from` (or where `from`'s instance took off) as its
+/// home, and a cancel or the removal of `to`'s row carries it back there
+/// (`settle_leaving_rows`). Any later carry out of `to` clears the note.
+pub fn carry(from: &CoreHandle, to: &CoreHandle, in_the_air: bool) -> Result<()> {
+    validate_move(from, to)?;
+    move_with_props(from, to, to, None, in_the_air)
 }
 
 pub(super) fn move_to_flight(
@@ -546,7 +562,8 @@ pub(super) fn move_to_flight(
     landing: &CoreHandle,
     values: &mut FlightValues,
 ) -> Result<()> {
-    move_with_props(from, to, landing, Some(values))
+    validate_move(from, to)?;
+    move_with_props(from, to, landing, Some(values), true)
 }
 
 fn move_with_props(
@@ -554,8 +571,8 @@ fn move_with_props(
     to: &CoreHandle,
     prop_slot: &CoreHandle,
     values: Option<&mut FlightValues>,
+    in_the_air: bool,
 ) -> Result<()> {
-    validate_move(from, to)?;
     // A unit whose slot never advanced has not had the bind its mount
     // scheduled. It leaves bound, as that advance would have left it.
     NestedArtboard::flush_pending_stateful_binding_occurrence(from);
@@ -594,8 +611,6 @@ fn move_with_props(
             .and_then(|state| state.origin_home.clone())
     })?
     .unwrap_or_else(|| from.clone());
-    // Only a flight slot names where its instance took off from.
-    let in_the_air = is_flight_slot(to)?;
     discard(to);
     detach_parent_props(from);
     for (a, b) in wrappers(from)?.iter().zip(wrappers(to)?) {

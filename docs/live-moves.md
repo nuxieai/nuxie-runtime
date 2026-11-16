@@ -206,7 +206,21 @@ The hold suite is `mechanical_port/source/layout_flight_hold_tests.rs`. Each cas
   - a screen reader's action, checked or not.
 
   Every machine on the page asks the same question, so a machine nested in a Screen needs no word of its host. Nothing enters the page at the top either.
-- **Take-off.** As a step begins, every Screen's machine ends what a person holds on it (`end_held_input`). Each pointer still down or over it exits where it last was, which ends a press, a hover or a drag, and a scroll gesture lets go. No key is released, as on the phones. Nothing is replayed at landing: a pointer still held then arrives as a new one, so a drag held at take-off does not resume.
+- **Take-off.** As a step begins, once it has passed every check and before anything moves, every Screen's machine ends what a person holds on it (`end_held_input`), down through its nested artboards and lists. A step refused leaves input as it was. What is held is read from its owners, nothing is kept for take-off:
+
+  | Held | Its owner | What ends it |
+  | --- | --- | --- |
+  | A press, a click in progress, a hover | the authored listener's `ListenerGroup` | upstream's cancel (`cancel_pointer`), then the pointer exits: exit listeners run |
+  | A scroll or scroll bar drag | `DraggableConstraintListenerGroup` | the cancel, which ends the drag in the constraint and lets the scroll's pointer go |
+  | A field's selection drag | `TextInputListenerGroup` | the cancel, which ends the field's drag (`TextInput::end_drag`) |
+  | An authored drag | the listener's group, then the machine | the cancel, then its drag end, as for content that collapses under a pointer |
+  | A capture listener's press, also one that arrived only through capture | the capture group | the cancel, then the exit, which releases the group and the pointer's claims |
+  | A script's press or hover | the script's hit (`HitScriptedDrawable`), which keeps its pointers as a group does | the exit: its exit handler runs |
+  | A disabled pointer, a drag's owner or holder, a claim | the machine | the exit |
+  | A wheel's latched scroll | the latch, down the tree (a nested artboard passes it to its machines, a list to its rows) | `cancel_scroll` |
+  | Any of these in a nested artboard or a list's row | that machine | the same, as the Screen's machine asks each to end its own |
+
+  A pointer is cancelled and exits where it last was. No key is released, as on the phones. Nothing is replayed at landing: a pointer still held then arrives as a new one, so a drag held at take-off does not resume.
 - **What runs on.** Anything that is not a person's input keeps running through the step: timers, scripts, data binding, and authored focus actions.
 - **What stays as it was.** A copy flying in place keeps its own semantic tree, focus and listeners. A focused field stays focused, and its geometry is read every frame, still where it rests. Reading it where the copy draws is a later change.
 
@@ -229,6 +243,11 @@ The numeric assertions below are implemented in `crates/nuxie-runtime/tests/live
 | `hits_every_pointer_entry_point_is_off_mid_step_and_on_after_landing` | Down, up, move, exit, miss, drag start and end, capture, both hit tests, the button query and occlusion: each heard at rest at (274, 154), heard by nothing half way there or at (110, 100), heard again landed. Each call has a pointer of its own; an exit or a miss is heard when it lets a disabled pointer go, a drag start when it disables one. |
 | `hits_a_drag_held_at_take_off_ends_there_and_does_not_resume` | A drag held from before take-off scrolls b; with no step, its further moves scroll b again. Through a step, landed, the same pointer's moves scroll nothing. |
 | `in_place_a_persons_focus_key_text_gamepad_and_screen_reader_input_is_off_mid_step` | Focus next, previous and by direction, clearing focus (on the machine and the host machine), a key, text, a gamepad batch, and a screen reader's tap, checked or not: each heard at rest, heard by nothing half way, heard again landed, on `InPlaceFixture::FieldHeard`, whose Screens' listeners on the field record a key and a screen reader's tap, and whose field takes text. |
+| `take_off_exits_a_pointer_released_over_a_screen_without_moving` | A mouse pressed and released over A's card without moving stays over it ("over" 1); take-off exits it ("over" 0). |
+| `take_off_cancels_a_press_that_came_only_through_capture` | A press through capture alone clicks on release with no step ("clicks" 9); cancelled at take-off, released after landing it clicks nothing (0). |
+| `take_off_ends_a_fields_selection_drag` | A press on A's field with text starts a selection drag; take-off ends it, and half way the cursor is as it was. |
+| `take_off_reaches_a_nested_artboard_two_levels_down` | Two nested artboards down, "leaf" hears a pointer enter and latches a wheel, as does A; take-off exits the pointer there and leaves no scroll latched on the leaf or on A. |
+| `a_refused_step_leaves_held_input_as_it_was` | A step that does not exist, or names the wrong destination, is refused and leaves a pointer held over A's card as it was; the step that begins exits it. |
 | `in_place_a_focused_fields_geometry_reads_through_a_step` (nux-capi) | A's focused field stays focused, and `nux_player_text_input_geometry` reads it half way and landed where it rests, as before the step. |
 | `empty_source_draws_no_geometry` | The source draws 1 shape before take-off and 0 after. |
 | `collapsed_rows_cost_one_row_and_wake_with_data` | 40 active rows make 81 advances and 40 draws. With 39 collapsed: 3 advances and 1 draw. Sleeping data value 777 applies on wake. |

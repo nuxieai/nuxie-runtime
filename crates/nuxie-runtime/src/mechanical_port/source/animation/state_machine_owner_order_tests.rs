@@ -274,6 +274,9 @@ impl ListenerGroupBehavior for QueryGroup {
     fn tracked_pointer_ids(&self) -> Vec<i32> {
         vec![]
     }
+    fn pointer_position(&self, _: i32) -> Option<Vec2D> {
+        None
+    }
     fn cancel_pointer(&self, _: i32, _: Vec2D, _: f32) -> bool {
         false
     }

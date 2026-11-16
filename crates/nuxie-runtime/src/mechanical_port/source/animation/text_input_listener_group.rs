@@ -116,6 +116,9 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
     fn tracked_pointer_ids(&self) -> Vec<i32> {
         self.base.tracked_pointer_ids()
     }
+    fn pointer_position(&self, id: i32) -> Option<Vec2D> {
+        self.base.pointer_position(id)
+    }
     fn cancel_pointer(&self, id: i32, position: Vec2D, timestamp: f32) -> bool {
         self.settle_tap(id);
         let was_dragging = self.base.cancel_pointer(id, position, timestamp);

@@ -1861,6 +1861,18 @@ pub trait HitComponent {
     /// A host drag handler took `pointer_id`'s drag: the drag handlers
     /// inside this hit (a nested state machine's) let it go (4.5).
     fn yield_drag(&self, _pointer_id: i32, _position: Vec2D, _timestamp: f32) {}
+    /// Nuxie: the pointers this hit holds a gesture for outside every
+    /// listener group, from a press or move until it exits, each with its
+    /// last place in the machine's event space: a script's pointer
+    /// handlers. A step's take-off exits each
+    /// (`StateMachineInstance::end_held_input`).
+    fn tracked_pointers(&self) -> Vec<(i32, Vec2D)> {
+        Vec::new()
+    }
+    /// Nuxie: a step's take-off reaches the machines inside this hit, a
+    /// nested artboard's or a list's rows' (`StateMachineInstance
+    /// ::end_held_input`).
+    fn end_held_input(&self) {}
     fn process_scroll(
         &self,
         _position: Vec2D,
@@ -2513,6 +2525,22 @@ struct HitNestedArtboard {
 }
 
 impl HitComponent for HitNestedArtboard {
+    fn end_held_input(&self) {
+        for animation in nested_animations(&self.component) {
+            if let Some(machine) = nested_state_machine(&animation) {
+                machine.with_instance_mut(StateMachineInstance::end_held_input);
+            }
+        }
+    }
+    /// Nuxie: a scroll latched on this hit is the nested machines' to let
+    /// go, as a list passes it to its rows.
+    fn cancel_scroll(&self) {
+        for animation in nested_animations(&self.component) {
+            if let Some(machine) = nested_state_machine(&animation) {
+                machine.with_instance_mut(StateMachineInstance::cancel_scroll);
+            }
+        }
+    }
     fn yield_drag(&self, pointer_id: i32, position: Vec2D, timestamp: f32) {
         let Some(local) = nested_world_to_local(&self.component, position) else {
             return;
@@ -2883,6 +2911,13 @@ struct HitComponentList {
 }
 
 impl HitComponent for HitComponentList {
+    fn end_held_input(&self) {
+        for index in component_list_indices(&self.component) {
+            if let Some(machine) = component_list_state_machine(&self.component, index) {
+                machine.with_instance_mut(StateMachineInstance::end_held_input);
+            }
+        }
+    }
     fn yield_drag(&self, pointer_id: i32, position: Vec2D, timestamp: f32) {
         for index in component_list_indices(&self.component) {
             let Some(local) = component_list_world_to_local(&self.component, position, index)
@@ -4082,10 +4117,6 @@ pub struct StateMachineInstance {
     capture_run_by_host: bool,
     in_pointer_miss: bool,
     disabled_pointer_ids: Vec<i32>,
-    /// Nuxie: each pointer a person has down or over this machine, where
-    /// it last was here, from its down or move to its up or exit: what a
-    /// step ends at take-off (`end_held_input`).
-    held_pointers: Vec<(i32, Vec2D)>,
     parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
     parent_nested_artboard: Option<CoreHandle>,
     pub(crate) data_bind_container: DataBindContainer,
@@ -4197,7 +4228,6 @@ impl StateMachineInstance {
             capture_run_by_host: false,
             in_pointer_miss: false,
             disabled_pointer_ids: Vec::new(),
-            held_pointers: Vec::new(),
             parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle::default(),
             parent_nested_artboard: None,
             data_bind_container: DataBindContainer::default(),
@@ -5476,22 +5506,6 @@ impl StateMachineInstance {
     ) -> HitResult {
         if !self.takes_input() {
             return HitResult::None;
-        }
-        match hit_type {
-            ListenerType::Down | ListenerType::Move => {
-                match self
-                    .held_pointers
-                    .iter_mut()
-                    .find(|(id, _)| *id == pointer_id)
-                {
-                    Some(held) => held.1 = position,
-                    None => self.held_pointers.push((pointer_id, position)),
-                }
-            }
-            ListenerType::Up | ListenerType::Exit => {
-                self.held_pointers.retain(|(id, _)| *id != pointer_id);
-            }
-            _ => {}
         }
         #[cfg(feature = "test-support")]
         crate::hosted_scene::record_walk(crate::hosted_scene::Walk::Hit);
@@ -7617,27 +7631,112 @@ impl StateMachineInstance {
     }
 
     /// Nuxie: what a step's take-off does to a person's input on this
-    /// machine, as both phones do when a step turns it off (iOS
-    /// `ExperienceRuntimePresentationLoop.endActiveInput`, Android
-    /// `ExperienceSurfaceHost.withdrawSceneInput`): each pointer still down
-    /// or over it exits where it last was, which ends a press, a hover or a
-    /// drag it holds, and a scroll gesture lets go. Nothing is replayed
-    /// when input comes back: a pointer still held then arrives as a new
-    /// one. No key is released, as on the phones, so no authored handler
-    /// runs for a key the person never let go of here.
+    /// machine, as both phones end a page's input when a step turns it off
+    /// (iOS `ExperienceRuntimePresentationLoop.endActiveInput`, Android
+    /// `ExperienceSurfaceHost.withdrawSceneInput`): every pointer anything
+    /// here holds is cancelled where it is held, then exits.
+    ///
+    /// What is held is read from its owners, not kept for take-off. Every
+    /// gesture group here (`ListenerGroupBehavior`: an authored listener's
+    /// `ListenerGroup`, a scroll or scroll bar's
+    /// `DraggableConstraintListenerGroup`, a text field's
+    /// `TextInputListenerGroup`) is in `listener_groups` or, for a capture
+    /// listener, in the capture groups, and each tracks every pointer it
+    /// has seen until that pointer exits. A script's hit tracks its own
+    /// (`HitComponent::tracked_pointers`). The machine's own pointer
+    /// state (disabled pointers, drag owners and holders, capture claims)
+    /// names pointers too.
+    ///
+    /// For each pointer, at its last place here: each group tracking it
+    /// cancels it with upstream's cancel (`cancel_pointer`, as for content
+    /// that collapses under a pointer), which ends a press, a scroll's or
+    /// scroll bar's drag and a field's selection drag; an authored drag it
+    /// ended gets its drag end, as on collapse; then the pointer exits,
+    /// which ends a hover, runs exit listeners, tells a script, and lets
+    /// the groups, the claims and the machine forget it. The machines
+    /// inside (nested artboards, list rows) do the same, and every scroll
+    /// gesture down the tree lets go. Nothing is replayed when input comes
+    /// back: a pointer still held then arrives as a new one. No key is
+    /// released, as on the phones.
     pub(crate) fn end_held_input(&mut self) {
-        let mut held = std::mem::take(&mut self.held_pointers);
-        held.sort_by_key(|(id, _)| *id);
-        for (id, position) in held {
-            self.update_listeners(
-                position,
-                ListenerType::Exit,
-                id,
-                0.0,
-                PointerButton::Primary,
-            );
+        let mut groups = self.listener_groups.clone();
+        if let Some(extras) = self.input_extras() {
+            groups.extend(extras.capture_groups.iter().cloned());
+        }
+        let hits = self.hit_components.clone();
+        let mut ids = groups
+            .iter()
+            .flat_map(|group| group.with_group(|group| group.tracked_pointer_ids()))
+            .chain(
+                hits.iter()
+                    .flat_map(|hit| hit.tracked_pointers().into_iter().map(|(id, _)| id)),
+            )
+            .chain(self.disabled_pointer_ids.iter().copied())
+            .chain(self.css_drag_owners.iter().map(|&(id, _)| id))
+            .chain(self.drag_holders.iter().copied())
+            .collect::<Vec<_>>();
+        if let Some(extras) = self.input_extras() {
+            ids.extend(extras.pointer_claims.iter().map(|claim| claim.pointer_id));
+        }
+        ids.sort_unstable();
+        ids.dedup();
+        for id in ids {
+            let tracking = groups
+                .iter()
+                .filter(|group| group.with_group(|group| group.tracked_pointer_ids().contains(&id)))
+                .cloned()
+                .collect::<Vec<_>>();
+            let at = tracking
+                .iter()
+                .find_map(|group| group.with_group(|group| group.pointer_position(id)))
+                .or_else(|| {
+                    hits.iter().find_map(|hit| {
+                        hit.tracked_pointers()
+                            .into_iter()
+                            .find_map(|(held, at)| (held == id).then_some(at))
+                    })
+                })
+                .unwrap_or_default();
+            let mut drag_ended: Vec<(i32, PointerButton)> = Vec::new();
+            for group in &tracking {
+                let button = group.with_group(|group| group.pointer_button(id));
+                if group.with_group(|group| group.cancel_pointer(id, at, 0.0))
+                    && !drag_ended.iter().any(|ended| ended.0 == id)
+                {
+                    drag_ended.push((id, button));
+                }
+            }
+            let host = self.content_to_host(at);
+            for (id, button) in drag_ended {
+                self.drag_end(host, 0.0, id, button);
+            }
+            self.update_listeners(host, ListenerType::Exit, id, 0.0, PointerButton::Primary);
+        }
+        for hit in &hits {
+            hit.end_held_input();
         }
         self.cancel_scroll();
+    }
+
+    /// Nuxie: a point in this machine's content space (where its groups
+    /// keep a pointer's place) in the space its input arrives in: the
+    /// inverse of `map_to_content_space`.
+    fn content_to_host(&self, position: Vec2D) -> Vec2D {
+        if self.host_space_pointers {
+            return position;
+        }
+        self.artboard_instance
+            .with_artboard(|artboard| {
+                let mut host = position;
+                if artboard.has_self_transform() {
+                    host = artboard.self_transform() * host;
+                }
+                if artboard.frame_origin() {
+                    host = host + artboard.content_origin();
+                }
+                host
+            })
+            .unwrap_or(position)
     }
 
     pub fn has_focus_nodes(&self) -> bool {

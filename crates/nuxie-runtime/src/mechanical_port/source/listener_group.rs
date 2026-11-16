@@ -122,6 +122,12 @@ impl ListenerGroup {
         self.pointers.borrow().keys().copied().collect()
     }
 
+    /// Nuxie: where `id` last was, while this group tracks it.
+    pub fn pointer_position(&self, id: i32) -> Option<Vec2D> {
+        self.find_pointer_data(id)
+            .map(|pointer| pointer.previous_position())
+    }
+
     pub fn cancel_pointer(&self, pointer_id: i32, _position: Vec2D, _timestamp: f32) -> bool {
         let Some(pointer) = self.find_pointer_data(pointer_id) else {
             return false;
@@ -472,6 +478,10 @@ pub trait ListenerGroupBehavior {
         false
     }
     fn tracked_pointer_ids(&self) -> Vec<i32>;
+    /// Nuxie: where `pointer_id` last was in this group's event space, while
+    /// the group tracks it. A step's take-off cancels and exits a pointer
+    /// there (`StateMachineInstance::end_held_input`).
+    fn pointer_position(&self, pointer_id: i32) -> Option<Vec2D>;
     fn cancel_pointer(&self, pointer_id: i32, position: Vec2D, timestamp: f32) -> bool;
     fn cancel_pointers(
         &self,
@@ -561,6 +571,9 @@ impl ListenerGroupBehavior for ListenerGroup {
     fn tracked_pointer_ids(&self) -> Vec<i32> {
         Self::tracked_pointer_ids(self)
     }
+    fn pointer_position(&self, id: i32) -> Option<Vec2D> {
+        Self::pointer_position(self, id)
+    }
     fn cancel_pointer(&self, id: i32, position: Vec2D, timestamp: f32) -> bool {
         Self::cancel_pointer(self, id, position, timestamp)
     }
@@ -627,6 +640,9 @@ impl ListenerGroupBehavior
         Self::takes_drag(self)
     }
     fn tracked_pointer_ids(&self) -> Vec<i32> { Self::tracked_pointer_ids(self) }
+    fn pointer_position(&self, id: i32) -> Option<Vec2D> {
+        Self::pointer_position(self, id)
+    }
     fn cancel_pointer(&self, id: i32, position: Vec2D, timestamp: f32) -> bool {
         Self::cancel_pointer(self, id, position, timestamp)
     }

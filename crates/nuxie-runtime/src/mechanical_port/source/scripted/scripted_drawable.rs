@@ -478,10 +478,18 @@ impl ScriptedDrawable {
 }
 pub struct HitScriptedDrawable {
     drawable: CoreHandle,
+    /// Nuxie: each pointer the script's handlers heard press or move and
+    /// have not yet heard exit, with its last place, as a listener group
+    /// tracks its pointers: a step's take-off exits each
+    /// (`HitComponent::tracked_pointers`).
+    pointers: std::cell::RefCell<Vec<(i32, Vec2D)>>,
 }
 impl HitScriptedDrawable {
     pub fn new(drawable: CoreHandle) -> Self {
-        Self { drawable }
+        Self {
+            drawable,
+            pointers: Default::default(),
+        }
     }
 
     /// Box test shared by pointer hits and scroll.
@@ -512,6 +520,9 @@ impl crate::mechanical_port::source::animation::state_machine_instance::HitCompo
     }
     fn hit_test(&self, _position: crate::mechanical_port::source::math::vec2d::Vec2D) -> bool {
         ScriptedDrawable::has_pointer_handler_occurrence(&self.drawable)
+    }
+    fn tracked_pointers(&self) -> Vec<(i32, Vec2D)> {
+        self.pointers.borrow().clone()
     }
     fn hit_test_bounded(&self, position: Vec2D) -> bool {
         if !ScriptedDrawable::has_pointer_handler_occurrence(&self.drawable) {
@@ -656,6 +667,17 @@ impl crate::mechanical_port::source::animation::state_machine_instance::HitCompo
         pointer_id: i32,
         _button: crate::mechanical_port::source::pointer_button::PointerButton,
     ) -> crate::mechanical_port::source::hit_result::HitResult {
+        // A handler hears an exit whenever the script is not hit, so that
+        // ends the pointer here; anything else keeps it.
+        {
+            let mut pointers = self.pointers.borrow_mut();
+            pointers.retain(|&(id, _)| id != pointer_id);
+            if can_hit
+                && hit_type != crate::mechanical_port::source::listener_type::ListenerType::Exit
+            {
+                pointers.push((pointer_id, position));
+            }
+        }
         machine.perform_scripted_pointer(
             &self.drawable,
             hit_type,

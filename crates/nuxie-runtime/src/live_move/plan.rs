@@ -285,7 +285,6 @@ impl Plan {
     ) -> Result<()> {
         ensure!(self.active.is_none(), "step already active");
         self.prepare(root)?;
-        end_held_input(root);
         if let Some(name) = step_name.filter(|_| self.in_place()) {
             return self.step_begin_in_place(root, incoming, name);
         }
@@ -407,6 +406,9 @@ impl Plan {
             Some(step) => flight_timeline(step.flight_animation, &plan)?,
             None => None,
         };
+        // Every check has passed and nothing has moved: take-off ends what
+        // a person holds on the page.
+        end_held_input(root);
         // What the step empties: each slot a flight takes off from, and each
         // transferred unit's arriving slot.
         let mut emptied = plan
@@ -762,7 +764,8 @@ impl Plan {
                     })?,
             )),
         };
-        // Every check has passed: mark. Lifts that share an anchor draw by
+        // Every check has passed: take-off ends what a person holds on the
+        // page, then mark. Lifts that share an anchor draw by
         // their records' order, a later record on top, so a later record is
         // placed first.
         let order = |flight: &InPlaceFlight| {
@@ -777,6 +780,7 @@ impl Plan {
                 .flatten()
                 .unwrap_or(0)
         };
+        end_held_input(root);
         flights.sort_by_key(|flight| std::cmp::Reverse(order(flight)));
         for flight in &flights {
             flight.mark(if flight.zoomed {
@@ -1166,12 +1170,14 @@ pub fn screens(
     .unwrap()
 }
 
-/// A step's take-off on a person's input: every Screen of the page ends
-/// what is held on it (`StateMachineInstance::end_held_input`), as both
-/// phones end a page's input when a step starts. While the step runs every
-/// machine on the page reads its input off (`StateMachineInstance
-/// ::takes_input`); at landing or a cancel it reads it on again, with
-/// nothing to undo.
+/// A step's take-off on a person's input, once the step has passed every
+/// check and before anything moves: every Screen of the page ends what is
+/// held on it, down through its nested artboards and lists
+/// (`StateMachineInstance::end_held_input`), as both phones end a page's
+/// input when a step starts. A step refused leaves input as it was. While
+/// the step runs every machine on the page reads its input off
+/// (`StateMachineInstance::takes_input`); at landing or a cancel it reads it
+/// on again, with nothing to undo.
 fn end_held_input(root: &RuntimeArtboardInstanceHandle) {
     let Some(list) = root.with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
     else {

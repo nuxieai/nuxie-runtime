@@ -508,8 +508,18 @@ pub enum InPlaceFixture {
     FieldTurned,
     /// `Field` with a state machine on each Screen listening to its field
     /// "edit a" ("edit b"): a pressed key sets "keys" to 9, text edits the
-    /// field, and a screen reader's tap sets "taps" to 9.
+    /// field, and a screen reader's tap sets "taps" to 9. Its fields have a
+    /// font, so text in them shapes.
     FieldHeard,
+    /// `Plain` with a state machine on A, for a step's take-off: over A's
+    /// card a pointer's enter sets "over" to 1 and its exit to 0, and a
+    /// capture click sets "clicks" to 9. A also places "outer" at (250,
+    /// 150), an artboard "mid" (100 by 100, a machine) placing "inner" at
+    /// its origin, an artboard "leaf": a CSS artboard 100 by 100 whose box
+    /// "pane" holds "pane list", 100 by 300, which a ScrollConstraint
+    /// "pane scroll" moves, and whose machine sets "over" to 1 as a pointer
+    /// enters it and to 0 as one exits.
+    Held,
 }
 
 /// What `InPlaceFixture::Keyed` keys in place of a box.
@@ -549,6 +559,22 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
             asset.extend([("width", F(40.0)), ("height", F(40.0))]);
         }
         obj(&mut b, "VideoAsset", &asset);
+    }
+    if kind == FieldHeard {
+        // The fields' font, asset 1, so text in them shapes.
+        obj(
+            &mut b,
+            "FontAsset",
+            &[("assetId", U(1)), ("name", S("Roboto"))],
+        );
+        obj(
+            &mut b,
+            "FileAssetContents",
+            &[(
+                "bytes",
+                Bytes(include_bytes!("../../../fixtures/fonts/roboto-input.ttf")),
+            )],
+        );
     }
     for name in ["A", "B"] {
         obj(&mut b, "ViewModel", &[("name", S(name))]);
@@ -629,7 +655,7 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
             ("styleId", U(2)),
             ("clip", B(false)),
         ];
-        if kind == FieldHeard {
+        if kind == FieldHeard || (kind == Held && screen == "A") {
             screen_props.push(("defaultStateMachineId", U(0)));
         }
         obj(&mut b, "Artboard", &screen_props); // 0
@@ -755,7 +781,62 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
                 }
             }
         }
+        if kind == Held && screen == "A" {
+            obj(
+                &mut b,
+                "NestedArtboard",
+                &[
+                    ("name", S("outer")),
+                    ("parentId", U(0)),
+                    ("artboardId", U(2)),
+                    ("x", F(250.0)),
+                    ("y", F(150.0)),
+                    ("isStateful", B(true)),
+                ],
+            ); // 13
+            obj(
+                &mut b,
+                "NestedStateMachine",
+                &[("parentId", U(13)), ("animationId", U(0))],
+            ); // 14
+            machine(&mut b, false);
+            for name in ["over", "clicks"] {
+                obj(
+                    &mut b,
+                    "StateMachineNumber",
+                    &[("name", S(name)), ("value", F(0.0))],
+                );
+            }
+            // Over the card: enter (0) and exit (1) set "over"; a capture
+            // click (6) sets "clicks".
+            for (listener_type, input, value, capture) in
+                [(0, 0, 1.0, false), (1, 0, 0.0, false), (6, 1, 9.0, true)]
+            {
+                let mut listener =
+                    vec![("targetId", U(3)), ("listenerTypeValue", U(listener_type))];
+                if capture {
+                    listener.push(("phaseValue", U(1)));
+                }
+                obj(&mut b, "StateMachineListenerSingle", &listener);
+                obj(
+                    &mut b,
+                    "ListenerNumberChange",
+                    &[("inputId", U(input)), ("value", F(value))],
+                );
+            }
+        }
         if kind == FieldHeard {
+            // The field's style, after every other object so no id moves.
+            obj(
+                &mut b,
+                "TextStylePaint",
+                &[
+                    ("parentId", U(13)),
+                    ("fontAssetId", U(1)),
+                    ("fontSize", F(20.0)),
+                    ("lineHeight", F(24.0)),
+                ],
+            );
             // Listeners on the field, object 13: any pressed key sets "keys"
             // to 9; text reaches the field through a text listener; a screen
             // reader's tap sets "taps" to 9.
@@ -795,6 +876,78 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
                 &mut b,
                 "ListenerNumberChange",
                 &[("inputId", U(1)), ("value", F(9.0))],
+            );
+        }
+    }
+    if kind == Held {
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S("mid")),
+                ("width", F(100.0)),
+                ("height", F(100.0)),
+                ("defaultStateMachineId", U(0)),
+            ],
+        ); // 0
+        obj(
+            &mut b,
+            "NestedArtboard",
+            &[
+                ("name", S("inner")),
+                ("parentId", U(0)),
+                ("artboardId", U(3)),
+                ("isStateful", B(true)),
+            ],
+        ); // 1
+        obj(
+            &mut b,
+            "NestedStateMachine",
+            &[("parentId", U(1)), ("animationId", U(0))],
+        ); // 2
+        machine(&mut b, false);
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S("leaf")),
+                ("width", F(100.0)),
+                ("height", F(100.0)),
+                ("styleId", U(2)),
+                ("clip", B(false)),
+                ("defaultStateMachineId", U(0)),
+            ],
+        ); // 0
+        obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+        obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+        boxed(&mut b, 3, "pane", (100.0, 100.0), 0, 0xff3333cc); // 3 to 7
+        boxed_in(&mut b, 3, 8, "pane list", (100.0, 300.0), 0, 0xff33cc33); // 8 to 12
+        obj(
+            &mut b,
+            "ScrollConstraint",
+            &[
+                ("name", S("pane scroll")),
+                ("parentId", U(8)),
+                ("directionValue", U(1)),
+                ("physicsTypeValue", U(0)),
+            ],
+        ); // 13
+        machine(&mut b, false);
+        obj(
+            &mut b,
+            "StateMachineNumber",
+            &[("name", S("over")), ("value", F(0.0))],
+        );
+        for (listener_type, value) in [(0, 1.0), (1, 0.0)] {
+            obj(
+                &mut b,
+                "StateMachineListenerSingle",
+                &[("targetId", U(0)), ("listenerTypeValue", U(listener_type))],
+            );
+            obj(
+                &mut b,
+                "ListenerNumberChange",
+                &[("inputId", U(0)), ("value", F(value))],
             );
         }
     }

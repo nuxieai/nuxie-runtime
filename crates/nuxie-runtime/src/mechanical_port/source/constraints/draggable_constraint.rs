@@ -219,6 +219,9 @@ impl DraggableConstraintListenerGroup {
     pub fn tracked_pointer_ids(&self) -> Vec<i32> {
         self.base.tracked_pointer_ids()
     }
+    pub fn pointer_position(&self, id: i32) -> Option<Vec2D> {
+        self.base.pointer_position(id)
+    }
     pub fn cancel_pointer(&self, id: i32, position: Vec2D, timestamp: f32) -> bool {
         let was_down = self
             .base

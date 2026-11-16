@@ -14377,6 +14377,207 @@ fn in_place_a_persons_focus_key_text_gamepad_and_screen_reader_input_is_off_mid_
     );
 }
 
+/// `InPlaceFixture::Held` loaded, its moves prepared: A's machine and the
+/// machine of "leaf", two nested artboards down on A.
+struct HeldPage {
+    page: InPlacePage,
+    moves: LiveMoves,
+    a: RuntimeStateMachineInstanceHandle,
+    leaf: RuntimeStateMachineInstanceHandle,
+}
+impl HeldPage {
+    fn load() -> Self {
+        let (page, moves) = field_page_of(fixture::InPlaceFixture::Held);
+        let a = screen_machine(&page, "A");
+        let row = screens(&page.root).unwrap()["A"].clone();
+        let outer = row
+            .with_artboard(|b| b.find_handle::<NestedArtboard>("outer"))
+            .unwrap();
+        let inner = child(&outer)
+            .unwrap()
+            .with_artboard(|b| b.find_handle::<NestedArtboard>("inner"))
+            .unwrap();
+        let leaf = machine(&inner);
+        page.machine.advance_and_apply(0.0);
+        Self {
+            page,
+            moves,
+            a,
+            leaf,
+        }
+    }
+    fn take_off(&mut self) {
+        self.moves
+            .step_begin(&self.page.root, "B", Some("t1"))
+            .unwrap();
+    }
+    fn land(&mut self) {
+        field_fly_to(&self.page, &mut self.moves, 0.5);
+        field_fly_to(&self.page, &mut self.moves, 1.0);
+        self.moves
+            .step_end(&self.page.root, "B", Some("t1"))
+            .unwrap();
+        self.page.machine.advance_and_apply(0.0);
+    }
+}
+fn number_of(machine: &RuntimeStateMachineInstanceHandle, name: &str) -> f32 {
+    machine.with_instance(|m| m.get_number(name).unwrap().value())
+}
+/// A's card's center on A, (60, 40), and the leaf's on A, (300, 200).
+const CARD: (f32, f32) = (60.0, 40.0);
+const LEAF: (f32, f32) = (300.0, 200.0);
+fn at(point: (f32, f32)) -> source::math::vec2d::Vec2D {
+    source::math::vec2d::Vec2D::new(point.0, point.1)
+}
+
+/// A mouse pressed and released over A's card without moving stays over
+/// it, its enter heard ("over" 1). Take-off exits it: "over" 0.
+#[test]
+fn take_off_exits_a_pointer_released_over_a_screen_without_moving() {
+    use source::pointer_button::PointerButton;
+    let mut h = HeldPage::load();
+    h.a.with_instance_mut(|m| {
+        m.pointer_down(at(CARD), 1, PointerButton::Primary);
+        m.pointer_up(at(CARD), 1, PointerButton::Primary);
+    });
+    assert_eq!(
+        number_of(&h.a, "over"),
+        1.0,
+        "over the card after its release"
+    );
+    h.take_off();
+    assert_eq!(number_of(&h.a, "over"), 0.0, "take-off exits it");
+}
+
+/// A press that comes only through capture (`capture_pointer`, no ordinary
+/// dispatch) completes a capture click on release ("clicks" 9) with no step
+/// between. Take-off cancels it: released after landing, it clicks nothing.
+#[test]
+fn take_off_cancels_a_press_that_came_only_through_capture() {
+    use source::{listener_type::ListenerType, pointer_button::PointerButton};
+    let press = |h: &HeldPage, kind: ListenerType| {
+        h.a.with_instance_mut(|m| {
+            m.capture_pointer(at(CARD), kind, 2, 0.0, PointerButton::Primary);
+        });
+    };
+    let h = HeldPage::load();
+    press(&h, ListenerType::Down);
+    press(&h, ListenerType::Up);
+    assert_eq!(number_of(&h.a, "clicks"), 9.0, "with no step it clicks");
+    let mut h = HeldPage::load();
+    press(&h, ListenerType::Down);
+    h.take_off();
+    h.land();
+    press(&h, ListenerType::Up);
+    assert_eq!(number_of(&h.a, "clicks"), 0.0, "cancelled at take-off");
+}
+
+/// A press on A's focused field, with text in it, starts a selection drag;
+/// take-off ends it, so the field stops dragging and its selection stays as
+/// it was through the step.
+#[test]
+fn take_off_ends_a_fields_selection_drag() {
+    use source::{pointer_button::PointerButton, text::text_input::TextInput};
+    let (page, mut moves) = field_page_of(fixture::InPlaceFixture::FieldHeard);
+    let a = screen_machine(&page, "A");
+    let (_, field) = field_on(&page, "A");
+    field.with_downcast_mut::<TextInput, _>(|t| t.raw_text_input().set_text("hello world".into()));
+    page.machine.advance_and_apply(0.0);
+    // A press drags in a focused field (in CSS content a press on one not
+    // focused is a tap). The field is the only thing on A a pointer hits.
+    let (node, _) = field_on(&page, "A");
+    let manager = node.borrow().manager().unwrap();
+    manager.with_focus_manager_mut(|m| m.set_focus(node.clone()));
+    let press = (0..30)
+        .flat_map(|x| (0..20).map(move |y| (x as f32 * 4.0, y as f32 * 4.0)))
+        .find(|&p| a.with_instance(|m| m.hit_test(at(p))))
+        .expect("a point on A's field");
+    a.with_instance_mut(|m| m.pointer_down(at(press), 3, PointerButton::Primary));
+    let dragging = || {
+        field
+            .with_downcast::<TextInput, _>(|t| t.is_dragging())
+            .unwrap()
+    };
+    assert!(dragging(), "the press starts a selection drag");
+    moves.step_begin(&page.root, "B", Some("t1")).unwrap();
+    assert!(!dragging(), "take-off ends it");
+    let selection = || {
+        field
+            .with_downcast_mut::<TextInput, _>(|t| t.raw_text_input().cursor())
+            .unwrap()
+    };
+    let before = selection();
+    field_fly_to(&page, &mut moves, 0.5);
+    assert!(selection() == before, "nothing selects through the step");
+}
+
+/// Two nested artboards down on A, "leaf" hears a pointer enter ("over" 1)
+/// and latches a wheel's scroll, as does A, whose scroll target is the
+/// nested artboard. Take-off reaches the leaf: the pointer exits it
+/// ("over" 0) and no scroll stays latched, on the leaf or on A.
+#[test]
+fn take_off_reaches_a_nested_artboard_two_levels_down() {
+    use source::scroll_event::{ScrollEvent, ScrollPhase};
+    let mut h = HeldPage::load();
+    let wheel = ScrollEvent {
+        delta: source::math::vec2d::Vec2D::new(0.0, -30.0),
+        phase: ScrollPhase::Begin,
+        precise: true,
+    };
+    h.a.with_instance_mut(|m| {
+        m.pointer_move(at(LEAF), 0.0, 4);
+        m.pointer_scroll(at(LEAF), &wheel, 0.0, 5);
+    });
+    assert_eq!(number_of(&h.leaf, "over"), 1.0, "the leaf hears the enter");
+    let latched = |h: &HeldPage| {
+        (
+            h.a.with_instance_mut(|m| m.has_scroll_latch()),
+            h.leaf.with_instance_mut(|m| m.has_scroll_latch()),
+        )
+    };
+    assert_eq!(latched(&h), (true, true), "A and the leaf latch the wheel");
+    h.take_off();
+    assert_eq!(
+        number_of(&h.leaf, "over"),
+        0.0,
+        "take-off exits it two levels down"
+    );
+    assert_eq!(latched(&h), (false, false), "no scroll stays latched");
+}
+
+/// A step refused (no such step, or the wrong destination) leaves what a
+/// person holds as it was: a pointer over A's card stays over it ("over"
+/// 1). The step that begins then exits it.
+#[test]
+fn a_refused_step_leaves_held_input_as_it_was() {
+    use source::pointer_button::PointerButton;
+    let mut h = HeldPage::load();
+    h.a.with_instance_mut(|m| {
+        m.pointer_down(at(CARD), 1, PointerButton::Primary);
+        m.pointer_up(at(CARD), 1, PointerButton::Primary);
+    });
+    assert_eq!(number_of(&h.a, "over"), 1.0, "over the card");
+    for (incoming, step) in [("B", "none"), ("A", "t1")] {
+        assert!(
+            h.moves
+                .step_begin(&h.page.root, incoming, Some(step))
+                .is_err(),
+            "{incoming} by {step} is refused"
+        );
+        assert_eq!(
+            number_of(&h.a, "over"),
+            1.0,
+            "{incoming} by {step}: still held"
+        );
+    }
+    h.take_off();
+    assert_eq!(
+        number_of(&h.a, "over"),
+        0.0,
+        "the step that begins exits it"
+    );
+}
+
 /// In place the focus tree never moves: a field focused on A stays the
 /// primary focus through a step, half way and landed, and every focus node
 /// keeps its manager and its parent.

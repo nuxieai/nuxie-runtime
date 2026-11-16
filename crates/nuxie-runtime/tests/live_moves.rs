@@ -8778,6 +8778,63 @@ mod paint_order {
         );
     }
 
+    /// Both phones exit a held pointer when input turns off, before the step
+    /// begins (iOS `endActiveInput`, Android `withdrawSceneInput`). In
+    /// `ZoomCase::Scrolls` in place, a press at (200, 100) on b dragged 30 up
+    /// scrolls b; the host exits it there; the step then begins, flies and
+    /// lands. Landed, the same pointer's moves and release scroll nothing.
+    /// (The exit leaves b's drag state set, as on main: UNIV-6462.)
+    #[test]
+    fn hits_a_drag_the_host_exits_before_take_off_does_not_resume() {
+        use source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+        let mut s = PaintScene::shaped(
+            PaintCase::Zoom(fixture::ZoomCase::Scrolls),
+            PaintShape::InPlace,
+        );
+        let scroll = s
+            .row("B")
+            .with_artboard(|r| r.find_handle::<ScrollConstraint>("b scroll"))
+            .expect("b scrolls");
+        let offset = || scroll.with_downcast(ScrollConstraint::offset_y).unwrap();
+        s.advance(0.0);
+        s.pointer += 1;
+        let id = s.pointer;
+        let mut t = 0.0;
+        let mut to = |s: &mut PaintScene, y: f32| {
+            t += 0.5;
+            s.machine
+                .with_instance_mut(|m| m.pointer_move(Vec2D::new(200.0, y), t, id));
+            s.advance(0.5);
+        };
+        s.machine.with_instance_mut(|m| {
+            m.pointer_move(Vec2D::new(200.0, 100.0), 0.0, id);
+            m.pointer_down(Vec2D::new(200.0, 100.0), id, PointerButton::Primary);
+        });
+        for y in [90.0, 80.0, 70.0] {
+            to(&mut s, y);
+        }
+        assert!(offset() != 0.0, "the held drag scrolls b");
+        s.machine
+            .with_instance_mut(|m| m.pointer_exit(Vec2D::new(200.0, 70.0), id));
+        s.fly(Way::Go, |_, _| {});
+        for _ in 0..4 {
+            s.advance(0.5);
+        }
+        let landed = offset();
+        for y in [60.0, 50.0, 40.0] {
+            to(&mut s, y);
+        }
+        s.machine.with_instance_mut(|m| {
+            m.pointer_up(Vec2D::new(200.0, 40.0), id, PointerButton::Primary)
+        });
+        s.advance(0.5);
+        assert_eq!(
+            offset(),
+            landed,
+            "landed, the exited pointer's moves scroll nothing"
+        );
+    }
+
     /// B put to sleep half way takes no tap on either copy, in both shapes,
     /// a's on A, awake, included: nothing on the page takes a tap while a
     /// step runs. At rest a hears a tap at its center (76, 50). Half way a's
@@ -14470,6 +14527,34 @@ fn take_off_cancels_a_press_that_came_only_through_capture() {
     h.land();
     press(&h, ListenerType::Up);
     assert_eq!(number_of(&h.a, "clicks"), 0.0, "cancelled at take-off");
+}
+
+/// Both phones exit a held pointer when input turns off, before the step
+/// begins. A press on A's card that the host exits, followed by a step that
+/// begins, flies and lands: the card is no longer over ("over" 0), and a
+/// release there after landing clicks nothing ("clicks" 0). With no exit and
+/// no step between, the same press and release click ("clicks" 9).
+#[test]
+fn take_off_after_the_hosts_exit_lets_a_held_button_go() {
+    use source::pointer_button::PointerButton;
+    let h = HeldPage::load();
+    h.a.with_instance_mut(|m| {
+        m.pointer_down(at(CARD), 6, PointerButton::Primary);
+        m.pointer_up(at(CARD), 6, PointerButton::Primary);
+    });
+    assert_eq!(number_of(&h.a, "clicks"), 9.0, "with no step it clicks");
+    let mut h = HeldPage::load();
+    h.a.with_instance_mut(|m| {
+        m.pointer_down(at(CARD), 6, PointerButton::Primary);
+        m.pointer_exit(at(CARD), 6);
+    });
+    h.take_off();
+    assert_eq!(number_of(&h.a, "over"), 0.0, "the card is let go");
+    h.land();
+    h.a.with_instance_mut(|m| {
+        m.pointer_up(at(CARD), 6, PointerButton::Primary);
+    });
+    assert_eq!(number_of(&h.a, "clicks"), 0.0, "no click after landing");
 }
 
 /// A press on A's focused field, with text in it, starts a selection drag;

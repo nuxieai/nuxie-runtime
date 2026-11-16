@@ -248,6 +248,8 @@ The numeric assertions below are implemented in `crates/nuxie-runtime/tests/live
 | `take_off_ends_a_fields_selection_drag` | A press on A's field with text starts a selection drag; take-off ends it, and half way the cursor is as it was. |
 | `take_off_reaches_a_nested_artboard_two_levels_down` | Two nested artboards down, "leaf" hears a pointer enter and latches a wheel, as does A; take-off exits the pointer there and leaves no scroll latched on the leaf or on A. |
 | `a_refused_step_leaves_held_input_as_it_was` | A step that does not exist, or names the wrong destination, is refused and leaves a pointer held over A's card as it was; the step that begins exits it. |
+| `hits_a_drag_the_host_exits_before_take_off_does_not_resume` | As both phones do, the host exits a held drag on b before the step begins; landed, the same pointer's moves and release scroll nothing. |
+| `take_off_after_the_hosts_exit_lets_a_held_button_go` | A press on A's card that the host exits before the step begins is let go ("over" 0); released after landing it clicks nothing (0). With no exit and no step it clicks (9). |
 | `in_place_a_focused_fields_geometry_reads_through_a_step` (nux-capi) | A's focused field stays focused, and `nux_player_text_input_geometry` reads it half way and landed where it rests, as before the step. |
 | `empty_source_draws_no_geometry` | The source draws 1 shape before take-off and 0 after. |
 | `collapsed_rows_cost_one_row_and_wake_with_data` | 40 active rows make 81 advances and 40 draws. With 39 collapsed: 3 advances and 1 draw. Sleeping data value 777 applies on wake. |

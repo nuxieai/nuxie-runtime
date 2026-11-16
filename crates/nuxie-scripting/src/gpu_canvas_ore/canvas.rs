@@ -232,7 +232,7 @@ pub(super) fn begin_pass(
     lua: &Lua,
     loan: &mut Loan<'_>,
     type_name: &str,
-    // The receiving canvas's colour view and, for a script canvas, its charge.
+    // The receiving canvas's color view and, for a script canvas, its charge.
     target_view: Option<(&AnyResourceHandle, Option<&GpuCharge>)>,
     host_target: bool,
     table: &Table,

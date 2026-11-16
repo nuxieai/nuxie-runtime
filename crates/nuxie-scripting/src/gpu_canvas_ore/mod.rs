@@ -98,7 +98,7 @@ pub(crate) fn keep_with_recording(ctx: &dyn ContextApi, charge: &GpuCharge) {
     ctx.keepWithRecording(Rc::clone(charge) as Rc<dyn std::any::Any>);
 }
 
-/// Bytes a canvas's backing takes: one RGBA8 colour texture.
+/// Bytes a canvas's backing takes: one RGBA8 color texture.
 pub(crate) fn canvas_bytes(width: u32, height: u32) -> u64 {
     u64::from(width)
         .saturating_mul(u64::from(height))

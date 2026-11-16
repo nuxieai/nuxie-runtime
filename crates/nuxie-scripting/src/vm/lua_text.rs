@@ -247,7 +247,7 @@ fn same_paint(a: Option<&RuntimeRenderPaintHandle>, b: Option<&RuntimeRenderPain
 }
 /// Refuses an append that would add a style past the `u16` a glyph run
 /// names it with. `RawText::append` reuses a style with the same paint and
-/// colour, so only a full Text is searched, and only for a new style.
+/// color, so only a full Text is searched, and only for a new style.
 /// Whether `text` has the style an append with `paint` and `foreground`
 /// would use (`RawText::append` reuses it rather than adding one).
 fn has_style(text: &RawText, paint: Option<&RuntimeRenderPaintHandle>, foreground: u32) -> bool {

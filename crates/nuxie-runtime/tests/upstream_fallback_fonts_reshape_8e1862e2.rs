@@ -281,6 +281,15 @@ fn the_sink_hears_text_whose_ellipsis_alone_needed_the_fallback_fonts() {
     ));
     assert_eq!(record(|| advance(&board)), vec![(key, true)]);
     assert!(record(|| advance(&board)).is_empty());
+
+    // Narrower: the ellipsis is laid out again over the same shape, and asks
+    // the chain again, whose answer may have changed.
+    assert!(CoreRegistry::set_double_handle(
+        &text,
+        i32::from(TextBase::WIDTH_PROPERTY_KEY),
+        40.0
+    ));
+    assert_eq!(record(|| advance(&board)), vec![(key, true)]);
 }
 
 #[test]

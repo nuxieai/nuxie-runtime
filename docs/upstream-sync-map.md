@@ -3231,6 +3231,17 @@ its complete accounting appears above. Its original ahead-port scope is retained
 in [cache-as-bitmap-port.md](cache-as-bitmap-port.md). There are no remaining
 ahead-port rows in this inventory.
 
+The fallback-fonts half of `8e1862e2` (upstream #15357) is ported ahead for
+UNIV-5593: `Font::fallbackFontsGeneration`, `fallbackFontsChanged` moving it,
+Text and TextInput reshaping on their next advance when it moves, quiet list
+rows waking for it, and `set_fallback_proc_enabled` leaving it alone. Its
+language half (the `FallbackRequestProc` with script and languages, and the
+Text, TextValueRun and TextInput language properties) changes the file format
+and waits for the sync to reach that commit. When it does, reconcile
+`text_engine.rs`, `text.rs`, `text_input.rs` and `artboard_component_list.rs`
+against the full diff; `tests/upstream_fallback_fonts_reshape_8e1862e2.rs`
+holds the ported sections of `text_language_test.cpp`.
+
 The alignment and obscured-input properties are now both reached and live in
 `defs/upstream-reconciliation/text/text_input.json`. The former shared forward
 overlay is retired. See [obscured-text-input-port.md](obscured-text-input-port.md)

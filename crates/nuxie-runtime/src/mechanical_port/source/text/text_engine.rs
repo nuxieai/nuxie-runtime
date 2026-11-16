@@ -668,12 +668,16 @@ struct FallbackConfiguration {
     callback: Option<FallbackProc>,
     enabled: bool,
     generation: u32,
+    // Upstream 8e1862e2 `g_fallbackFontsGeneration` (font_hb.cpp): moves with
+    // `generation` except for `enabled`.
+    fonts_generation: u32,
 }
 static FALLBACK_CONFIGURATION: std::sync::Mutex<FallbackConfiguration> =
     std::sync::Mutex::new(FallbackConfiguration {
         callback: None,
         enabled: true,
         generation: 0,
+        fonts_generation: 0,
     });
 pub const REGULAR_WEIGHT: u32 = 400;
 
@@ -688,6 +692,9 @@ pub fn set_fallback_proc(value: Option<FallbackProc>) {
     };
     if !same {
         config.generation = config.generation.wrapping_add(1);
+        // A new proc may pick other fonts (upstream 8e1862e2,
+        // `Font::fallbackGeneration`).
+        config.fonts_generation = config.fonts_generation.wrapping_add(1);
         config.callback = value;
     }
 }
@@ -720,11 +727,30 @@ pub fn fallback_generation() -> u32 {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .generation
 }
+/// Changes with [`fallback_generation`], except for
+/// [`set_fallback_proc_enabled`]: when the fonts fallbacks are picked from may
+/// have changed, not whether they are used. Every Text and TextInput reshapes
+/// on its next advance once it moves (upstream 8e1862e2,
+/// `Font::fallbackFontsGeneration`). A scoped host proc
+/// ([`with_host_fallback_proc`]) does not move it: a host that sets its proc
+/// around each operation tells [`fallback_fonts_changed`] when its fonts change.
+pub fn fallback_fonts_generation() -> u32 {
+    FALLBACK_CONFIGURATION
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .fonts_generation
+}
+/// The fonts a host's fallback proc picks from changed, so text already
+/// shaped reshapes on its next advance (upstream 8e1862e2,
+/// `Font::fallbackFontsChanged`).
 pub fn fallback_fonts_changed() {
     let mut config = FALLBACK_CONFIGURATION
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
+    // The reuse generation first, under the same lock, so text that reshapes
+    // for the new fonts never reuses a shape made before them.
     config.generation = config.generation.wrapping_add(1);
+    config.fonts_generation = config.fonts_generation.wrapping_add(1);
 }
 pub(crate) type FallbackState = (u32, u64);
 
@@ -749,6 +775,41 @@ pub(crate) fn note_fallback_call() {
 
 pub(crate) fn fallback_calls() -> u64 {
     FALLBACK_CALLS.with(std::cell::Cell::get)
+}
+
+/// Told after a Text or text field's drawn shape is made, with that object
+/// and whether making it called the fallback callback: whether how the text
+/// looks depends on the fonts the callback picks from.
+pub type ShapeFallbackSink = fn(&crate::mechanical_port::source::core::CoreHandle, bool);
+
+thread_local! {
+    static SHAPE_FALLBACK_SINK: std::cell::Cell<Option<ShapeFallbackSink>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Nuxie addition (UNIV-5593): a host that fetches fallback fonts once text
+/// needs them learns which text drew with its fallback fonts, wherever that
+/// text's artboard lives. Upstream's fallback callback is asked for a font
+/// mid-shaping and never learns which text asked or what the shaper drew
+/// with what it returned. Applies to this thread during `work` only.
+pub fn with_shape_fallback_sink<R>(sink: ShapeFallbackSink, work: impl FnOnce() -> R) -> R {
+    struct Restore(Option<ShapeFallbackSink>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            SHAPE_FALLBACK_SINK.with(|slot| slot.set(self.0));
+        }
+    }
+    let _restore = Restore(SHAPE_FALLBACK_SINK.with(|slot| slot.replace(Some(sink))));
+    work()
+}
+
+pub(crate) fn report_shape_fallback(
+    owner: &crate::mechanical_port::source::core::CoreHandle,
+    used_fallback: bool,
+) {
+    if let Some(sink) = SHAPE_FALLBACK_SINK.with(std::cell::Cell::get) {
+        sink(owner, used_fallback);
+    }
 }
 
 /// Snapshot of global fallback fonts and the owning thread's host override.

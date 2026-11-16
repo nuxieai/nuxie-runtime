@@ -931,7 +931,17 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(
         );
         owner.with_downcast_mut::<Self, _>(|object| object.mark_listened_runs());
         Self::sync_style_list_items_occurrence(owner);
-        owner.with_downcast_mut::<Self, _>(|object| object.update_after_transform_super(dirt));
+        let shaped = owner.with_downcast_mut::<Self, _>(|object| {
+            let serial = object.shape_serial;
+            object.update_after_transform_super(dirt);
+            (object.shape_serial != serial).then(|| object.shape_uses_fallback())
+        });
+        if let Some(Some(used_fallback)) = shaped {
+            crate::mechanical_port::source::text_engine::report_shape_fallback(
+                owner,
+                used_fallback,
+            );
+        }
     },
     crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
     crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
@@ -1019,6 +1029,13 @@ pub struct Text {
     measured_shape: Option<Box<MeasuredShape>>,
     shape_fallbacks: FallbackState,
     shape_reusable: bool,
+    /// Nuxie: moves each time `shape` is replaced, so the update that made it
+    /// reports it (see `text_engine::with_shape_fallback_sink`).
+    shape_serial: u32,
+    /// Upstream 8e1862e2 `m_fallbackFontsGeneration`: the generation the
+    /// shape was last marked for, so new fallback fonts reshape on the next
+    /// advance.
+    fallback_fonts_generation: u32,
     shape_css_owned: bool,
     lines_dirty: bool,
     broken_lines: Option<(u32, TextAlign, TextWrap, TextWordBreak)>,
@@ -1077,6 +1094,11 @@ impl Default for Text {
             measured_shape: None,
             shape_fallbacks: (0, 0),
             shape_reusable: false,
+            shape_serial: 0,
+            // Upstream records it in onAddedDirty; every Text, read or
+            // cloned, is built through Default here.
+            fallback_fonts_generation:
+                crate::mechanical_port::source::text_engine::fallback_fonts_generation(),
             shape_css_owned: false,
             lines_dirty: false,
             broken_lines: None,
@@ -1771,11 +1793,13 @@ impl Text {
                         self.shape = spare.shape;
                         self.shape_fallbacks = spare.fallback;
                         self.shape_reusable = true;
+                        self.shape_serial = self.shape_serial.wrapping_add(1);
                     } else {
                         let calls = fallback_calls();
                         self.shape = self.shape_styled(&styled, ShapeSource::Update);
                         self.shape_fallbacks = fallback;
                         self.shape_reusable = calls == fallback_calls();
+                        self.shape_serial = self.shape_serial.wrapping_add(1);
                     }
                     self.shape_css_owned = self.css_owned;
                 }
@@ -1805,6 +1829,9 @@ impl Text {
             } else {
                 shape_changed = !self.shape.is_empty();
                 lines_changed = self.broken_lines.is_some();
+                if shape_changed {
+                    self.shape_serial = self.shape_serial.wrapping_add(1);
+                }
                 self.shape.clear();
                 self.lines.clear();
                 self.broken_lines = None;
@@ -2896,6 +2923,12 @@ impl Text {
             self.mark_lines_dirty(false);
         }
     }
+    /// Whether making the drawn shape called the fallback callback, so how
+    /// it looks depends on the fonts the callback picks from. A shape that
+    /// did is never kept for reuse (`shape_reusable`).
+    pub fn shape_uses_fallback(&self) -> bool {
+        !self.shape.is_empty() && !self.shape_reusable
+    }
     fn current_shape_matches(&self, styled: &StyledText, fallback: FallbackState) -> bool {
         self.shape_reusable
             && !self.shape.is_empty()
@@ -3770,6 +3803,21 @@ impl Text {
         flags: crate::source::advance_flags::AdvanceFlags,
     ) -> bool {
         Self::sync_style_list_items_occurrence(owner);
+        // Upstream 8e1862e2 Text::advanceComponent: new fallback fonts, such
+        // as one a host fetched once text needed it, reshape every text
+        // whether or not it fell back. (Its system-language half waits for
+        // the sync that takes Text.language.)
+        let fallbacks = crate::mechanical_port::source::text_engine::fallback_fonts_generation();
+        let reshape = owner
+            .with_downcast_mut::<Self, _>(|text| {
+                let reshape = fallbacks != text.fallback_fonts_generation;
+                text.fallback_fonts_generation = fallbacks;
+                reshape
+            })
+            .unwrap_or(false);
+        if reshape {
+            Self::mark_shape_dirty_occurrence(owner, true);
+        }
         let mut changed = false;
         let mut keep_going = false;
         for style in Self::on_demand_occurrences(owner) {
@@ -3782,6 +3830,12 @@ impl Text {
     }
     pub fn quiet_state(&self) -> crate::source::advancing_component::QuietState {
         use crate::source::advancing_component::QuietState;
+        // Upstream 8e1862e2: new fallback fonts not reshaped for yet.
+        if crate::mechanical_port::source::text_engine::fallback_fonts_generation()
+            != self.fallback_fonts_generation
+        {
+            return QuietState::Busy;
+        }
         let mut state = QuietState::Quiet;
         for style in &self.on_demand_styles {
             match style.borrow().quiet_state() {

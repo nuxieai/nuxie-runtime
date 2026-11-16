@@ -92,6 +92,12 @@ pub struct TextInput {
     layout_width: f32,
     layout_height: f32,
     raw_text_input: RawTextInput,
+    /// Upstream 8e1862e2 `m_fallbackFontsGeneration`: the generation the input
+    /// last shaped for, so new fallback fonts reshape it on the next advance.
+    fallback_fonts_generation: u32,
+    /// Nuxie: the shape an update just made, for the occurrence to report
+    /// once the input's slot is released (`with_shape_fallback_sink`).
+    shape_report: Option<bool>,
 }
 
 impl Default for TextInput {
@@ -114,6 +120,10 @@ impl Default for TextInput {
             layout_width: f32::NAN,
             layout_height: f32::NAN,
             raw_text_input: RawTextInput::default(),
+            // Upstream records it in onAddedClean; every TextInput, read or
+            // cloned, is built through Default here.
+            fallback_fonts_generation: super::text_engine::fallback_fonts_generation(),
+            shape_report: None,
         }
     }
 }
@@ -421,6 +431,7 @@ impl TextInput {
             self.update_alignment();
             let changed = self.raw_text_input.update(&factory);
             if changed & Flags::ShapeDirty as u8 != 0 {
+                self.shape_report = Some(self.raw_text_input.shape_uses_fallback());
                 self.world_bounds = self
                     .base
                     .world_transform()
@@ -451,9 +462,15 @@ impl TextInput {
     }
 
     pub(crate) fn update_after_transform_occurrence(owner: &CoreHandle, dirt: ComponentDirt) {
-        let pending = owner
-            .with_downcast_mut::<Self, _>(|input| input.update_after_transform_state(dirt))
-            .flatten();
+        let (pending, shaped) = owner
+            .with_downcast_mut::<Self, _>(|input| {
+                let pending = input.update_after_transform_state(dirt);
+                (pending, input.shape_report.take())
+            })
+            .unwrap_or((None, None));
+        if let Some(used_fallback) = shaped {
+            super::text_engine::report_shape_fallback(owner, used_fallback);
+        }
         let Some((scroll, cursor, multiline)) = pending else {
             return;
         };
@@ -998,6 +1015,16 @@ impl TextInput {
         self.is_dragging
     }
     pub fn advance_component(&mut self, elapsed: f32, flags: AdvanceFlags) -> bool {
+        // Upstream 8e1862e2 TextInput::advanceComponent: new fallback fonts
+        // reshape the input (see Text::advance_component_occurrence). Its
+        // system-language half waits for the sync that takes the language.
+        let fallbacks = super::text_engine::fallback_fonts_generation();
+        if fallbacks != self.fallback_fonts_generation {
+            self.fallback_fonts_generation = fallbacks;
+            self.raw_text_input.invalidate_shape();
+            self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
+            self.base.mark_layout_node_dirty();
+        }
         if self.update_alignment() {
             self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
         }

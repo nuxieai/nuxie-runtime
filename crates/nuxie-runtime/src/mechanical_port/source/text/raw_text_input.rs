@@ -177,6 +177,9 @@ pub struct RawTextInput {
     journal_index: u32,
     max_characters: u32,
     max_lines: u32,
+    /// Nuxie: whether making `shape` called the fallback callback (see
+    /// `text_engine::with_shape_fallback_sink`).
+    shape_used_fallback: bool,
 }
 
 impl Default for RawTextInput {
@@ -241,6 +244,7 @@ impl RawTextInput {
             journal_index: 0,
             max_characters: 0,
             max_lines: 0,
+            shape_used_fallback: false,
         }
     }
 
@@ -775,8 +779,15 @@ impl RawTextInput {
         updated
     }
 
+    /// Whether making the drawn shape called the fallback callback, so how
+    /// it looks depends on the fonts the callback picks from.
+    pub fn shape_uses_fallback(&self) -> bool {
+        self.shape_used_fallback
+    }
+
     fn ensure_shape(&mut self) {
         if self.unflag(Flags::ShapeDirty as u8) {
+            let calls = super::text_engine::fallback_calls();
             self.text_run.unichar_count = self.text.len() as u32;
             self.prepare_obscured_text();
             let text = if self.obscured() {
@@ -799,6 +810,7 @@ impl RawTextInput {
                 self.vertical_align,
                 self.align_height,
             );
+            self.shape_used_fallback = calls != super::text_engine::fallback_calls();
             self.flag(Flags::Shaped as u8);
         }
     }

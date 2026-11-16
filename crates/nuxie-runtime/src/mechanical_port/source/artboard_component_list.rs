@@ -186,6 +186,10 @@ pub struct ArtboardComponentList {
     pending_focus_tree_build: Option<RuntimeFocusManagerHandle>,
     list_has_duplicate_items: bool,
     quiet_rows: Rc<RefCell<Vec<u64>>>,
+    /// Upstream 8e1862e2 `m_fallbackFontsGeneration`: the generation the rows
+    /// last advanced under, since text in a quiet row reshapes for new
+    /// fallback fonts too.
+    fallback_fonts_generation: u32,
     quiet_row_artboards: Rc<RefCell<Vec<Option<CoreHandle>>>>,
     never_quiet_rows: Vec<u64>,
     list_uses_draw_index_sort: bool,
@@ -232,6 +236,8 @@ impl Default for ArtboardComponentList {
             pending_focus_tree_build: None,
             list_has_duplicate_items: false,
             quiet_rows: Rc::new(RefCell::new(Vec::new())),
+            fallback_fonts_generation:
+                crate::mechanical_port::source::text_engine::fallback_fonts_generation(),
             quiet_row_artboards: Rc::new(RefCell::new(Vec::new())),
             never_quiet_rows: Vec::new(),
             list_uses_draw_index_sort: false,
@@ -1441,6 +1447,25 @@ impl ArtboardComponentList {
         true
     }
 
+    /// Upstream 8e1862e2 `wakeQuietRows`: wakes every quiet row, for a change
+    /// none of them can see coming.
+    fn wake_quiet_rows(&mut self) {
+        let mut rows = self.quiet_rows.borrow_mut();
+        for (word, bits) in rows.iter_mut().enumerate() {
+            let mut quiet = *bits;
+            while quiet != 0 {
+                let row = (word << 6) + quiet.trailing_zeros() as usize;
+                if let Some(Some(artboard)) = self.artboard_instances_by_index.get(row) {
+                    artboard.with_artboard(|artboard| {
+                        artboard.set_quiet_host_row(Artboard::NO_QUIET_ROW)
+                    });
+                }
+                quiet &= quiet - 1;
+            }
+            *bits = 0;
+        }
+    }
+
     fn can_quiet_rows(&self) -> bool {
         #[cfg(any(test, feature = "testing"))]
         if !QUIET_ROWS_ENABLED.with(std::cell::Cell::get) {
@@ -1603,6 +1628,16 @@ impl ArtboardComponentList {
         if inactive {
             return false;
         }
+        // Upstream 8e1862e2: new fallback fonts reshape text, in quiet rows
+        // too. (Its system-language half waits for the sync that takes it.)
+        owner.with_downcast_mut::<Self, _>(|list| {
+            let fallbacks =
+                crate::mechanical_port::source::text_engine::fallback_fonts_generation();
+            if fallbacks != list.fallback_fonts_generation {
+                list.fallback_fonts_generation = fallbacks;
+                list.wake_quiet_rows();
+            }
+        });
         let mut keep_going = false;
         let advance_nested = flags.contains(AdvanceFlags::ADVANCE_NESTED);
         let new_frame = flags.contains(AdvanceFlags::NEW_FRAME);

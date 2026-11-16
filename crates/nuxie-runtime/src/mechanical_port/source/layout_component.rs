@@ -1725,6 +1725,7 @@ impl LayoutComponent {
             layout.apply_css_scroll_thumb_size(&mut style);
             layout.apply_hosted_css_item(&mut style);
             layout.apply_virtual_grid_placement(&mut style);
+            Self::apply_rive_ratio_minimum(&mut style, &context);
             layout.layout_data.set_style(style);
         });
         for (child, provider) in Self::layout_providers_occurrence(owner) {
@@ -4113,12 +4114,32 @@ impl LayoutComponent {
         self.apply_css_scroll_thumb_size(&mut taffy_style);
         self.apply_hosted_css_item(&mut taffy_style);
         self.apply_virtual_grid_placement(&mut taffy_style);
+        Self::apply_rive_ratio_minimum(&mut taffy_style, &context);
         self.layout_data.set_style(taffy_style);
         for (child, provider) in Self::layout_providers_children(self.base.children(), false) {
             let excluded = matches!(child.core_type(), Some(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY | crate::mechanical_port::source::generated::nested_artboard_layout_base::NestedArtboardLayoutBase::TYPE_KEY | crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY));
             if !excluded {
                 Self::sync_provider_style_occurrence(&provider);
             }
+        }
+    }
+    /// A Rive-made box with an aspect ratio has no automatic minimum: an
+    /// unset minimum is 0, as Yoga's is. CSS Sizing 4 §5.1 makes the size
+    /// such a box's ratio derives from a stretched or flexed size its
+    /// automatic minimum (the Taffy fork's `ratio.rs`), so a Fill box in a
+    /// column would take its ratio height from its stretched width and
+    /// overflow its parent. That rule is CSS mode's; a Rive-made box fills
+    /// both axes as before. An authored minimum stays.
+    fn apply_rive_ratio_minimum(style: &mut Style, context: &LayoutSyncContext) {
+        if context.css || style.aspect_ratio.is_none() {
+            return;
+        }
+        let zero = taffy::prelude::LengthPercentageAuto::length(0.0);
+        if style.min_size.width.is_auto() {
+            style.min_size.width = zero;
+        }
+        if style.min_size.height.is_auto() {
+            style.min_size.height = zero;
         }
     }
     /// CSS style from the authored appliers. The owning tree resolves the

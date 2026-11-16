@@ -2383,6 +2383,66 @@ fn translated_fill_shares_the_row_by_fraction() {
     assert_eq!(f.bounds("Empty"), [150.0, 0.0, 150.0, 100.0]);
 }
 
+/// A Rive-made box with an aspect ratio has no automatic minimum: Fill in
+/// both axes fills its column, 200 by 100, and the ratio does not turn the
+/// stretched width into a minimum height. A CSS-mode box in the same column
+/// does (CSS Sizing 4 §5.1, as Chrome): its stretched 200 width gives a
+/// 400 minimum height.
+#[test]
+fn rive_ratio_box_has_no_automatic_ratio_minimum_and_css_one_does() {
+    use crate::css_layout::keys;
+    let rive = scene(
+        (200.0, 100.0),
+        B {
+            name: "Column",
+            component: vec![
+                F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0),
+                F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0),
+            ],
+            style: vec![U(
+                LayoutComponentStyleBase::FLEX_DIRECTION_VALUE_PROPERTY_KEY,
+                YGFlexDirection::Column as u64,
+            )],
+            children: vec![B {
+                name: "Box",
+                style: vec![
+                    U(
+                        LayoutSizingStyleBase::LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY,
+                        LayoutScaleType::Fill as u64,
+                    ),
+                    U(
+                        LayoutSizingStyleBase::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY,
+                        LayoutScaleType::Fill as u64,
+                    ),
+                    F(LayoutComponentStyleBase::ASPECT_RATIO_PROPERTY_KEY, 0.5),
+                ],
+                ..B::default()
+            }],
+            ..B::default()
+        },
+    );
+    assert_eq!(rive.bounds("Box"), [0.0, 0.0, 200.0, 100.0]);
+
+    let css_mode = scene(
+        (200.0, 100.0),
+        css(
+            "Column",
+            [
+                [U(DISPLAY, 1), U(BOX_SIZING, 1), U(keys::FLEX_DIRECTION, 2)].as_slice(),
+                &width(200.0),
+                &height(100.0),
+            ]
+            .concat(),
+            vec![css(
+                "Box",
+                [F(FLEX_GROW, 1.0), F(keys::ASPECT_RATIO, 0.5)],
+                vec![],
+            )],
+        ),
+    );
+    assert_eq!(css_mode.bounds("Box"), [0.0, 0.0, 200.0, 400.0]);
+}
+
 /// CSS mode: a shape is content at its natural size, as an `<svg width>` is.
 /// Its box hugs it, keeps it as its automatic minimum, and never resizes it.
 #[test]

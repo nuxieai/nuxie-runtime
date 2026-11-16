@@ -348,24 +348,24 @@ mod tests {
         Ok(sorted)
     }
 
-    /// Whether a cycle is reachable from `roots` (colouring depth-first
+    /// Whether a cycle is reachable from `roots` (coloring depth-first
     /// search, recursive; graphs here are small).
     fn has_reachable_cycle(roots: &[usize], graph: &[Vec<usize>]) -> bool {
-        fn visit(node: usize, graph: &[Vec<usize>], colour: &mut [u8]) -> bool {
-            match colour[node] {
+        fn visit(node: usize, graph: &[Vec<usize>], color: &mut [u8]) -> bool {
+            match color[node] {
                 1 => return true,
                 2 => return false,
                 _ => {}
             }
-            colour[node] = 1;
-            if graph[node].iter().any(|&next| visit(next, graph, colour)) {
+            color[node] = 1;
+            if graph[node].iter().any(|&next| visit(next, graph, color)) {
                 return true;
             }
-            colour[node] = 2;
+            color[node] = 2;
             false
         }
-        let mut colour = vec![0; graph.len()];
-        roots.iter().any(|&root| visit(root, graph, &mut colour))
+        let mut color = vec![0; graph.len()];
+        roots.iter().any(|&root| visit(root, graph, &mut color))
     }
 
     fn reachable(roots: &[usize], graph: &[Vec<usize>]) -> BTreeSet<usize> {

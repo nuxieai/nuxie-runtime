@@ -114,7 +114,7 @@ real two-script cycle (same text), and a seeded property test
 graphs of 1 to 12 scripts, a quarter of them allowed to cycle) that checks:
 the order equals the old recursive `sort` (ported into the test) wherever
 that sort succeeded; the order is topological and contains exactly the
-scripts reachable from the roots; a cycle is reported iff a colouring DFS
+scripts reachable from the roots; a cycle is reported iff a coloring DFS
 finds one reachable. Of the 20,000: 17,152
 ordered, 2,848 real cycles; 3,453 that the old sort rejected with a false
 cycle are now ordered.

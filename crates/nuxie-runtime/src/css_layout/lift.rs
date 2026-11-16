@@ -29,7 +29,8 @@ pub(crate) struct LiftState {
     /// The Screen that holds the copy.
     pub(crate) row: CoreHandle,
     /// The upper Screen, which draws the lift: `row` for the upper copy.
-    pub(crate) board: CoreHandle,
+    /// Read through `Lift::drawing_screen`.
+    board: CoreHandle,
     /// The copy: the element whose entries the lift draws.
     pub(crate) element: CoreHandle,
     /// The upper Screen's own copy, where the lift paints.
@@ -104,11 +105,63 @@ pub(crate) fn semantics_moved(element: &CoreHandle) {
     }
 }
 
+/// The Screen that draws a lifted copy: the upper Screen, which draws every
+/// lift as it holds every flight slot. Above the copy, every reader starts
+/// here and not on the copy's own Screen: taps, covers, drawing and the
+/// pose, visibility, clips and semantic bounds. It answers whether that
+/// Screen is awake, whether its frame and what is above it take a point of
+/// the copy, and where it puts that point.
+pub(crate) struct DrawingScreen {
+    pub(crate) screen: CoreHandle,
+    /// The lift's matrix: from the copy's own Screen's space to this one's,
+    /// with the flight's pose.
+    pub(crate) matrix: Mat2D,
+}
+
+impl DrawingScreen {
+    /// Whether it is awake, by the one visibility rule
+    /// (`live_move::effectively_hidden`): a Screen asleep in its list reads
+    /// as its row does, though row sleep keeps its root awake.
+    pub(crate) fn awake(&self) -> bool {
+        crate::hosted_scene::is_active_artboard(&self.screen)
+    }
+
+    /// Where it draws `rest`, a point of the copy at rest in the copy's own
+    /// Screen's space.
+    pub(crate) fn at(&self, rest: Vec2D) -> Vec2D {
+        self.matrix * rest
+    }
+
+    /// Whether it takes a pointer over `rest`, as it takes one for a flight
+    /// slot of its own: it is awake, and its frame and what is above it hit
+    /// at `at(rest)`.
+    pub(crate) fn takes_pointer(&self, rest: Vec2D) -> bool {
+        let drawn = self.at(rest);
+        self.awake()
+            && self
+                .screen
+                .with_mut(|screen| screen.component_hit_test_point(&drawn, true, false))
+                .flatten()
+                .unwrap_or(false)
+    }
+}
+
 impl Lift {
+    /// The Screen that draws the copy (`DrawingScreen`).
+    pub(crate) fn drawing_screen(&self) -> DrawingScreen {
+        let state = self.0.borrow();
+        DrawingScreen {
+            screen: state.board.clone(),
+            matrix: state.matrix,
+        }
+    }
+
     /// The point of the copy at rest under `position`, a pointer on its own
-    /// Screen; None while the lift draws nothing.
+    /// Screen. None while the lift draws nothing, and where the Screen that
+    /// draws it takes no pointer (`DrawingScreen::takes_pointer`).
     pub(crate) fn hit_position(&self, position: Vec2D) -> Option<Vec2D> {
-        self.0.borrow().hit.map(|hit| hit * position)
+        let rest = self.hit()? * position;
+        self.drawing_screen().takes_pointer(rest).then_some(rest)
     }
 
     /// Where the lift draws the copy, in the page's space: None while it

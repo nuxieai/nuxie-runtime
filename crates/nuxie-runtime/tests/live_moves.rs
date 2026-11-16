@@ -8460,6 +8460,40 @@ mod paint_order {
         }
     }
 
+    /// B put to sleep half way takes no tap on either copy, in both shapes:
+    /// on the slot path both flights sleep with B; in place B draws both
+    /// lifts, so a's copy on A, awake, takes none either. At rest a hears a
+    /// tap at its center (76, 50). Half way a's and b's copies draw at the
+    /// same place, b's above, so (110, 100) would reach a's once b's sleeps.
+    #[test]
+    fn hits_a_copy_takes_no_tap_while_the_screen_drawing_it_sleeps() {
+        use fixture::{ElementCase, ElementKind};
+        for shape in [PaintShape::Slots, PaintShape::InPlace] {
+            let mut s = PaintScene::shaped(
+                PaintCase::Element(ElementKind::Text, ElementCase::Tapped),
+                shape,
+            );
+            let list = s
+                .root
+                .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+                .unwrap();
+            let a = s.heard_on("A", "a", None);
+            assert_eq!(s.tap_heard(76.0, 50.0, &a), 9.0, "{shape:?}: a at rest");
+            s.begin("B", "go");
+            s.to(0.5);
+            let a = match shape {
+                PaintShape::InPlace => s.heard_on("A", "a", None),
+                _ => s.heard_on("B", "a", Some("a go")),
+            };
+            set_row_collapsed(&list, 1, true).unwrap();
+            s.advance(0.0);
+            assert_eq!(s.tap_heard(110.0, 100.0, &a), 0.0, "{shape:?}: B asleep");
+            set_row_collapsed(&list, 1, false).unwrap();
+            s.to(1.0);
+            s.end("B", "go");
+        }
+    }
+
     /// E's copies' draws on the page: each copy's color and outline.
     fn e_draws(s: &PaintScene) -> Vec<(u32, String)> {
         let colors = ["Ea", "Eb"].map(|name| fixture::paint_color(name) & 0x00ff_ffff);

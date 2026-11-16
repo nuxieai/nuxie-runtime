@@ -519,9 +519,6 @@ pub struct InPlaceFlight {
     pub to: CoreHandle,
     from_row: CoreHandle,
     to_row: CoreHandle,
-    /// The upper Screen: the one holding the step's flight records, which
-    /// draws every lift.
-    pub board: CoreHandle,
     pub size_mode: SizeMode,
     /// A version of a zoomed pair (`InPlacePair`): held at its departure
     /// size, with no corners or shadow, and solved onto the pair's box.
@@ -584,7 +581,6 @@ impl InPlaceFlight {
             to,
             from_row,
             to_row,
-            board,
             size_mode,
             zoomed,
             departure,
@@ -671,7 +667,7 @@ impl InPlaceFlight {
         } else {
             None
         };
-        let (upper, _, _) = draw_pose(&self.board)?;
+        let (upper, _, _) = draw_pose(&self.board())?;
         let (row, _, _) = draw_pose(&self.row)?;
         let t = frame.progress;
         let opacity = (a.opacity + (b.opacity - a.opacity) * t) * frame.fade();
@@ -735,6 +731,12 @@ impl InPlaceFlight {
         changed
     }
 
+    /// The upper Screen, holding the step's flight records, which draws
+    /// every lift (`Lift::drawing_screen`).
+    pub(crate) fn board(&self) -> CoreHandle {
+        self.lift.drawing_screen().screen
+    }
+
     /// Starts the copy's marks: its hold, its opacity root and its lift on
     /// both Screens.
     pub(super) fn mark(&self, opacity_root: OpacityRoot) {
@@ -745,11 +747,12 @@ impl InPlaceFlight {
         self.row.with_downcast::<Artboard, _>(|row| {
             row.lifts.borrow_mut().away.push(self.lift.clone());
         });
-        self.board.with_downcast::<Artboard, _>(|board| {
+        let board = self.board();
+        board.with_downcast::<Artboard, _>(|board| {
             board.lifts.borrow_mut().drawn.push(self.lift.clone());
         });
         changed(&self.row);
-        changed(&self.board);
+        changed(&board);
     }
 
     /// Ends every mark of the copy, whatever is still there of it.
@@ -759,7 +762,8 @@ impl InPlaceFlight {
         }
         set_opacity_root(&self.element, OpacityRoot::None);
         self.flying.set_paint(None, None);
-        for row in [&self.row, &self.board] {
+        let board = self.board();
+        for row in [&self.row, &board] {
             row.with_downcast::<Artboard, _>(|row| {
                 let mut lifts = row.lifts.borrow_mut();
                 lifts.drawn.retain(|lift| !lift.ptr_eq(&self.lift));
@@ -781,7 +785,7 @@ impl InPlaceFlight {
     pub(super) fn is_whole(&self, rows: &HashSet<CoreHandle>) -> bool {
         self.flying.still_reads()
             && rows.contains(&self.row)
-            && rows.contains(&self.board)
+            && rows.contains(&self.board())
             && rows.contains(&self.from_row)
             && rows.contains(&self.to_row)
             && [&self.element, &self.from, &self.to].iter().all(|element| {
@@ -905,11 +909,12 @@ impl InPlacePair {
             // The upper Screen draws the lift: while it is awake the lift
             // follows, even with the copy's own Screen asleep, whose matrices
             // stay as they were.
-            if !active.contains(&copy.board) {
+            let board = copy.board();
+            if !active.contains(&board) {
                 continue;
             }
             let (_, scales, target) = zoom::hang(&ends[version], &zoom_box);
-            let (upper, _, _) = draw_pose(&copy.board)?;
+            let (upper, _, _) = draw_pose(&board)?;
             let (row, _, _) = draw_pose(&copy.row)?;
             let now = copy.flying.box_matrix(When::Live)?;
             let matrix = target

@@ -238,7 +238,7 @@ impl Plan {
         let lifted = std::mem::take(&mut self.lifted);
         let touched = lifted
             .iter()
-            .flat_map(|flight| [flight.row.clone(), flight.board.clone()])
+            .flat_map(|flight| [flight.row.clone(), flight.board()])
             .filter(|row| rows.contains(row))
             .collect::<HashSet<_>>();
         for flight in &lifted {
@@ -523,7 +523,7 @@ impl Plan {
         self.pairs.clear();
         let landed_rows = lifted
             .iter()
-            .flat_map(|flight| [flight.row.clone(), flight.board.clone()])
+            .flat_map(|flight| [flight.row.clone(), flight.board()])
             .collect::<HashSet<_>>();
         for flight in &lifted {
             flight.clear();
@@ -772,7 +772,7 @@ impl Plan {
         // placed first.
         let order = |flight: &InPlaceFlight| {
             flight
-                .board
+                .board()
                 .with_downcast::<Artboard, _>(|board| {
                     board
                         .objects()
@@ -876,15 +876,16 @@ impl Plan {
                 &active,
             )?;
         }
-        let mut boards: Vec<(&CoreHandle, Vec<&super::in_place::InPlaceFlight>)> = Vec::new();
+        let mut boards: Vec<(CoreHandle, Vec<&super::in_place::InPlaceFlight>)> = Vec::new();
         for flight in &self.lifted {
-            match boards.iter_mut().find(|(board, _)| **board == flight.board) {
+            let board = flight.board();
+            match boards.iter_mut().find(|(seen, _)| *seen == board) {
                 Some((_, copies)) => copies.push(flight),
-                None => boards.push((&flight.board, vec![flight])),
+                None => boards.push((board, vec![flight])),
             }
         }
         for (board, copies) in boards {
-            if super::in_place::InPlaceFlight::read_covers(board, &copies) {
+            if super::in_place::InPlaceFlight::read_covers(&board, &copies) {
                 if let Some(dirty) = board.artboard_dirty_handle() {
                     dirty.mark_css_draw_order_dirty();
                 }
@@ -894,7 +895,7 @@ impl Plan {
         for board in self
             .lifted
             .iter()
-            .map(|flight| &flight.board)
+            .map(|flight| flight.board())
             .collect::<HashSet<_>>()
         {
             if let Some(dirty) = board.artboard_dirty_handle() {
@@ -1372,7 +1373,7 @@ impl LiveMoves {
             return Ok(own);
         };
         let matrix = flight.lift.0.borrow().matrix;
-        let (upper, _, _) = super::follow::draw_pose(&flight.board)?;
+        let (upper, _, _) = super::follow::draw_pose(&flight.board())?;
         let (row, _, _) = super::follow::draw_pose(&flight.row)?;
         let mut row_inverse = crate::source::math::mat2d::Mat2D::identity();
         ensure!(row.invert(&mut row_inverse), "singular Screen matrix");

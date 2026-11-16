@@ -79,47 +79,57 @@ pub fn drawn_root_transform_point(
 
 /// Our layer: where a copy flying in place is drawn, in the space of the
 /// legacy root transform the native bounds contract reads
-/// (`semantic_bounds`, `root_transform_aabb`): the lift's map in its Screen,
-/// `drawn`, taken there by the Screen's own root transform. `Lifted::No`
-/// outside a step's lifts; a lift that draws nothing keeps the copy's
-/// bounds where it rests (css_layout/lift.rs).
+/// (`semantic_bounds`, `root_transform_aabb`): from a point of the copy at
+/// rest there, back by its own Screen's root transform, through the lift's
+/// matrix onto the Screen that draws it, and out by that Screen's root
+/// transform (css_layout/lift.rs, `DrawingScreen`). `Lifted::No` outside a
+/// step's lifts; a lift that draws nothing keeps the copy's bounds where it
+/// rests.
 pub(crate) fn legacy_lifted(component: &CoreHandle) -> crate::css_layout::lift::Lifted {
     use crate::css_layout::lift::{Lifted, lift_around};
     let Some(lift) = lift_around(component) else {
         return Lifted::No;
     };
-    let (Some(drawn), row) = (lift.drawn(), lift.0.borrow().row.clone()) else {
+    if lift.drawn().is_none() {
+        return Lifted::No;
+    }
+    let row = lift.0.borrow().row.clone();
+    let drawing = lift.drawing_screen();
+    let (Some(rest), Some(screen)) = (legacy_root(&row), legacy_root(&drawing.screen)) else {
         return Lifted::No;
     };
-    let Some([origin, x, y]) = row.with_downcast_mut::<Artboard, _>(|row| {
+    let mut inverse = Mat2D::default();
+    if !rest.invert(&mut inverse) {
+        return Lifted::No;
+    }
+    Lifted::Drawn(screen * drawing.matrix * inverse)
+}
+
+/// `artboard`'s legacy root transform as a matrix.
+fn legacy_root(artboard: &CoreHandle) -> Option<Mat2D> {
+    let [origin, x, y] = artboard.with_downcast_mut::<Artboard, _>(|row| {
         [
             Vec2D::new(0.0, 0.0),
             Vec2D::new(1.0, 0.0),
             Vec2D::new(0.0, 1.0),
         ]
         .map(|point| row.root_transform(point))
-    }) else {
-        return Lifted::No;
-    };
-    let root = Mat2D::new(
+    })?;
+    Some(Mat2D::new(
         x.x - origin.x,
         x.y - origin.y,
         y.x - origin.x,
         y.y - origin.y,
         origin.x,
         origin.y,
-    );
-    let mut inverse = Mat2D::default();
-    if !root.invert(&mut inverse) {
-        return Lifted::No;
-    }
-    Lifted::Drawn(root * drawn * inverse)
+    ))
 }
 
 /// Our layer: the bounds of `points`, points in `artboard`'s space of a
 /// copy at rest, where `map` (`legacy_lifted`) shows it: each point goes
-/// through the artboard's root transform and the lift before the bounds are
-/// taken, so a turn the flight takes off the copy is not bounded twice.
+/// through the artboard's legacy root transform, the space `map` is in, and
+/// the lift before the bounds are taken, so a turn the flight takes off the
+/// copy is not bounded twice.
 pub(crate) fn drawn_root_bounds(
     artboard: Option<&CoreHandle>,
     map: &Mat2D,
@@ -128,7 +138,10 @@ pub(crate) fn drawn_root_bounds(
     let mut drawn = Bounds::for_expansion();
     for point in points {
         let point = artboard
-            .and_then(|artboard| root_transform_point(artboard, *point))
+            .and_then(|artboard| {
+                artboard
+                    .with_downcast_mut::<Artboard, _>(|artboard| artboard.root_transform(*point))
+            })
             .unwrap_or(*point);
         let point = *map * point;
         drawn.expand((point.x, point.y));
@@ -227,12 +240,11 @@ pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
         return false;
     }
     let lifted = lift.map(|lift| {
-        let state = lift.0.borrow();
-        (
-            state.element.clone(),
-            state.row.clone(),
-            state.board.clone(),
-        )
+        let (element, row) = {
+            let state = lift.0.borrow();
+            (state.element.clone(), state.row.clone())
+        };
+        (element, row, lift.drawing_screen().screen)
     });
     // Between the copy and its Screen, the Screen included.
     let mut above_lift = false;
@@ -295,9 +307,9 @@ pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
             if above_lift {
                 above_lift = false;
                 // Above its own Screen, a copy shows where its lift draws it:
-                // on the upper Screen, at its own strength there too, as a
-                // flight slot of that Screen does. So the upper Screen asleep
-                // hides it.
+                // on the Screen that draws it (`DrawingScreen`), at its own
+                // strength there too, as a flight slot of that Screen does.
+                // So that Screen asleep hides it.
                 if let Some((_, row, board)) = &lifted
                     && component == *row
                     && row != board
@@ -522,11 +534,8 @@ fn walk_rendered_clips(
             let Some(page) = lift.page() else {
                 return false;
             };
-            let state = lift.0.borrow();
-            (
-                Some(page),
-                Some((state.element.clone(), state.board.clone())),
-            )
+            let element = lift.0.borrow().element.clone();
+            (Some(page), Some((element, lift.drawing_screen().screen)))
         }
     };
     let mut current = Some(component.clone());

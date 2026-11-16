@@ -117,6 +117,14 @@ or compatible emoji font. Current device qualification belongs to
 The pre-existing scoped `with_host_fallback_proc` remains for editor hosts
 that supply font bytes. The native SDK default uses the process hook.
 
+The **shape-fallback-sink** addition (UNIV-5593) tells a host which text
+needed the fallback chain. `text_engine::with_shape_fallback_sink` installs a
+thread-local sink for the duration of a closure; each Text or TextInput that
+shapes inside it reports its `CoreHandle` and whether that shaping asked the
+fallback hook, whatever the hook answered. A shape is reported once, when it
+replaces the drawn one; an unchanged shape reports nothing. No sink, no cost. Reshaping after the host's faces change is
+upstream's `fallback_fonts_changed` generation (`8e1862e2`), not this hook.
+
 ## 1. Ownership & Type Mappings
 
 ### 1.1 `rcp<T>` / reference counting → `CoreArena` ownership

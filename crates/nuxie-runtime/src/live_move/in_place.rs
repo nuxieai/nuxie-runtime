@@ -11,7 +11,7 @@
 //! back.
 use super::{
     drawn::{When, drawn},
-    follow::{FlightFrame, SizeMode, draw_pose, lift_cover},
+    follow::{FlightFrame, SizeMode, draw_pose, lift_covers},
     plan::zoom::{self, Rule},
     records::{LiveFlight, Values},
     wide::Wide,
@@ -704,28 +704,29 @@ impl InPlaceFlight {
         lift.clip_space = space.unwrap_or_default();
     }
 
-    /// What covers the copy's anchor on the upper Screen, stored in the lift.
-    /// True when it changed, so the Screen sorts again.
-    pub(super) fn read_cover(&self) -> bool {
-        let (anchor, skip) = {
-            let lift = self.lift.0.borrow();
-            let skip = self
-                .board
-                .with_downcast::<Artboard, _>(|board| {
-                    std::rc::Rc::clone(&board.lifts.borrow().skip)
-                })
-                .unwrap_or_default();
-            (lift.anchor.clone(), skip)
-        };
-        let coverer = lift_cover(&self.board, &anchor, &skip);
-        let mut lift = self.lift.0.borrow_mut();
-        let same = match (&lift.coverer, &coverer) {
-            (Some(a), Some(b)) => crate::css_layout::paint_order::same(a, b),
-            (None, None) => true,
-            _ => false,
-        };
-        lift.coverer = coverer;
-        !same
+    /// What covers each copy's anchor on `board`, the upper Screen of every
+    /// one of `copies`, stored in its lift. True when one changed, so the
+    /// Screen sorts again.
+    pub(super) fn read_covers(board: &CoreHandle, copies: &[&Self]) -> bool {
+        let skip = board
+            .with_downcast::<Artboard, _>(|board| std::rc::Rc::clone(&board.lifts.borrow().skip))
+            .unwrap_or_default();
+        let anchors = copies
+            .iter()
+            .map(|copy| copy.lift.0.borrow().anchor.clone())
+            .collect::<Vec<_>>();
+        let mut changed = false;
+        for (copy, coverer) in copies.iter().zip(lift_covers(board, &anchors, &skip)) {
+            let mut lift = copy.lift.0.borrow_mut();
+            let same = match (&lift.coverer, &coverer) {
+                (Some(a), Some(b)) => crate::css_layout::paint_order::same(a, b),
+                (None, None) => true,
+                _ => false,
+            };
+            lift.coverer = coverer;
+            changed |= !same;
+        }
+        changed
     }
 
     /// Starts the copy's marks: its hold, its opacity root and its lift on

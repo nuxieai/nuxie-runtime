@@ -10176,6 +10176,360 @@ mod paint_order {
         s.end("B", "go");
     }
 
+    /// E's copies' draws on the page: each copy's color and outline.
+    fn e_draws(s: &PaintScene) -> Vec<(u32, String)> {
+        let colors = ["Ea", "Eb"].map(|name| fixture::paint_color(name) & 0x00ff_ffff);
+        shown(&page_draws(s))
+            .into_iter()
+            .filter_map(|d| {
+                d.rgb
+                    .filter(|rgb| colors.contains(rgb))
+                    .map(|rgb| (rgb, format!("{:?}", d.points)))
+            })
+            .collect()
+    }
+
+    /// A box's outline as `e_draws` gives it.
+    fn box_outline(x0: f32, y0: f32, x1: f32, y1: f32) -> String {
+        format!(
+            "{:?}",
+            [
+                Vec2D::new(x0, y0),
+                Vec2D::new(x1, y0),
+                Vec2D::new(x1, y1),
+                Vec2D::new(x0, y1),
+            ]
+        )
+    }
+
+    /// Ruling 1 (a), lower Screen: A put to sleep half way stops drawing its
+    /// copy with it, and B's copy flies on against A's end as it was last
+    /// read. This page stacks its Screens, A's 100 above B's, and a
+    /// sleeping Screen takes no room, so B's Screen moves up to where A's
+    /// was: Ea rests at (40, 0) and Eb now does too, so half way B's copy
+    /// draws 250 wide at (40, 0), and at 0.75 275 wide there. Landed and
+    /// woken, the page draws as one that never slept.
+    #[test]
+    fn in_place_a_screen_slept_mid_step_lower_sleeps_its_copy_and_the_upper_flies_on() {
+        let case = PaintCase::TextRefill { a: 200 };
+        let mut s = PaintScene::shaped(case, PaintShape::InPlace);
+        let [ea, eb] = ["Ea", "Eb"].map(|name| fixture::paint_color(name) & 0x00ff_ffff);
+        let of = |draws: &[(u32, String)], rgb: u32| {
+            draws
+                .iter()
+                .filter(|d| d.0 == rgb)
+                .map(|d| d.1.clone())
+                .collect::<Vec<_>>()
+        };
+        let list = s
+            .root
+            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+            .unwrap();
+        s.begin("B", "go");
+        s.to(0.5);
+        let awake = e_draws(&s);
+        assert_eq!(of(&awake, ea).len(), 1, "both copies fly: {awake:?}");
+        assert_eq!(
+            of(&awake, eb),
+            [box_outline(40.0, 50.0, 290.0, 150.0)],
+            "half way between (40, 0) and (40, 100)"
+        );
+        set_row_collapsed(&list, 0, true).unwrap();
+        s.advance(0.0);
+        let slept = e_draws(&s);
+        assert!(
+            of(&slept, ea).is_empty(),
+            "A's copy sleeps with it: {slept:?}"
+        );
+        assert_eq!(
+            of(&slept, eb),
+            [box_outline(40.0, 0.0, 290.0, 100.0)],
+            "B's copy flies against A's kept end"
+        );
+        s.to(0.75);
+        let later = e_draws(&s);
+        assert!(of(&later, ea).is_empty(), "still asleep: {later:?}");
+        assert_eq!(
+            of(&later, eb),
+            [box_outline(40.0, 0.0, 315.0, 100.0)],
+            "and flies on"
+        );
+        s.to(1.0);
+        s.end("B", "go");
+        set_row_collapsed(&list, 0, false).unwrap();
+        s.advance(0.0);
+        let mut fresh = PaintScene::shaped(case, PaintShape::InPlace);
+        fresh.fly(Way::Go, |_, _| {});
+        assert_eq!(e_draws(&s), e_draws(&fresh), "woken, as if it never slept");
+    }
+
+    /// The upper Screen draws every lift, as it holds every flight slot, so
+    /// B put to sleep half way stops both copies with it, in both shapes:
+    /// nothing of E draws while it sleeps. Landed and woken, the page draws
+    /// as one that never slept.
+    #[test]
+    fn in_place_a_screen_slept_mid_step_upper_sleeps_both_copies_as_its_slots_do() {
+        let case = PaintCase::TextRefill { a: 200 };
+        for shape in [PaintShape::Slots, PaintShape::InPlace] {
+            let mut s = PaintScene::shaped(case, shape);
+            let list = s
+                .root
+                .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+                .unwrap();
+            s.begin("B", "go");
+            s.to(0.5);
+            assert_eq!(e_draws(&s).len(), 2, "{shape:?}: both copies fly");
+            set_row_collapsed(&list, 1, true).unwrap();
+            s.advance(0.0);
+            assert_eq!(e_draws(&s), Vec::new(), "{shape:?}: B sleeps with both");
+            s.to(0.75);
+            assert_eq!(e_draws(&s), Vec::new(), "{shape:?}: still asleep");
+            s.to(1.0);
+            s.end("B", "go");
+            set_row_collapsed(&list, 1, false).unwrap();
+            s.advance(0.0);
+            let mut fresh = PaintScene::shaped(case, shape);
+            fresh.fly(Way::Go, |_, _| {});
+            assert_eq!(
+                e_draws(&s),
+                e_draws(&fresh),
+                "{shape:?}: woken, as if it never slept"
+            );
+        }
+    }
+
+    /// 4.5 (7): a flying frame of a pair whose two ends are the same size,
+    /// after the step's first, solves only what a frame at rest solves: an
+    /// unchanged flight size solves nothing. E is 300 by 100 on both
+    /// Screens.
+    #[test]
+    fn in_place_a_flying_frame_whose_ends_are_the_same_size_solves_what_a_rest_frame_does() {
+        use nuxie_runtime::source::artboard::Artboard;
+        let mut s = PaintScene::shaped(PaintCase::TextRefill { a: 300 }, PaintShape::InPlace);
+        s.advance(0.0);
+        let passes = Artboard::layout_pass_count();
+        s.advance(1.0 / 60.0);
+        let at_rest = Artboard::layout_pass_count() - passes;
+        s.begin("B", "go");
+        s.to(0.4);
+        for p in [0.5, 0.6] {
+            let passes = Artboard::layout_pass_count();
+            s.to(p);
+            assert_eq!(
+                Artboard::layout_pass_count() - passes,
+                at_rest,
+                "at {p}, as at rest"
+            );
+        }
+        s.to(1.0);
+        s.end("B", "go");
+    }
+
+    /// The page drawn once, as a frame draws it.
+    fn draw_page(s: &PaintScene) {
+        s.factory.borrow_mut().clear();
+        let mut renderer = s.factory.borrow().make_renderer();
+        s.root.draw(&mut renderer);
+    }
+
+    /// The median of `times`, in microseconds.
+    fn median_us(mut times: Vec<std::time::Duration>) -> f64 {
+        times.sort();
+        times[times.len() / 2].as_secs_f64() * 1e6
+    }
+
+    /// 4.5's timings on `PaintCase::Large` in `shape`, each the median of
+    /// `FRAMES`, in microseconds: (1) a frame at rest (advance, follow,
+    /// draw); (2) step begin; (3) a flying frame's advance and follow, half
+    /// way; (4) its draw; (5) step end; (6) a frame at rest (advance and
+    /// follow) after a size write to an unmatched box; (7) a flying frame's
+    /// advance and follow after the step's first, when both ends are the
+    /// same size; (8) a frame at rest's advance and follow, which (7) is
+    /// held to. A stripped page has no step, so it times (1), (6) and (8)
+    /// only. Also the layout passes of the last frame at rest and the last
+    /// of (7). The steps' timings take both ways, "go" and "back", half the
+    /// frames each, so no step is played only to return.
+    fn large_timings(shape: PaintShape) -> ([Option<f64>; 8], u64, Option<u64>) {
+        use nuxie_runtime::source::artboard::Artboard;
+        use std::time::{Duration, Instant};
+        const FRAMES: usize = 200;
+        let dt = 1.0 / 60.0;
+        let time = |f: &mut dyn FnMut()| {
+            let start = Instant::now();
+            f();
+            start.elapsed()
+        };
+        let mut s = PaintScene::shaped(PaintCase::Large { same_size: false }, shape);
+        let mut rest = Vec::new();
+        for _ in 0..FRAMES {
+            rest.push(time(&mut || {
+                s.advance(dt);
+                draw_page(&s);
+            }));
+        }
+        let mut idle = Vec::new();
+        let mut rest_passes = 0;
+        for _ in 0..FRAMES {
+            let passes = Artboard::layout_pass_count();
+            idle.push(time(&mut || s.advance(dt)));
+            rest_passes = Artboard::layout_pass_count() - passes;
+        }
+        let footer = record_of(&s.layout("B", "footer"));
+        let mut write = Vec::new();
+        for frame in 0..FRAMES {
+            set(&footer, 61022, if frame % 2 == 0 { 300.0 } else { 402.0 });
+            write.push(time(&mut || s.advance(dt)));
+        }
+        if shape == PaintShape::Stripped {
+            let times = [
+                Some(median_us(rest)),
+                None,
+                None,
+                None,
+                None,
+                Some(median_us(write)),
+                None,
+                Some(median_us(idle)),
+            ];
+            return (times, rest_passes, None);
+        }
+        let (mut begin, mut flying, mut draw, mut end) =
+            (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        for _ in 0..FRAMES / 2 {
+            for (screen, step) in [("B", "go"), ("A", "back")] {
+                begin.push(time(&mut || s.begin(screen, step)));
+                flying.push(time(&mut || s.to(0.5)));
+                draw.push(time(&mut || draw_page(&s)));
+                s.to(1.0);
+                end.push(time(&mut || s.end(screen, step)));
+            }
+        }
+        let mut same = PaintScene::shaped(PaintCase::Large { same_size: true }, shape);
+        let mut alike: Vec<Duration> = Vec::new();
+        let mut alike_passes = 0;
+        for _ in 0..FRAMES / 2 {
+            for (screen, step) in [("B", "go"), ("A", "back")] {
+                same.begin(screen, step);
+                same.to(0.4);
+                let passes = Artboard::layout_pass_count();
+                alike.push(time(&mut || same.to(0.5)));
+                alike_passes = Artboard::layout_pass_count() - passes;
+                same.to(1.0);
+                same.end(screen, step);
+            }
+        }
+        let times = [
+            Some(median_us(rest)),
+            Some(median_us(begin)),
+            Some(median_us(flying)),
+            Some(median_us(draw)),
+            Some(median_us(end)),
+            Some(median_us(write)),
+            Some(median_us(alike)),
+            Some(median_us(idle)),
+        ];
+        (times, rest_passes, Some(alike_passes))
+    }
+
+    /// 4.5's bench: in place against slots on a Screen pair the size of the
+    /// largest paired reference Screen, release, 200 frames a timing,
+    /// medians in microseconds. Each shape runs five times, the shapes in
+    /// turn, so drift between runs reaches every shape alike. The bar,
+    /// asserted: no in-place timing above the slots' median by more than the
+    /// noise, the spread of the five slot runs; (1), (6) and (8) equal to the
+    /// stripped page's within the wider of the two shapes' spreads, so the
+    /// records cost nothing when no step runs; and a flying frame whose ends
+    /// are the same size (7) lays out as often as a frame at rest.
+    #[test]
+    #[ignore = "a timing run: only for the in-place bench, in a release build"]
+    fn bench_in_place_against_slots_on_a_large_screen() {
+        const NAMES: [&str; 8] = [
+            "(1) rest frame",
+            "(2) step begin",
+            "(3) flying advance and follow",
+            "(4) flying draw",
+            "(5) step end",
+            "(6) rest size write",
+            "(7) flying, ends the same size",
+            "(8) rest advance and follow",
+        ];
+        const RUNS: usize = 5;
+        let (mut slots, mut in_place, mut stripped) = (Vec::new(), Vec::new(), Vec::new());
+        for _ in 0..RUNS {
+            slots.push(large_timings(PaintShape::Slots));
+            in_place.push(large_timings(PaintShape::InPlace));
+            stripped.push(large_timings(PaintShape::Stripped));
+        }
+        // One timing's median and spread over a shape's runs.
+        type Run = ([Option<f64>; 8], u64, Option<u64>);
+        let stats = |runs: &[Run], line: usize| -> Option<(f64, f64)> {
+            let mut times: Vec<f64> = runs.iter().filter_map(|run| run.0[line]).collect();
+            if times.is_empty() {
+                return None;
+            }
+            times.sort_by(f64::total_cmp);
+            Some((times[times.len() / 2], times[times.len() - 1] - times[0]))
+        };
+        println!(
+            "layout passes a frame: in place at rest {:?}, flying with ends the same size {:?}, stripped at rest {:?}; slots at rest {:?}, flying with ends the same size {:?}",
+            in_place.iter().map(|run| run.1).collect::<Vec<_>>(),
+            in_place
+                .iter()
+                .map(|run| run.2.unwrap())
+                .collect::<Vec<_>>(),
+            stripped.iter().map(|run| run.1).collect::<Vec<_>>(),
+            slots.iter().map(|run| run.1).collect::<Vec<_>>(),
+            slots.iter().map(|run| run.2.unwrap()).collect::<Vec<_>>(),
+        );
+        println!(
+            "timing | slot median of 5 | slot spread | in place median of 5 | in place spread | stripped median of 5 | stripped spread"
+        );
+        let mut misses = Vec::new();
+        for (line, name) in NAMES.iter().enumerate() {
+            let (slot, noise) = stats(&slots, line).expect("slots time every line");
+            let (place, place_spread) = stats(&in_place, line).expect("in place times every line");
+            let bare = stats(&stripped, line);
+            println!(
+                "{name} | {slot:.1} | {noise:.1} | {place:.1} | {place_spread:.1} | {}",
+                bare.map_or(" | ".to_owned(), |(t, spread)| format!(
+                    "{t:.1} | {spread:.1}"
+                ))
+            );
+            if place > slot + noise {
+                misses.push(format!(
+                    "{name}: in place {place:.1} is above slots {slot:.1} by more than their spread {noise:.1}"
+                ));
+            }
+            if let Some((bare, bare_spread)) = bare {
+                let noise = place_spread.max(bare_spread);
+                if (place - bare).abs() > noise {
+                    misses.push(format!(
+                        "{name}: in place {place:.1} differs from the stripped page's {bare:.1} by more than the noise {noise:.1}"
+                    ));
+                }
+            }
+        }
+        for (run, stripped) in in_place.iter().zip(&stripped) {
+            if run.1 != stripped.1 {
+                misses.push(format!(
+                    "a frame at rest lays out {} times in place, {} on the stripped page",
+                    run.1, stripped.1
+                ));
+            }
+            if run.2 != Some(run.1) {
+                misses.push(format!(
+                    "(7) lays out {:?} times, a frame at rest {}",
+                    run.2, run.1
+                ));
+            }
+        }
+        assert!(
+            misses.is_empty(),
+            "4.5's bar is missed:\n{}",
+            misses.join("\n")
+        );
+    }
+
     /// 4.2 of the in-place plan: each test above, run again on its page's
     /// in-place shape, with its own assertions. Not twinned:
     /// - nothing in place has the thing they test: a plain host anchor
@@ -13277,6 +13631,89 @@ fn in_place_a_file_imports_and_draws_as_without_keys() {
     page.machine.advance_and_apply(0.0);
     assert!(!moves.after_advance(&page.root).unwrap());
     assert_eq!(page.draw(), before, "landing leaves the page as it was");
+}
+
+/// `InPlaceFixture::Field` loaded, with its moves prepared.
+fn field_page() -> (InPlacePage, LiveMoves) {
+    let page = InPlacePage::load(fixture::InPlaceFixture::Field);
+    let mut moves = LiveMoves::default();
+    moves.prepare(&page.root).unwrap();
+    (page, moves)
+}
+/// One frame of step t1 at progress `p`.
+fn field_fly_to(page: &InPlacePage, moves: &mut LiveMoves, p: f32) {
+    for controls in moves.flight_controls(&page.root) {
+        set(&controls, 62033, p);
+    }
+    page.machine.advance_and_apply(0.0);
+    moves.after_advance(&page.root).unwrap();
+}
+
+/// Every focus node under `roots`, with its parent.
+fn focus_tree(roots: &[source::input::focus_node::FocusNodeRef]) -> Vec<(usize, Option<usize>)> {
+    let mut tree = Vec::new();
+    let mut nodes = roots.to_vec();
+    while let Some(node) = nodes.pop() {
+        let node_ref = node.borrow();
+        tree.push((
+            std::rc::Rc::as_ptr(&node) as usize,
+            node_ref
+                .parent()
+                .map(|parent| std::rc::Rc::as_ptr(&parent) as usize),
+        ));
+        nodes.extend(node_ref.children().iter().cloned());
+    }
+    tree.sort();
+    tree
+}
+
+/// In place the focus tree never moves: a field focused on A stays the
+/// primary focus through a step, half way and landed, and every focus node
+/// keeps its manager and its parent.
+#[test]
+fn in_place_focus_stays_on_the_field_and_its_tree_is_untouched() {
+    use source::{focus_data::FocusData, text::text_input::TextInput};
+    let (page, mut moves) = field_page();
+    let a = screens(&page.root).unwrap()["A"].clone();
+    let node = a.with_artboard(|b| b.find_all_handles::<FocusData>())[0]
+        .with_downcast::<FocusData, _>(|f| f.existing_focus_node())
+        .flatten()
+        .unwrap();
+    let manager = a.with_artboard(|b| b.focus_manager()).unwrap();
+    manager.with_focus_manager_mut(|m| m.set_focus(node.clone()));
+    let text = a
+        .with_artboard(|b| b.find_handle::<TextInput>("edit a"))
+        .unwrap();
+    let tree = || manager.with_focus_manager(|m| focus_tree(&m.root_nodes()));
+    let at_rest = tree();
+    let check = |when: &str| {
+        assert!(
+            manager.with_focus_manager(|m| m.has_primary_focus(&node)),
+            "{when}: the field is the primary focus"
+        );
+        assert!(
+            text.with_downcast::<TextInput, _>(|t| t.is_focused())
+                .unwrap(),
+            "{when}: the field is focused"
+        );
+        assert_eq!(tree(), at_rest, "{when}: the focus tree is untouched");
+        assert!(
+            node.borrow()
+                .manager()
+                .is_some_and(|owner| owner.ptr_eq(&manager)),
+            "{when}: the same manager"
+        );
+    };
+    check("at rest");
+    moves.step_begin(&page.root, "B", Some("t1")).unwrap();
+    check("begun");
+    field_fly_to(&page, &mut moves, 0.5);
+    check("half way");
+    field_fly_to(&page, &mut moves, 1.0);
+    moves.step_end(&page.root, "B", Some("t1")).unwrap();
+    page.machine.advance_and_apply(0.0);
+    moves.after_advance(&page.root).unwrap();
+    check("landed");
 }
 
 /// In an in-place file a step unit flies two copies: `transfers` is

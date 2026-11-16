@@ -190,6 +190,16 @@ A reader that predates these records skips them only when the file's property ta
 
 The hold suite is `mechanical_port/source/layout_flight_hold_tests.rs`. Each case checks, on every frame of a step forward, Back and cancelled halfway: every box outside the element rests where it rested; the element's inside equals a fresh load with the element authored at the flight size; the tree holds the same nodes as at rest; and afterwards the resting layout comes back. Its table runs each parent kind (block, flex row, flex column, grid, baseline-aligned row) against each child property (a fixed size, a size from content, margins, relative insets, percentage padding, a percentage width, flex grow and shrink, a stretched cross size, min and max widths, an aspect ratio, a content box, resting overflow, a scroll container, an absolute position, a margin collapsing through): held at its resting size every box is as at rest, and as the flight size changes everything outside the element stays so.
 
+### Input during a step
+
+The runtime changes nothing about a person's input during a step. Each host turns input off for the whole page while a step runs, and ends what a person holds when the step starts:
+- iOS: `ExperiencePageStep.perform` turns input off before the step and on after it. While it is off, pointer, focus, key and queued input work are refused, and `endActiveInput` exits each pointer still down.
+- Android: `ExperiencePageStep.perform` turns input off before the step and on in its `finally`. `sceneInputEnabled` is checked at every intake, and `withdrawSceneInput` exits each delivered pointer.
+
+So a copy flying in place takes no input from a person on either phone. The editor Preview does not play steps yet, and must do the same when it does ([UNIV-6463](https://universe.basis.dev/issue/UNIV-6463)). An exit does not end every held gesture, such as a field's selection drag or a scroll's drag; a cancel through dispatch, sent by the hosts, is [UNIV-6462](https://universe.basis.dev/issue/UNIV-6462).
+
+A copy flying in place keeps its own semantic tree, focus and listeners. A focused field stays focused, and its geometry is read every frame, still where it rests. Reading it where the copy draws is a later change.
+
 ## Regression assertions
 
 Historical results describe their implementations at the time. Round 4 supersedes semantic-only sleep and the focus-navigation hook. Round 5 replaces the separate live-move mutation boundary and makes all feature collapse reconciliation use one hosted-ancestor visibility rule. Round 6 replaces global bookkeeping and adapter-owned caches with optional native occurrence state. The change to one instance only where a step unit transfers removed homes, coming home, the stay list, loans and holder history: rows below that describe a return home or a loan record that earlier behavior, and their tests were rewritten or deleted with it.
@@ -203,6 +213,12 @@ The numeric assertions below are implemented in `crates/nuxie-runtime/tests/live
 | `rejected_moves_do_not_mutate_slots` | Refused moves leave both occupied identities unchanged. |
 | `private_values_text_and_destination_prop_survive` | Private count 7, 12-byte typed text, VM identity, and local context survive. Incoming prop becomes 200, follows 321, and ignores source 999. |
 | `hits_follow_the_new_host` | A destination hit sets the same input to 9. A hit at the empty source leaves it at 0. |
+| `in_place_a_focused_fields_geometry_reads_through_a_step` (nux-capi) | A's focused field stays focused, and `nux_player_text_input_geometry` reads it half way and landed where it rests, as before the step. |
+| `in_place_focus_stays_on_the_field_and_its_tree_is_untouched` | A field focused on A stays the primary focus at rest, begun, half way and landed; the focus tree, each node's manager and parent are unchanged. |
+| `in_place_a_screen_slept_mid_step_lower_sleeps_its_copy_and_the_upper_flies_on` | A put to sleep half way stops drawing its copy; B's copy flies on against A's end as last read; landed and woken, the page draws as one that never slept. |
+| `in_place_a_screen_slept_mid_step_upper_sleeps_both_copies_as_its_slots_do` | B put to sleep half way stops both copies, in both shapes; landed and woken, the page draws as one that never slept. |
+| `in_place_a_flying_frame_whose_ends_are_the_same_size_solves_what_a_rest_frame_does` | A flying frame of a pair whose ends are the same size runs as many layout passes as a frame at rest. |
+| `bench_in_place_against_slots_on_a_large_screen` (ignored; release) | The 4.5 bench on a 402 by 874 page with 33 matched pictures: in place against slots and against the same page with no records. |
 | `empty_source_draws_no_geometry` | The source draws 1 shape before take-off and 0 after. |
 | `collapsed_rows_cost_one_row_and_wake_with_data` | 40 active rows make 81 advances and 40 draws. With 39 collapsed: 3 advances and 1 draw. Sleeping data value 777 applies on wake. |
 | `focus_scope_moves_without_blurring_the_field` | The same focused leaf stays primary across take-off, flight, and landing. |

@@ -121,8 +121,10 @@ The **shape-fallback-sink** addition (UNIV-5593) tells a host which text
 needed the fallback chain. `text_engine::with_shape_fallback_sink` installs a
 thread-local sink for the duration of a closure; each Text or TextInput that
 shapes inside it reports its `CoreHandle` and whether that shaping asked the
-fallback hook, whatever the hook answered. A shape is reported once, when it
-replaces the drawn one; an unchanged shape reports nothing. No sink, no cost. Reshaping after the host's faces change is
+fallback hook, whatever the hook answered: in its shape, or while its lines
+were laid out (an ellipsis its own font lacks). Text is reported when its
+shape is replaced, when lines that asked the hook are laid out again, and when
+its answer changes; unchanged text reports nothing. No sink, no cost. Reshaping after the host's faces change is
 upstream's `fallback_fonts_changed` generation (`8e1862e2`), not this hook.
 
 ## 1. Ownership & Type Mappings

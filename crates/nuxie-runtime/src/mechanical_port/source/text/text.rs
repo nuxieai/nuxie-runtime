@@ -932,11 +932,11 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(
         owner.with_downcast_mut::<Self, _>(|object| object.mark_listened_runs());
         Self::sync_style_list_items_occurrence(owner);
         let shaped = owner.with_downcast_mut::<Self, _>(|object| {
-            let before = (object.shape_serial, object.shape_uses_fallback());
+            let before = (object.drawn_serial, object.shape_uses_fallback());
             object.update_after_transform_super(dirt);
             let used = object.shape_uses_fallback();
-            // A new shape, or an ellipsis rebuilt with another answer.
-            (object.shape_serial != before.0 || used != before.1).then_some(used)
+            // New drawn text, or lines that no longer ask the callback.
+            (object.drawn_serial != before.0 || used != before.1).then_some(used)
         });
         if let Some(Some(used_fallback)) = shaped {
             crate::mechanical_port::source::text_engine::report_shape_fallback(
@@ -1031,9 +1031,10 @@ pub struct Text {
     measured_shape: Option<Box<MeasuredShape>>,
     shape_fallbacks: FallbackState,
     shape_reusable: bool,
-    /// Nuxie: moves each time `shape` is replaced, so the update that made it
-    /// reports it (see `text_engine::with_shape_fallback_sink`).
-    shape_serial: u32,
+    /// Nuxie: moves each time `shape` is replaced, and each time lines that
+    /// asked the fallback callback are laid out again, so the update that
+    /// made them reports them (see `text_engine::with_shape_fallback_sink`).
+    drawn_serial: u32,
     /// Nuxie: whether laying out the drawn lines (the ellipsis, chiefly)
     /// called the fallback callback after the shape was made.
     lines_used_fallback: bool,
@@ -1099,7 +1100,7 @@ impl Default for Text {
             measured_shape: None,
             shape_fallbacks: (0, 0),
             shape_reusable: false,
-            shape_serial: 0,
+            drawn_serial: 0,
             lines_used_fallback: false,
             // Upstream records it in onAddedDirty; every Text, read or
             // cloned, is built through Default here.
@@ -1799,13 +1800,13 @@ impl Text {
                         self.shape = spare.shape;
                         self.shape_fallbacks = spare.fallback;
                         self.shape_reusable = true;
-                        self.shape_serial = self.shape_serial.wrapping_add(1);
+                        self.drawn_serial = self.drawn_serial.wrapping_add(1);
                     } else {
                         let calls = fallback_calls();
                         self.shape = self.shape_styled(&styled, ShapeSource::Update);
                         self.shape_fallbacks = fallback;
                         self.shape_reusable = calls == fallback_calls();
-                        self.shape_serial = self.shape_serial.wrapping_add(1);
+                        self.drawn_serial = self.drawn_serial.wrapping_add(1);
                     }
                     self.shape_css_owned = self.css_owned;
                 }
@@ -1836,7 +1837,7 @@ impl Text {
                 shape_changed = !self.shape.is_empty();
                 lines_changed = self.broken_lines.is_some();
                 if shape_changed {
-                    self.shape_serial = self.shape_serial.wrapping_add(1);
+                    self.drawn_serial = self.drawn_serial.wrapping_add(1);
                 }
                 self.shape.clear();
                 self.lines.clear();
@@ -2247,6 +2248,10 @@ impl Text {
         let calls = fallback_calls();
         self.build_render_styles_lines();
         self.lines_used_fallback = calls != fallback_calls();
+        if self.lines_used_fallback {
+            // The callback may have answered otherwise this time.
+            self.drawn_serial = self.drawn_serial.wrapping_add(1);
+        }
     }
 
     fn build_render_styles_lines(&mut self) {

@@ -494,6 +494,14 @@ pub enum InPlaceFixture {
     /// 0.3), or a text, an image or a video hosting a layout participant;
     /// its record holds the card's size and key.
     Keyed(KeyedKind),
+    /// `Plain` with each Screen's card holding a text field "edit a" (on A,
+    /// "edit b" on B) with focus data, a painted shape "button", 40 by 40
+    /// at (20, 20), and a video "clip a" ("clip b"), with semantics on the
+    /// card (a group, "card"), the field ("field") and the button
+    /// ("button"); B's card resting at (100, 60), padded in, so its copies
+    /// move as they fly; and B holding a plain video "plain" at (300, 200),
+    /// outside every card.
+    Field,
 }
 
 /// What `InPlaceFixture::Keyed` keys in place of a box.
@@ -515,21 +523,24 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
     let keyed = !matches!(kind, Stripped | SlotOnly);
     let slot = matches!(kind, WithSlot | SlotOnly);
     let records_on = if kind == FlightsOnA { "A" } else { "B" };
+    let field = kind == Field;
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
         var(&mut b, n);
     }
     obj(&mut b, "Backboard", &[]);
-    if kind == Keyed(KeyedKind::Video) {
-        // A video names its asset, as a published file's does.
-        obj(
-            &mut b,
-            "VideoAsset",
-            &[
-                ("sourceKey", S("asset:card")),
-                ("contentType", S("video/mp4")),
-            ],
-        );
+    if kind == Keyed(KeyedKind::Video) || field {
+        // A video names its asset, as a published file's does. The field
+        // card's videos, not laid out, take the asset's size, so they have
+        // an area to be seen in.
+        let mut asset = vec![
+            ("sourceKey", S("asset:card")),
+            ("contentType", S("video/mp4")),
+        ];
+        if field {
+            asset.extend([("width", F(40.0)), ("height", F(40.0))]);
+        }
+        obj(&mut b, "VideoAsset", &asset);
     }
     for name in ["A", "B"] {
         obj(&mut b, "ViewModel", &[("name", S(name))]);
@@ -605,15 +616,16 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
                 ("clip", B(false)),
             ],
         ); // 0
-        obj(
-            &mut b,
-            "LayoutCssStyle",
-            &[
-                ("parentId", U(0)),
-                ("display", U(1)),
-                ("columnGap", F(10.0)),
-            ],
-        ); // 1
+        let mut root = vec![
+            ("parentId", U(0)),
+            ("display", U(1)),
+            ("columnGap", F(10.0)),
+        ];
+        if field && screen == "B" {
+            // B's card rests at (100, 60), so its copy moves as it flies.
+            root.extend([("paddingLeft", F(100.0)), ("paddingTop", F(60.0))]);
+        }
+        obj(&mut b, "LayoutCssStyle", &root); // 1
         obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
         let note = if let Keyed(element_kind) = kind {
             let type_name = match element_kind {
@@ -665,6 +677,9 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
             8
         };
         boxed(&mut b, note, "note", (60.0, 40.0), 0, 0xff3333cc); // note to note + 4
+        if field {
+            field_card(&mut b, screen); // 13 to 23
+        }
         if screen == "A" && slot {
             obj(
                 &mut b,
@@ -795,6 +810,74 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
     machine(&mut b, false);
     b
 }
+/// `InPlaceFixture::Field`'s contents of Screen `screen`'s card, object 3,
+/// from object 13 on.
+fn field_card(b: &mut Vec<u8>, screen: &str) {
+    use V::*;
+    let own = screen.to_lowercase();
+    obj(
+        b,
+        "TextInput",
+        &[
+            ("name", S(&format!("edit {own}"))),
+            ("parentId", U(3)),
+            ("text", S("")),
+        ],
+    ); // 13
+    obj(b, "FocusData", &[("parentId", U(13))]); // 14
+    obj(b, "Shape", &[("name", S("button")), ("parentId", U(3))]); // 15
+    obj(
+        b,
+        "Rectangle",
+        &[
+            ("parentId", U(15)),
+            ("width", F(40.0)),
+            ("height", F(40.0)),
+            ("x", F(20.0)),
+            ("y", F(20.0)),
+        ],
+    ); // 16
+    obj(b, "Fill", &[("parentId", U(15))]); // 17
+    obj(
+        b,
+        "SolidColor",
+        &[("parentId", U(17)), ("colorValue", Color(0xff33cc33))],
+    ); // 18
+    obj(
+        b,
+        "Video",
+        &[
+            ("name", S(&format!("clip {own}"))),
+            ("parentId", U(3)),
+            ("assetId", U(0)),
+        ],
+    ); // 19
+    for (parent, role, label) in [(3, 9, "card"), (13, 6, "field"), (15, 1, "button")] {
+        obj(
+            b,
+            "SemanticData",
+            &[
+                ("parentId", U(parent)),
+                ("role", U(role)),
+                ("label", S(label)),
+            ],
+        ); // 20 to 22
+    }
+    if screen == "B" {
+        obj(
+            b,
+            "Video",
+            &[
+                ("name", S("plain")),
+                ("parentId", U(0)),
+                ("assetId", U(0)),
+                ("x", F(300.0)),
+                ("y", F(200.0)),
+            ],
+        ); // 23
+    }
+}
+
 /// A text field pair as the compiler publishes it: a key per Screen, each
 /// copy's unit holding its own unbound text field ("edit"), two flight keys
 /// and no `transfers`.
@@ -4804,6 +4887,16 @@ pub enum PaintCase {
     /// `Corners`' versions, unkeyed, each a content box with 10 points of
     /// padding a side, flown in Layout mode.
     Padded,
+    /// A Screen pair the size of the largest paired reference Screen,
+    /// ListToGrid's list and grid as published on nuxie-dev main: on each
+    /// Screen 33 pictures, each matched with its twin on the other, 31
+    /// texts and 70 boxes, 402 by 874. A lists the pictures a row each, 24
+    /// by 24, with a text beside each of the first 31; B tiles them three a
+    /// row, 128 by 48 (24 by 24 when `same_size`, so a flight changes no
+    /// size), with a text under each. For the bench (4.5).
+    Large {
+        same_size: bool,
+    },
     /// A box E holding a text that wraps, between N1 and N2 in a flex row
     /// on each Screen: `a` points wide on A, 300 on B, so the text refills
     /// its box as E flies.
@@ -5204,6 +5297,9 @@ enum PaintKind {
     Video,
     /// A CSS box holding a text bound to B's "subtitle".
     Subtitle,
+    /// A CSS box holding a text of these words, 14 points on 18, with the
+    /// file's asset `font` as its font.
+    Words { words: &'static str, font: u64 },
 }
 
 #[derive(Clone)]
@@ -6270,6 +6366,30 @@ impl PaintSpec {
     }
     /// Each track on a flight slot's values keys the same control of a
     /// flight record, as an in-place page carries it.
+    /// The page without what a step needs: no steps, no flight slots and
+    /// no unit keys, so in place no flight keys or records.
+    fn stripped(mut self) -> Self {
+        fn strip(els: &mut Vec<PaintEl>) {
+            els.retain(|el| {
+                !matches!(el.kind, PaintKind::Flight { .. } | PaintKind::Native { .. })
+            });
+            for el in els.iter_mut() {
+                if let PaintKind::Slot { key, .. } = &mut el.kind {
+                    *key = 0;
+                }
+                strip(&mut el.kids);
+            }
+        }
+        assert!(
+            self.tracks.is_empty() && self.a_tracks.is_empty(),
+            "a stripped page keys nothing"
+        );
+        self.steps.clear();
+        self.zoom = [0, 0];
+        strip(&mut self.a);
+        strip(&mut self.b);
+        self
+    }
     fn record_keys(mut self) -> Self {
         for t in self.tracks.iter_mut().chain(self.a_tracks.iter_mut()) {
             if t.target.ends_with(".live") {
@@ -6799,6 +6919,44 @@ impl PaintArt<'_> {
                     ],
                 );
             }
+            PaintKind::Words { words, font } => {
+                self.add(
+                    "LayoutComponent",
+                    &[
+                        ("name", S(&el.name)),
+                        ("parentId", U(parent)),
+                        ("styleId", U(id + 1)),
+                    ],
+                );
+                self.add("LayoutComponentStyle", &[("parentId", U(id))]);
+                self.record(el, id, &el.css);
+                let text = self.add("Text", &[("parentId", U(id))]);
+                let style = self.add(
+                    "TextStylePaint",
+                    &[
+                        ("parentId", U(text)),
+                        ("fontAssetId", U(font)),
+                        ("fontSize", F(14.0)),
+                        ("lineHeight", F(18.0)),
+                    ],
+                );
+                let fill = self.add("Fill", &[("parentId", U(style))]);
+                self.add(
+                    "SolidColor",
+                    &[
+                        ("parentId", U(fill)),
+                        ("colorValue", Color(paint_color(&el.name))),
+                    ],
+                );
+                self.add(
+                    "TextValueRun",
+                    &[
+                        ("parentId", U(text)),
+                        ("styleId", U(style)),
+                        ("text", S(words)),
+                    ],
+                );
+            }
             PaintKind::Subtitle => {
                 self.add(
                     "LayoutComponent",
@@ -7169,6 +7327,86 @@ fn zoom_pair(
         ("back", "B", "A", vec![[1, 2, 14, 13, 0]]),
     ];
     spec.zoom = [1, 2];
+    spec
+}
+
+/// `PaintCase::Large`'s page.
+fn large_spec(same_size: bool) -> PaintSpec {
+    const PICTURES: u64 = 33;
+    const TEXTS: u64 = 31;
+    /// The extra boxes that make 70 on each Screen: 2 holders, 33 rows or
+    /// tiles, 31 text boxes and these 4.
+    const EXTRA: [&str; 4] = ["toolbar", "status", "footer", "scrim"];
+    const WORDS: &str = "Roasted squash";
+    // The font is the file's second asset, after the pictures' one.
+    let words = |name: String, css: Css| {
+        PaintEl::new(
+            &name,
+            PaintKind::Words {
+                words: WORDS,
+                font: 1,
+            },
+            css,
+        )
+    };
+    let name = |text: String| -> &'static str { Box::leak(text.into_boxed_str()) };
+    let tile = if same_size {
+        (24.0, 24.0)
+    } else {
+        (128.0, 48.0)
+    };
+    let mut units = Vec::new();
+    let (mut rows, mut tiles, mut flights) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut go, mut back) = (Vec::new(), Vec::new());
+    for i in 0..PICTURES {
+        let (a, b) = (name(format!("p{i} a")), name(format!("p{i} b")));
+        units.push(unit(a, 24.0, 24.0).element(ElementKind::Image));
+        units.push(unit(b, tile.0, tile.1).element(ElementKind::Image));
+        let (a_key, b_key, flight) = (2 * i + 1, 2 * i + 2, 1000 + 4 * i);
+        let mut row = vec![rest(a, a_key, css_at(4.0, 0.0, 24.0, 24.0))];
+        let mut cell = vec![rest(b, b_key, css_at(2.0, 2.0, tile.0, tile.1))];
+        if i < TEXTS {
+            row.push(words(
+                format!("row text {i}"),
+                css_at(32.0, 3.0, 300.0, 18.0),
+            ));
+            cell.push(words(
+                format!("tile text {i}"),
+                css_at(2.0, 52.0, 128.0, 18.0),
+            ));
+        }
+        let top = 25.0 * i as f32;
+        rows.push(bx(&format!("row {i}"), css_at(0.0, top, 402.0, 24.0)).kids(row));
+        let (column, line) = ((i % 3) as f32, (i / 3) as f32);
+        tiles.push(
+            bx(
+                &format!("tile {i}"),
+                css_at(134.0 * column, 76.0 * line, 132.0, 74.0),
+            )
+            .kids(cell),
+        );
+        flights.extend([
+            flight_slot(&format!("{a} go"), a, a_key, flight, 1),
+            flight_slot(&format!("{b} go"), b, b_key, flight + 1, 1),
+            flight_slot(&format!("{b} back"), b, b_key, flight + 2, 1),
+            flight_slot(&format!("{a} back"), a, a_key, flight + 3, 1),
+        ]);
+        go.push([b_key, a_key, flight + 1, flight, 0]);
+        back.push([a_key, b_key, flight + 3, flight + 2, 0]);
+    }
+    let screen = |holder: &str, kids: Vec<PaintEl>| {
+        let mut els = vec![
+            bx(&format!("{holder} header"), css_at(0.0, 0.0, 402.0, 44.0)),
+            bx(holder, css_at(0.0, 44.0, 402.0, 830.0)).kids(kids),
+        ];
+        els.extend(EXTRA.map(|extra| bx(extra, css_at(0.0, 830.0, 402.0, 10.0)).paintless()));
+        els
+    };
+    let mut b = screen("grid", tiles);
+    b.extend(flights);
+    let mut spec = PaintSpec::new(units, screen("list", rows), b);
+    spec.size = (402.0, 874.0);
+    spec.steps = vec![("go", "A", "B", go), ("back", "B", "A", back)];
     spec
 }
 
@@ -7553,6 +7791,10 @@ fn paint_file_shaped(spec: &PaintSpec, in_place: bool) -> Result<Vec<u8>, &'stat
         els.iter()
             .any(|el| matches!(el.kind, PaintKind::Video) || has_video(&el.kids))
     }
+    fn has_words(els: &[PaintEl]) -> bool {
+        els.iter()
+            .any(|el| matches!(el.kind, PaintKind::Words { .. }) || has_words(&el.kids))
+    }
     let elements = |kind: ElementKind| spec.units.iter().any(|u| u.element == Some(kind));
     // An element pair names one asset, the file's first: a text's font, an
     // image's picture or a video's. Nothing else on its page names one.
@@ -7608,6 +7850,8 @@ fn paint_file_shaped(spec: &PaintSpec, in_place: bool) -> Result<Vec<u8>, &'stat
     if spec.subtitle.is_some()
         || spec.units.iter().any(|u| u.text.is_some())
         || elements(ElementKind::Text)
+        || has_words(&spec.a)
+        || has_words(&spec.b)
     {
         obj(
             &mut b,
@@ -7809,6 +8053,9 @@ pub enum PaintShape {
     /// a `LiveFlight` record on the Screen for each, in the flight slots'
     /// order. Tracks on a flight slot's values key its record.
     InPlace,
+    /// `InPlace`'s page without flight keys, flight records or steps: the
+    /// same Screens, which the records must cost nothing beside.
+    Stripped,
 }
 
 /// The page for one paint case in `shape`, or why the case has no such
@@ -7823,6 +8070,7 @@ pub fn css_paint_fixture_shaped(
         PaintShape::Slots => Ok(paint_file(&spec)),
         PaintShape::SlotCopies => Ok(paint_file(&spec.two_copies())),
         PaintShape::InPlace => paint_file_shaped(&spec.two_copies().record_keys(), true),
+        PaintShape::Stripped => paint_file_shaped(&spec.two_copies().stripped(), true),
     }
 }
 
@@ -8830,6 +9078,7 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
         PaintCase::Reader { kind, flies } => reader_spec(kind, flies),
         PaintCase::Zoom(case) => zoom_spec(case),
         PaintCase::Element(kind, case) => element_spec(kind, case),
+        PaintCase::Large { same_size } => large_spec(same_size),
         PaintCase::EmptiedCover { copies } => {
             let e = || rest("E", 1, css_at(100.0, 100.0, 100.0, 60.0));
             let w_on_a = css_at(180.0, 170.0, 200.0, 120.0);

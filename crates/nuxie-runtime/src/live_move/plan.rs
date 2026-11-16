@@ -876,15 +876,18 @@ impl Plan {
                 &active,
             )?;
         }
-        let mut covers_changed = HashSet::new();
+        let mut boards: Vec<(CoreHandle, Vec<&super::in_place::InPlaceFlight>)> = Vec::new();
         for flight in &self.lifted {
-            if flight.read_cover() {
-                covers_changed.insert(flight.board.clone());
+            match boards.iter_mut().find(|(seen, _)| *seen == flight.board) {
+                Some((_, copies)) => copies.push(flight),
+                None => boards.push((flight.board.clone(), vec![flight])),
             }
         }
-        for board in &covers_changed {
-            if let Some(dirty) = board.artboard_dirty_handle() {
-                dirty.mark_css_draw_order_dirty();
+        for (board, copies) in boards {
+            if super::in_place::InPlaceFlight::read_covers(&board, &copies) {
+                if let Some(dirty) = board.artboard_dirty_handle() {
+                    dirty.mark_css_draw_order_dirty();
+                }
             }
         }
         // What every lift draws moved: the upper Screens draw again.

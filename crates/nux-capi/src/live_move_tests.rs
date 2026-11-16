@@ -3165,3 +3165,172 @@ fn a_video_in_a_mask_run_reads_as_the_marks_around_its_run() {
         scene.close();
     }
 }
+
+/// `InPlaceFixture::Field` played on its page: a card flying in place from
+/// A to B by step "t1", each copy holding a field "edit a" or "edit b", a
+/// button and a video "clip a" or "clip b"; B also holds a plain video
+/// "plain". B's card rests 100 right and 60 down in its Screen, so its
+/// copy moves as it flies; each copy's field and button sit at its card's
+/// corner, so half way both copies' are midway between where they rest.
+unsafe fn in_place_field_page() -> (LiveScene, nuxie::RuntimeArtboardInstanceHandle) {
+    unsafe {
+        let scene = LiveScene::from_bytes_named(
+            &fixture::in_place_fixture(fixture::InPlaceFixture::Field),
+            "Page",
+        );
+        let root = page_root(&scene);
+        (scene, root)
+    }
+}
+/// Writes `progress` to every flight record on the page's Screens.
+fn set_in_place_progress(root: &nuxie::RuntimeArtboardInstanceHandle, progress: f32) {
+    for row in nuxie::live_move::screens(root).unwrap().values() {
+        for record in
+            row.with_artboard(|b| b.find_all_handles::<nuxie::live_move::records::LiveFlight>())
+        {
+            assert!(
+                nuxie::runtime::generated::core_registry::CoreRegistry::set_double_handle(
+                    &record, 62033, progress
+                )
+            );
+        }
+    }
+}
+/// The semantic node of role `role` on Screen `screen`'s card.
+fn in_place_node(
+    root: &nuxie::RuntimeArtboardInstanceHandle,
+    screen: &str,
+    role: u32,
+) -> nuxie::runtime::semantic::semantic_node::SemanticNodeRef {
+    use nuxie::runtime::semantic::semantic_data::SemanticData;
+    let rows = nuxie::live_move::screens(root).unwrap();
+    rows[screen]
+        .with_artboard(|b| b.find_all_handles::<SemanticData>())
+        .iter()
+        .find_map(|h| {
+            h.with_downcast::<SemanticData, _>(|d| d.existing_semantic_node())
+                .flatten()
+                .filter(|n| n.borrow().role == role)
+        })
+        .unwrap_or_else(|| panic!("no node of role {role} on {screen}"))
+}
+/// The page's semantic snapshot, presented: each node's id, parent, role
+/// and state.
+unsafe fn in_place_snapshot(
+    player: *mut NuxPlayer,
+) -> (*mut NuxSemanticSnapshot, Vec<NuxSemanticNodeView>) {
+    unsafe {
+        let revision = (&(*player).artboard).render_revision.get();
+        assert_eq!(
+            nux_player_acknowledge_presented(player, revision),
+            NuxStatus::Ok
+        );
+        let mut snapshot = ptr::null_mut();
+        assert_eq!(
+            nux_player_semantic_snapshot(player, &mut snapshot),
+            NuxStatus::Ok
+        );
+        let mut info = NuxSemanticSnapshotInfo {
+            struct_size: std::mem::size_of::<NuxSemanticSnapshotInfo>() as u32,
+            ..Default::default()
+        };
+        assert_eq!(
+            nux_semantic_snapshot_info(snapshot, &mut info),
+            NuxStatus::Ok
+        );
+        let nodes = (0..info.node_count)
+            .map(|i| {
+                let mut node = NuxSemanticNodeView {
+                    struct_size: std::mem::size_of::<NuxSemanticNodeView>() as u32,
+                    ..Default::default()
+                };
+                assert_eq!(
+                    nux_semantic_snapshot_node(snapshot, i, &mut node),
+                    NuxStatus::Ok
+                );
+                node
+            })
+            .collect();
+        (snapshot, nodes)
+    }
+}
+
+/// A field in a copy flying in place keeps its native overlay's geometry
+/// through a step, as it does on runtime main: a step turns the page's
+/// input off, and that leaves the focused field focused and its geometry
+/// read every frame, where it rests, half way and landed. iOS moves its
+/// native field by it each frame of a step; where the geometry reads a
+/// copy flying in place is a later change.
+#[test]
+fn in_place_a_focused_fields_geometry_reads_through_a_step() {
+    unsafe {
+        let (scene, root) = in_place_field_page();
+        assert_eq!(nux_player_enable_semantics(scene.player), NuxStatus::Ok);
+        step_ok(scene.player);
+        let rows = nuxie::live_move::screens(&root).unwrap();
+        let text = rows["A"]
+            .with_artboard(|b| {
+                b.find_handle::<nuxie::runtime::text::text_input::TextInput>("edit a")
+            })
+            .unwrap();
+        let node = rows["A"]
+            .with_artboard(|b| b.find_all_handles::<nuxie::runtime::focus_data::FocusData>())[0]
+            .with_downcast::<nuxie::runtime::focus_data::FocusData, _>(|f| f.existing_focus_node())
+            .flatten()
+            .unwrap();
+        let manager = node.borrow().manager().unwrap();
+        manager.with_focus_manager_mut(|m| m.set_focus(node.clone()));
+        step_ok(scene.player);
+        let read = |when: &str| {
+            assert!(
+                text.with_downcast::<nuxie::runtime::text::text_input::TextInput, _>(
+                    |t| t.is_focused()
+                )
+                .unwrap(),
+                "{when}: the field is focused"
+            );
+            let id = in_place_node(&root, "A", 6).borrow().id();
+            let (snapshot, _) = in_place_snapshot(scene.player);
+            let mut out = NuxTextInputGeometry {
+                struct_size: std::mem::size_of::<NuxTextInputGeometry>() as u32,
+                ..Default::default()
+            };
+            assert_eq!(
+                nux_player_text_input_geometry(
+                    scene.player,
+                    snapshot,
+                    id,
+                    view("edit a"),
+                    &mut out
+                ),
+                NuxStatus::Ok,
+                "{when}: the field's geometry"
+            );
+            assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+            [
+                out.world_transform[4],
+                out.world_transform[5],
+                out.max_x - out.min_x,
+                out.max_y - out.min_y,
+            ]
+        };
+        let rest = read("at rest");
+        let t = view("t1");
+        assert_eq!(
+            nux_player_step_begin(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        set_in_place_progress(&root, 0.5);
+        step_ok(scene.player);
+        assert_eq!(read("half way"), rest, "half way: where it rests");
+        set_in_place_progress(&root, 1.0);
+        step_ok(scene.player);
+        assert_eq!(
+            nux_player_step_end(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        step_ok(scene.player);
+        assert_eq!(read("landed"), rest, "landed: where it rests");
+        scene.close();
+    }
+}

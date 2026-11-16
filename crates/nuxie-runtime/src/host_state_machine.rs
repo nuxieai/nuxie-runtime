@@ -1010,10 +1010,16 @@ impl StateMachineInstance {
         self.native.with_instance(|machine| machine.focus_state())
     }
     pub fn focus_next(&mut self) -> bool {
+        if !self.native.with_instance(|machine| machine.takes_input()) {
+            return false;
+        }
         let manager = self.native.with_instance(|machine| machine.focus_manager());
         manager.is_some_and(|manager| manager.with_focus_manager_mut(FocusManager::focus_next))
     }
     pub fn focus_previous(&mut self) -> bool {
+        if !self.native.with_instance(|machine| machine.takes_input()) {
+            return false;
+        }
         let manager = self.native.with_instance(|machine| machine.focus_manager());
         manager.is_some_and(|manager| manager.with_focus_manager_mut(FocusManager::focus_previous))
     }
@@ -1033,6 +1039,9 @@ impl StateMachineInstance {
             .with_instance_mut(|machine| machine.focus_right())
     }
     pub fn clear_focus(&mut self) {
+        if !self.native.with_instance(|machine| machine.takes_input()) {
+            return;
+        }
         let manager = self.native.with_instance(|machine| machine.focus_manager());
         if let Some(manager) = manager {
             manager.with_focus_manager_mut(FocusManager::clear_focus);

@@ -190,6 +190,26 @@ A reader that predates these records skips them only when the file's property ta
 
 The hold suite is `mechanical_port/source/layout_flight_hold_tests.rs`. Each case checks, on every frame of a step forward, Back and cancelled halfway: every box outside the element rests where it rested; the element's inside equals a fresh load with the element authored at the flight size; the tree holds the same nodes as at rest; and afterwards the resting layout comes back. Its table runs each parent kind (block, flex row, flex column, grid, baseline-aligned row) against each child property (a fixed size, a size from content, margins, relative insets, percentage padding, a percentage width, flex grow and shrink, a stretched cross size, min and max widths, an aspect ratio, a content box, resting overflow, a scroll container, an absolute position, a margin collapsing through): held at its resting size every box is as at rest, and as the flight size changes everything outside the element stays so.
 
+### Input during a step
+
+`animation/state_machine_instance.rs`, `live_move/plan.rs`. While a step runs on a page, begun and not yet landed or cancelled, a person's input reaches nothing on it, in either shape. Both phones already turn a page's input off for a step: iOS `ExperienceScreenViewController.setPageInputEnabled(false)`, then `ExperienceRuntimePresentationLoop.endActiveInput`; Android `ExperiencePageStep.perform`, then `input(false)` and `ExperienceSurfaceHost.withdrawSceneInput`. The canvas Preview now does the same: nothing on the page answers a press during a move.
+
+- **One check.** Every entry point a person's input arrives at asks `StateMachineInstance::takes_input`, which reads the step live (`live_move::step_runs`, from the page's scene). Nothing is stored for it and nothing is sorted. The entry points are:
+  - pointers: down, up, move, exit, a miss, drag start and end (hover exit reaches a person only through the exit it calls);
+  - capture and capture occlusion;
+  - hit tests, bounded or not;
+  - the button query;
+  - scroll: wanting a wheel, a scroll target, scroll occlusion, and the scroll itself;
+  - focus moves, next, previous and by direction, and clearing focus, on the machine and on the host machine;
+  - keys and text;
+  - gamepads, by batch and by broadcast;
+  - a screen reader's action, checked or not.
+
+  Every machine on the page asks the same question, so a machine nested in a Screen needs no word of its host. Nothing enters the page at the top either.
+- **Take-off.** As a step begins, every Screen's machine ends what a person holds on it (`end_held_input`). Each pointer still down or over it exits where it last was, which ends a press, a hover or a drag, and a scroll gesture lets go. No key is released, as on the phones. Nothing is replayed at landing: a pointer still held then arrives as a new one, so a drag held at take-off does not resume.
+- **What runs on.** Anything that is not a person's input keeps running through the step: timers, scripts, data binding, and authored focus actions.
+- **What stays as it was.** A copy flying in place keeps its own semantic tree, focus and listeners. A focused field stays focused, and its geometry is read every frame, still where it rests. Reading it where the copy draws is a later change.
+
 ## Regression assertions
 
 Historical results describe their implementations at the time. Round 4 supersedes semantic-only sleep and the focus-navigation hook. Round 5 replaces the separate live-move mutation boundary and makes all feature collapse reconciliation use one hosted-ancestor visibility rule. Round 6 replaces global bookkeeping and adapter-owned caches with optional native occurrence state. The change to one instance only where a step unit transfers removed homes, coming home, the stay list, loans and holder history: rows below that describe a return home or a loan record that earlier behavior, and their tests were rewritten or deleted with it.
@@ -203,6 +223,13 @@ The numeric assertions below are implemented in `crates/nuxie-runtime/tests/live
 | `rejected_moves_do_not_mutate_slots` | Refused moves leave both occupied identities unchanged. |
 | `private_values_text_and_destination_prop_survive` | Private count 7, 12-byte typed text, VM identity, and local context survive. Incoming prop becomes 200, follows 321, and ignores source 999. |
 | `hits_follow_the_new_host` | A destination hit sets the same input to 9. A hit at the empty source leaves it at 0. |
+| `hits_each_kind_takes_no_tap_mid_step_and_one_where_it_rests_once_landed` | Text, image, video and placement, in both shapes: half way, (110, 100) where b draws and (274, 154) where it rests leave b's input at 0. Landed, (274, 154) sets 9. |
+| `hits_a_copy_flying_in_place_takes_no_drag_or_wheel_until_it_lands` | Half way, a wheel notch at b's drawn center or its resting center (200, 100) is not wanted, finds no target and scrolls nothing, and a 60 point drag there leaves b's offset as it was. Landed, each scrolls b at (200, 100). |
+| `hits_a_capture_listener_inside_a_copy_flying_in_place_hears_nothing_until_it_lands` | A capture listener on a text and inside a placement hears nothing half way at (110, 100) or (274, 154), and hears (274, 154) landed. |
+| `hits_every_pointer_entry_point_is_off_mid_step_and_on_after_landing` | Down, up, move, exit, miss, drag start and end, capture, both hit tests, the button query and occlusion: each heard at rest at (274, 154), heard by nothing half way there or at (110, 100), heard again landed. Each call has a pointer of its own; an exit or a miss is heard when it lets a disabled pointer go, a drag start when it disables one. |
+| `hits_a_drag_held_at_take_off_ends_there_and_does_not_resume` | A drag held from before take-off scrolls b; with no step, its further moves scroll b again. Through a step, landed, the same pointer's moves scroll nothing. |
+| `in_place_a_persons_focus_key_text_gamepad_and_screen_reader_input_is_off_mid_step` | Focus next, previous and by direction, clearing focus (on the machine and the host machine), a key, text, a gamepad batch, and a screen reader's tap, checked or not: each heard at rest, heard by nothing half way, heard again landed, on `InPlaceFixture::FieldHeard`, whose Screens' listeners on the field record a key and a screen reader's tap, and whose field takes text. |
+| `in_place_a_focused_fields_geometry_reads_through_a_step` (nux-capi) | A's focused field stays focused, and `nux_player_text_input_geometry` reads it half way and landed where it rests, as before the step. |
 | `empty_source_draws_no_geometry` | The source draws 1 shape before take-off and 0 after. |
 | `collapsed_rows_cost_one_row_and_wake_with_data` | 40 active rows make 81 advances and 40 draws. With 39 collapsed: 3 advances and 1 draw. Sleeping data value 777 applies on wake. |
 | `focus_scope_moves_without_blurring_the_field` | The same focused leaf stays primary across take-off, flight, and landing. |
@@ -259,8 +286,8 @@ The paint order tests (UNIV-5635, `docs/CSS_LAYOUT.md` 4.4) are the `paint_order
 | --- | --- |
 | `paint_order_01_app_store_card_back_flies_under_the_blur` | Back's flight is drawn before the full screen blur's fill, and card0's flight is drawn last. |
 | `paint_order_02_match_red_flies_under_the_panel` | The red's flight is drawn before the panel's fill; the panel's fill before the bar's and Back's flights. |
-| `paint_order_02_hit_control_the_red_above_the_panel_takes_the_tap` | With the red authored above the panel, a tap half way through the move fires the red's listener in its flight and the panel's does not, so the red is a real competitor for the tap. |
-| `paint_order_02_hit_the_panel_over_the_flight_takes_the_tap` | With the red authored under the panel, after an advance places the flight, the same tap fires the panel's listener and the red's does not. |
+| `paint_order_02_hit_half_way_back_neither_the_red_nor_the_panel_takes_the_tap` | At rest the panel alone under (200, 250) takes a tap. Half way Back, in both shapes, a tap on the red and the panel reaches neither, with the red authored above the panel or under it. |
+| `paint_order_02_hit_no_tap_reaches_the_page_mid_step` | Half way forward, in both shapes, (200, 205) where the red's flight draws and (25, 100) where it rests reach nothing, nor does the panel. Landed, (25, 100) reaches the red and (200, 205) the panel. |
 | `paint_order_03_calmly_lake_flies_under_the_scrim` | The lake's flight is drawn before the scrim's fill and the chevron after it; the title's, orb's and card's flights are drawn last, in that order. |
 | `paint_order_04_list_to_grid_pictures_fly_on_top` | Both toggles: every picture's flight is drawn after every row, cell, title and detail, whose step tracks are taken at rest and whose boxes only touch the pictures. |
 | `paint_order_05_catzy_flights_keep_the_dims_place` | The cards', title's and Continue's flights come before the dim's flight, then the dim's flight, Yearly's flight, the ribbon, and the deal's flight last. |

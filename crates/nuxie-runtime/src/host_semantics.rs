@@ -1923,12 +1923,18 @@ impl RuntimeStateMachineInstanceHandle {
     /// semantic ancestor, or invisible source (including zero opacity).
     /// Accepted actions remain queued if eligibility changes before advance.
     /// The raw `fire_semantic_action` entry point retains upstream behavior.
+    /// Neither takes an action while a live-move step runs on the page.
     pub fn fire_semantic_action_checked(&self, node_id: u32, action_type: u8) -> bool {
         use crate::mechanical_port::source::{
             animation::semantic_listener_group::SemanticActionType,
             semantic::semantic_node::SemanticNode,
         };
 
+        // Nuxie: a screen reader's action is a person's input, off for a
+        // live-move step (`StateMachineInstance::takes_input`).
+        if !self.with_instance(|machine| machine.takes_input()) {
+            return false;
+        }
         let Some(manager) = self.with_instance(|machine| machine.semantic_manager()) else {
             return false;
         };

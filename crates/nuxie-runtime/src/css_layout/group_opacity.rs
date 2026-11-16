@@ -1335,17 +1335,11 @@ fn draw_screen(
     set_screen_pass(row, None);
 }
 
-/// Whether the page `row` is a Screen of has a live-move step running: begun
-/// and not yet landed or cancelled (`Plan::step_running`), read from the
-/// page's scene, which its occurrence decided once. Nothing is kept for the
-/// draw, so outside a step a Screen at 1 reads nothing more.
+/// Whether the page `row` is a Screen of has a live-move step running
+/// (`live_move::step_runs`). Nothing is kept for the draw, so outside a step
+/// a Screen at 1 reads nothing more.
 fn step_runs(row: &CoreHandle) -> bool {
-    crate::hosted_scene::scene_for(row).is_some_and(|scene| {
-        scene
-            .plan
-            .try_borrow()
-            .is_ok_and(|plan| plan.step_running())
-    })
+    crate::live_move::step_runs(row)
 }
 
 /// What a Screen's draw left for its list to draw after every row: the

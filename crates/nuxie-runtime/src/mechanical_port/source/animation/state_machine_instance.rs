@@ -3654,6 +3654,9 @@ impl RuntimeStateMachineInstanceHandle {
         is_pressed: bool,
         is_repeat: bool,
     ) -> bool {
+        if !self.with_instance(StateMachineInstance::takes_input) {
+            return false;
+        }
         let manager = self.with_instance(StateMachineInstance::focus_manager);
         manager.is_some_and(|manager| {
             manager.key_input_dispatch(key, modifiers, is_pressed, is_repeat)
@@ -3661,11 +3664,17 @@ impl RuntimeStateMachineInstanceHandle {
     }
 
     pub fn text_input(&self, text: &str) -> bool {
+        if !self.with_instance(StateMachineInstance::takes_input) {
+            return false;
+        }
         let manager = self.with_instance(StateMachineInstance::focus_manager);
         manager.is_some_and(|manager| manager.text_input_dispatch(text))
     }
 
     pub fn submit_gamepads_from_buffer(&self, data: &[u8]) -> bool {
+        if !self.with_instance(StateMachineInstance::takes_input) {
+            return false;
+        }
         // Upstream validates the batch version before creating input state.
         if !GamepadBatchState::has_valid_header(data) {
             return false;
@@ -3688,6 +3697,9 @@ impl RuntimeStateMachineInstanceHandle {
         invocation: &ListenerInvocation,
         already_dispatched: Option<&CoreHandle>,
     ) -> HitResult {
+        if !self.with_instance(StateMachineInstance::takes_input) {
+            return HitResult::None;
+        }
         let mut hit_something = false;
         let mut hit_opaque = false;
         // Retain the actual hit occurrences without holding the SMI across
@@ -3741,6 +3753,9 @@ impl RuntimeStateMachineInstanceHandle {
     }
 
     pub fn fire_semantic_action(&self, node_id: u32, action_type: u8) {
+        if !self.with_instance(StateMachineInstance::takes_input) {
+            return;
+        }
         let Some(manager) = self.with_instance(|machine| machine.semantic_manager()) else {
             return;
         };
@@ -4067,6 +4082,10 @@ pub struct StateMachineInstance {
     capture_run_by_host: bool,
     in_pointer_miss: bool,
     disabled_pointer_ids: Vec<i32>,
+    /// Nuxie: each pointer a person has down or over this machine, where
+    /// it last was here, from its down or move to its up or exit: what a
+    /// step ends at take-off (`end_held_input`).
+    held_pointers: Vec<(i32, Vec2D)>,
     parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
     parent_nested_artboard: Option<CoreHandle>,
     pub(crate) data_bind_container: DataBindContainer,
@@ -4178,6 +4197,7 @@ impl StateMachineInstance {
             capture_run_by_host: false,
             in_pointer_miss: false,
             disabled_pointer_ids: Vec::new(),
+            held_pointers: Vec::new(),
             parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle::default(),
             parent_nested_artboard: None,
             data_bind_container: DataBindContainer::default(),
@@ -5176,6 +5196,9 @@ impl StateMachineInstance {
         timestamp: f32,
         pointer_id: i32,
     ) -> HitResult {
+        if !self.takes_input() {
+            return HitResult::None;
+        }
         let mut mapped = *event;
         if !self.map_to_content_space(&mut position, Some(&mut mapped.delta)) {
             self.cancel_scroll();
@@ -5215,6 +5238,9 @@ impl StateMachineInstance {
     }
 
     pub fn wants_scroll(&mut self, mut position: Vec2D, event: &ScrollEvent) -> bool {
+        if !self.takes_input() {
+            return false;
+        }
         if self.has_scroll_latch() {
             return true;
         }
@@ -5238,6 +5264,9 @@ impl StateMachineInstance {
     }
 
     pub fn has_scroll_target_at(&mut self, mut position: Vec2D) -> bool {
+        if !self.takes_input() {
+            return false;
+        }
         if self.has_scroll_latch() {
             return true;
         }
@@ -5260,6 +5289,9 @@ impl StateMachineInstance {
     }
 
     pub fn scroll_occluded_at(&mut self, mut position: Vec2D) -> bool {
+        if !self.takes_input() {
+            return false;
+        }
         if !self.map_to_content_space(&mut position, None) {
             return false;
         }
@@ -5272,6 +5304,9 @@ impl StateMachineInstance {
     }
 
     pub fn listens_to_button_at(&mut self, mut position: Vec2D, button: PointerButton) -> bool {
+        if !self.takes_input() {
+            return false;
+        }
         if !self.map_to_content_space(&mut position, None) {
             return false;
         }
@@ -5439,6 +5474,25 @@ impl StateMachineInstance {
         timestamp: f32,
         button: PointerButton,
     ) -> HitResult {
+        if !self.takes_input() {
+            return HitResult::None;
+        }
+        match hit_type {
+            ListenerType::Down | ListenerType::Move => {
+                match self
+                    .held_pointers
+                    .iter_mut()
+                    .find(|(id, _)| *id == pointer_id)
+                {
+                    Some(held) => held.1 = position,
+                    None => self.held_pointers.push((pointer_id, position)),
+                }
+            }
+            ListenerType::Up | ListenerType::Exit => {
+                self.held_pointers.retain(|(id, _)| *id != pointer_id);
+            }
+            _ => {}
+        }
         #[cfg(feature = "test-support")]
         crate::hosted_scene::record_walk(crate::hosted_scene::Walk::Hit);
         // Nuxie: upstream sorts its hits into paint order only as it
@@ -5651,6 +5705,9 @@ impl StateMachineInstance {
     }
 
     fn hit_test_internal(&self, position: Vec2D, bounded: bool) -> bool {
+        if !self.takes_input() {
+            return false;
+        }
         let (position, contents_collapsed) = self.normalize_pointer_position(position);
         if contents_collapsed {
             return false;
@@ -5752,6 +5809,9 @@ impl StateMachineInstance {
         pointer_id: i32,
         button: PointerButton,
     ) -> HitResult {
+        if !self.takes_input() {
+            return HitResult::None;
+        }
         if disable_pointer {
             self.disable_pointer_events(pointer_id);
         }
@@ -5765,6 +5825,9 @@ impl StateMachineInstance {
         pointer_id: i32,
         button: PointerButton,
     ) -> HitResult {
+        if !self.takes_input() {
+            return HitResult::None;
+        }
         self.enable_pointer_events(pointer_id);
         let hit = self.update_listeners(position, ListenerType::DragEnd, pointer_id, 0.0, button);
         self.pointer_move(position, timestamp, pointer_id);
@@ -7215,6 +7278,9 @@ impl StateMachineInstance {
         self.input_extras().unwrap().capture_tree_has
     }
     pub fn pointer_occluded_at(&self, position: Vec2D) -> bool {
+        if !self.takes_input() {
+            return false;
+        }
         let (position, collapsed) = self.normalize_pointer_position(position);
         !collapsed
             && self
@@ -7241,7 +7307,7 @@ impl StateMachineInstance {
         timestamp: f32,
         button: PointerButton,
     ) -> HitResult {
-        if Self::live_capture_machines() == 0 {
+        if Self::live_capture_machines() == 0 || !self.takes_input() {
             return HitResult::None;
         }
         #[cfg(any(test, feature = "testing"))]
@@ -7533,6 +7599,47 @@ impl StateMachineInstance {
         !self.hit_components.is_empty()
     }
 
+    /// Nuxie: whether a person's input reaches this machine now. Not while
+    /// a live-move step runs on the page it is in, begun and not yet landed
+    /// or cancelled (`live_move::step_runs`), as both phones turn a page's
+    /// input off for a step (iOS `ExperienceScreenViewController
+    /// .setPageInputEnabled`, Android `ExperienceSurfaceHost.setInputEnabled`).
+    /// Every entry point a person's input arrives at asks it: pointers,
+    /// drags, scroll, capture, hit tests, focus moves, keys, text, gamepads
+    /// and a screen reader's action. It reads the step live and keeps
+    /// nothing, so a machine nested in a Screen needs no word of its host.
+    /// What isn't a person's input (timers, scripts, data binding, an
+    /// authored focus action) runs on.
+    pub fn takes_input(&self) -> bool {
+        self.artboard_instance
+            .upgrade()
+            .is_none_or(|artboard| !crate::live_move::step_runs(&artboard.core_handle()))
+    }
+
+    /// Nuxie: what a step's take-off does to a person's input on this
+    /// machine, as both phones do when a step turns it off (iOS
+    /// `ExperienceRuntimePresentationLoop.endActiveInput`, Android
+    /// `ExperienceSurfaceHost.withdrawSceneInput`): each pointer still down
+    /// or over it exits where it last was, which ends a press, a hover or a
+    /// drag it holds, and a scroll gesture lets go. Nothing is replayed
+    /// when input comes back: a pointer still held then arrives as a new
+    /// one. No key is released, as on the phones, so no authored handler
+    /// runs for a key the person never let go of here.
+    pub(crate) fn end_held_input(&mut self) {
+        let mut held = std::mem::take(&mut self.held_pointers);
+        held.sort_by_key(|(id, _)| *id);
+        for (id, position) in held {
+            self.update_listeners(
+                position,
+                ListenerType::Exit,
+                id,
+                0.0,
+                PointerButton::Primary,
+            );
+        }
+        self.cancel_scroll();
+    }
+
     pub fn has_focus_nodes(&self) -> bool {
         self.focus_manager().is_some_and(|manager| {
             manager.with_focus_manager_mut(FocusManager::has_focusable_content)
@@ -7540,36 +7647,57 @@ impl StateMachineInstance {
     }
 
     pub fn focus_next(&mut self) -> bool {
+        if !self.takes_input() {
+            return false;
+        }
         self.focus_manager()
             .is_some_and(|manager| manager.with_focus_manager_mut(FocusManager::focus_next))
     }
 
     pub fn focus_previous(&mut self) -> bool {
+        if !self.takes_input() {
+            return false;
+        }
         self.focus_manager()
             .is_some_and(|manager| manager.with_focus_manager_mut(FocusManager::focus_previous))
     }
 
     pub fn focus_up(&mut self) -> bool {
+        if !self.takes_input() {
+            return false;
+        }
         self.focus_manager()
             .is_some_and(|manager| manager.with_focus_manager_mut(FocusManager::focus_up))
     }
 
     pub fn focus_down(&mut self) -> bool {
+        if !self.takes_input() {
+            return false;
+        }
         self.focus_manager()
             .is_some_and(|manager| manager.with_focus_manager_mut(FocusManager::focus_down))
     }
 
     pub fn focus_left(&mut self) -> bool {
+        if !self.takes_input() {
+            return false;
+        }
         self.focus_manager()
             .is_some_and(|manager| manager.with_focus_manager_mut(FocusManager::focus_left))
     }
 
     pub fn focus_right(&mut self) -> bool {
+        if !self.takes_input() {
+            return false;
+        }
         self.focus_manager()
             .is_some_and(|manager| manager.with_focus_manager_mut(FocusManager::focus_right))
     }
 
     pub fn clear_focus(&mut self) {
+        if !self.takes_input() {
+            return;
+        }
         if let Some(manager) = self.focus_manager() {
             manager.with_focus_manager_mut(FocusManager::clear_focus);
         }

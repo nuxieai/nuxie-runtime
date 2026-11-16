@@ -285,6 +285,7 @@ impl Plan {
     ) -> Result<()> {
         ensure!(self.active.is_none(), "step already active");
         self.prepare(root)?;
+        end_held_input(root);
         if let Some(name) = step_name.filter(|_| self.in_place()) {
             return self.step_begin_in_place(root, incoming, name);
         }
@@ -324,10 +325,7 @@ impl Plan {
                 let to = find_slot(&incoming_row, unit.incoming_unit_key, 0)?;
                 let two_versions = !unit.transfers();
                 let holder = from.node.clone();
-                ensure!(
-                    child(&holder)?.is_some(),
-                    "leaving copy has no instance"
-                );
+                ensure!(child(&holder)?.is_some(), "leaving copy has no instance");
                 let outgoing_flight =
                     find_flight(outgoing, &incoming_row, unit.outgoing_flight_key)?;
                 let incoming_flight =
@@ -366,10 +364,7 @@ impl Plan {
                     // The incoming version takes off from its own Screen.
                     // Both versions follow the outgoing-to-incoming poses;
                     // file object order alone determines which draws above.
-                    ensure!(
-                        child(&to.node)?.is_some(),
-                        "arriving copy has no instance"
-                    );
+                    ensure!(child(&to.node)?.is_some(), "arriving copy has no instance");
                     let arriving = make_flight(incoming_flight, to.node.clone(), &to.node)?;
                     // A zoom keeps the two together: one box, one entry
                     // (docs/live-moves.md).
@@ -876,15 +871,18 @@ impl Plan {
                 &active,
             )?;
         }
-        let mut covers_changed = HashSet::new();
+        let mut boards: Vec<(CoreHandle, Vec<&super::in_place::InPlaceFlight>)> = Vec::new();
         for flight in &self.lifted {
-            if flight.read_cover() {
-                covers_changed.insert(flight.board.clone());
+            match boards.iter_mut().find(|(seen, _)| *seen == flight.board) {
+                Some((_, copies)) => copies.push(flight),
+                None => boards.push((flight.board.clone(), vec![flight])),
             }
         }
-        for board in &covers_changed {
-            if let Some(dirty) = board.artboard_dirty_handle() {
-                dirty.mark_css_draw_order_dirty();
+        for (board, copies) in boards {
+            if super::in_place::InPlaceFlight::read_covers(&board, &copies) {
+                if let Some(dirty) = board.artboard_dirty_handle() {
+                    dirty.mark_css_draw_order_dirty();
+                }
             }
         }
         // What every lift draws moved: the upper Screens draw again.
@@ -1166,6 +1164,29 @@ pub fn screens(
         Ok(rows)
     })
     .unwrap()
+}
+
+/// A step's take-off on a person's input: every Screen of the page ends
+/// what is held on it (`StateMachineInstance::end_held_input`), as both
+/// phones end a page's input when a step starts. While the step runs every
+/// machine on the page reads its input off (`StateMachineInstance
+/// ::takes_input`); at landing or a cancel it reads it on again, with
+/// nothing to undo.
+fn end_held_input(root: &RuntimeArtboardInstanceHandle) {
+    let Some(list) = root.with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+    else {
+        return;
+    };
+    let machines = list
+        .with_downcast::<ArtboardComponentList, _>(|l| {
+            (0..l.artboard_count())
+                .filter_map(|i| l.state_machine_instance(i as i32))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    for machine in machines {
+        machine.with_instance_mut(|machine| machine.end_held_input());
+    }
 }
 
 /// Settles a Screen after an in-place step lands, as a frame's Layout and

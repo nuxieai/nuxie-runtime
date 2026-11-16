@@ -30,6 +30,22 @@ pub(crate) use values::ValueBlend;
 
 // Nuxie slots can carry the full local matrix produced by flight following.
 // An ordinary host falls through to the original composition function.
+/// Whether the page `owner` is in, or is, has a live-move step running:
+/// begun and not yet landed or cancelled (`Plan::step_running`), read from
+/// the page's scene, which its occurrence decided once. Ordinary content
+/// has no scene and reads false. A Screen at 1 reads it to draw its mark
+/// (css_layout/group_opacity.rs), and every state machine on the page reads
+/// it to turn a person's input off for the step
+/// (`StateMachineInstance::takes_input`).
+pub(crate) fn step_runs(owner: &crate::source::core::CoreHandle) -> bool {
+    crate::hosted_scene::scene_for(owner).is_some_and(|scene| {
+        scene
+            .plan
+            .try_borrow()
+            .is_ok_and(|plan| plan.step_running())
+    })
+}
+
 pub(crate) fn compose_slot_transform<T: crate::source::transform_component::TransformUpdate>(
     object: &mut T,
 ) {

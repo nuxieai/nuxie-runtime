@@ -197,7 +197,7 @@ impl SemanticManager {
             generated::component_base::ComponentBase,
             semantic::{
                 semantic_provider::{
-                    bounds_points, drawn_root_bounds, legacy_lifted, root_transform_aabb,
+                    bounds_points, drawn_root_bounds, legacy_drawn, root_transform_aabb,
                     semantic_bounds,
                 },
                 semantic_snapshot::Bounds,
@@ -221,11 +221,9 @@ impl SemanticManager {
                 })?;
                 // Our layer: a placement flying in place is where its lift
                 // draws it.
-                Some(match legacy_lifted(&artboard) {
-                    crate::css_layout::lift::Lifted::Drawn(map) => {
-                        drawn_root_bounds(Some(&artboard), &map, &bounds_points(rect))
-                    }
-                    _ => root_transform_aabb(&artboard, rect),
+                Some(match legacy_drawn(&artboard) {
+                    Some(map) => drawn_root_bounds(Some(&artboard), &map, &bounds_points(rect)),
+                    None => root_transform_aabb(&artboard, rect),
                 })
             })
         } else {

@@ -77,32 +77,18 @@ pub fn drawn_root_transform_point(
     lifted.point(root_transform_point(artboard, point)?)
 }
 
-/// Our layer: where a copy flying in place is drawn, in the space of the
-/// legacy root transform the native bounds contract reads
-/// (`semantic_bounds`, `root_transform_aabb`): from a point of the copy at
-/// rest there, back by its own Screen's root transform, through the lift's
-/// matrix onto the Screen that draws it, and out by that Screen's root
-/// transform (css_layout/lift.rs, `DrawingScreen`). `Lifted::No` outside a
-/// step's lifts; a lift that draws nothing keeps the copy's bounds where it
-/// rests.
-pub(crate) fn legacy_lifted(component: &CoreHandle) -> crate::css_layout::lift::Lifted {
-    use crate::css_layout::lift::{Lifted, lift_around};
-    let Some(lift) = lift_around(component) else {
-        return Lifted::No;
+/// Our layer: where a copy flying in place draws, in the legacy
+/// root-transform space the native bounds contract reads (`semantic_bounds`,
+/// `root_transform_aabb`): the lift's one map (css_layout/lift.rs,
+/// `DrawnMap`) there, by its own Screen's legacy root transform. None outside
+/// a lift, and while it draws nothing, which keeps the copy's bounds where
+/// it rests.
+pub(crate) fn legacy_drawn(component: &CoreHandle) -> Option<Mat2D> {
+    let crate::css_layout::lift::Lifted::Drawn(map) = crate::css_layout::lift::Lifted::of(component)
+    else {
+        return None;
     };
-    if lift.drawn().is_none() {
-        return Lifted::No;
-    }
-    let row = lift.0.borrow().row.clone();
-    let drawing = lift.drawing_screen();
-    let (Some(rest), Some(screen)) = (legacy_root(&row), legacy_root(&drawing.screen)) else {
-        return Lifted::No;
-    };
-    let mut inverse = Mat2D::default();
-    if !rest.invert(&mut inverse) {
-        return Lifted::No;
-    }
-    Lifted::Drawn(screen * drawing.matrix * inverse)
+    map.in_space(legacy_root(&map.screen)?)
 }
 
 /// `artboard`'s legacy root transform as a matrix.
@@ -126,7 +112,7 @@ fn legacy_root(artboard: &CoreHandle) -> Option<Mat2D> {
 }
 
 /// Our layer: the bounds of `points`, points in `artboard`'s space of a
-/// copy at rest, where `map` (`legacy_lifted`) shows it: each point goes
+/// copy at rest, where `map` (`legacy_drawn`) shows it: each point goes
 /// through the artboard's legacy root transform, the space `map` is in, and
 /// the lift before the bounds are taken, so a turn the flight takes off the
 /// copy is not bounded twice.
@@ -224,44 +210,30 @@ pub fn semantic_source_is_visible(component: &CoreHandle) -> bool {
 
 pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
     use crate::css_layout::group_opacity::{ScreenLayer, screen_fade_is_zero, screen_layer_of};
-    use crate::css_layout::lift::{OpacityRoot, lift_around};
-    let mut current = Some(component.clone());
-    let mut visited = std::collections::HashSet::new();
+    use crate::css_layout::lift::{DrawnAncestors, OpacityRoot, Place};
+    // Our layer: inside a copy flying in place, its lift draws it at the
+    // flight's opacity, without its ancestors' opacity on its own Screen or
+    // the Screen's fade, and on the Screen that draws it at its own strength
+    // there too, as a flight slot of that Screen (css_layout/lift.rs,
+    // `DrawnAncestors`). So it shows while its lift does; past the copy only
+    // a collapsed or hidden ancestor hides it, and that Screen asleep hides
+    // it.
+    let mut walk = DrawnAncestors::of(component);
+    if walk.lift().is_some_and(|lift| !lift.shows()) {
+        return false;
+    }
+    let copy = walk.copy().cloned();
     // Our layer: the first node met on each artboard, which says where what
     // the walk started from draws on a Screen (css_layout/group_opacity.rs).
     let mut kept: Option<CoreHandle> = None;
-    // Our layer: inside a copy flying in place, its lift draws it at the
-    // flight's opacity, without its ancestors' opacity on its own Screen or
-    // the Screen's fade (css_layout/lift.rs). So it shows while its lift
-    // does, and from the copy up to its Screen only what is collapsed or
-    // hidden hides it, as a flight's unit at its own strength today.
-    let lift = lift_around(component);
-    if lift.as_ref().is_some_and(|lift| !lift.shows()) {
-        return false;
-    }
-    let lifted = lift.map(|lift| {
-        let (element, row) = {
-            let state = lift.0.borrow();
-            (state.element.clone(), state.row.clone())
-        };
-        (element, row, lift.drawing_screen().screen)
-    });
-    // Between the copy and its Screen, the Screen included.
-    let mut above_lift = false;
-    while let Some(component) = current {
-        if !visited.insert(component.clone()) {
-            return false;
-        }
+    for (component, place) in &mut walk {
         let kept_here = kept.get_or_insert_with(|| component.clone()).clone();
-        let at_lift = lifted
-            .as_ref()
-            .is_some_and(|(element, _, _)| *element == component);
-        let ignores_opacity = above_lift;
-        let Some((visible, screen_at_zero, parent, crosses)) = component.with(|component| {
+        let at_copy = copy.as_ref() == Some(&component);
+        let ignores_opacity = matches!(place, Place::Between | Place::Screen);
+        let Some((visible, screen_at_zero, crosses)) = component.with(|component| {
             // Our layer: a Screen asleep in its list keeps its root awake
             // and collapses what is under it (live_move/collapse.rs), so an
-            // artboard reads as its row does. A walk reaches a Screen from
-            // outside its content when it goes on where a lift draws.
+            // artboard reads as its row does.
             let shown = !component.component_is_collapsed()
                 && !(component.as_artboard().is_some()
                     && crate::live_move::effectively_hidden(component, None))
@@ -271,7 +243,7 @@ pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
                 .map(|transform| transform.opacity())
                 .filter(|_| {
                     !ignores_opacity
-                        && !(at_lift
+                        && !(at_copy
                             && component.as_transform_component().is_some_and(|transform| {
                                 transform.opacity_root == OpacityRoot::Nothing
                             }))
@@ -281,15 +253,7 @@ pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
             // A Screen at 0 still shows what draws at its own strength. It
             // reads 0 where its draw does, below 0 too.
             let screen_at_zero = shown && component.as_artboard().is_some_and(screen_fade_is_zero);
-            let parent = component
-                .component_parent_handle()
-                .or_else(|| component.as_artboard().and_then(Artboard::host));
-            (
-                visible,
-                screen_at_zero,
-                parent,
-                component.as_artboard().is_some(),
-            )
+            (visible, screen_at_zero, component.as_artboard().is_some())
         }) else {
             return false;
         };
@@ -304,28 +268,9 @@ pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
         }
         if crosses {
             kept = None;
-            if above_lift {
-                above_lift = false;
-                // Above its own Screen, a copy shows where its lift draws it:
-                // on the Screen that draws it (`DrawingScreen`), at its own
-                // strength there too, as a flight slot of that Screen does.
-                // So that Screen asleep hides it.
-                if let Some((_, row, board)) = &lifted
-                    && component == *row
-                    && row != board
-                {
-                    above_lift = true;
-                    current = Some(board.clone());
-                    continue;
-                }
-            }
         }
-        if at_lift {
-            above_lift = true;
-        }
-        current = parent;
     }
-    true
+    !walk.looped()
 }
 
 fn semantic_is_fully_clipped(component: &CoreHandle) -> bool {
@@ -338,7 +283,7 @@ fn semantic_is_fully_clipped(component: &CoreHandle) -> bool {
 
 fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> SemanticClipRegion {
     let mut region = SemanticClipRegion::from_polygon(&polygon);
-    let complete = walk_rendered_clips(component, true, |artboard, clip, page| {
+    let complete = walk_rendered_clips(component, true, |artboard, clip, drawn| {
         let clip = if let Some(artboard) = artboard {
             let Some(clip) = artboard.with_downcast_mut::<Artboard, _>(|artboard| {
                 clip.mapped(|point| artboard.semantic_root_transform(point))
@@ -349,8 +294,11 @@ fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> Se
         } else {
             clip
         };
-        let clip = match page {
-            Some(page) => clip.mapped(|point| page * point),
+        let clip = match drawn {
+            Some(map) => {
+                let page = map.page();
+                clip.mapped(|point| page * point)
+            }
             None => clip,
         };
         clip.intersect(&mut region);
@@ -401,26 +349,29 @@ fn walk_geometry_clips(
 ) -> bool {
     let mut hosts = None;
     // Our layer: above a copy flying in place the walk goes on from the
-    // Screen that draws it, which the query's spaces may not hold, a sibling
-    // of the copy's own Screen: its space is the copy's Screen's through the
-    // pose (css_layout/lift.rs, `DrawingScreen::to_copy_screen`).
+    // Screen that draws it (css_layout/lift.rs, `DrawnAncestors`), which the
+    // query's spaces may not hold, a sibling of the copy's own Screen: its
+    // space is the copy's Screen's through the pose
+    // (`DrawingScreen::to_copy_screen`). The copy's own clips are where it
+    // draws, by the lift's one map in the query's space (`DrawnMap`); a query
+    // rooted inside the copy moves with it.
     let drawing = crate::css_layout::lift::lift_around(component).and_then(|lift| {
         let row = lift.0.borrow().row.clone();
         let drawing = lift.drawing_screen();
         Some((row, drawing.screen.clone(), drawing.to_copy_screen()?))
     });
-    walk_rendered_clips(component, false, |artboard, clip, page| {
+    walk_rendered_clips(component, false, |artboard, clip, drawn| {
+        let find = |spaces: &[(CoreHandle, Mat2D)], owner: &CoreHandle| {
+            spaces
+                .iter()
+                .find(|(seen, _)| seen == owner)
+                .map(|(_, transform)| *transform)
+        };
+        let mut space = |owner: &CoreHandle| {
+            find(spaces, owner)
+                .or_else(|| find(hosts.get_or_insert_with(|| host_spaces(spaces)), owner))
+        };
         let clip = if let Some(artboard) = artboard {
-            let find = |spaces: &[(CoreHandle, Mat2D)], owner: &CoreHandle| {
-                spaces
-                    .iter()
-                    .find(|(seen, _)| seen == owner)
-                    .map(|(_, transform)| *transform)
-            };
-            let mut space = |owner: &CoreHandle| {
-                find(spaces, owner)
-                    .or_else(|| find(hosts.get_or_insert_with(|| host_spaces(spaces)), owner))
-            };
             let transform = space(artboard).or_else(|| {
                 let (row, screen, to_copy) = drawing.as_ref()?;
                 (screen == artboard).then_some(())?;
@@ -433,9 +384,10 @@ fn walk_geometry_clips(
         } else {
             clip
         };
-        let clip = match page {
-            Some(page) => clip.mapped(|point| page * point),
-            None => clip,
+        let clip = match drawn.map(|map| space(&map.screen).map(|to| map.in_space(to))) {
+            None | Some(None) => clip,
+            Some(Some(Some(lifted))) => clip.mapped(|point| lifted * point),
+            Some(Some(None)) => return false,
         };
         visit(clip)
     })
@@ -535,36 +487,46 @@ pub(crate) fn rendered_geometry_contains_point(
 fn walk_rendered_clips(
     component: &CoreHandle,
     own_clip: bool,
-    mut visit: impl FnMut(Option<&CoreHandle>, RenderedClip, Option<Mat2D>) -> bool,
+    mut visit: impl FnMut(
+        Option<&CoreHandle>,
+        RenderedClip,
+        Option<&crate::css_layout::lift::DrawnMap>,
+    ) -> bool,
 ) -> bool {
     use crate::css_layout::group_opacity::{lifted_on, marked_above};
+    use crate::css_layout::lift::{DrawnAncestors, Lifted, Place};
     // Our layer: a copy flying in place draws its own clips where its lift
-    // draws it, mapped by the lift's page map, and none of its ancestors'
-    // on its Screen. Above it, the walk goes on from the upper Screen, which
-    // draws the lift: its frame and what is above it clip the copy
-    // (css_layout/lift.rs). A lift that draws nothing shows nothing.
-    let lift = crate::css_layout::lift::lift_around(component);
-    let (mut page, lifted) = match &lift {
-        None => (None, None),
-        Some(lift) => {
-            let Some(page) = lift.page() else {
-                return false;
-            };
-            let element = lift.0.borrow().element.clone();
-            (Some(page), Some((element, lift.drawing_screen().screen)))
-        }
+    // draws it, under the lift's map (`DrawnMap`), and none of its
+    // ancestors' on its own Screen, clipping shapes owned past it included,
+    // which drawing leaves out of the lift. Above it, the walk goes on from
+    // the Screen that draws the lift: its frame and what is above it clip
+    // the copy (css_layout/lift.rs, `DrawnAncestors`). A lift that draws
+    // nothing shows nothing.
+    let mut walk = DrawnAncestors::of(component);
+    let drawn = match Lifted::of_lift(walk.lift()) {
+        Lifted::No => None,
+        Lifted::Drawn(map) => Some(map),
+        Lifted::Hidden => return false,
     };
-    let mut current = Some(component.clone());
-    let mut visited = std::collections::HashSet::new();
+    // The copy and what holds it inside it: only clipping shapes these own
+    // clip it where it draws.
+    let copy: Vec<CoreHandle> = match drawn {
+        Some(_) => DrawnAncestors::of(component)
+            .take_while(|(_, place)| *place == Place::Copy)
+            .map(|(owner, _)| owner)
+            .collect(),
+        None => Vec::new(),
+    };
     let mut applied_shapes = std::collections::HashSet::new();
     // Our layer: the artboard the walk is on, and whether a Screen's draw
     // lifts what the walk came from there above every row, which leaves out
     // the box clips above its mark of 3 (css_layout/group_opacity.rs).
     let mut lift: Option<(CoreHandle, bool)> = None;
-    while let Some(owner) = current {
-        if !visited.insert(owner.clone()) {
-            return false;
+    for (owner, place) in &mut walk {
+        if place == Place::Between {
+            continue;
         }
+        let in_copy = drawn.as_ref().filter(|_| place == Place::Copy);
         let skip_own = !own_clip && &owner == component;
         let on = owner
             .with(|object| {
@@ -582,7 +544,7 @@ fn walk_rendered_clips(
             }
             lift.as_ref().is_some_and(|&(_, lifted)| lifted) && !marked_above(&owner)
         });
-        let Some((clip, parent, css_artboard_clip)) = owner.with_mut(|object| {
+        let Some((clip, css_artboard_clip)) = owner.with_mut(|object| {
             let is_artboard = object.as_artboard().is_some();
             // A CSS artboard's record clips its content at its padding box,
             // inside its own clip (docs/CSS_LAYOUT.md, 4.2).
@@ -594,9 +556,6 @@ fn walk_rendered_clips(
                     let paths = paths.borrow();
                     (paths.clip.raw_path().clone(), paths.clip.fill_rule())
                 });
-            let parent = object
-                .component_parent_handle()
-                .or_else(|| object.as_artboard().and_then(Artboard::host));
             let fallback = if let Some(artboard) = object.as_artboard() {
                 artboard.clip().then(|| {
                     let origin = artboard.content_origin();
@@ -634,12 +593,12 @@ fn walk_rendered_clips(
                 let path = path.map(|path| (path.raw_path().clone(), path.fill_rule()));
                 (corners, artboard, path)
             });
-            (clip, parent, css_artboard_clip)
+            (clip, css_artboard_clip)
         }) else {
             return false;
         };
         if let Some((path, rule)) = css_artboard_clip.filter(|_| !skip_own) {
-            if !visit(Some(&owner), RenderedClip::Path(path, rule), page) {
+            if !visit(Some(&owner), RenderedClip::Path(path, rule), in_copy) {
                 return false;
             }
         }
@@ -658,6 +617,16 @@ fn walk_rendered_clips(
             .unwrap_or_default();
         for shape in shapes {
             if !applied_shapes.insert(shape.clone()) {
+                continue;
+            }
+            // Our layer: a clipping shape owned past a copy flying in place
+            // clips where the copy rests, not where its lift draws it.
+            if in_copy.is_some()
+                && !shape
+                    .with(|object| object.component_parent_handle())
+                    .flatten()
+                    .is_some_and(|holder| copy.contains(&holder))
+            {
                 continue;
             }
             let Some(clip) = shape.with_downcast_mut::<ClippingShape, _>(|shape| {
@@ -679,7 +648,7 @@ fn walk_rendered_clips(
             let Some((path, rule)) = path else {
                 return false;
             };
-            if !visit(artboard.as_ref(), RenderedClip::Path(path, rule), page) {
+            if !visit(artboard.as_ref(), RenderedClip::Path(path, rule), in_copy) {
                 return false;
             }
         }
@@ -688,20 +657,12 @@ fn walk_rendered_clips(
                 || RenderedClip::Polygon(corners),
                 |(path, rule)| RenderedClip::Path(path, rule),
             );
-            if !visit(artboard.as_ref(), clip, page) {
+            if !visit(artboard.as_ref(), clip, in_copy) {
                 return false;
             }
         }
-        if let Some((element, board)) = &lifted
-            && *element == owner
-        {
-            page = None;
-            current = Some(board.clone());
-            continue;
-        }
-        current = parent;
     }
-    true
+    !walk.looped()
 }
 
 fn bounds_corners(bounds: Aabb) -> [Vec2D; 4] {
@@ -756,9 +717,9 @@ pub fn semantic_bounds(component: Option<&CoreHandle>) -> Bounds {
         return Bounds::default();
     };
     // Our layer: a copy flying in place is where its lift draws it.
-    match legacy_lifted(component) {
-        crate::css_layout::lift::Lifted::Drawn(map) => lifted_semantic_bounds(component, &map),
-        _ => resting_semantic_bounds(component),
+    match legacy_drawn(component) {
+        Some(map) => lifted_semantic_bounds(component, &map),
+        None => resting_semantic_bounds(component),
     }
 }
 

@@ -8372,7 +8372,9 @@ mod paint_order {
 
     /// The hit test's controls: at rest, with B entered, the panel alone is
     /// under (200, 250) and takes the tap; with the red after the panel, its
-    /// flight paints on top, takes the tap and leaves the panel at 0.
+    /// flight paints on top, takes the tap and leaves the panel at 0. In
+    /// place the red's copy takes no pointer for the step, so the tap goes on
+    /// to the panel, which isn't flying.
     #[test]
     fn paint_order_02_hit_control_the_red_above_the_panel_takes_the_tap() {
         let mut s = PaintScene::new(PaintCase::Match { red_above: false });
@@ -8380,8 +8382,13 @@ mod paint_order {
         close(s.tap(200.0, 250.0), 9.0);
 
         let (panel, red) = tap_half_way_back(true);
-        close(red, 9.0);
-        close(panel, 0.0);
+        if SHAPE.get() == PaintShape::InPlace {
+            close(red, 0.0);
+            close(panel, 9.0);
+        } else {
+            close(red, 9.0);
+            close(panel, 0.0);
+        }
     }
 
     /// The red's flight is under the panel, so the panel takes a tap on the
@@ -8393,15 +8400,14 @@ mod paint_order {
         close(red, 0.0);
     }
 
-    /// A tap where the red's copy draws reaches it, and a tap where it
-    /// rests does not. Half way forward, the red draws from (50, 50) to
-    /// (350, 210) and its target, its resting size, covers (50, 50) to
-    /// (450, 250); it rests at (0, 0) to (400, 200). (200, 205) is on the
-    /// flying target and off the resting red, (25, 100) the other way
-    /// round, and the panel, its top at 225, is under neither. Landed,
-    /// (25, 100) reaches the red and (200, 205) the panel. In place this is
-    /// `hits_follow_the_new_host`: the copy never changes host, and its
-    /// hits follow its drawing.
+    /// On the slot path a tap where the red's flight draws reaches it, and
+    /// a tap where it rests does not. Half way forward, the red draws from
+    /// (50, 50) to (350, 210) and its target, its resting size, covers (50,
+    /// 50) to (450, 250); it rests at (0, 0) to (400, 200). (200, 205) is on
+    /// the flying target and off the resting red, (25, 100) the other way
+    /// round, and the panel, its top at 225, is under neither. In place the
+    /// red's copy takes no pointer for the step, at either. Landed, in both
+    /// shapes, (25, 100) reaches the red and (200, 205) the panel.
     #[test]
     fn paint_order_02_hit_a_tap_reaches_the_red_where_it_draws() {
         let mut s = PaintScene::new(PaintCase::Match { red_above: false });
@@ -8414,10 +8420,14 @@ mod paint_order {
                 half_way = Some((drawn, rests));
             }
         });
+        let expected = match SHAPE.get() {
+            PaintShape::InPlace => (0.0, 0.0),
+            _ => (9.0, 0.0),
+        };
         assert_eq!(
             half_way,
-            Some((9.0, 0.0)),
-            "half way: heard where it draws, not where it rests"
+            Some(expected),
+            "half way: heard where it draws on the slot path, nowhere in place"
         );
         let red = s.heard_on("B", "red", None);
         close(s.tap_heard(25.0, 100.0, &red), 9.0);
@@ -8425,14 +8435,15 @@ mod paint_order {
         close(s.tap(200.0, 205.0), 9.0);
     }
 
-    /// Each kind's copy hears a tap where it draws and not where it rests,
-    /// in both shapes. Half way forward in `ElementCase::Tapped`, b's copy
-    /// draws from (78, 30), 120 by 90, and its target, its box at rest, 160
-    /// by 120, from about there, covers (110, 100); b rests at (120, 40) on
-    /// (274, 154), which the flying target is off. Landed, (274, 154)
-    /// reaches b.
+    /// Each kind's flight hears a tap where it draws and not where it rests
+    /// on the slot path; in place its copy takes no pointer for the step,
+    /// at either. Half way forward in `ElementCase::Tapped`, b's copy draws
+    /// from (78, 30), 120 by 90, and its target, its box at rest, 160 by
+    /// 120, from about there, covers (110, 100); b rests at (120, 40) on
+    /// (274, 154), which the flying target is off. Landed, in both shapes,
+    /// (274, 154) reaches b.
     #[test]
-    fn hits_each_kind_hears_a_tap_where_its_copy_draws() {
+    fn hits_each_kind_takes_a_tap_where_it_draws_on_slots_and_none_in_place() {
         use fixture::{ElementCase, ElementKind};
         for shape in [PaintShape::Slots, PaintShape::InPlace] {
             for kind in [
@@ -8453,18 +8464,182 @@ mod paint_order {
                         half_way = Some((drawn, rests));
                     }
                 });
-                assert_eq!(half_way, Some((9.0, 0.0)), "{label}: half way");
+                let expected = match shape {
+                    PaintShape::InPlace => (0.0, 0.0),
+                    _ => (9.0, 0.0),
+                };
+                assert_eq!(half_way, Some(expected), "{label}: half way");
                 let b = s.heard_on("B", "b", None);
                 assert_eq!(s.tap_heard(274.0, 154.0, &b), 9.0, "{label}: landed");
             }
         }
     }
 
+    /// A copy flying in place takes no pointer for the step, as the devices
+    /// turn input off for one: half way forward in `ZoomCase::Scrolls`, a
+    /// wheel notch or a drag over b's copy, at its center where it draws or
+    /// at (200, 100), its center where it rests, scrolls nothing. Landed,
+    /// each scrolls it there. A tap is
+    /// `hits_each_kind_takes_a_tap_where_it_draws_on_slots_and_none_in_place`.
+    #[test]
+    fn hits_a_copy_flying_in_place_takes_no_drag_or_wheel_until_it_lands() {
+        use source::{
+            constraints::scrolling::scroll_constraint::ScrollConstraint,
+            hit_result::HitResult,
+            scroll_event::{ScrollEvent, ScrollPhase},
+        };
+        let mut s = PaintScene::shaped(
+            PaintCase::Zoom(fixture::ZoomCase::Scrolls),
+            PaintShape::InPlace,
+        );
+        let scroll = s
+            .row("B")
+            .with_artboard(|r| r.find_handle::<ScrollConstraint>("b scroll"))
+            .expect("b scrolls");
+        let offset = || scroll.with_downcast(ScrollConstraint::offset_y).unwrap();
+        // A wheel notch down at (x, y), which b at the top of its list can
+        // take: whether the page wants it, has a scroll target there, and
+        // scrolled something.
+        let wheel = |s: &mut PaintScene, (x, y): (f32, f32)| {
+            s.advance(0.0);
+            let point = Vec2D::new(x, y);
+            let event = ScrollEvent {
+                delta: Vec2D::new(0.0, -30.0),
+                phase: ScrollPhase::Update,
+                precise: false,
+            };
+            s.machine.with_instance_mut(|m| {
+                (
+                    m.wants_scroll(point, &event),
+                    m.has_scroll_target_at(point),
+                    m.pointer_scroll(point, &event, 0.0, 0) != HitResult::None,
+                )
+            })
+        };
+        // A press at (x, y) dragged 60 up and let go.
+        let drag = |s: &mut PaintScene, (x, y): (f32, f32)| {
+            s.advance(0.0);
+            s.pointer += 1;
+            let id = s.pointer;
+            s.machine.with_instance_mut(|m| {
+                m.pointer_move(Vec2D::new(x, y), 0.0, id);
+                m.pointer_down(Vec2D::new(x, y), id, PointerButton::Primary);
+                for step in 1..=6 {
+                    m.pointer_move(Vec2D::new(x, y - 10.0 * step as f32), step as f32 / 60.0, id);
+                }
+                m.pointer_up(Vec2D::new(x, y - 60.0), id, PointerButton::Primary);
+            });
+            s.advance(0.0);
+        };
+        let b = fixture::paint_color("b") & 0x00ff_ffff;
+        let mut half_way = Vec::new();
+        s.fly(Way::Go, |s, p| {
+            if p != 0.5 {
+                return;
+            }
+            let copy = shown(&page_draws(s))
+                .into_iter()
+                .find(|d| d.rgb == Some(b))
+                .expect("b's copy draws");
+            let (lo, hi) = drawn_rect(&copy.points);
+            let drawn = ((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0);
+            for at in [drawn, (200.0, 100.0)] {
+                let before = offset();
+                half_way.push((at, wheel(s, at), offset() - before));
+                let before = offset();
+                drag(s, at);
+                half_way.push((at, (false, false, false), offset() - before));
+            }
+        });
+        assert_eq!(half_way.len(), 4, "half way ran");
+        for (at, wheel, moved) in &half_way {
+            assert_eq!(*wheel, (false, false, false), "half way at {at:?}: the wheel");
+            assert_eq!(*moved, 0.0, "half way at {at:?}: b scrolled");
+        }
+        let before = offset();
+        assert_eq!(wheel(&mut s, (200.0, 100.0)), (true, true, true), "landed: the wheel");
+        assert_ne!(offset(), before, "landed: the wheel scrolls b");
+        let before = offset();
+        drag(&mut s, (200.0, 100.0));
+        assert_ne!(offset(), before, "landed: a drag scrolls b");
+    }
+
+    /// A clipping shape owned above a copy flying in place does not clip it,
+    /// as drawing leaves the copy's ancestors on its own Screen out of its
+    /// lift (css_layout/lift.rs, `DrawnAncestors`): the clip walk host
+    /// geometry and semantics share leaves it out too. In
+    /// `ZoomCase::ClippedAbove` a clipping shape owned by "card a", above
+    /// a's home, keeps about card a's left 56 points. At rest it cuts a's
+    /// listed box to under its 80 points, as it cuts a's drawing, the
+    /// control. Half way, a's copy is listed where its fill draws, uncut.
+    #[test]
+    fn hits_a_clipping_shape_above_a_copy_flying_in_place_cuts_none_of_it() {
+        use nuxie_render_api::Aabb;
+        let mut s = PaintScene::shaped(
+            PaintCase::Zoom(fixture::ZoomCase::ClippedAbove),
+            PaintShape::InPlace,
+        );
+        let index = s
+            ._file
+            .with_file(|f| (0..f.artboard_count()).find(|&i| f.artboard_name_at(i) == "Page"))
+            .unwrap();
+        let mut host = ArtboardInstance::from_native_handle(s._file.clone(), index, s.root.clone());
+        let a_id = s.row("A").with_artboard(|r| {
+            let a = r.find_handle::<LayoutComponent>("a").expect("a's home");
+            r.objects()
+                .iter()
+                .position(|object| object.as_ref() == Some(&a))
+                .expect("a is one of A's objects")
+        });
+        // a's listed box: the one geometry hit ending at a's home on A.
+        let listed = |host: &mut ArtboardInstance| -> Vec<Aabb> {
+            host.visible_geometry_with_bounds()
+                .into_iter()
+                .filter(|hit| hit.path.last().is_some_and(|part| part.local_id == a_id))
+                .map(|hit| hit.bounds)
+                .collect()
+        };
+        let rest = listed(&mut host);
+        assert_eq!(rest.len(), 1, "a is listed once at rest: {rest:?}");
+        assert!(
+            rest[0].max_x - rest[0].min_x < 79.0,
+            "at rest the clipping shape cuts a: {:?}",
+            rest[0]
+        );
+        let a = fixture::paint_color("a") & 0x00ff_ffff;
+        let mut half_way = None;
+        s.fly(Way::Go, |s, p| {
+            if p != 0.5 {
+                return;
+            }
+            let copy = shown(&page_draws(s))
+                .into_iter()
+                .find(|d| d.rgb == Some(a))
+                .expect("a's copy draws");
+            half_way = Some((drawn_rect(&copy.points), listed(&mut host)));
+        });
+        let ((lo, hi), boxes) = half_way.expect("half way ran");
+        assert_eq!(boxes.len(), 1, "a is listed once half way: {boxes:?}");
+        for (got, want) in [
+            (boxes[0].min_x, lo.x),
+            (boxes[0].min_y, lo.y),
+            (boxes[0].max_x, hi.x),
+            (boxes[0].max_y, hi.y),
+        ] {
+            assert!(
+                (got - want).abs() < 0.5,
+                "half way a is listed at {:?}, its fill draws from {lo:?} to {hi:?}",
+                boxes[0]
+            );
+        }
+    }
+
     /// B put to sleep half way takes no tap on either copy, in both shapes:
-    /// on the slot path both flights sleep with B; in place B draws both
-    /// lifts, so a's copy on A, awake, takes none either. At rest a hears a
-    /// tap at its center (76, 50). Half way a's and b's copies draw at the
-    /// same place, b's above, so (110, 100) would reach a's once b's sleeps.
+    /// on the slot path both flights sleep with B; in place no copy flying
+    /// takes a pointer for the step, a's on A, awake, included. At rest a
+    /// hears a tap at its center (76, 50). Half way a's and b's copies draw
+    /// at the same place, b's above, so (110, 100) would reach a's once b's
+    /// sleeps.
     #[test]
     fn hits_a_copy_takes_no_tap_while_the_screen_drawing_it_sleeps() {
         use fixture::{ElementCase, ElementKind};
@@ -8749,9 +8924,13 @@ mod paint_order {
 
     /// 4.5's bench: in place against slots on a Screen pair the size of the
     /// largest paired reference Screen, release, 200 frames a timing,
-    /// medians in microseconds. Five slot runs give the noise, their
-    /// spread; in place must be no slower than slots beyond it, and its
-    /// frame at rest and its size write equal to the stripped page's.
+    /// medians in microseconds. Each shape runs five times, the shapes in
+    /// turn, so drift between runs reaches every shape alike. The bar,
+    /// asserted: no in-place timing above the slots' median by more than the
+    /// noise, the spread of the five slot runs; (1), (6) and (8) equal to the
+    /// stripped page's within the wider of the two shapes' spreads, so the
+    /// records cost nothing when no step runs; and a flying frame whose ends
+    /// are the same size (7) lays out as often as a frame at rest.
     #[test]
     #[ignore = "a timing run: only for the in-place bench, in a release build"]
     fn bench_in_place_against_slots_on_a_large_screen() {
@@ -8765,28 +8944,72 @@ mod paint_order {
             "(7) flying, ends the same size",
             "(8) rest advance and follow",
         ];
-        let slot_runs: Vec<_> = (0..5).map(|_| large_timings(PaintShape::Slots)).collect();
-        let (in_place, rest_passes, alike_passes) = large_timings(PaintShape::InPlace);
-        let (stripped, stripped_passes, _) = large_timings(PaintShape::Stripped);
-        println!(
-            "layout passes a frame: in place at rest {rest_passes}, flying with ends the same size {}, stripped at rest {stripped_passes}; slots at rest {}, flying with ends the same size {}",
-            alike_passes.unwrap(),
-            slot_runs[0].1,
-            slot_runs[0].2.unwrap()
-        );
-        let slots: Vec<_> = slot_runs.iter().map(|run| run.0).collect();
-        println!("timing | slot median of 5 runs | slot spread | in place | stripped");
-        for (i, name) in NAMES.iter().enumerate() {
-            let mut runs: Vec<f64> = slots.iter().filter_map(|run| run[i]).collect();
-            runs.sort_by(f64::total_cmp);
-            let spread = runs[runs.len() - 1] - runs[0];
-            let stripped = stripped[i].map_or("".to_owned(), |t| format!("{t:.1}"));
-            println!(
-                "{name} | {:.1} | {spread:.1} | {:.1} | {stripped}",
-                runs[runs.len() / 2],
-                in_place[i].unwrap()
-            );
+        const RUNS: usize = 5;
+        let (mut slots, mut in_place, mut stripped) = (Vec::new(), Vec::new(), Vec::new());
+        for _ in 0..RUNS {
+            slots.push(large_timings(PaintShape::Slots));
+            in_place.push(large_timings(PaintShape::InPlace));
+            stripped.push(large_timings(PaintShape::Stripped));
         }
+        // One timing's median and spread over a shape's runs.
+        type Run = ([Option<f64>; 8], u64, Option<u64>);
+        let stats = |runs: &[Run], line: usize| -> Option<(f64, f64)> {
+            let mut times: Vec<f64> = runs.iter().filter_map(|run| run.0[line]).collect();
+            if times.is_empty() {
+                return None;
+            }
+            times.sort_by(f64::total_cmp);
+            Some((times[times.len() / 2], times[times.len() - 1] - times[0]))
+        };
+        println!(
+            "layout passes a frame: in place at rest {:?}, flying with ends the same size {:?}, stripped at rest {:?}; slots at rest {:?}, flying with ends the same size {:?}",
+            in_place.iter().map(|run| run.1).collect::<Vec<_>>(),
+            in_place.iter().map(|run| run.2.unwrap()).collect::<Vec<_>>(),
+            stripped.iter().map(|run| run.1).collect::<Vec<_>>(),
+            slots.iter().map(|run| run.1).collect::<Vec<_>>(),
+            slots.iter().map(|run| run.2.unwrap()).collect::<Vec<_>>(),
+        );
+        println!(
+            "timing | slot median of 5 | slot spread | in place median of 5 | in place spread | stripped median of 5 | stripped spread"
+        );
+        let mut misses = Vec::new();
+        for (line, name) in NAMES.iter().enumerate() {
+            let (slot, noise) = stats(&slots, line).expect("slots time every line");
+            let (place, place_spread) = stats(&in_place, line).expect("in place times every line");
+            let bare = stats(&stripped, line);
+            println!(
+                "{name} | {slot:.1} | {noise:.1} | {place:.1} | {place_spread:.1} | {}",
+                bare.map_or(" | ".to_owned(), |(t, spread)| format!("{t:.1} | {spread:.1}"))
+            );
+            if place > slot + noise {
+                misses.push(format!(
+                    "{name}: in place {place:.1} is above slots {slot:.1} by more than their spread {noise:.1}"
+                ));
+            }
+            if let Some((bare, bare_spread)) = bare {
+                let noise = place_spread.max(bare_spread);
+                if (place - bare).abs() > noise {
+                    misses.push(format!(
+                        "{name}: in place {place:.1} differs from the stripped page's {bare:.1} by more than the noise {noise:.1}"
+                    ));
+                }
+            }
+        }
+        for (run, stripped) in in_place.iter().zip(&stripped) {
+            if run.1 != stripped.1 {
+                misses.push(format!(
+                    "a frame at rest lays out {} times in place, {} on the stripped page",
+                    run.1, stripped.1
+                ));
+            }
+            if run.2 != Some(run.1) {
+                misses.push(format!(
+                    "(7) lays out {:?} times, a frame at rest {}",
+                    run.2, run.1
+                ));
+            }
+        }
+        assert!(misses.is_empty(), "4.5's bar is missed:\n{}", misses.join("\n"));
     }
 
     /// Test 3, Calmly welcome: `#lake` and `#scrim` absolute and full
@@ -10643,7 +10866,7 @@ mod paint_order {
     ///   and a list's hosted rows (`paint_order_12_keyed_layout_l_pushed_by_a_list_row`).
     ///
     /// A test that runs both shapes itself is not twinned either
-    /// (`hits_each_kind_hears_a_tap_where_its_copy_draws`).
+    /// (`hits_each_kind_takes_a_tap_where_it_draws_on_slots_and_none_in_place`).
     macro_rules! in_place_twins {
         ($($name:ident),* $(,)?) => {
             mod in_place_twins {
@@ -13982,6 +14205,72 @@ fn in_place_a_turned_copys_semantic_bounds_are_where_it_draws() {
             }
         }
     }
+}
+
+/// Host geometry reads a copy flying in place where it draws, and its point
+/// test hits it there and not where it rests (css_layout/lift.rs,
+/// `DrawnMap`). On `Field` at the step's end, progress 1, A's copy draws
+/// where B's card rests, so A's button is listed with B's button's resting
+/// bounds, a point at their center hits it, and its own resting center
+/// does not.
+#[test]
+fn in_place_host_geometry_reads_a_copy_where_it_draws() {
+    use nuxie_render_api::{Aabb, Vec2D};
+    let (page, mut moves) = field_page_of(fixture::InPlaceFixture::Field);
+    let index = page
+        ._file
+        .with_file(|f| (0..f.artboard_count()).find(|&i| f.artboard_name_at(i) == "Page"))
+        .unwrap();
+    let mut host = ArtboardInstance::from_native_handle(page._file.clone(), index, page.root.clone());
+    // Each Screen's button, local id 15 (`field_card`), by its path.
+    let buttons = |host: &mut ArtboardInstance| {
+        let mut found: Vec<_> = host
+            .visible_geometry_with_bounds()
+            .into_iter()
+            .filter(|hit| hit.path.last().is_some_and(|part| part.local_id == 15))
+            .collect();
+        found.sort_by(|a, b| a.bounds.min_x.total_cmp(&b.bounds.min_x));
+        found
+    };
+    let rest = buttons(&mut host);
+    assert_eq!(rest.len(), 2, "one button a Screen: {rest:?}");
+    // At rest A's card is left of B's.
+    let (a, b) = (&rest[0], &rest[1]);
+    moves.step_begin(&page.root, "B", Some("t1")).unwrap();
+    page.machine.advance_and_apply(0.0);
+    moves.after_advance(&page.root).unwrap();
+    field_fly_to(&page, &mut moves, 1.0);
+    let end = buttons(&mut host);
+    let a_end = end
+        .iter()
+        .find(|hit| hit.path == a.path)
+        .unwrap_or_else(|| panic!("A's button is listed: {end:?}"));
+    for (got, want) in [
+        (a_end.bounds.min_x, b.bounds.min_x),
+        (a_end.bounds.min_y, b.bounds.min_y),
+        (a_end.bounds.max_x, b.bounds.max_x),
+        (a_end.bounds.max_y, b.bounds.max_y),
+    ] {
+        assert!(
+            (got - want).abs() < 0.01,
+            "A's button at the end {:?}, B's at rest {:?}",
+            a_end.bounds,
+            b.bounds
+        );
+    }
+    let hits_a = |host: &mut ArtboardInstance, at: Vec2D| {
+        host.hit_test_segments_with_bounds(at)
+            .iter()
+            .any(|hit| hit.path == a.path)
+    };
+    let center = |bounds: &Aabb| {
+        Vec2D::new(
+            (bounds.min_x + bounds.max_x) / 2.0,
+            (bounds.min_y + bounds.max_y) / 2.0,
+        )
+    };
+    assert!(hits_a(&mut host, center(&b.bounds)), "where A's copy draws");
+    assert!(!hits_a(&mut host, center(&a.bounds)), "where A's button rests");
 }
 
 /// In an in-place file a step unit flies two copies: `transfers` is

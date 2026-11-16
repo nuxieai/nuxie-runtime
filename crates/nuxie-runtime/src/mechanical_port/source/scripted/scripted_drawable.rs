@@ -521,11 +521,7 @@ impl crate::mechanical_port::source::animation::state_machine_instance::HitCompo
         if !ScriptedDrawable::has_pointer_handler_occurrence(&self.drawable) {
             return false;
         }
-        // Nuxie: inside a copy flying in place, the pointer where the copy
-        // rests (`HitLift`).
-        self.lift
-            .at(position)
-            .is_some_and(|position| self.within_bounds(position))
+        self.within_bounds(position)
     }
     fn hit_lift(
         &self,
@@ -540,9 +536,6 @@ impl crate::mechanical_port::source::animation::state_machine_instance::HitCompo
     ) {
     }
     fn has_scroll_target(&self, position: Vec2D) -> bool {
-        let Some(position) = self.lift.at(position) else {
-            return false;
-        };
         let Some((is_layout, artboard)) = self
             .drawable
             .with(|owner| {
@@ -624,14 +617,13 @@ impl crate::mechanical_port::source::animation::state_machine_instance::HitCompo
                 Some((instance, inverse))
             })
             .flatten();
-        let (Some((instance, inverse)), Some(position)) = (state, self.lift.at(position)) else {
+        let Some((instance, inverse)) = state else {
             self.cancel_scroll();
             return HitResult::None;
         };
         let local = inverse * position;
-        let delta = self.lift.delta(event.delta);
         let mapped = ScrollEvent {
-            delta: inverse * (position + delta) - local,
+            delta: inverse * (position + event.delta) - local,
             ..*event
         };
         let mut host = ScriptUpdateRequestHost::default();
@@ -673,9 +665,6 @@ impl crate::mechanical_port::source::animation::state_machine_instance::HitCompo
         pointer_id: i32,
         _button: crate::mechanical_port::source::pointer_button::PointerButton,
     ) -> crate::mechanical_port::source::hit_result::HitResult {
-        // Inside a copy flying in place, as `HitDrawable::process_listeners`.
-        let (position, reaches) = self.lift.pointer(position);
-        let can_hit = can_hit && reaches;
         machine.perform_scripted_pointer(
             &self.drawable,
             hit_type,

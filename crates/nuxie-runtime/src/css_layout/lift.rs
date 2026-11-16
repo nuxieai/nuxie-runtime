@@ -56,9 +56,6 @@ pub(crate) struct LiftState {
     /// space: from a point of the copy at rest to where it is drawn now.
     /// None while the lift can't be solved and draws nothing.
     drawn: Option<Mat2D>,
-    /// `drawn`'s inverse: from where a pointer is on the copy's own Screen
-    /// to the point of the copy at rest under it.
-    hit: Option<Mat2D>,
     /// `drawn` in the page's space: from where the page shows a point of the
     /// copy at rest to where it shows it drawn, which a semantic bound or a
     /// field's geometry, read through its Screen's root, takes last.
@@ -75,11 +72,8 @@ impl LiftState {
     /// (live_move/in_place.rs, `drawn_map`).
     /// Returns whether where the lift draws the copy changed.
     pub(crate) fn set_drawn(&mut self, maps: Option<(Mat2D, Mat2D)>) -> bool {
-        self.hit = maps.and_then(|(drawn, _)| {
-            let mut hit = Mat2D::default();
-            drawn.invert(&mut hit).then_some(hit)
-        });
-        let maps = maps.filter(|_| self.hit.is_some());
+        // A map that can't be undone draws nothing.
+        let maps = maps.filter(|(drawn, _)| drawn.invert(&mut Mat2D::default()));
         let before = self.drawn;
         self.drawn = maps.map(|(drawn, _)| drawn);
         self.page = maps.map(|(_, page)| page);
@@ -107,10 +101,9 @@ pub(crate) fn semantics_moved(element: &CoreHandle) {
 
 /// The Screen that draws a lifted copy: the upper Screen, which draws every
 /// lift as it holds every flight slot. Above the copy, every reader starts
-/// here and not on the copy's own Screen: taps, covers, drawing and the
-/// pose, visibility, clips and semantic bounds. It answers whether that
-/// Screen is awake, whether its frame and what is above it take a point of
-/// the copy, and where it puts that point.
+/// here and not on the copy's own Screen (`DrawnAncestors`): covers,
+/// drawing and the pose, visibility, clips and semantic bounds. It answers
+/// where its space sits in the copy's own Screen's.
 pub(crate) struct DrawingScreen {
     pub(crate) screen: CoreHandle,
     /// The lift's matrix: from the copy's own Screen's space to this one's,
@@ -121,19 +114,6 @@ pub(crate) struct DrawingScreen {
 }
 
 impl DrawingScreen {
-    /// Whether it is awake, by the one visibility rule
-    /// (`live_move::effectively_hidden`): a Screen asleep in its list reads
-    /// as its row does, though row sleep keeps its root awake.
-    pub(crate) fn awake(&self) -> bool {
-        crate::hosted_scene::is_active_artboard(&self.screen)
-    }
-
-    /// Where it draws `rest`, a point of the copy at rest in the copy's own
-    /// Screen's space.
-    pub(crate) fn at(&self, rest: Vec2D) -> Vec2D {
-        self.matrix * rest
-    }
-
     /// From its space to the copy's own Screen's, as the pose places the two
     /// (`drawn · matrix⁻¹`): the identity for the upper copy. None while the
     /// lift draws nothing.
@@ -141,19 +121,6 @@ impl DrawingScreen {
         let drawn = self.drawn?;
         let mut inverse = Mat2D::default();
         self.matrix.invert(&mut inverse).then(|| drawn * inverse)
-    }
-
-    /// Whether it takes a pointer over `rest`, as it takes one for a flight
-    /// slot of its own: it is awake, and its frame and what is above it hit
-    /// at `at(rest)`.
-    pub(crate) fn takes_pointer(&self, rest: Vec2D) -> bool {
-        let drawn = self.at(rest);
-        self.awake()
-            && self
-                .screen
-                .with_mut(|screen| screen.component_hit_test_point(&drawn, true, false))
-                .flatten()
-                .unwrap_or(false)
     }
 }
 
@@ -166,46 +133,6 @@ impl Lift {
             matrix: state.matrix,
             drawn: state.drawn,
         }
-    }
-
-    /// `position`, a pointer on the copy's own Screen, as the copy hears it:
-    /// the point of the copy at rest under it, and whether it reaches the
-    /// copy there, where the Screen that draws it takes it
-    /// (`DrawingScreen::takes_pointer`). While the lift draws nothing, the
-    /// pointer itself, reaching nothing.
-    pub(crate) fn pointer(&self, position: Vec2D) -> (Vec2D, bool) {
-        match self.hit() {
-            None => (position, false),
-            Some(hit) => {
-                let rest = hit * position;
-                (rest, self.drawing_screen().takes_pointer(rest))
-            }
-        }
-    }
-
-    /// The point of the copy at rest under `position`, where the pointer
-    /// reaches the copy (`pointer`).
-    pub(crate) fn hit_position(&self, position: Vec2D) -> Option<Vec2D> {
-        let (rest, reaches) = self.pointer(position);
-        reaches.then_some(rest)
-    }
-
-    /// Where the lift draws the copy, in the page's space: None while it
-    /// draws nothing.
-    pub(crate) fn page(&self) -> Option<Mat2D> {
-        self.0.borrow().page
-    }
-
-    /// Where the lift draws the copy, in its own Screen's drawing space:
-    /// None while it draws nothing.
-    pub(crate) fn drawn(&self) -> Option<Mat2D> {
-        self.0.borrow().drawn
-    }
-
-    /// The pointer's way back to the copy at rest (`drawn`'s inverse): None
-    /// while the lift draws nothing.
-    pub(crate) fn hit(&self) -> Option<Mat2D> {
-        self.0.borrow().hit
     }
 
     /// Whether the lift draws its copy now: it is solved, at an opacity
@@ -234,7 +161,6 @@ impl Lift {
             entries: Vec::new(),
             picture: GroupPicture::default(),
             drawn: None,
-            hit: None,
             page: None,
             entry: None,
         })))
@@ -339,23 +265,63 @@ pub(crate) fn lift_around(component: &CoreHandle) -> Option<Lift> {
     None
 }
 
-/// What a lift does to where the page shows `component`: nothing, outside
-/// one; its page map, inside one that draws; or nothing shown, inside one
-/// that draws nothing.
+/// Where a lift draws its copy: the one map that every reader of where a
+/// lifted copy draws reads, in whatever space it works in, instead of the
+/// copy's resting world, which never moves (`Lifted::of`).
+#[derive(Clone)]
+pub(crate) struct DrawnMap {
+    /// From a point of the copy at rest to where it draws, in its own
+    /// Screen's drawing space.
+    drawn: Mat2D,
+    /// The same in the page's space, which the pose writes beside it.
+    page: Mat2D,
+    /// The copy's own Screen, whose drawing space `drawn` is in.
+    pub(crate) screen: CoreHandle,
+}
+
+impl DrawnMap {
+    /// The map in the page's space.
+    pub(crate) fn page(&self) -> Mat2D {
+        self.page
+    }
+
+    /// The map in a reader's own space, given the copy's own Screen's
+    /// drawing space in it (`to_space`): `to_space · drawn · to_space⁻¹`.
+    pub(crate) fn in_space(&self, to_space: Mat2D) -> Option<Mat2D> {
+        let mut inverse = Mat2D::default();
+        to_space
+            .invert(&mut inverse)
+            .then(|| to_space * self.drawn * inverse)
+    }
+}
+
+/// What a lift does to where `component` draws: nothing, outside one; its
+/// map (`DrawnMap`), inside one that draws; or nothing drawn, inside one that
+/// draws nothing.
 pub(crate) enum Lifted {
     No,
-    Drawn(Mat2D),
+    Drawn(DrawnMap),
     Hidden,
 }
 
 impl Lifted {
     pub(crate) fn of(component: &CoreHandle) -> Self {
-        match lift_around(component) {
-            None => Self::No,
-            Some(lift) => match lift.page() {
-                Some(page) => Self::Drawn(page),
-                None => Self::Hidden,
-            },
+        Self::of_lift(lift_around(component).as_ref())
+    }
+
+    /// What `lift`, the lift around a component, does to where it draws.
+    pub(crate) fn of_lift(lift: Option<&Lift>) -> Self {
+        let Some(lift) = lift else {
+            return Self::No;
+        };
+        let state = lift.0.borrow();
+        match (state.drawn, state.page) {
+            (Some(drawn), Some(page)) => Self::Drawn(DrawnMap {
+                drawn,
+                page,
+                screen: state.row.clone(),
+            }),
+            _ => Self::Hidden,
         }
     }
 
@@ -364,9 +330,123 @@ impl Lifted {
     pub(crate) fn point(&self, point: Vec2D) -> Option<Vec2D> {
         match self {
             Self::No => Some(point),
-            Self::Drawn(page) => Some(*page * point),
+            Self::Drawn(map) => Some(map.page * point),
             Self::Hidden => None,
         }
+    }
+}
+
+/// Where an ancestor that `DrawnAncestors` meets sits for what draws it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Place {
+    /// Outside any lift: an ordinary ancestor.
+    Plain,
+    /// The walk's start and what holds it up to the copy flying in place,
+    /// the copy included: what the lift draws, where its map puts it.
+    Copy,
+    /// Past the copy up to its own Screen, that Screen included when another
+    /// draws the lift: where the copy is held. A collapsed or hidden one
+    /// hides it; none of it draws over it or clips it.
+    Between,
+    /// The Screen that draws the lift, the upper copy's own: it draws the
+    /// copy at its own strength there, inside its frame, while awake.
+    Screen,
+    /// What is above that Screen, as for any of its content.
+    Above,
+}
+
+/// The one walk up from a component for what draws it. Outside a lift it is
+/// the ordinary climb, each artboard on to its host. Inside a copy flying in
+/// place it climbs the copy, then past it to the copy's own Screen, then goes
+/// on from the Screen that draws the copy (`Lift::drawing_screen`) and what
+/// is above that, never from the copy's own Screen's hosts. Every reader
+/// that climbs above a component reads this walk: visibility, rendered
+/// clips and the geometry clips built on them. It stops at a loop
+/// (`looped`).
+pub(crate) struct DrawnAncestors {
+    lift: Option<Lift>,
+    /// The copy, its own Screen and the Screen that draws it.
+    marks: Option<(CoreHandle, CoreHandle, CoreHandle)>,
+    next: Option<(CoreHandle, Place)>,
+    visited: HashSet<CoreHandle>,
+    looped: bool,
+}
+
+impl DrawnAncestors {
+    pub(crate) fn of(start: &CoreHandle) -> Self {
+        let lift = lift_around(start);
+        let marks = lift.as_ref().map(|lift| {
+            let (element, row) = {
+                let state = lift.0.borrow();
+                (state.element.clone(), state.row.clone())
+            };
+            (element, row, lift.drawing_screen().screen)
+        });
+        let place = if marks.is_some() {
+            Place::Copy
+        } else {
+            Place::Plain
+        };
+        Self {
+            lift,
+            marks,
+            next: Some((start.clone(), place)),
+            visited: HashSet::new(),
+            looped: false,
+        }
+    }
+
+    /// The lift around the start, inside a copy flying in place.
+    pub(crate) fn lift(&self) -> Option<&Lift> {
+        self.lift.as_ref()
+    }
+
+    /// The copy flying in place, inside one.
+    pub(crate) fn copy(&self) -> Option<&CoreHandle> {
+        self.marks.as_ref().map(|(element, _, _)| element)
+    }
+
+    /// Whether the walk met an ancestor twice and stopped.
+    pub(crate) fn looped(&self) -> bool {
+        self.looped
+    }
+}
+
+/// The next level up: a component's parent, an artboard's host.
+fn parent_or_host(component: &CoreHandle) -> Option<CoreHandle> {
+    component
+        .with(|object| {
+            object
+                .component_parent_handle()
+                .or_else(|| object.as_artboard().and_then(Artboard::host))
+        })
+        .flatten()
+}
+
+impl Iterator for DrawnAncestors {
+    type Item = (CoreHandle, Place);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (current, mut place) = self.next.take()?;
+        if !self.visited.insert(current.clone()) {
+            self.looped = true;
+            return None;
+        }
+        let up = |place: Place| parent_or_host(&current).map(|parent| (parent, place));
+        self.next = match (&self.marks, place) {
+            (Some((element, _, _)), Place::Copy) if current == *element => up(Place::Between),
+            (Some((_, row, screen)), Place::Between) if current == *row => {
+                if row == screen {
+                    place = Place::Screen;
+                    up(Place::Above)
+                } else {
+                    Some((screen.clone(), Place::Screen))
+                }
+            }
+            (_, Place::Screen) => up(Place::Above),
+            _ => up(place),
+        };
+        Some((current, place))
     }
 }
 
@@ -486,9 +566,6 @@ pub(crate) fn set_opacity_root(element: &CoreHandle, root: OpacityRoot) {
     use crate::source::component_dirt::ComponentDirt;
     let changed = element
         .with_mut(|object| {
-            if let Some(component) = object.as_component_mut() {
-                component.lift_root = root != OpacityRoot::None;
-            }
             let transform = object.as_transform_component_mut()?;
             let changed = transform.opacity_root != root;
             transform.opacity_root = root;

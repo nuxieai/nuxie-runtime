@@ -808,6 +808,29 @@ fn css_box_paints(
             .any(crate::mechanical_port::source::layout_component::css_paint_draws)
 }
 
+/// Our layer: `to_root`, which takes a drawable's world into the query's
+/// root, moved to where it draws: inside a copy flying in place, after the
+/// lift's one map in the root's space (css_layout/lift.rs, `DrawnMap`), read
+/// through the copy's own Screen's entry in `spaces`. A query rooted inside
+/// the copy moves with it, so there it is `to_root`. None while the lift
+/// draws nothing, except for retained geometry, which counts it at rest.
+fn drawn_to_root(
+    handle: &CoreHandle,
+    to_root: NativeMat2D,
+    spaces: &[(CoreHandle, NativeMat2D)],
+    visibility: GeometryVisibility,
+) -> Option<NativeMat2D> {
+    use crate::css_layout::lift::Lifted;
+    match Lifted::of(handle) {
+        Lifted::No => Some(to_root),
+        Lifted::Hidden => (visibility == GeometryVisibility::Retained).then_some(to_root),
+        Lifted::Drawn(map) => match spaces.iter().find(|(owner, _)| *owner == map.screen) {
+            None => Some(to_root),
+            Some((_, screen)) => Some(map.in_space(*screen)? * to_root),
+        },
+    }
+}
+
 /// Geometry bounds in root space, optionally clipped from an owner outward.
 fn geometry_visible_bounds(
     clip_owner: &CoreHandle,
@@ -1015,7 +1038,12 @@ fn collect_geometry(
     spaces.push((artboard.core_handle(), drawing_to_root));
     // Our layer: a CSS artboard that paints itself is the bottom geometry.
     // It is seen, and selected, where it paints (docs/CSS_LAYOUT.md, 4.5).
-    if let Some((handle, painted, covers)) = artboard.with_artboard(|instance| {
+    if let Some(painted_to_root) = drawn_to_root(
+        &artboard.core_handle(),
+        drawing_to_root,
+        &spaces,
+        visibility,
+    ) && let Some((handle, painted, covers)) = artboard.with_artboard(|instance| {
         let root = &instance.base;
         let layout = &root.base.base;
         // `display: none` leaves it nothing visible; retained geometry
@@ -1036,7 +1064,7 @@ fn collect_geometry(
         // applies its frame clip and every clip through its hosts.
         let covers = query.map(|point| {
             let mut inverse = NativeMat2D::identity();
-            if !drawing_to_root.invert(&mut inverse) {
+            if !painted_to_root.invert(&mut inverse) {
                 return false;
             }
             let point = inverse * render_to_native_point(point);
@@ -1063,7 +1091,7 @@ fn collect_geometry(
                 geometry_visible_bounds(
                     &handle,
                     painted,
-                    drawing_to_root,
+                    painted_to_root,
                     visibility == GeometryVisibility::Visible,
                     &spaces,
                 )
@@ -1117,6 +1145,10 @@ fn collect_geometry(
         });
 
         if painted_box {
+            let Some(box_to_root) = drawn_to_root(&handle, drawing_to_root, &spaces, visibility)
+            else {
+                continue;
+            };
             let render_bounds = |bounds: NativeAabb| {
                 Some(bounds)
                     .filter(|bounds| !bounds.is_empty_or_nan())
@@ -1124,7 +1156,7 @@ fn collect_geometry(
             };
             let visible = css_box_visible_bounds(
                 &handle,
-                drawing_to_root,
+                box_to_root,
                 visibility == GeometryVisibility::Visible,
                 &spaces,
             )
@@ -1140,7 +1172,7 @@ fn collect_geometry(
                     continue;
                 }
                 let mut inverse = NativeMat2D::identity();
-                if !drawing_to_root.invert(&mut inverse) {
+                if !box_to_root.invert(&mut inverse) {
                     continue;
                 }
                 let artboard_point = inverse * render_to_native_point(point);
@@ -1251,7 +1283,10 @@ fn collect_geometry(
         else {
             continue;
         };
-        let root_transform = drawing_to_root * world;
+        let Some(to_root) = drawn_to_root(&handle, drawing_to_root, &spaces, visibility) else {
+            continue;
+        };
+        let root_transform = to_root * world;
         // Visible bounds take the same clips, from the drawable outward, as
         // the point test below and as drawing: its artboard's frame when that
         // artboard clips, its hosts' clips, and any clipping shapes.
@@ -1277,7 +1312,7 @@ fn collect_geometry(
                 continue;
             }
             let mut inverse = NativeMat2D::identity();
-            if !drawing_to_root.invert(&mut inverse) {
+            if !to_root.invert(&mut inverse) {
                 continue;
             }
             let local_point = inverse * render_to_native_point(point);
@@ -1342,6 +1377,7 @@ impl ArtboardInstance {
 fn collect_semantic_text(
     artboard: &RuntimeArtboardInstanceHandle,
     artboard_to_root: NativeMat2D,
+    parent_spaces: &[(CoreHandle, NativeMat2D)],
     path_prefix: &[RuntimeGeometryHitPathSegment],
     occurrence: &[RuntimeGeometryHitOccurrence],
     output: &mut Vec<RuntimeSemanticTextHit>,
@@ -1349,6 +1385,8 @@ fn collect_semantic_text(
     let Some(artboard_global_id) = source_artboard_global_id(artboard) else {
         return;
     };
+    let mut spaces = parent_spaces.to_vec();
+    spaces.push((artboard.core_handle(), artboard_to_root));
     for drawable in drawable_chain(artboard, GeometryVisibility::Visible) {
         let Some(handle) = drawable.authored_handle() else {
             continue;
@@ -1376,6 +1414,7 @@ fn collect_semantic_text(
             collect_semantic_text(
                 &child,
                 artboard_to_root * host_transform,
+                &spaces,
                 &path,
                 occurrence,
                 output,
@@ -1416,6 +1455,7 @@ fn collect_semantic_text(
                 collect_semantic_text(
                     &child,
                     artboard_to_root * child_transform,
+                    &spaces,
                     &path,
                     &child_occurrence,
                     output,
@@ -1457,7 +1497,15 @@ fn collect_semantic_text(
         else {
             continue;
         };
-        let bounds = transform_bounds(local_bounds, artboard_to_root * world);
+        let Some(to_root) = drawn_to_root(
+            &handle,
+            artboard_to_root,
+            &spaces,
+            GeometryVisibility::Visible,
+        ) else {
+            continue;
+        };
+        let bounds = transform_bounds(local_bounds, to_root * world);
         if ![bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y]
             .into_iter()
             .all(f32::is_finite)
@@ -1480,6 +1528,7 @@ impl ArtboardInstance {
         collect_semantic_text(
             &self.native_handle(),
             NativeMat2D::identity(),
+            &[],
             &[],
             &[],
             &mut output,

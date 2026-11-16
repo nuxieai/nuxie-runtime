@@ -5109,6 +5109,14 @@ pub enum ZoomCase {
     /// "card b" at (60, 20), 320 by 240. Each card's scale is keyed from 0.8 to
     /// 1 about its center.
     CardsKeyed,
+    /// `Plain`, b a scroller: it scrolls on y over a box "b list", 160 by
+    /// 360, painted `paint_color("b list")`, which a ScrollConstraint "b
+    /// scroll" moves. In place only: the slot page's unit leaves it out.
+    Scrolls,
+    /// a's home in a box "card a" at (20, 10), 300 by 200, which holds a
+    /// ClippingShape whose source, a paintless shape at (28, 100) of a 56 by
+    /// 200 rectangle, keeps about its left 56 points: at rest it cuts a.
+    ClippedAbove,
     /// Each home slot's own turn: 0.3 on a's and 0.4 on b's.
     SlotTurn,
     /// Each frame's own scale keyed from 0.5 to 1 about its center.
@@ -5348,6 +5356,9 @@ struct PaintEl {
     mask: Option<&'static str>,
     /// A box's fill, in place of `paint_color` of its name.
     color: Option<u32>,
+    /// A ClippingShape the box owns, after its kids: its source a paintless
+    /// shape at (x, y) in the box of a w by h rectangle.
+    clip_shape: Option<(f32, f32, f32, f32)>,
 }
 impl PaintEl {
     fn new(name: &str, kind: PaintKind, css: Css) -> Self {
@@ -5365,6 +5376,7 @@ impl PaintEl {
             column: None,
             mask: None,
             color: None,
+            clip_shape: None,
         }
     }
     fn paintless(mut self) -> Self {
@@ -5405,6 +5417,10 @@ impl PaintEl {
     }
     fn color(mut self, color: u32) -> Self {
         self.color = Some(color);
+        self
+    }
+    fn clip_shape(mut self, x: f32, y: f32, w: f32, h: f32) -> Self {
+        self.clip_shape = Some((x, y, w, h));
         self
     }
 }
@@ -5487,6 +5503,11 @@ struct PaintUnit {
     own_scale: Option<(f32, f32)>,
     /// It holds a box "`name` child", 30 by 20, 10 from its right and bottom.
     child: bool,
+    /// It scrolls on y over a box "`name` list", its width and three times
+    /// its height, painted `paint_color` of that name, which a
+    /// ScrollConstraint "`name` scroll" moves. Written inline in place; a
+    /// unit artboard leaves it out.
+    scrolls: bool,
     /// A box shadow under its fill, as the compiler writes one, and whether
     /// it is inset.
     shadow: Option<(Shadow, bool)>,
@@ -5545,6 +5566,7 @@ fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
         corner: 0.0,
         own_scale: None,
         child: false,
+        scrolls: false,
         shadow: None,
         text: None,
         padding: 0.0,
@@ -5887,6 +5909,10 @@ impl PaintUnit {
     }
     fn with_child(mut self) -> Self {
         self.child = true;
+        self
+    }
+    fn scrolls(mut self) -> Self {
+        self.scrolls = true;
         self
     }
     fn modeled(&self) -> bool {
@@ -6707,6 +6733,9 @@ impl PaintArt<'_> {
         self.add("LayoutComponentStyle", &u.style(id));
         let mut css = el.css.clone();
         css.extend(u.padding_css());
+        if u.scrolls {
+            css.push(("overflowY", U(3)));
+        }
         if key != 0 {
             css.push(("flightKey", U(key)));
         }
@@ -6774,6 +6803,23 @@ impl PaintArt<'_> {
             self.emit(
                 &bx("child", css).color(paint_color(&format!("{} child", u.name))),
                 id,
+            );
+        }
+        if u.scrolls {
+            let name = format!("{} list", u.name);
+            let list = self.next;
+            self.emit(
+                &bx(&name, css_size(u.size.0, u.size.1 * 3.0)).color(paint_color(&name)),
+                id,
+            );
+            self.add(
+                "ScrollConstraint",
+                &[
+                    ("name", S(&format!("{} scroll", u.name))),
+                    ("parentId", U(list)),
+                    ("directionValue", U(1)),
+                    ("physicsTypeValue", U(0)),
+                ],
             );
         }
         if let Some(artboard) = u.hosts {
@@ -6861,6 +6907,20 @@ impl PaintArt<'_> {
                 }
                 for kid in &el.kids {
                     self.emit(kid, id);
+                }
+                if let Some((x, y, w, h)) = el.clip_shape {
+                    let source = self.add(
+                        "Shape",
+                        &[("parentId", U(id)), ("x", F(x)), ("y", F(y))],
+                    );
+                    self.add(
+                        "Rectangle",
+                        &[("parentId", U(source)), ("width", F(w)), ("height", F(h))],
+                    );
+                    self.add(
+                        "ClippingShape",
+                        &[("parentId", U(id)), ("sourceId", U(source))],
+                    );
                 }
             }
             PaintKind::Slot { unit, key } if self.in_place => {
@@ -7659,6 +7719,14 @@ fn zoom_spec(case: ZoomCase) -> PaintSpec {
     };
     match case {
         Plain => plain(unit_a(), unit_b()),
+        Scrolls => plain(unit_a(), unit_b().scrolls()),
+        ClippedAbove => zoom_pair(
+            unit_a(),
+            unit_b(),
+            vec![card_a().clip_shape(28.0, 100.0, 56.0, 200.0)],
+            vec![home_b()],
+            zoom_flights(1),
+        ),
         CardsKeyed => zoom_pair(
             unit_a(),
             unit_b(),

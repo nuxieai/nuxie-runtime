@@ -273,7 +273,7 @@ impl DraggableConstraintListenerGroup {
     pub fn process_event(
         &self,
         component: &RuntimeDrawableOccurrence,
-        position: Vec2D,
+        pointer_at: crate::mechanical_port::source::listener_group::ListenerPointer,
         pointer_id: i32,
         hit_event: ListenerType,
         button: crate::mechanical_port::source::pointer_button::PointerButton,
@@ -287,11 +287,12 @@ impl DraggableConstraintListenerGroup {
         {
             return ProcessEventResult::None;
         }
+        let position = pointer_at.at;
         let pointer = self.base.pointer_data(pointer_id);
         let previous_phase = pointer.phase.get();
         self.base.process_event(
             component,
-            position,
+            pointer_at,
             pointer_id,
             hit_event,
             button,
@@ -306,7 +307,7 @@ impl DraggableConstraintListenerGroup {
             self.draggable.borrow_mut().end_drag(position, time_stamp);
             if self.scrolling_pointer_id.get() == pointer_id {
                 state_machine_instance.drag_end(
-                    position,
+                    pointer_at.machine,
                     time_stamp,
                     pointer_id,
                     PointerButton::Primary,
@@ -318,7 +319,12 @@ impl DraggableConstraintListenerGroup {
             if self.in_css.get() && self.draggable.borrow().claims_on_press() {
                 use crate::mechanical_port::source::listener_group::ListenerGroupBehavior;
                 let me = ListenerGroupBehavior::identity(self);
-                state_machine_instance.claim_css_drag(pointer_id, me, position, time_stamp);
+                state_machine_instance.claim_css_drag(
+                    pointer_id,
+                    me,
+                    pointer_at.machine,
+                    time_stamp,
+                );
             }
             self.draggable.borrow_mut().start_drag(position, time_stamp);
             self.constraint.with_downcast_mut::<
@@ -349,10 +355,15 @@ impl DraggableConstraintListenerGroup {
                     // takes the drag, and the press stops being a tap
                     // (docs/CSS_LAYOUT.md, 4.5).
                     if in_css {
-                        state_machine_instance.claim_css_drag(pointer_id, me, position, time_stamp);
+                        state_machine_instance.claim_css_drag(
+                            pointer_id,
+                            me,
+                            pointer_at.machine,
+                            time_stamp,
+                        );
                     }
                     state_machine_instance.drag_start(
-                        position,
+                        pointer_at.machine,
                         time_stamp,
                         in_css,
                         pointer_id,

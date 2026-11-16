@@ -116,6 +116,8 @@ pub(crate) struct DrawingScreen {
     /// The lift's matrix: from the copy's own Screen's space to this one's,
     /// with the flight's pose.
     pub(crate) matrix: Mat2D,
+    /// The lift's drawn map: None while it draws nothing.
+    drawn: Option<Mat2D>,
 }
 
 impl DrawingScreen {
@@ -130,6 +132,15 @@ impl DrawingScreen {
     /// Screen's space.
     pub(crate) fn at(&self, rest: Vec2D) -> Vec2D {
         self.matrix * rest
+    }
+
+    /// From its space to the copy's own Screen's, as the pose places the two
+    /// (`drawn · matrix⁻¹`): the identity for the upper copy. None while the
+    /// lift draws nothing.
+    pub(crate) fn to_copy_screen(&self) -> Option<Mat2D> {
+        let drawn = self.drawn?;
+        let mut inverse = Mat2D::default();
+        self.matrix.invert(&mut inverse).then(|| drawn * inverse)
     }
 
     /// Whether it takes a pointer over `rest`, as it takes one for a flight
@@ -153,15 +164,30 @@ impl Lift {
         DrawingScreen {
             screen: state.board.clone(),
             matrix: state.matrix,
+            drawn: state.drawn,
         }
     }
 
-    /// The point of the copy at rest under `position`, a pointer on its own
-    /// Screen. None while the lift draws nothing, and where the Screen that
-    /// draws it takes no pointer (`DrawingScreen::takes_pointer`).
+    /// `position`, a pointer on the copy's own Screen, as the copy hears it:
+    /// the point of the copy at rest under it, and whether it reaches the
+    /// copy there, where the Screen that draws it takes it
+    /// (`DrawingScreen::takes_pointer`). While the lift draws nothing, the
+    /// pointer itself, reaching nothing.
+    pub(crate) fn pointer(&self, position: Vec2D) -> (Vec2D, bool) {
+        match self.hit() {
+            None => (position, false),
+            Some(hit) => {
+                let rest = hit * position;
+                (rest, self.drawing_screen().takes_pointer(rest))
+            }
+        }
+    }
+
+    /// The point of the copy at rest under `position`, where the pointer
+    /// reaches the copy (`pointer`).
     pub(crate) fn hit_position(&self, position: Vec2D) -> Option<Vec2D> {
-        let rest = self.hit()? * position;
-        self.drawing_screen().takes_pointer(rest).then_some(rest)
+        let (rest, reaches) = self.pointer(position);
+        reaches.then_some(rest)
     }
 
     /// Where the lift draws the copy, in the page's space: None while it

@@ -673,10 +673,9 @@ impl crate::mechanical_port::source::animation::state_machine_instance::HitCompo
         pointer_id: i32,
         _button: crate::mechanical_port::source::pointer_button::PointerButton,
     ) -> crate::mechanical_port::source::hit_result::HitResult {
-        let (position, can_hit) = match self.lift.at(position) {
-            Some(position) => (position, can_hit),
-            None => (position, false),
-        };
+        // Inside a copy flying in place, as `HitDrawable::process_listeners`.
+        let (position, reaches) = self.lift.pointer(position);
+        let can_hit = can_hit && reaches;
         machine.perform_scripted_pointer(
             &self.drawable,
             hit_type,

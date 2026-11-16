@@ -400,17 +400,33 @@ fn walk_geometry_clips(
     mut visit: impl FnMut(RenderedClip) -> bool,
 ) -> bool {
     let mut hosts = None;
+    // Our layer: above a copy flying in place the walk goes on from the
+    // Screen that draws it, which the query's spaces may not hold, a sibling
+    // of the copy's own Screen: its space is the copy's Screen's through the
+    // pose (css_layout/lift.rs, `DrawingScreen::to_copy_screen`).
+    let drawing = crate::css_layout::lift::lift_around(component).and_then(|lift| {
+        let row = lift.0.borrow().row.clone();
+        let drawing = lift.drawing_screen();
+        Some((row, drawing.screen.clone(), drawing.to_copy_screen()?))
+    });
     walk_rendered_clips(component, false, |artboard, clip, page| {
         let clip = if let Some(artboard) = artboard {
-            let find = |spaces: &[(CoreHandle, Mat2D)]| {
+            let find = |spaces: &[(CoreHandle, Mat2D)], owner: &CoreHandle| {
                 spaces
                     .iter()
-                    .find(|(owner, _)| owner == artboard)
+                    .find(|(seen, _)| seen == owner)
                     .map(|(_, transform)| *transform)
             };
-            let Some(transform) =
-                find(spaces).or_else(|| find(hosts.get_or_insert_with(|| host_spaces(spaces))))
-            else {
+            let mut space = |owner: &CoreHandle| {
+                find(spaces, owner)
+                    .or_else(|| find(hosts.get_or_insert_with(|| host_spaces(spaces)), owner))
+            };
+            let transform = space(artboard).or_else(|| {
+                let (row, screen, to_copy) = drawing.as_ref()?;
+                (screen == artboard).then_some(())?;
+                Some(space(row)? * *to_copy)
+            });
+            let Some(transform) = transform else {
                 return false;
             };
             clip.mapped(|point| transform * point)

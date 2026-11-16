@@ -300,7 +300,7 @@ impl ListenerGroupBehavior for QueryGroup {
     fn process_event(
         &self,
         _: &RuntimeDrawableOccurrence,
-        _: Vec2D,
+        _: crate::mechanical_port::source::listener_group::ListenerPointer,
         _: i32,
         _: ListenerType,
         _: PointerButton,

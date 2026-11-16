@@ -232,7 +232,7 @@ impl ListenerGroup {
     pub fn process_event(
         &self,
         _component: &RuntimeDrawableOccurrence,
-        position: Vec2D,
+        pointer_at: ListenerPointer,
         pointer_id: i32,
         hit_event: ListenerType,
         button: PointerButton,
@@ -240,6 +240,7 @@ impl ListenerGroup {
         time_stamp: f32,
         state_machine_instance: &mut StateMachineInstance,
     ) -> ProcessEventResult {
+        let position = pointer_at.at;
         let pointer = self.pointer_data(pointer_id);
         let previous_phase = pointer.phase.get();
         // The finger is over this element, whatever is drawn above it.
@@ -284,7 +285,12 @@ impl ListenerGroup {
             )
             && pointer.has_dragged.get()
         {
-            state_machine_instance.drag_end(position, time_stamp, pointer_id, pointer.button.get());
+            state_machine_instance.drag_end(
+                pointer_at.machine,
+                time_stamp,
+                pointer_id,
+                pointer.button.get(),
+            );
             pointer.has_dragged.set(false);
         }
 
@@ -342,10 +348,15 @@ impl ListenerGroup {
             button_matched = pointer.button.get();
             if !pointer.has_dragged.get() {
                 if self.in_css.get() {
-                    state_machine_instance.claim_css_drag(pointer_id, me, position, time_stamp);
+                    state_machine_instance.claim_css_drag(
+                        pointer_id,
+                        me,
+                        pointer_at.machine,
+                        time_stamp,
+                    );
                 }
                 state_machine_instance.drag_start(
-                    position,
+                    pointer_at.machine,
                     time_stamp,
                     false,
                     pointer_id,
@@ -507,7 +518,7 @@ pub trait ListenerGroupBehavior {
     fn process_event(
         &self,
         component: &RuntimeDrawableOccurrence,
-        position: Vec2D,
+        pointer_at: ListenerPointer,
         pointer_id: i32,
         hit_event: ListenerType,
         button: PointerButton,
@@ -515,6 +526,27 @@ pub trait ListenerGroupBehavior {
         time_stamp: f32,
         state_machine_instance: &mut StateMachineInstance,
     ) -> ProcessEventResult;
+}
+
+/// A pointer as a listener group hears it. `at` is where its listeners hear
+/// it; inside a copy flying in place, that is where the copy rests, as the
+/// copy's own world reads it (`HitLift`). `machine` is where the group's
+/// own machine took it, which a drag's start or end, or a drag's claim,
+/// re-enters that machine with. Outside a lift the two are the same.
+#[derive(Clone, Copy, Debug)]
+pub struct ListenerPointer {
+    pub at: Vec2D,
+    pub machine: Vec2D,
+}
+
+impl ListenerPointer {
+    /// A pointer outside any lift.
+    pub fn plain(position: Vec2D) -> Self {
+        Self {
+            at: position,
+            machine: position,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -594,7 +626,7 @@ impl ListenerGroupBehavior for ListenerGroup {
     fn process_event(
         &self,
         component: &RuntimeDrawableOccurrence,
-        position: Vec2D,
+        pointer_at: ListenerPointer,
         pointer_id: i32,
         hit_event: ListenerType,
         button: PointerButton,
@@ -605,7 +637,7 @@ impl ListenerGroupBehavior for ListenerGroup {
         ListenerGroup::process_event(
             self,
             component,
-            position,
+            pointer_at,
             pointer_id,
             hit_event,
             button,
@@ -660,7 +692,7 @@ impl ListenerGroupBehavior
     fn process_event(
         &self,
         component: &RuntimeDrawableOccurrence,
-        position: Vec2D,
+        pointer_at: ListenerPointer,
         pointer_id: i32,
         hit_event: ListenerType,
         button: PointerButton,
@@ -671,7 +703,7 @@ impl ListenerGroupBehavior
         Self::process_event(
             self,
             component,
-            position,
+            pointer_at,
             pointer_id,
             hit_event,
             button,

@@ -169,7 +169,7 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
     fn process_event(
         &self,
         _component: &RuntimeDrawableOccurrence,
-        position: Vec2D,
+        pointer_at: crate::mechanical_port::source::listener_group::ListenerPointer,
         pointer_id: i32,
         event: ListenerType,
         button: crate::source::pointer_button::PointerButton,
@@ -182,6 +182,7 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
         {
             return ProcessEventResult::None;
         }
+        let position = pointer_at.at;
         let pointer = self.base.pointer_data(pointer_id);
         let previous = pointer.phase.get();
         if !can_hit && pointer.is_hovered.get() {
@@ -219,7 +220,7 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
             if self.in_css.get() {
                 // A focused CSS field's drag selects: it is the innermost
                 // drag handler (docs/CSS_LAYOUT.md, 4.5).
-                machine.claim_css_drag(pointer_id, self.identity(), position, timestamp);
+                machine.claim_css_drag(pointer_id, self.identity(), pointer_at.machine, timestamp);
             }
             self.focus(machine);
             self.text_input.with_mut(|input| {

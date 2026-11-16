@@ -1798,8 +1798,19 @@ impl HitLift {
         *self.0.borrow_mut() = lift;
     }
 
-    /// `position` where the copy rests, itself outside a lift; None when
-    /// the lift draws nothing, which no pointer reaches.
+    /// `position` as the hit hears it: where the copy rests under it, and
+    /// whether it reaches the copy (`Lift::pointer`); outside a lift, itself,
+    /// reaching. A hit the pointer doesn't reach still hears it there, as a
+    /// miss, so a hover or a press it holds ends.
+    pub(crate) fn pointer(&self, position: Vec2D) -> (Vec2D, bool) {
+        match &*self.0.borrow() {
+            None => (position, true),
+            Some(lift) => lift.pointer(position),
+        }
+    }
+
+    /// `position` where the copy rests, itself outside a lift; None where
+    /// the pointer doesn't reach the copy (`pointer`), for a hit test.
     pub(crate) fn at(&self, position: Vec2D) -> Option<Vec2D> {
         match &*self.0.borrow() {
             None => Some(position),
@@ -1940,7 +1951,12 @@ fn nested_mapping(
     lift: &HitLift,
     position: Vec2D,
 ) -> Option<(Vec2D, bool, Mat2D)> {
-    let position = lift.at(position)?;
+    nested_local(component, lift.at(position)?)
+}
+
+/// A nested artboard's mapping of `position`, already where a copy flying
+/// in place rests (`HitLift::pointer`).
+fn nested_local(component: &CoreHandle, position: Vec2D) -> Option<(Vec2D, bool, Mat2D)> {
     component
         .with(|component| {
             let nested = component.as_nested_artboard()?;
@@ -1997,7 +2013,12 @@ fn component_list_world_to_local(
     position: Vec2D,
     index: i32,
 ) -> Option<Vec2D> {
-    let position = lift.at(position)?;
+    component_list_local(component, lift.at(position)?, index)
+}
+
+/// A list row's local `position`, already where a copy flying in place
+/// rests (`HitLift::pointer`).
+fn component_list_local(component: &CoreHandle, position: Vec2D, index: i32) -> Option<Vec2D> {
     component
         .with_downcast_mut::<ArtboardComponentList, _>(|list| {
             let mut local = Vec2D::new(0.0, 0.0);
@@ -2175,11 +2196,12 @@ impl HitDrawable {
             return HitResult::None;
         }
         // Inside a copy flying in place, the listeners hear the pointer
-        // where the copy rests; a lift that draws nothing takes no hit.
-        let (position, can_hit) = match self.lift.at(position) {
-            Some(position) => (position, can_hit),
-            None => (position, false),
-        };
+        // where the copy rests, and a drag they start or end re-enters this
+        // machine where it took the pointer (`ListenerPointer`). Where the
+        // pointer doesn't reach the copy they hear it as a miss.
+        let machine_position = position;
+        let (position, reaches) = self.lift.pointer(position);
+        let can_hit = can_hit && reaches;
         if bubbled && can_hit && hit_type != ListenerType::Exit && !self.is_hovered.get() {
             self.is_hovered.set(true);
             for listener in self.listeners.borrow().iter() {
@@ -2204,7 +2226,10 @@ impl HitDrawable {
             let result = listener.with_group(|listener| {
                 listener.process_event(
                     &self.component,
-                    position,
+                    crate::mechanical_port::source::listener_group::ListenerPointer {
+                        at: position,
+                        machine: machine_position,
+                    },
                     pointer_id,
                     hit_type,
                     button,
@@ -2502,10 +2527,8 @@ impl HitComponent for HitTextStyleRuns {
     ) -> HitResult {
         let mut hit_result = HitResult::None;
         // Inside a copy flying in place, as `HitDrawable::process_listeners`.
-        let (position, can_hit) = match self.lift.at(position) {
-            Some(position) => (position, can_hit),
-            None => (position, false),
-        };
+        let (position, reaches) = self.lift.pointer(position);
+        let can_hit = can_hit && reaches;
         let mut running_can_hit = can_hit && !self.hidden();
         // Retain the collected machines, never a Text/style borrow, across listeners.
         let state_machines = self.state_machines();
@@ -2815,10 +2838,13 @@ impl HitComponent for HitNestedArtboard {
         {
             return HitResult::None;
         }
-        let Some((local, off_mesh, _)) = nested_mapping(&self.component, &self.lift, position)
-        else {
+        // Inside a copy flying in place, where the pointer doesn't reach the
+        // copy it is off it, as off a mesh: its machines hear a miss.
+        let (position, reaches) = self.lift.pointer(position);
+        let Some((local, off_mesh, _)) = nested_local(&self.component, position) else {
             return HitResult::None;
         };
+        let off_mesh = off_mesh || !reaches;
         let past_mesh = can_hit && off_mesh;
         let misses_mesh = (is_missable_event(hit_type) && (past_mesh || outer.in_pointer_miss()))
             || (is_drag_pass(hit_type) && past_mesh && !self.pointers_off.has(pointer_id));
@@ -2942,11 +2968,12 @@ impl HitComponent for HitNestedArtboard {
         {
             return HitResult::None;
         }
-        let Some((local, off_mesh, _)) = nested_mapping(&self.component, &self.lift, position)
-        else {
+        // As `process_event`: off the copy is off a mesh.
+        let (position, reaches) = self.lift.pointer(position);
+        let Some((local, off_mesh, _)) = nested_local(&self.component, position) else {
             return HitResult::None;
         };
-        let hit_type = if off_mesh && is_missable_event(hit_type) {
+        let hit_type = if (off_mesh || !reaches) && is_missable_event(hit_type) {
             ListenerType::Exit
         } else {
             hit_type
@@ -3223,11 +3250,12 @@ impl HitComponent for HitComponentList {
             return HitResult::None;
         }
         let mut result = HitResult::None;
-        let mut running_can_hit = can_hit;
+        // Inside a copy flying in place, where the pointer doesn't reach the
+        // copy its rows hear a miss, as rows under an opaque hit do.
+        let (position, reaches) = self.lift.pointer(position);
+        let mut running_can_hit = can_hit && reaches;
         for index in component_list_indices(&self.component).into_iter().rev() {
-            let Some(local) =
-                component_list_world_to_local(&self.component, &self.lift, position, index)
-            else {
+            let Some(local) = component_list_local(&self.component, position, index) else {
                 continue;
             };
             let Some(machine) = component_list_state_machine(&self.component, index) else {
@@ -3263,6 +3291,7 @@ impl HitComponent for HitComponentList {
                     }
                 } else if is_missable_event(hit_type)
                     && (outer.in_pointer_miss()
+                        || !reaches
                         || (can_hit && crate::css_layout::pointer::in_css(&self.component())))
                 {
                     // `can_hit` here means a higher row answered opaque: in
@@ -3377,7 +3406,9 @@ impl HitComponent for HitComponentList {
             return HitResult::None;
         }
         let mut result = HitResult::None;
-        let mut occluded = false;
+        // As `process_event`: off the copy, every row hears an exit.
+        let (position, reaches) = self.lift.pointer(position);
+        let mut occluded = !reaches;
         let order = component_list_indices(&self.component);
         let count = order.len();
         let mut tested = 0;
@@ -3389,16 +3420,14 @@ impl HitComponent for HitComponentList {
             if !machine.with_instance(StateMachineInstance::has_capture_listeners) {
                 continue;
             }
-            let Some(local) =
-                component_list_world_to_local(&self.component, &self.lift, position, index)
-            else {
+            let Some(local) = component_list_local(&self.component, position, index) else {
                 continue;
             };
             while !occluded && tested < item {
                 let above = order[count - 1 - tested];
                 if let Some(above_machine) = component_list_state_machine(&self.component, above) {
                     if let Some(above_position) =
-                        component_list_world_to_local(&self.component, &self.lift, position, above)
+                        component_list_local(&self.component, position, above)
                     {
                         if above_machine.with_instance_mut(|machine| {
                             machine.pointer_occluded_at(above_position)
@@ -7526,10 +7555,16 @@ impl StateMachineInstance {
                     *index < capture.draw_index
                         && !component_within(component.clone(), &capture.target)
                 });
+            // Inside a copy flying in place, as `HitDrawable::process_listeners`.
+            let (at, reaches) = capture.hit.hit_lift().pointer(position);
+            let can_hit = can_hit && reaches;
             capture.group.with_group(|g| {
                 g.process_event(
                     &capture.hit.component(),
-                    position,
+                    crate::mechanical_port::source::listener_group::ListenerPointer {
+                        at,
+                        machine: position,
+                    },
                     pointer_id,
                     hit_type,
                     button,

@@ -6,15 +6,20 @@ use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
     advance_flags::AdvanceFlags,
     artboard_component_list::ArtboardComponentList,
+    assets::font_asset::FontAsset,
     core::{CoreHandle, CoreType},
     generated::{
         core_registry::CoreRegistry,
-        text::{text_input_base::TextInputBase, text_value_run_base::TextValueRunBase},
+        text::{
+            text_base::TextBase, text_input_base::TextInputBase,
+            text_value_run_base::TextValueRunBase,
+        },
     },
     text::{
         font_hb::HbFont,
         text::{ShapeSource, Text},
         text_input::TextInput,
+        text_style::TextStyle,
         text_value_run::TextValueRun,
     },
     text_engine::{self, FallbackProc, Font, FontRef},
@@ -235,6 +240,47 @@ fn the_sink_hears_text_whose_fallback_had_nothing_for_it() {
         record(|| advance(&board)),
         vec![(text.identity_key(), true)]
     );
+}
+
+#[test]
+fn the_sink_hears_text_whose_ellipsis_alone_needed_the_fallback_fonts() {
+    // The emoji subset has its three emoji but no full stop, so only the
+    // ellipsis asks the chain.
+    let _serial = serial();
+    let _restore = use_fallback(None);
+    let (_file, board, text, run) = arabic_text();
+    let emoji = HbFont::decode(&asset("NotoColorEmojiCOLRv1.subset.ttf")).unwrap();
+    for style in all::<TextStyle>(&board) {
+        let font = style.insert_sibling(FontAsset::default()).unwrap();
+        FontAsset::set_font_occurrence(&font, Some(emoji.clone()));
+        TextStyle::set_asset_occurrence(&style, Some(font));
+    }
+    set_text(&run, &"\u{1F600}".repeat(40));
+    for (key, value) in [
+        (TextBase::SIZING_VALUE_PROPERTY_KEY, 2), // fixed
+        (TextBase::WRAP_VALUE_PROPERTY_KEY, 1),   // no wrap
+        (TextBase::OVERFLOW_VALUE_PROPERTY_KEY, 0),
+    ] {
+        assert!(CoreRegistry::set_uint_handle(&text, i32::from(key), value));
+    }
+    for key in [TextBase::WIDTH_PROPERTY_KEY, TextBase::HEIGHT_PROPERTY_KEY] {
+        assert!(CoreRegistry::set_double_handle(&text, i32::from(key), 60.0));
+    }
+    let key = text.identity_key();
+    assert_eq!(
+        record(|| advance(&board)),
+        vec![(key, false)],
+        "the text's own font draws every emoji"
+    );
+
+    // Only the lines are laid out again, now ending in an ellipsis.
+    assert!(CoreRegistry::set_uint_handle(
+        &text,
+        i32::from(TextBase::OVERFLOW_VALUE_PROPERTY_KEY),
+        3 // ellipsis
+    ));
+    assert_eq!(record(|| advance(&board)), vec![(key, true)]);
+    assert!(record(|| advance(&board)).is_empty());
 }
 
 #[test]

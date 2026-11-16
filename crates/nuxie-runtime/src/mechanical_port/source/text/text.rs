@@ -932,9 +932,11 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(
         owner.with_downcast_mut::<Self, _>(|object| object.mark_listened_runs());
         Self::sync_style_list_items_occurrence(owner);
         let shaped = owner.with_downcast_mut::<Self, _>(|object| {
-            let serial = object.shape_serial;
+            let before = (object.shape_serial, object.shape_uses_fallback());
             object.update_after_transform_super(dirt);
-            (object.shape_serial != serial).then(|| object.shape_uses_fallback())
+            let used = object.shape_uses_fallback();
+            // A new shape, or an ellipsis rebuilt with another answer.
+            (object.shape_serial != before.0 || used != before.1).then_some(used)
         });
         if let Some(Some(used_fallback)) = shaped {
             crate::mechanical_port::source::text_engine::report_shape_fallback(
@@ -1032,6 +1034,9 @@ pub struct Text {
     /// Nuxie: moves each time `shape` is replaced, so the update that made it
     /// reports it (see `text_engine::with_shape_fallback_sink`).
     shape_serial: u32,
+    /// Nuxie: whether laying out the drawn lines (the ellipsis, chiefly)
+    /// called the fallback callback after the shape was made.
+    lines_used_fallback: bool,
     /// Upstream 8e1862e2 `m_fallbackFontsGeneration`: the generation the
     /// shape was last marked for, so new fallback fonts reshape on the next
     /// advance.
@@ -1095,6 +1100,7 @@ impl Default for Text {
             shape_fallbacks: (0, 0),
             shape_reusable: false,
             shape_serial: 0,
+            lines_used_fallback: false,
             // Upstream records it in onAddedDirty; every Text, read or
             // cloned, is built through Default here.
             fallback_fonts_generation:
@@ -2236,6 +2242,14 @@ impl Text {
     }
 
     pub fn build_render_styles(&mut self) {
+        // Nuxie: an ellipsis the text's own font lacks asks the fallback
+        // callback here, after the shape was made.
+        let calls = fallback_calls();
+        self.build_render_styles_lines();
+        self.lines_used_fallback = calls != fallback_calls();
+    }
+
+    fn build_render_styles_lines(&mut self) {
         self.clear_render_styles();
         // Paint-only rebuilds lay out every line again too.
         self.ordered_lines.clear();
@@ -2923,11 +2937,12 @@ impl Text {
             self.mark_lines_dirty(false);
         }
     }
-    /// Whether making the drawn shape called the fallback callback, so how
-    /// it looks depends on the fonts the callback picks from. A shape that
-    /// did is never kept for reuse (`shape_reusable`).
+    /// Whether making the drawn text called the fallback callback, so how
+    /// it looks depends on the fonts the callback picks from: its shape (a
+    /// shape that did is never kept for reuse, `shape_reusable`) or the
+    /// lines laid out from it, such as an ellipsis.
     pub fn shape_uses_fallback(&self) -> bool {
-        !self.shape.is_empty() && !self.shape_reusable
+        !self.shape.is_empty() && (!self.shape_reusable || self.lines_used_fallback)
     }
     fn current_shape_matches(&self, styled: &StyledText, fallback: FallbackState) -> bool {
         self.shape_reusable

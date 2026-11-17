@@ -1,6 +1,6 @@
 //! Atomic transport. The authored wrappers and the empty layout leaf belong to
 //! their slot. All running state belongs to the single transported occurrence.
-use super::values::{FlightValues, TypedText};
+use super::values::{FlightValues, TypedText, WrittenValues};
 use crate::{
     Artboard, CoreHandle, RuntimeArtboardInstanceHandle,
     source::{
@@ -894,6 +894,40 @@ fn rebuild_semantics(
             instance.build_semantic_tree(Some(manager), parent_node);
         }
     }
+}
+/// What a carried instance takes from `to`, both placements read as the file
+/// has them, and what it takes back from `from` on a cancel; read while it is
+/// still at `from`. Its own model is the one it has there, which it keeps.
+pub(super) fn written_values(from: &CoreHandle, to: &CoreHandle) -> Result<WrittenValues> {
+    // A unit whose placement never advanced has not had the bind its mount
+    // scheduled, and so has no model yet; the carry runs it first anyway.
+    NestedArtboard::flush_pending_stateful_binding_occurrence(from);
+    let as_written = |placement: &CoreHandle| -> Result<Option<CoreHandle>> {
+        Ok(slot_model(placement)?
+            .and_then(|own| NestedArtboard::as_the_file_has_it(placement, &own)))
+    };
+    let (Some(leaving), Some(arriving)) = (as_written(from)?, as_written(to)?) else {
+        return Ok(WrittenValues::default());
+    };
+    let Some(model) = child(from)?
+        .and_then(|instance| instance.data_context())
+        .and_then(|context| context.with_context(DataContext::main_view_model_instance))
+    else {
+        return Ok(WrittenValues::default());
+    };
+    let bound = |placement: &CoreHandle| -> Result<Vec<u32>> {
+        Ok(slot_props(placement)?
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect())
+    };
+    Ok(WrittenValues::read(
+        &leaving,
+        &arriving,
+        &model,
+        &bound(from)?,
+        &bound(to)?,
+    ))
 }
 fn slot_model(slot: &CoreHandle) -> Result<Option<CoreHandle>> {
     let model_id = definition(slot)?.with_downcast::<Artboard, _>(|b| b.base.view_model_id());

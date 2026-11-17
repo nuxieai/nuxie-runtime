@@ -557,6 +557,11 @@ pub(super) struct Carried {
     leaving: Lift,
     /// Its numbers and colors, blending to the arriving Screen's.
     pub(super) values: super::values::FlightValues,
+    /// What the arriving placement writes differently from the leaving one.
+    pub(super) written: super::values::WrittenValues,
+    /// The instance it carries, to tell it from another that fills the
+    /// placement it left while it flies.
+    instance: crate::RuntimeArtboardInstanceWeakHandle,
 }
 
 impl Carried {
@@ -576,16 +581,17 @@ impl Carried {
             })
         };
         let (from_placement, to_placement) = (placement(from)?, placement(to)?);
-        ensure!(
-            super::transport::child(&from_placement)?.is_some(),
-            "leaving copy has no instance"
-        );
+        let instance = super::transport::child(&from_placement)?
+            .ok_or_else(|| anyhow::anyhow!("leaving copy has no instance"))?;
         super::transport::validate_move(&from_placement, &to_placement)?;
+        let written = super::transport::written_values(&from_placement, &to_placement)?;
         Ok(Self {
             from: from_placement,
             to: to_placement,
             leaving: Lift::new(from_row.clone(), from.clone(), from.clone()),
             values: super::values::FlightValues::default(),
+            written,
+            instance: instance.downgrade(),
         })
     }
 }
@@ -698,6 +704,7 @@ impl InPlaceFlight {
         // its Screen: its values stay as they were.
         if let Some(carried) = self.carried.as_ref().filter(|_| awake) {
             carried.values.follow(frame.progress);
+            carried.written.follow(frame.progress);
         }
         if let Some(node) = &self.held {
             let size = frame.blended_size();
@@ -819,10 +826,24 @@ impl InPlaceFlight {
     }
 
     /// Ends a carried instance's blend: its bindings take their own values
-    /// again at the next settlement, which the step's end runs right after.
+    /// again at the next settlement, which the step's end runs right after,
+    /// and its written values take those of the placement it is at: the one
+    /// it left if a cancel already took it home (the unmount hook does when
+    /// the arriving Screen goes), the arriving one otherwise, including when
+    /// another instance filled the placement it left.
     pub(super) fn release_values(&mut self) {
         if let Some(carried) = &mut self.carried {
             carried.values = Default::default();
+            let home = super::transport::child(&carried.from)
+                .ok()
+                .flatten()
+                .zip(carried.instance.upgrade())
+                .is_some_and(|(at_home, carried)| at_home.core_handle() == carried.core_handle());
+            if home {
+                carried.written.home();
+            } else {
+                carried.written.arrive();
+            }
         }
     }
 

@@ -271,3 +271,293 @@ impl TypedText {
         }
     }
 }
+
+/// A value as one of a view model value's kinds holds it, read through its
+/// field type.
+#[derive(Clone, Debug, PartialEq)]
+enum Written {
+    Uint(u32),
+    Double(f32),
+    Str(String),
+    Bool(bool),
+    Color(i32),
+}
+impl Written {
+    fn read(value: &CoreHandle, key: u16) -> Option<Self> {
+        use crate::source::core::field_types::{
+            core_bool_type::CoreBoolType, core_color_type::CoreColorType,
+            core_double_type::CoreDoubleType, core_string_type::CoreStringType,
+            core_uint_type::CoreUintType,
+        };
+        let key = i32::from(key);
+        match CoreRegistry::property_field_id(key) {
+            CoreUintType::ID => CoreRegistry::get_uint_handle(value, key).map(Self::Uint),
+            CoreDoubleType::ID => CoreRegistry::get_double_handle(value, key).map(Self::Double),
+            CoreStringType::ID => CoreRegistry::get_string_handle(value, key).map(Self::Str),
+            CoreBoolType::ID => CoreRegistry::get_bool_handle(value, key).map(Self::Bool),
+            CoreColorType::ID => CoreRegistry::get_color_handle(value, key).map(Self::Color),
+            _ => None,
+        }
+    }
+    /// Writes through the property's setter, so its kind's change hooks run
+    /// as for any other write.
+    fn write(&self, value: &CoreHandle, key: u16) {
+        let key = i32::from(key);
+        match self {
+            Self::Uint(v) => CoreRegistry::set_uint_handle(value, key, *v),
+            Self::Double(v) => CoreRegistry::set_double_handle(value, key, *v),
+            Self::Str(v) => CoreRegistry::set_string_handle(value, key, v.clone()),
+            Self::Bool(v) => CoreRegistry::set_bool_handle(value, key, *v),
+            Self::Color(v) => CoreRegistry::set_color_handle(value, key, *v),
+        };
+    }
+    /// Whether this kind blends over a flight: a number or a color.
+    fn blends(&self) -> bool {
+        matches!(self, Self::Double(_) | Self::Color(_))
+    }
+    /// At `t` from `self` to `to`: a number or a color blends as a bound one
+    /// does, anything else is already `to`.
+    fn at(&self, to: &Self, t: f32) -> Self {
+        match (self, to) {
+            (Self::Double(a), Self::Double(b)) if t < 1.0 => Self::Double(a + (b - a) * t),
+            (Self::Color(a), Self::Color(b)) if t < 1.0 => {
+                Self::Color(blend_color(*a as u32, *b as u32, t) as i32)
+            }
+            _ => to.clone(),
+        }
+    }
+}
+
+/// The key that holds a view model value's written value, for each kind a
+/// carried instance takes from the placement it arrives at: the kinds that
+/// hold nothing in place of what is written, by the one property each
+/// declares for it. `UNWRITTEN_KINDS` names the rest.
+const WRITTEN_KEYS: [u16; 6] = {
+    use crate::source::generated::viewmodel::{
+        viewmodel_instance_boolean_base::ViewModelInstanceBooleanBase,
+        viewmodel_instance_enum_base::ViewModelInstanceEnumBase,
+        viewmodel_instance_symbol_list_index_base::ViewModelInstanceSymbolListIndexBase,
+    };
+    [
+        ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY,
+        ViewModelInstanceColorBase::PROPERTY_VALUE_PROPERTY_KEY,
+        ViewModelInstanceStringBase::PROPERTY_VALUE_PROPERTY_KEY,
+        ViewModelInstanceBooleanBase::PROPERTY_VALUE_PROPERTY_KEY,
+        ViewModelInstanceEnumBase::PROPERTY_VALUE_PROPERTY_KEY,
+        ViewModelInstanceSymbolListIndexBase::PROPERTY_VALUE_PROPERTY_KEY,
+    ]
+};
+
+/// The key of `value`'s written value, by its kind; None for a kind a
+/// carried instance keeps as it left.
+pub(super) fn written_key(value: &CoreHandle) -> Option<u16> {
+    WRITTEN_KEYS
+        .into_iter()
+        .find(|&key| value.is_type_of(CoreRegistry::property_owner_type_key(u32::from(key))))
+}
+
+/// The kinds a carried instance keeps as it left, by type key. A test checks
+/// every kind of view model value is here or has a key in `WRITTEN_KEYS`.
+/// - A list (its rows), a trigger (a fire count) and a reference to another
+///   model instance (what it refers to is an object, not the id it was
+///   written with) hold no one written value.
+/// - An image, a font, a blob and an artboard can hold one a host, a binding
+///   or a script gave them in place of the file's, with their id at "none",
+///   so writing the id alone would not replace it (UNIV-6481).
+#[cfg(test)]
+const UNWRITTEN_KINDS: [u16; 7] = {
+    use crate::source::generated::viewmodel::{
+        viewmodel_instance_artboard_base::ViewModelInstanceArtboardBase,
+        viewmodel_instance_asset_blob_base::ViewModelInstanceAssetBlobBase,
+        viewmodel_instance_asset_font_base::ViewModelInstanceAssetFontBase,
+        viewmodel_instance_asset_image_base::ViewModelInstanceAssetImageBase,
+        viewmodel_instance_list_base::ViewModelInstanceListBase,
+        viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase,
+        viewmodel_instance_viewmodel_base::ViewModelInstanceViewModelBase,
+    };
+    [
+        ViewModelInstanceListBase::TYPE_KEY,
+        ViewModelInstanceTriggerBase::TYPE_KEY,
+        ViewModelInstanceViewModelBase::TYPE_KEY,
+        ViewModelInstanceAssetImageBase::TYPE_KEY,
+        ViewModelInstanceAssetFontBase::TYPE_KEY,
+        ViewModelInstanceAssetBlobBase::TYPE_KEY,
+        ViewModelInstanceArtboardBase::TYPE_KEY,
+    ]
+};
+
+/// One value of a carried instance that the step changes: the instance's own
+/// value and its key, the value it shows at take-off, and what each
+/// placement writes, as the file has them; None where that placement binds
+/// it, so its binding gives the value instead.
+struct Change {
+    target: CoreHandle,
+    key: u16,
+    start: Written,
+    from: Option<Written>,
+    to: Option<Written>,
+}
+
+/// What a carried instance takes from the placement it arrives at, as the
+/// written values of where it is, for the kinds `WRITTEN_KEYS` names: each
+/// value the arriving placement writes, where the leaving one binds it or
+/// writes it differently. A number or a
+/// color blends from what the instance shows at take-off to the arriving
+/// value over the flight, as a bound one does; anything else switches at
+/// take-off and is then the instance's own. A value written the same on
+/// both is left alone, so the instance keeps what it made of it. A cancel
+/// that takes the instance home gives it back what the placement it left
+/// writes, including a value the arriving placement binds.
+#[derive(Default)]
+pub(super) struct WrittenValues(Vec<Change>);
+impl Clone for WrittenValues {
+    // As a flight's values: a snapshot of a flight never writes its values.
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+impl WrittenValues {
+    /// Reads `from` and `to`, the two placements' own model instances as
+    /// the file has them, against `model`, the instance's own.
+    /// `bound_from` and `bound_to` name the properties each placement binds.
+    pub(super) fn read(
+        from: &CoreHandle,
+        to: &CoreHandle,
+        model: &CoreHandle,
+        bound_from: &[u32],
+        bound_to: &[u32],
+    ) -> Self {
+        let values = |model: &CoreHandle| {
+            model
+                .with_downcast::<ViewModelInstance, _>(|v| v.property_values().to_vec())
+                .unwrap_or_default()
+        };
+        let id = |value: &CoreHandle| {
+            value
+                .with(|o| {
+                    o.as_view_model_instance_value()
+                        .map(|v| v.view_model_property_id())
+                })
+                .flatten()
+        };
+        let (leaving, arriving) = (values(from), values(to));
+        let find = |values: &[CoreHandle], wanted: u32| {
+            values.iter().find(|v| id(v) == Some(wanted)).cloned()
+        };
+        let mut changes = Vec::new();
+        for target in values(model) {
+            let Some(property) = id(&target) else {
+                continue;
+            };
+            let Some(key) = written_key(&target) else {
+                continue;
+            };
+            let written = |values: &[CoreHandle], bound: &[u32]| {
+                if bound.contains(&property) {
+                    Some(None)
+                } else {
+                    find(values, property).and_then(|v| Written::read(&v, key).map(Some))
+                }
+            };
+            let (Some(from), Some(to), Some(start)) = (
+                written(&leaving, bound_from),
+                written(&arriving, bound_to),
+                Written::read(&target, key),
+            ) else {
+                continue;
+            };
+            let changes_here = match (&from, &to) {
+                (Some(from), Some(to)) => from != to,
+                (None, None) => false,
+                _ => true,
+            };
+            if changes_here {
+                changes.push(Change {
+                    target,
+                    key,
+                    start,
+                    from,
+                    to,
+                });
+            }
+        }
+        Self(changes)
+    }
+
+    /// At take-off: each arriving value that does not blend switches.
+    pub(super) fn take_off(&self) {
+        for change in &self.0 {
+            if let Some(to) = change.to.as_ref().filter(|to| !to.blends()) {
+                to.write(&change.target, change.key);
+            }
+        }
+    }
+
+    /// At `progress` of the flight: each arriving value that blends.
+    pub(super) fn follow(&self, progress: f32) {
+        for change in &self.0 {
+            if let Some(to) = change.to.as_ref().filter(|to| to.blends()) {
+                change
+                    .start
+                    .at(to, progress)
+                    .write(&change.target, change.key);
+            }
+        }
+    }
+
+    /// Landed where it flew, or left there by a cancel: the arriving values.
+    pub(super) fn arrive(&self) {
+        self.follow(1.0);
+    }
+
+    /// Carried home by a cancel: what the placement it left writes.
+    pub(super) fn home(&self) {
+        for change in &self.0 {
+            if let Some(from) = &change.from {
+                from.write(&change.target, change.key);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::source::generated::{
+        core_type_tree::{PARENT_TYPE_KEYS, has_ancestor},
+        viewmodel::viewmodel_instance_value_base::ViewModelInstanceValueBase,
+    };
+
+    /// Every kind of view model value either has its written value carried
+    /// or is named as one a carried instance keeps as it left, so a kind
+    /// added to the format fails here until it is one or the other. Kinds
+    /// that others extend (a symbol, an asset) are covered through the kinds
+    /// a file holds.
+    #[test]
+    fn every_kind_of_value_is_carried_or_named() {
+        let value = ViewModelInstanceValueBase::TYPE_KEY;
+        let kinds = (0..PARENT_TYPE_KEYS.len() as u16)
+            .filter(|&kind| has_ancestor(kind, value))
+            .collect::<Vec<_>>();
+        let owners = WRITTEN_KEYS.map(|key| CoreRegistry::property_owner_type_key(u32::from(key)));
+        for owner in owners {
+            assert!(kinds.contains(&owner), "{owner} is a kind of value");
+        }
+        for kind in &kinds {
+            let extended = kinds
+                .iter()
+                .any(|&other| PARENT_TYPE_KEYS[usize::from(other)] == *kind);
+            if extended {
+                continue;
+            }
+            let carried = owners
+                .iter()
+                .any(|&owner| owner == *kind || has_ancestor(*kind, owner));
+            assert!(
+                carried != UNWRITTEN_KINDS.contains(kind),
+                "kind {kind}: carried {carried}, named as kept {}",
+                UNWRITTEN_KINDS.contains(kind)
+            );
+        }
+    }
+}

@@ -263,6 +263,7 @@ impl Plan {
             let home = |host: &CoreHandle| crate::hosted_scene::is_carry_host(host);
             if home(from) && child(from)?.is_none() && home(to) && child(to)?.is_some() {
                 super::carry(to, from, false)?;
+                carried.written.home();
                 settle_slot(from)?;
                 refill_left(to)?;
             } else {
@@ -858,6 +859,7 @@ impl Plan {
                     &carried.to,
                     &mut carried.values,
                 )?;
+                carried.written.take_off();
                 settle_row(&flight.row);
             }
         }

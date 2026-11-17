@@ -15104,4 +15104,262 @@ return function() return {init=init,advance=advance} end
         close(val(&property(&vm(&original), "prop"), 575), 200.0);
         assert_eq!((s.count(B_CARD), s.count(BUTTON)), (1, 1));
     }
+
+    const RED: u32 = 0xffff0000;
+    const BLUE: u32 = 0xff0000ff;
+    /// What `model` shows of the written kinds' `level`, `tint` and
+    /// `caption`.
+    fn shows(model: &CoreHandle) -> (f32, u32, String) {
+        (
+            val(&property(model, "level"), 575),
+            color_value(model, "tint"),
+            string_value(model, "caption"),
+        )
+    }
+    fn shows_close(model: &CoreHandle, expected: (f32, u32, &str), at: &str) {
+        let (level, tint, caption) = shows(model);
+        assert!((level - expected.0).abs() < 1e-4, "level {level} at {at}");
+        assert_eq!(
+            (tint, caption.as_str()),
+            (expected.1, expected.2),
+            "at {at}"
+        );
+    }
+
+    /// B3, ruling (1): an instance arriving at a placement takes that
+    /// placement's written values. Where the two placements write a value
+    /// differently, a number and a color blend over the flight from what the
+    /// instance shows to the arriving value, as bound ones do, and a string
+    /// switches at take-off. Back, the same towards A's. The copy refilled
+    /// where it left shows that placement's own values.
+    #[test]
+    fn in_place_a_prop_written_differently_takes_the_arriving_value() {
+        let mut s = Page::new(InPlaceCarry::TransferWritten);
+        let original = child(&s.pa).unwrap();
+        let model = vm(&original);
+        shows_close(&model, (0.3, RED, "one"), "rest");
+        shows_close(&vm(&child(&s.pb).unwrap()), (0.6, BLUE, "two"), "B at rest");
+        s.begin("B", "t1");
+        shows_close(&model, (0.3, RED, "two"), "take-off");
+        s.fly(0.5);
+        let (level, tint, caption) = shows(&model);
+        close(level, 0.45);
+        assert!(tint != RED && tint != BLUE, "the color blends: {tint:#x}");
+        assert_eq!(caption, "two");
+        s.fly(1.0);
+        shows_close(&model, (0.6, BLUE, "two"), "go at 1");
+        s.end("B", "t1");
+        assert_eq!(holds(&s.pb), Some(original.core_handle()));
+        shows_close(&model, (0.6, BLUE, "two"), "landed");
+        shows_close(&vm(&child(&s.pa).unwrap()), (0.3, RED, "one"), "A's refill");
+        s.begin("A", "back");
+        shows_close(&model, (0.6, BLUE, "one"), "back take-off");
+        s.fly(0.5);
+        close(shows(&model).0, 0.45);
+        s.end("A", "back");
+        assert_eq!(holds(&s.pa), Some(original.core_handle()));
+        shows_close(&model, (0.3, RED, "one"), "home");
+        shows_close(
+            &vm(&child(&s.pb).unwrap()),
+            (0.6, BLUE, "two"),
+            "B's refill",
+        );
+    }
+
+    /// A value both placements write the same is the instance's own: it
+    /// keeps what it made of it. A value written differently blends from
+    /// what the instance shows at take-off, not from what A writes.
+    #[test]
+    fn in_place_a_prop_written_the_same_keeps_its_live_value() {
+        let mut s = Page::new(InPlaceCarry::TransferWritten);
+        let original = child(&s.pa).unwrap();
+        let model = vm(&original);
+        let count = property(&model, "count");
+        CoreRegistry::set_double_handle(&count, 575, 7.0);
+        CoreRegistry::set_double_handle(&property(&model, "level"), 575, 0.9);
+        s.begin("B", "t1");
+        for (p, level) in [(0.0, 0.9), (0.5, 0.75), (1.0, 0.6)] {
+            s.fly(p);
+            close(val(&count, 575), 7.0);
+            close(shows(&model).0, level);
+        }
+        s.end("B", "t1");
+        close(val(&count, 575), 7.0);
+        s.begin("A", "back");
+        s.fly(1.0);
+        s.end("A", "back");
+        close(val(&count, 575), 7.0);
+        close(shows(&model).0, 0.3);
+    }
+
+    /// A cancel leaves the instance with the written values of where it
+    /// ends: A's when the arriving Screen goes and it is taken home, B's
+    /// when the leaving Screen goes and it stays.
+    #[test]
+    fn in_place_a_cancelled_transfer_takes_the_values_of_where_it_ends() {
+        let page = |s: &Page| {
+            RuntimeOwnedViewModelHandle::from_native(
+                s._file.clone(),
+                s.root
+                    .data_context()
+                    .unwrap()
+                    .with_context(|c| c.main_view_model_instance())
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        for (gone, home) in [(1, true), (0, false)] {
+            let mut s = Page::new(InPlaceCarry::TransferWritten);
+            let original = child(&s.pa).unwrap();
+            s.begin("B", "t1");
+            s.fly(0.5);
+            assert!(page(&s).remove_list_item_by_property_name_path("screens", gone));
+            s.advance(0.0);
+            assert!(s.moves.flight_controls(&s.root).is_empty(), "the step ends");
+            let (at, expected) = if home {
+                (&s.pa, (0.3, RED, "one"))
+            } else {
+                (&s.pb, (0.6, BLUE, "two"))
+            };
+            assert_eq!(holds(at), Some(original.core_handle()));
+            shows_close(
+                &vm(&original),
+                expected,
+                if home { "home" } else { "stays" },
+            );
+        }
+    }
+
+    /// The same values written on the placements or bound to each Screen's
+    /// model fly the same: every frame of a go and a Back, and at rest.
+    #[test]
+    fn in_place_written_values_fly_as_bound_ones_do() {
+        let frames = |kind| {
+            let mut s = Page::new(kind);
+            let model = vm(&child(&s.pa).unwrap());
+            let mut seen = vec![shows(&model)];
+            for (to, step) in [("B", "t1"), ("A", "back")] {
+                s.begin(to, step);
+                seen.push(shows(&model));
+                for p in [0.0, 0.25, 0.5, 0.75, 1.0] {
+                    s.fly(p);
+                    seen.push(shows(&model));
+                }
+                s.end(to, step);
+                seen.push(shows(&model));
+            }
+            seen
+        };
+        let written = frames(InPlaceCarry::TransferWritten);
+        for kind in [
+            InPlaceCarry::TransferWrittenBound,
+            InPlaceCarry::TransferWrittenBoundOnB,
+        ] {
+            let bound = frames(kind);
+            assert_eq!(written.len(), bound.len());
+            for (frame, (w, b)) in written.iter().zip(&bound).enumerate() {
+                assert!(
+                    (w.0 - b.0).abs() < 1e-4,
+                    "{kind:?} level at frame {frame}: {w:?} {b:?}"
+                );
+                assert_eq!((w.1, &w.2), (b.1, &b.2), "{kind:?} frame {frame}");
+            }
+        }
+    }
+
+    /// A value that switches at take-off is the instance's own from then
+    /// on: what changes it during the flight stays, through the landing.
+    #[test]
+    fn in_place_a_switched_value_is_the_instances_own_after_take_off() {
+        let mut s = Page::new(InPlaceCarry::TransferWritten);
+        let model = vm(&child(&s.pa).unwrap());
+        s.begin("B", "t1");
+        s.fly(0.25);
+        assert_eq!(string_value(&model, "caption"), "two");
+        CoreRegistry::set_string_handle(&property(&model, "caption"), 561, "mine".into());
+        for p in [0.5, 1.0] {
+            s.fly(p);
+            assert_eq!(string_value(&model, "caption"), "mine", "at {p}");
+        }
+        s.end("B", "t1");
+        assert_eq!(string_value(&model, "caption"), "mine");
+    }
+
+    /// The placement it left, filled again while the instance flies (as a
+    /// data-bound swap of its component would), is not the instance come
+    /// home: the instance lands with B's values, and the placement keeps
+    /// what filled it.
+    #[test]
+    fn in_place_a_placement_filled_while_it_flies_is_not_its_home() {
+        let mut s = Page::new(InPlaceCarry::TransferWritten);
+        let original = child(&s.pa).unwrap();
+        s.begin("B", "t1");
+        s.fly(0.5);
+        refill_slot(&s.pa).unwrap();
+        let filled = child(&s.pa).unwrap();
+        s.fly(1.0);
+        s.end("B", "t1");
+        assert_eq!(holds(&s.pb), Some(original.core_handle()));
+        shows_close(&vm(&original), (0.6, BLUE, "two"), "landed");
+        assert_eq!(holds(&s.pa), Some(filled.core_handle()));
+        shows_close(&vm(&filled), (0.3, RED, "one"), "what filled A");
+    }
+
+    /// An image, a font, a blob or an artboard value is not carried as
+    /// written: the instance keeps it as it left, through a go and a Back,
+    /// though B writes another. Each placement's own copy shows its own.
+    #[test]
+    fn in_place_an_asset_value_stays_as_it_left() {
+        let picture = |model: &CoreHandle| {
+            CoreRegistry::get_uint_handle(&property(model, "picture"), 824).unwrap()
+        };
+        let mut s = Page::new(InPlaceCarry::TransferWritten);
+        let original = child(&s.pa).unwrap();
+        let model = vm(&original);
+        assert_eq!(picture(&model), u32::MAX);
+        assert_eq!(picture(&vm(&child(&s.pb).unwrap())), 0);
+        s.begin("B", "t1");
+        for p in [0.0, 0.5, 1.0] {
+            s.fly(p);
+            assert_eq!(picture(&model), u32::MAX, "go at {p}");
+        }
+        s.end("B", "t1");
+        assert_eq!(holds(&s.pb), Some(original.core_handle()));
+        assert_eq!(picture(&model), u32::MAX, "landed at B");
+        s.begin("A", "back");
+        s.fly(1.0);
+        s.end("A", "back");
+        assert_eq!(picture(&model), u32::MAX, "home");
+        assert_eq!(picture(&vm(&child(&s.pb).unwrap())), 0, "B's refill");
+    }
+
+    /// A takes its values from what it writes and B from its bindings. A
+    /// cancel that takes the instance home gives it back what A writes,
+    /// though B's bindings gave it B's.
+    #[test]
+    fn in_place_a_value_bound_on_arrival_comes_home_as_written() {
+        let page = |s: &Page| {
+            RuntimeOwnedViewModelHandle::from_native(
+                s._file.clone(),
+                s.root
+                    .data_context()
+                    .unwrap()
+                    .with_context(|c| c.main_view_model_instance())
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        let mut s = Page::new(InPlaceCarry::TransferWrittenBoundOnB);
+        let original = child(&s.pa).unwrap();
+        let model = vm(&original);
+        shows_close(&model, (0.3, RED, "one"), "rest");
+        s.begin("B", "t1");
+        s.fly(0.5);
+        close(shows(&model).0, 0.45);
+        assert!(page(&s).remove_list_item_by_property_name_path("screens", 1));
+        s.advance(0.0);
+        assert!(s.moves.flight_controls(&s.root).is_empty(), "the step ends");
+        assert_eq!(holds(&s.pa), Some(original.core_handle()), "home");
+        shows_close(&model, (0.3, RED, "one"), "home");
+    }
 }

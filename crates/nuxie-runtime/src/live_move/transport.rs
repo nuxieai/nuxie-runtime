@@ -556,6 +556,15 @@ pub fn carry(from: &CoreHandle, to: &CoreHandle, in_the_air: bool) -> Result<()>
     move_with_props(from, to, to, None, in_the_air)
 }
 
+/// Lands an instance carried in place where it already is: `host` no longer
+/// names where it took off, and no longer lends it out. Nothing moves.
+pub(super) fn land_in_place(host: &CoreHandle) -> Result<()> {
+    read(host, |_| ())?;
+    write(host, |s| s.live_move_mut().origin_home = None);
+    register_loan(host, false);
+    Ok(())
+}
+
 pub(super) fn move_to_flight(
     from: &CoreHandle,
     to: &CoreHandle,

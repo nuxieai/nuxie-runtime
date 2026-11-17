@@ -537,6 +537,57 @@ pub struct InPlaceFlight {
     to_end: Cell<Option<End>>,
     /// The lift's last transform, kept while it can't be solved.
     last: Cell<Mat2D>,
+    /// A unit that transfers: the one instance it carries.
+    pub(super) carried: Option<Carried>,
+}
+
+/// The one instance a transferring unit flies in place
+/// (docs/live-moves.md, Flying in place). The step carries it at take-off
+/// from the component placement inside the leaving element into the one
+/// inside the arriving element, the flying copy, which is never empty. The
+/// leaving element stays where it rests, its placement empty, and its
+/// Screen leaves it out of its draw for the step, with no lift drawing it,
+/// so one occurrence shows, as when a unit transfers through slots.
+#[derive(Clone)]
+pub(super) struct Carried {
+    /// The placement inside the leaving element, then the arriving one's.
+    pub(super) from: CoreHandle,
+    pub(super) to: CoreHandle,
+    /// The leaving element's mark on its own Screen: in `away` only.
+    leaving: Lift,
+    /// Its numbers and colors, blending to the arriving Screen's.
+    pub(super) values: super::values::FlightValues,
+}
+
+impl Carried {
+    /// What a transferring unit carries from `from`, an element of
+    /// `from_row`, to `to`: the one placement inside each. Read before
+    /// anything moves; refused unless each holds exactly one, the leaving
+    /// one holds an instance, and the carry takes it from one to the other.
+    pub(super) fn read(
+        (from, from_row): (&CoreHandle, &CoreHandle),
+        to: &CoreHandle,
+    ) -> Result<Self> {
+        let placement = |element: &CoreHandle| {
+            crate::hosted_scene::boxed_placement(element).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "a transferring unit's element is not a box holding one component placement"
+                )
+            })
+        };
+        let (from_placement, to_placement) = (placement(from)?, placement(to)?);
+        ensure!(
+            super::transport::child(&from_placement)?.is_some(),
+            "leaving copy has no instance"
+        );
+        super::transport::validate_move(&from_placement, &to_placement)?;
+        Ok(Self {
+            from: from_placement,
+            to: to_placement,
+            leaving: Lift::new(from_row.clone(), from.clone(), from.clone()),
+            values: super::values::FlightValues::default(),
+        })
+    }
 }
 
 impl InPlaceFlight {
@@ -592,7 +643,14 @@ impl InPlaceFlight {
             from_end: Cell::new(None),
             to_end: Cell::new(None),
             last: Cell::new(Mat2D::identity()),
+            carried: None,
         })
+    }
+
+    /// The arriving copy of a transferring unit, the only copy it flies.
+    pub(super) fn carrying(mut self, carried: Carried) -> Self {
+        self.carried = Some(carried);
+        self
     }
 
     fn values_of(record: &CoreHandle) -> Result<Values> {
@@ -631,8 +689,16 @@ impl InPlaceFlight {
     }
 
     /// The Size barrier's writes: the held copy's flight size, and the
-    /// corners and shadow its box draws in place of its own.
-    pub(super) fn apply_size(&self, frame: &FlightFrame) {
+    /// corners and shadow its box draws in place of its own. `awake` is
+    /// whether the Screen the copy flies in is awake.
+    pub(super) fn apply_size(&self, frame: &FlightFrame, awake: bool) {
+        // Blended values can feed layout: they go first, at the progress the
+        // pose uses, as the slot follower blends them. A carried instance
+        // sleeps with the Screen it flies in, as a slot flight sleeps with
+        // its Screen: its values stay as they were.
+        if let Some(carried) = self.carried.as_ref().filter(|_| awake) {
+            carried.values.follow(frame.progress);
+        }
         if let Some(node) = &self.held {
             let size = frame.blended_size();
             flight_hold::set_size(node, (size.x.max(0.0), size.y.max(0.0)));
@@ -742,8 +808,22 @@ impl InPlaceFlight {
         self.board.with_downcast::<Artboard, _>(|board| {
             board.lifts.borrow_mut().drawn.push(self.lift.clone());
         });
+        if let Some(carried) = &self.carried {
+            self.from_row.with_downcast::<Artboard, _>(|row| {
+                row.lifts.borrow_mut().away.push(carried.leaving.clone());
+            });
+            changed(&self.from_row);
+        }
         changed(&self.row);
         changed(&self.board);
+    }
+
+    /// Ends a carried instance's blend: its bindings take their own values
+    /// again at the next settlement, which the step's end runs right after.
+    pub(super) fn release_values(&mut self) {
+        if let Some(carried) = &mut self.carried {
+            carried.values = Default::default();
+        }
     }
 
     /// Ends every mark of the copy, whatever is still there of it.
@@ -753,11 +833,19 @@ impl InPlaceFlight {
         }
         set_opacity_root(&self.element, OpacityRoot::None);
         self.flying.set_paint(None, None);
-        for row in [&self.row, &self.board] {
+        let leaving = self.carried.as_ref().map(|carried| &carried.leaving);
+        let rows: &[&CoreHandle] = if leaving.is_some() {
+            &[&self.row, &self.board, &self.from_row]
+        } else {
+            &[&self.row, &self.board]
+        };
+        for row in rows {
             row.with_downcast::<Artboard, _>(|row| {
                 let mut lifts = row.lifts.borrow_mut();
                 lifts.drawn.retain(|lift| !lift.ptr_eq(&self.lift));
-                lifts.away.retain(|lift| !lift.ptr_eq(&self.lift));
+                lifts.away.retain(|lift| {
+                    !lift.ptr_eq(&self.lift) && leaving.is_none_or(|leaving| !lift.ptr_eq(leaving))
+                });
                 if lifts.away.is_empty() {
                     lifts.skip = std::rc::Rc::default();
                 }

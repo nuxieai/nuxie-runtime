@@ -9645,9 +9645,107 @@ mod paint_order {
         );
     }
 
+    /// Row 22 of runtime PR B: each paint case with a unit that transfers,
+    /// flown in place as one instance (`PaintShape::InPlaceCarry`), draws
+    /// what its slot page draws flying it as one instance, every frame of a
+    /// go and a Back, at rest after each, and through the same cancels as
+    /// `in_place_matches_the_slot_path`.
+    ///
+    /// Six cases differ, each in where the flying instance draws against one
+    /// later neighbor, C, at the first frame of a step (UNIV-6476). Each is
+    /// asserted exactly as it differs today, so a fix to lift placement turns
+    /// its row red and the table shrinks:
+    /// - Taking off, a component whose own root is turned or scaled draws
+    ///   past its box; the cover reads the box, misses C that only the
+    ///   overflow touches, and draws the instance above C, where the slot
+    ///   path draws it under.
+    /// - A turned or faded root sorts its placement above C at rest. A lift
+    ///   is placed where its element, the box, paints, below C, where the
+    ///   slot path keeps the instance above; this shows from the take-off,
+    ///   and on the way back too.
+    #[test]
+    fn in_place_a_transfer_matches_the_slot_path() {
+        let frames: Vec<f32> = (0..=20).map(|n| n as f32 * 0.05).collect();
+        let (e, c) = (
+            fixture::paint_color("E") & 0x00ff_ffff,
+            fixture::paint_color("C") & 0x00ff_ffff,
+        );
+        // (case, first frame that differs, slot order, in-place order)
+        let expected: [(PaintCase, &str, [u32; 2], [u32; 2]); 6] = [
+            (PaintCase::Resting(6), "go at 0", [e, c], [c, e]),
+            (PaintCase::Resting(7), "go at 0", [e, c], [c, e]),
+            (PaintCase::Resting(9), "go at 0", [e, c], [c, e]),
+            (PaintCase::Resting(10), "go at 0", [e, c], [c, e]),
+            (PaintCase::TurnedFrame, "go at 0", [c, e], [e, c]),
+            (
+                PaintCase::FadeAtRest { native: false },
+                "go at 0",
+                [c, e],
+                [e, c],
+            ),
+        ];
+        let order = |o: [u32; 2]| format!("{:?}", o.map(Some));
+        let (mut ran, mut failed) = (Vec::new(), Vec::new());
+        for case in in_place_cases() {
+            let shaped = |shape| fixture::css_paint_fixture_shaped(case, shape);
+            let transfers = shaped(PaintShape::Slots) != shaped(PaintShape::SlotCopies);
+            if !transfers || shaped(PaintShape::InPlaceCarry).is_err() {
+                continue;
+            }
+            ran.push(case);
+            let run = std::panic::catch_unwind(|| {
+                equivalent_shapes(case, [PaintShape::Slots, PaintShape::InPlaceCarry], &frames)
+            });
+            if let Err(err) = run {
+                let why = err
+                    .downcast_ref::<String>()
+                    .cloned()
+                    .or_else(|| err.downcast_ref::<&str>().map(|s| (*s).to_owned()))
+                    .unwrap_or_default();
+                if let Some((_, label, slots, in_place)) =
+                    expected.iter().find(|(known, ..)| *known == case)
+                {
+                    let as_known = why.contains(&format!("{case:?} {label}: draw order"))
+                        && why.contains(&format!("left: {}", order(*slots)))
+                        && why.contains(&format!("right: {}", order(*in_place)));
+                    if as_known {
+                        continue;
+                    }
+                }
+                failed.push(format!("{case:?}: {why}"));
+            } else if expected.iter().any(|(known, ..)| *known == case) {
+                failed.push(format!(
+                    "{case:?}: a known difference now matches; drop its row"
+                ));
+            }
+        }
+        for (known, ..) in &expected {
+            if !ran.contains(known) {
+                failed.push(format!("{known:?}: a known difference no longer transfers"));
+            }
+        }
+        eprintln!("transferring cases: {ran:?}");
+        assert!(!ran.is_empty(), "some paint case transfers");
+        assert!(
+            failed.is_empty(),
+            "{} of {} cases differ:\n{}",
+            failed.len(),
+            ran.len(),
+            failed.join("\n")
+        );
+    }
+
     fn equivalent(case: PaintCase, frames: &[f32]) {
-        let mut slots = PaintScene::shaped(case, PaintShape::SlotCopies);
-        let mut in_place = PaintScene::shaped(case, PaintShape::InPlace);
+        equivalent_shapes(case, [PaintShape::SlotCopies, PaintShape::InPlace], frames);
+    }
+
+    /// `case` drawn in `shapes`, a slot page and an in-place one, draws the
+    /// same at rest, every frame of a go and a Back, after each, home, and
+    /// through two cancels.
+    fn equivalent_shapes(case: PaintCase, shapes: [PaintShape; 2], frames: &[f32]) {
+        let [slot_shape, in_place_shape] = shapes;
+        let mut slots = PaintScene::shaped(case, slot_shape);
+        let mut in_place = PaintScene::shaped(case, in_place_shape);
         // The one case whose cards scale through zero.
         let near_zero = matches!(
             case,
@@ -9750,11 +9848,15 @@ mod paint_order {
             both(&slots, &in_place, &format!("after {step}"));
         }
         // Home: each page draws what the same page draws that never
-        // stepped, after the same time (its timelines keep playing).
-        for (s, shape) in [
-            (&slots, PaintShape::SlotCopies),
-            (&in_place, PaintShape::InPlace),
-        ] {
+        // stepped, after the same time (its timelines keep playing). Not
+        // for a transfer: the copy refilled where the instance left starts
+        // at its entry state, so a page that stepped is not one that never
+        // did.
+        let transfers = matches!(slot_shape, PaintShape::Slots);
+        for (s, shape) in [(&slots, slot_shape), (&in_place, in_place_shape)] {
+            if transfers {
+                break;
+            }
             let mut still = PaintScene::shaped(case, shape);
             still.advance(2.0);
             same_draws(
@@ -13784,16 +13886,6 @@ fn in_place_focus_stays_on_the_field_and_its_tree_is_untouched() {
     check("landed");
 }
 
-/// In an in-place file a step unit flies two copies: `transfers` is
-/// refused at import, even naming one flight record as a slot file may.
-#[test]
-fn in_place_a_file_that_transfers_is_refused() {
-    use fixture::InPlaceFixture::*;
-    assert!(!imports(&fixture::in_place_fixture(Transfers)));
-    // The same unit in a slot file imports (`a_file_says_what_transfers_or_is_refused`).
-    assert!(imports(&fixture::transfers_plan_fixture(3)));
-}
-
 /// A file is one shape: flight records and a flight slot together are
 /// refused.
 #[test]
@@ -14223,7 +14315,9 @@ mod in_place_carry {
             .expect("the in-place page imports");
             let root = file.with_file(|f| f.artboard_named("Page")).unwrap();
             let model = file
-                .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+                .with_file(|f| {
+                    f.create_default_view_model_instance_for_artboard(root.core_handle())
+                })
                 .unwrap();
             let machine = root.default_state_machine_handle().unwrap();
             machine.with_instance_mut(|m| m.bind_view_model_instance(model));
@@ -14296,7 +14390,10 @@ mod in_place_carry {
         let s = Page::new(InPlaceCarry::TwoInCard);
         let second = placement(&s.a, "second unit");
         let (a, b, two) = (holds(&s.pa), holds(&s.pb), holds(&second));
-        assert!(carry(&s.pa, &s.pb, false).is_err(), "a box holding two placements");
+        assert!(
+            carry(&s.pa, &s.pb, false).is_err(),
+            "a box holding two placements"
+        );
         assert!(carry(&second, &s.pb, false).is_err());
         assert_eq!((holds(&s.pa), holds(&s.pb), holds(&second)), (a, b, two));
     }
@@ -14327,7 +14424,10 @@ mod in_place_carry {
         s.advance(0.0);
         assert!(child(&s.pa).is_none());
         assert_eq!(holds(&s.pb), Some(original.core_handle()));
-        assert!(fresh.upgrade().is_none(), "the arriving placement's instance is released");
+        assert!(
+            fresh.upgrade().is_none(),
+            "the arriving placement's instance is released"
+        );
         assert_eq!((s.paths(&s.a), s.paths(&s.b)), (1, 2));
     }
 
@@ -14426,7 +14526,10 @@ mod in_place_carry {
         refill_slot(&s.pa).unwrap();
         let own = child(&s.pa).expect("A's placement holds a copy of its own");
         assert_ne!(own.core_handle(), flown.core_handle());
-        assert_eq!(own.with_artboard(|b| b.artboard_source_handle()), definition);
+        assert_eq!(
+            own.with_artboard(|b| b.artboard_source_handle()),
+            definition
+        );
         assert!(machine(&s.pb).downgrade().ptr_eq(&running.downgrade()));
         s.advance(0.0);
         close(val(&keyed(&own), 13), 0.0);
@@ -14446,12 +14549,24 @@ mod in_place_carry {
                 .with_instance_mut(|m| m.pointer_down(p, id, PointerButton::Primary));
         };
         tap(&s, &s.pb, 0);
-        close(running.with_instance(|m| m.get_number("hits").unwrap().value()), 9.0);
-        close(restored.with_instance(|m| m.get_number("hits").unwrap().value()), 0.0);
+        close(
+            running.with_instance(|m| m.get_number("hits").unwrap().value()),
+            9.0,
+        );
+        close(
+            restored.with_instance(|m| m.get_number("hits").unwrap().value()),
+            0.0,
+        );
         running.set_number("hits", 0.0);
         tap(&s, &s.pa, 1);
-        close(restored.with_instance(|m| m.get_number("hits").unwrap().value()), 9.0);
-        close(running.with_instance(|m| m.get_number("hits").unwrap().value()), 0.0);
+        close(
+            restored.with_instance(|m| m.get_number("hits").unwrap().value()),
+            9.0,
+        );
+        close(
+            running.with_instance(|m| m.get_number("hits").unwrap().value()),
+            0.0,
+        );
         // A's copy is in A's focus tree, the carried one in B's.
         let focus = own.with_artboard(|b| b.focus_manager()).unwrap();
         assert!(focus.ptr_eq(&s.a.with_artboard(|b| b.focus_manager()).unwrap()));
@@ -14491,8 +14606,13 @@ mod in_place_carry {
         let a_focus = s.a.with_artboard(|b| b.focus_manager()).unwrap();
         let b_focus = s.b.with_artboard(|b| b.focus_manager()).unwrap();
         a_focus.with_focus_manager_mut(|m| m.set_focus(node.clone()));
-        let text = unit.with_artboard(|b| b.find_handle::<TextInput>("edit")).unwrap();
-        let focused = || text.with_downcast::<TextInput, _>(|t| t.is_focused()).unwrap();
+        let text = unit
+            .with_artboard(|b| b.find_handle::<TextInput>("edit"))
+            .unwrap();
+        let focused = || {
+            text.with_downcast::<TextInput, _>(|t| t.is_focused())
+                .unwrap()
+        };
         assert!(focused());
         carry(&s.pa, &s.pb, false).unwrap();
         assert!(b_focus.with_focus_manager(|m| m.has_primary_focus(&node)));
@@ -14578,5 +14698,410 @@ mod in_place_carry {
                 "home only when the caller said it was in the air"
             );
         }
+    }
+
+    impl Page {
+        fn begin(&mut self, to: &str, step: &str) {
+            self.moves.step_begin(&self.root, to, Some(step)).unwrap();
+        }
+        /// One frame at `p`: every flight record's progress, then a frame.
+        fn fly(&mut self, p: f32) {
+            for controls in self.moves.flight_controls(&self.root) {
+                set(&controls, 62033, p);
+            }
+            self.advance(0.0);
+        }
+        fn end(&mut self, to: &str, step: &str) {
+            self.moves.step_end(&self.root, to, Some(step)).unwrap();
+            self.advance(0.0);
+        }
+        /// What the page draws: each draw's color, without alpha, and its
+        /// alpha.
+        fn draws(&self) -> Vec<(Option<u32>, f32)> {
+            self.factory.borrow_mut().clear();
+            let mut renderer = self.factory.borrow().make_renderer();
+            self.root.draw(&mut renderer);
+            let stream = self.factory.borrow().stream();
+            nuxie_render_stream::frame_draws(
+                &nuxie_render_stream::stream_ops(&stream).unwrap(),
+                &[],
+            )
+            .iter()
+            .map(|draw| (draw.rgb(), draw.opacity()))
+            .collect()
+        }
+        /// How many times the page draws `rgb`.
+        fn count(&self, rgb: u32) -> usize {
+            self.draws().iter().filter(|(c, _)| *c == Some(rgb)).count()
+        }
+        fn lifts(&self) -> usize {
+            self.moves.lifted_elements(&self.root).len()
+        }
+    }
+    const A_CARD: u32 = 0x22aa22;
+    const B_CARD: u32 = 0x2222aa;
+    const BUTTON: u32 = 0xff0000;
+
+    /// Rows 1, 4 and 7 through a step: a unit that transfers flies one
+    /// instance, the leaving one, in one flight. Take-off discards and
+    /// releases the arriving placement's own instance; the instance flies
+    /// in B's placement with B's props; landing leaves it there, and A's
+    /// placement gets a copy of its own at its entry state, with A's props.
+    #[test]
+    fn in_place_a_transferring_unit_flies_one_instance() {
+        let mut s = Page::new(InPlaceCarry::Transfer);
+        let original = child(&s.pa).unwrap();
+        let fresh = child(&s.pb).unwrap().downgrade();
+        s.advance(0.3);
+        s.begin("B", "t1");
+        assert_eq!(s.lifts(), 1, "one flight");
+        assert!(child(&s.pa).is_none(), "A's placement is empty");
+        assert_eq!(holds(&s.pb), Some(original.core_handle()));
+        assert!(fresh.upgrade().is_none(), "B's own instance is released");
+        // One button draws: the instance's.
+        assert_eq!(s.count(BUTTON), 1, "one occurrence takes off");
+        // Its props blend from where they were to B's, as a flight's do.
+        close(val(&property(&vm(&original), "prop"), 575), 10.0);
+        for (p, prop) in [(0.25, 57.5), (0.5, 105.0), (0.75, 152.5), (1.0, 200.0)] {
+            s.fly(p);
+            assert_eq!(s.count(BUTTON), 1, "one occurrence at {p}");
+            assert_eq!(holds(&s.pb), Some(original.core_handle()));
+            close(val(&property(&vm(&original), "prop"), 575), prop);
+        }
+        s.end("B", "t1");
+        assert_eq!(s.lifts(), 0);
+        assert_eq!(
+            holds(&s.pb),
+            Some(original.core_handle()),
+            "it lands where it flew"
+        );
+        let own = child(&s.pa).expect("A's placement has a copy of its own");
+        assert_ne!(own.core_handle(), original.core_handle());
+        close(val(&keyed(&own), 13), 0.0);
+        close(val(&keyed(&original), 13), 30.0);
+        close(val(&property(&vm(&own), "prop"), 575), 10.0);
+        close(val(&property(&vm(&original), "prop"), 575), 200.0);
+        assert_eq!(s.count(BUTTON), 2, "each Screen draws its own at rest");
+    }
+
+    /// Pick (a) of B1-read: while the instance flies, the box it left is
+    /// left out of its own Screen's draw, its own paint too, with no lift
+    /// drawing it, so one occurrence of the element shows, as through
+    /// slots. The arriving box flies with its paint. Both draw at rest
+    /// again after landing.
+    #[test]
+    fn in_place_the_box_it_left_is_left_out_of_its_screen_while_it_flies() {
+        let mut s = Page::new(InPlaceCarry::Transfer);
+        assert_eq!((s.count(A_CARD), s.count(B_CARD)), (1, 1));
+        s.begin("B", "t1");
+        for p in [0.0, 0.5, 1.0] {
+            s.fly(p);
+            assert_eq!((s.count(A_CARD), s.count(B_CARD)), (0, 1), "at {p}");
+        }
+        s.end("B", "t1");
+        assert_eq!((s.count(A_CARD), s.count(B_CARD)), (1, 1));
+        // Back, the same with the Screens swapped: B's box is left out.
+        s.begin("A", "back");
+        s.fly(0.5);
+        assert_eq!((s.count(A_CARD), s.count(B_CARD)), (1, 0));
+        s.end("A", "back");
+        assert_eq!((s.count(A_CARD), s.count(B_CARD)), (1, 1));
+    }
+
+    /// Row 2: the instance's own motion keeps going through take-off,
+    /// flight, landing and Back: its walk advances by exactly the time that
+    /// passed.
+    #[test]
+    fn in_place_a_transferred_mascot_keeps_its_bob() {
+        let mut s = Page::new(InPlaceCarry::Transfer);
+        let unit = child(&s.pa).unwrap();
+        let x = || val(&keyed(&unit), 13);
+        s.advance(0.1);
+        close(x(), 10.0);
+        s.begin("B", "t1");
+        close(x(), 10.0);
+        s.advance(0.2);
+        close(x(), 30.0);
+        s.end("B", "t1");
+        s.advance(0.1);
+        close(x(), 40.0);
+        s.begin("A", "back");
+        s.advance(0.1);
+        s.end("A", "back");
+        close(x(), 50.0);
+        assert_eq!(holds(&s.pa), Some(unit.core_handle()));
+    }
+
+    /// Row 3: a script's private state survives the flight, the landing and
+    /// a Back step, with one init, in the same drawable.
+    #[test]
+    fn in_place_lua_private_state_survives_flight_landing_and_a_back_step() {
+        use nuxie_scripting::vm::ScriptVm;
+        use source::{
+            assets::script_asset::ScriptAsset, scripted::scripted_drawable::ScriptedDrawable,
+        };
+        let mut s = Page::new(InPlaceCarry::Transfer);
+        let source = r#"
+local elapsed=0
+local inits=0
+function init(self, context) inits+=1 return true end
+function advance(self, seconds) elapsed+=seconds return true end
+function getElapsed() return math.floor(elapsed*1000+0.5) end
+function getInits() return inits end
+return function() return {init=init,advance=advance} end
+"#;
+        luaur_common::set_all_flags(true);
+        let mut len = 0;
+        let pointer = luaur_compiler::functions::luau_compile::luau_compile(
+            source.as_ptr().cast(),
+            source.len(),
+            std::ptr::null_mut(),
+            &mut len,
+        );
+        assert!(!pointer.is_null() && len > 0);
+        let bytecode = unsafe { std::slice::from_raw_parts(pointer.cast::<u8>(), len) }.to_vec();
+        unsafe extern "C" {
+            fn free(p: *mut std::ffi::c_void);
+        }
+        unsafe { free(pointer.cast()) };
+        assert_ne!(
+            bytecode[0],
+            0,
+            "{}",
+            String::from_utf8_lossy(&bytecode[1..])
+        );
+        let payload = [vec![0], bytecode].concat();
+        let vm = ScriptVm::new();
+        let program = vm
+            .register_protocol_script_with_factory("live-unit", &payload, &mut s.factory)
+            .unwrap();
+        let mut instance = vm
+            .instantiate_registered_script_with_context(&program, None, Vec::new())
+            .unwrap();
+        assert!(instance.call_init(&mut NoopScriptHost).unwrap());
+        let vm = RuntimeScriptingVmHandle::new(Box::new(vm));
+        let drawable = child(&s.pa)
+            .unwrap()
+            .with_artboard(|b| b.find_handle::<ScriptedDrawable>("script"))
+            .unwrap();
+        let asset = drawable.insert_sibling(ScriptAsset::default()).unwrap();
+        drawable
+            .with_downcast_mut::<ScriptedDrawable, _>(|d| {
+                d.scripted.set_asset(drawable.clone(), Some(asset));
+                d.scripted.install_script_instance(instance, vm);
+                d.scripted
+                    .set_implemented_methods(source::scripted::scripted_object::ADVANCES_BIT);
+            })
+            .unwrap();
+        let elapsed = || {
+            program
+                .upstream_test_module_i32_getter("getElapsed")
+                .unwrap()
+        };
+        s.advance(0.1);
+        assert_eq!(elapsed(), 100);
+        s.begin("B", "t1");
+        s.advance(0.2);
+        s.end("B", "t1");
+        s.advance(0.1);
+        s.begin("A", "back");
+        s.advance(0.1);
+        s.end("A", "back");
+        assert_eq!(elapsed(), 500);
+        assert_eq!(
+            program.upstream_test_module_i32_getter("getInits").unwrap(),
+            1
+        );
+        assert_eq!(
+            child(&s.pa)
+                .unwrap()
+                .with_artboard(|b| b.find_handle::<ScriptedDrawable>("script"))
+                .unwrap(),
+            drawable
+        );
+    }
+
+    /// Row 24: an in-place file says what transfers or is refused, as a slot
+    /// file does: a unit that transfers names one flight record, two copies
+    /// name two, and anything else is refused at import.
+    #[test]
+    fn in_place_a_file_says_what_transfers_or_is_refused() {
+        assert!(imports(&fixture::in_place_carry_fixture(
+            InPlaceCarry::Transfer
+        )));
+        assert!(imports(&fixture::in_place_carry_fixture(InPlaceCarry::Duo)));
+        assert!(
+            !imports(&fixture::in_place_carry_fixture(
+                InPlaceCarry::TransferTwoKeys
+            )),
+            "transfers with two flight records is refused"
+        );
+        assert!(
+            !imports(&fixture::in_place_carry_fixture(InPlaceCarry::CopiesOneKey)),
+            "two copies through one flight record are refused"
+        );
+    }
+
+    /// Row 25 and refusals: a transfer between two different components, or
+    /// between boxes that hold no placement, is refused at take-off before
+    /// anything is marked or moved.
+    #[test]
+    fn in_place_a_refused_transfer_marks_and_moves_nothing() {
+        for kind in [InPlaceCarry::TransferElsewhere, InPlaceCarry::TransferBox] {
+            let mut s = Page::new(kind);
+            let (a, b) = (holds(&s.pa), holds(&s.pb));
+            let before = s.draws();
+            assert!(
+                s.moves.step_begin(&s.root, "B", Some("t1")).is_err(),
+                "{kind:?}"
+            );
+            assert_eq!(
+                (holds(&s.pa), holds(&s.pb)),
+                (a, b),
+                "{kind:?}: nothing moved"
+            );
+            assert_eq!(s.lifts(), 0, "{kind:?}: nothing marked");
+            assert!(s.moves.flight_controls(&s.root).is_empty());
+            s.advance(0.0);
+            assert_eq!(s.draws(), before, "{kind:?}: the page draws as before");
+            // The page still steps: nothing was left half done.
+            if kind == InPlaceCarry::TransferBox {
+                assert!(s.moves.step_begin(&s.root, "B", Some("t1")).is_err());
+            }
+        }
+    }
+
+    /// Row 30: a transferred flight starts at its track's first frame, its
+    /// fade stays 1 with nothing keying it, and a transferring unit ignores
+    /// `zoom`: it flies one copy, not a zoomed pair.
+    #[test]
+    fn in_place_a_transfer_starts_at_its_first_frame_and_ignores_zoom() {
+        for kind in [InPlaceCarry::Transfer, InPlaceCarry::TransferZoom] {
+            let mut s = Page::new(kind);
+            let records = s.b.with_artboard(|b| {
+                b.find_all_handles::<nuxie_runtime::live_move::records::LiveFlight>()
+            });
+            let record = records
+                .iter()
+                .find(|r| {
+                    r.with_downcast::<nuxie_runtime::live_move::records::LiveFlight, _>(|r| {
+                        r.values.key == 11
+                    })
+                    .unwrap()
+                })
+                .unwrap()
+                .clone();
+            set(&record, 62033, 0.7);
+            s.begin("B", "t1");
+            close(val(&record, 62033), 0.0);
+            close(val(&record, 62036), 1.0);
+            assert_eq!(s.lifts(), 1, "{kind:?}: one copy flies");
+            s.fly(0.5);
+            let card: Vec<_> = s
+                .draws()
+                .into_iter()
+                .filter(|(c, _)| *c == Some(B_CARD))
+                .collect();
+            assert_eq!(card.len(), 1, "{kind:?}");
+            close(card[0].1, 1.0);
+            s.end("B", "t1");
+        }
+    }
+
+    /// A step that mixes a unit that transfers and one that flies two
+    /// copies: three copies fly, the carried instance in one of them, and
+    /// landing leaves each Screen as a step of either kind alone does.
+    #[test]
+    fn in_place_a_step_mixes_a_transfer_and_two_copies() {
+        let mut s = Page::new(InPlaceCarry::TransferMixed);
+        let original = child(&s.pa).unwrap();
+        let notes = (s.count(0x3333cc), s.count(BUTTON));
+        assert_eq!(notes, (2, 2));
+        s.begin("B", "t1");
+        assert_eq!(s.lifts(), 3);
+        assert!(child(&s.pa).is_none());
+        assert_eq!(holds(&s.pb), Some(original.core_handle()));
+        s.fly(0.5);
+        assert_eq!(s.count(0x3333cc), 2, "both notes fly as copies");
+        assert_eq!(s.count(BUTTON), 1, "one instance flies");
+        s.end("B", "t1");
+        assert_eq!(s.lifts(), 0);
+        assert_eq!(holds(&s.pb), Some(original.core_handle()));
+        assert!(child(&s.pa).is_some());
+        assert_eq!((s.count(0x3333cc), s.count(BUTTON)), (2, 2));
+    }
+
+    /// A step cancelled half way puts the instance back: removing the
+    /// arriving Screen takes it home before the row goes, and the step
+    /// ends; removing the leaving Screen ends the step with the instance
+    /// where it already is, drawn at rest.
+    /// A carried instance sleeps with the Screen it flies in, as a slot
+    /// flight sleeps with its Screen: B put to sleep half way keeps the
+    /// instance's blended value where it was while the step's progress moves
+    /// on, and woken, it blends on to B's value at landing.
+    #[test]
+    fn in_place_a_transfer_sleeps_with_the_screen_it_flies_in() {
+        let mut s = Page::new(InPlaceCarry::Transfer);
+        let original = child(&s.pa).unwrap();
+        let list = s
+            .root
+            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+            .unwrap();
+        s.begin("B", "t1");
+        s.fly(0.5);
+        close(val(&property(&vm(&original), "prop"), 575), 105.0);
+        let controls = s.moves.flight_controls(&s.root);
+        assert!(!controls.is_empty());
+        set_row_collapsed(&list, 1, true).unwrap();
+        for controls in &controls {
+            set(controls, 62033, 0.75);
+        }
+        s.advance(0.0);
+        close(val(&property(&vm(&original), "prop"), 575), 105.0);
+        set_row_collapsed(&list, 1, false).unwrap();
+        s.fly(1.0);
+        close(val(&property(&vm(&original), "prop"), 575), 200.0);
+        s.end("B", "t1");
+        assert_eq!(holds(&s.pb), Some(original.core_handle()));
+        close(val(&property(&vm(&original), "prop"), 575), 200.0);
+    }
+
+    #[test]
+    fn in_place_a_cancelled_transfer_puts_the_instance_back() {
+        let page = |s: &Page| {
+            RuntimeOwnedViewModelHandle::from_native(
+                s._file.clone(),
+                s.root
+                    .data_context()
+                    .unwrap()
+                    .with_context(|c| c.main_view_model_instance())
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        // The arriving Screen goes.
+        let mut s = Page::new(InPlaceCarry::Transfer);
+        let original = child(&s.pa).unwrap();
+        s.begin("B", "t1");
+        s.fly(0.5);
+        assert!(page(&s).remove_list_item_by_property_name_path("screens", 1));
+        s.advance(0.0);
+        assert!(s.moves.flight_controls(&s.root).is_empty(), "the step ends");
+        assert_eq!(holds(&s.pa), Some(original.core_handle()), "home");
+        close(val(&property(&vm(&original), "prop"), 575), 10.0);
+        assert_eq!((s.count(A_CARD), s.count(BUTTON)), (1, 1));
+        // The leaving Screen goes.
+        let mut s = Page::new(InPlaceCarry::Transfer);
+        let original = child(&s.pa).unwrap();
+        s.begin("B", "t1");
+        s.fly(0.5);
+        assert!(page(&s).remove_list_item_by_property_name_path("screens", 0));
+        s.advance(0.0);
+        assert!(s.moves.flight_controls(&s.root).is_empty(), "the step ends");
+        assert_eq!(holds(&s.pb), Some(original.core_handle()), "it stays");
+        // Its blend ended with the step: it shows B's value, not the
+        // half-way one.
+        close(val(&property(&vm(&original), "prop"), 575), 200.0);
+        assert_eq!((s.count(B_CARD), s.count(BUTTON)), (1, 1));
     }
 }

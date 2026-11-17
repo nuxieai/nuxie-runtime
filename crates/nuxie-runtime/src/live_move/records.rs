@@ -700,14 +700,7 @@ pub(crate) fn validate_import_shape(file: &crate::File, replacement: Option<&Cor
                         )
                     })
                     .unwrap();
-                let in_place_rule = || -> anyhow::Result<()> {
-                    anyhow::ensure!(
-                        !in_place || units.iter().all(|unit| !unit.transfers()),
-                        "a step unit of an in-place file transfers"
-                    );
-                    Ok(())
-                };
-                if let Err(error) = in_place_rule().and_then(|()| validate_step_units(&units)) {
+                if let Err(error) = validate_step_units(&units) {
                     eprintln!("live moves: invalid step {name}: {error}");
                     return false;
                 }

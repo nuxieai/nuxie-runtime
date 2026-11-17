@@ -235,18 +235,44 @@ impl Plan {
         // In place nothing is away: the cancel is the landing's clear, and
         // each Screen still mounted that drew or left out a lift settles
         // now, as at landing, so its next draw has no lift entry in it.
-        let lifted = std::mem::take(&mut self.lifted);
+        let mut lifted = std::mem::take(&mut self.lifted);
         let touched = lifted
             .iter()
             .flat_map(|flight| [flight.row.clone(), flight.board.clone()])
             .filter(|row| rows.contains(row))
             .collect::<HashSet<_>>();
-        for flight in &lifted {
+        // A carried instance's blend ends before its Screen settles, so the
+        // first draw after the cancel shows that Screen's values.
+        for flight in &mut lifted {
+            flight.release_values();
             flight.clear();
         }
         for row in &touched {
             settle_row(row);
         }
+        // A carried instance goes back to the placement it left, when that
+        // is still on a Screen and empty, and the placement it flew in gets
+        // a copy of its own. Otherwise it stays where it is, and the
+        // placement it left, if still there, gets one. The list's unmount
+        // hook already took one home whose arriving Screen went.
+        for flight in &lifted {
+            let Some(carried) = &flight.carried else {
+                continue;
+            };
+            let (from, to) = (&carried.from, &carried.to);
+            let home = |host: &CoreHandle| crate::hosted_scene::is_carry_host(host);
+            if home(from) && child(from)?.is_none() && home(to) && child(to)?.is_some() {
+                super::carry(to, from, false)?;
+                settle_slot(from)?;
+                refill_left(to)?;
+            } else {
+                if home(to) && child(to)?.is_some() {
+                    super::transport::land_in_place(to)?;
+                }
+                refill_left(from)?;
+            }
+        }
+        drop(lifted);
         self.pairs.clear();
         let entries = std::mem::take(&mut self.flights);
         for f in entries.iter().flat_map(Entry::flights) {
@@ -519,17 +545,33 @@ impl Plan {
     fn land(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<()> {
         // In place: each Screen draws its own copy as authored in the same
         // frame.
-        let lifted = std::mem::take(&mut self.lifted);
+        let mut lifted = std::mem::take(&mut self.lifted);
         self.pairs.clear();
         let landed_rows = lifted
             .iter()
             .flat_map(|flight| [flight.row.clone(), flight.board.clone()])
             .collect::<HashSet<_>>();
-        for flight in &lifted {
+        // A carried instance's blend ends before its Screen settles, so its
+        // bindings take the arriving Screen's values in that settlement.
+        for flight in &mut lifted {
+            flight.release_values();
             flight.clear();
         }
         for row in &landed_rows {
             settle_row(row);
+        }
+        // A carried instance has landed where it flew, and the placement it
+        // left gets a copy of its own (decision 297).
+        let carried = lifted
+            .into_iter()
+            .filter_map(|flight| flight.carried)
+            .map(|carried| (carried.from, carried.to))
+            .collect::<Vec<_>>();
+        for (from, to) in carried {
+            if crate::hosted_scene::is_carry_host(&to) {
+                super::transport::land_in_place(&to)?;
+            }
+            refill_left(&from)?;
         }
         for f in self.all_flights() {
             validate_move(&f.flight, &f.landing)?;
@@ -661,7 +703,7 @@ impl Plan {
         incoming: &str,
         name: &str,
     ) -> Result<()> {
-        use super::in_place::{InPlaceFlight, InPlacePair, is_inside};
+        use super::in_place::{Carried, InPlaceFlight, InPlacePair, is_inside};
         let step = self
             .steps
             .iter()
@@ -712,6 +754,27 @@ impl Plan {
                 used.insert(from.clone()) && used.insert(to.clone()),
                 "overlapping flight owners"
             );
+            // A unit that transfers flies one copy, the arriving one, which
+            // the carry fills with the leaving one's instance. It never
+            // zooms, as through slots.
+            if unit.transfers() {
+                let carried = Carried::read((&from, &outgoing.board), &to)?;
+                let (board, record) = record(unit.incoming_flight_key)?;
+                boards.insert(board.clone());
+                flights.push(
+                    InPlaceFlight::new(
+                        record,
+                        to.clone(),
+                        arriving.board.clone(),
+                        (from.clone(), outgoing.board.clone()),
+                        (to.clone(), arriving.board.clone()),
+                        board,
+                        false,
+                    )?
+                    .carrying(carried),
+                );
+                continue;
+            }
             let rule = zoom::Rule::of(unit.read_zoom());
             if let Some(rule) = rule {
                 zoomed.push((rule, flights.len()));
@@ -767,7 +830,11 @@ impl Plan {
                     })?,
             )),
         };
-        // Every check has passed: mark. Lifts that share an anchor draw by
+        // Every check has passed. Each transferring unit's instance moves
+        // into the arriving placement, which discards that placement's own
+        // never-shown instance and gives it the arriving Screen's props, and
+        // its Screen settles once, as after any carry. Then mark. Lifts that
+        // share an anchor draw by
         // their records' order, a later record on top, so a later record is
         // placed first.
         let order = |flight: &InPlaceFlight| {
@@ -783,6 +850,17 @@ impl Plan {
                 .unwrap_or(0)
         };
         flights.sort_by_key(|flight| std::cmp::Reverse(order(flight)));
+        for flight in &mut flights {
+            if let Some(carried) = &mut flight.carried {
+                super::transport::move_to_flight(
+                    &carried.from,
+                    &carried.to,
+                    &carried.to,
+                    &mut carried.values,
+                )?;
+                settle_row(&flight.row);
+            }
+        }
         for flight in &flights {
             flight.mark(if flight.zoomed {
                 crate::css_layout::lift::OpacityRoot::Nothing
@@ -825,7 +903,7 @@ impl Plan {
             .collect::<Result<Vec<_>>>()?;
         for (flight, frame) in self.lifted.iter().zip(&frames) {
             if let Some(frame) = frame {
-                flight.apply_size(frame);
+                flight.apply_size(frame, active.contains(&flight.row));
             }
         }
         let rows = self
@@ -1173,6 +1251,15 @@ pub fn screens(
 
 /// Settles a Screen after an in-place step lands, as a frame's Layout and
 /// Settle do: the layout tree that holds it first, then the Screen.
+/// Gives `placement` a copy of its own when it is still on a Screen and
+/// empty, and settles its Screen.
+fn refill_left(placement: &CoreHandle) -> Result<()> {
+    if crate::hosted_scene::is_carry_host(placement) && child(placement)?.is_none() {
+        refill_slot(placement)?;
+        settle_slot(placement)?;
+    }
+    Ok(())
+}
 fn settle_row(row: &CoreHandle) {
     let owner = layout_root(row.clone());
     if owner != *row {

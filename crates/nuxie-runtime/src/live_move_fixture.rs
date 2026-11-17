@@ -832,6 +832,19 @@ pub enum InPlaceCarry {
     TransferTwoKeys,
     /// t1's unit flies two copies through one flight record, 11.
     CopiesOneKey,
+    /// `Transfer`, with three more values on "Unit", `level` (a number),
+    /// `tint` (a color) and `caption` (a string), written differently on the
+    /// two placements: 0.3, red and "one" on A; 0.6, blue and "two" on B.
+    /// Also an image, `picture`, written as none on A and as file asset 0 on
+    /// B.
+    TransferWritten,
+    /// `TransferWritten`'s three values written the same on both placements
+    /// (0, transparent, empty) and bound to their Screen's model, which holds
+    /// A's and B's.
+    TransferWrittenBound,
+    /// `TransferWritten` on A, `TransferWrittenBound` on B: A writes the
+    /// three values, B binds them.
+    TransferWrittenBoundOnB,
 }
 
 /// An in-place page shaped as the compiler publishes a matched component
@@ -850,6 +863,35 @@ pub enum InPlaceCarry {
 /// kinds fly the unit as one instance instead.
 pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
     use V::*;
+    // Whether each Screen's placement binds the extra values, and whether
+    // either does.
+    let bound_on = |screen: &str| match kind {
+        InPlaceCarry::TransferWrittenBound => true,
+        InPlaceCarry::TransferWrittenBoundOnB => screen == "B",
+        _ => false,
+    };
+    let bound = bound_on("A") || bound_on("B");
+    let extra = bound || kind == InPlaceCarry::TransferWritten;
+    let picture = kind == InPlaceCarry::TransferWritten;
+    // What each Screen's placement shows of `level`, `tint` and `caption`.
+    let shown = |screen: &str| -> [V<'static>; 3] {
+        if screen == "A" {
+            [F(0.3), Color(0xffff0000), S("one")]
+        } else {
+            [F(0.6), Color(0xff0000ff), S("two")]
+        }
+    };
+    // The extra values: (type, property id on "Unit", value key, the value
+    // written where it is bound).
+    let extras: &[(&str, u64, u64, V)] = if extra {
+        &[
+            ("ViewModelInstanceNumber", 3, 575, F(0.0)),
+            ("ViewModelInstanceColor", 4, 555, Color(0)),
+            ("ViewModelInstanceString", 5, 561, S("")),
+        ]
+    } else {
+        &[]
+    };
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
         var(&mut b, n);
@@ -858,6 +900,11 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
     for (name, offset) in [("A", 10.0), ("B", 200.0)] {
         obj(&mut b, "ViewModel", &[("name", S(name))]);
         obj(&mut b, "ViewModelPropertyNumber", &[("name", S("offset"))]);
+        if bound {
+            obj(&mut b, "ViewModelPropertyNumber", &[("name", S("level"))]);
+            obj(&mut b, "ViewModelPropertyColor", &[("name", S("tint"))]);
+            obj(&mut b, "ViewModelPropertyString", &[("name", S("caption"))]);
+        }
         obj(
             &mut b,
             "ViewModelInstance",
@@ -868,6 +915,15 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             "ViewModelInstanceNumber",
             &[("viewModelPropertyId", U(0)), ("propertyValue", F(offset))],
         );
+        if bound {
+            for (id, (&(kind, ..), value)) in (1..).zip(extras.iter().zip(shown(name))) {
+                obj(
+                    &mut b,
+                    kind,
+                    &[("viewModelPropertyId", U(id)), ("propertyValue", value)],
+                );
+            }
+        }
     }
     obj(&mut b, "ViewModel", &[("name", S("Page"))]);
     obj(&mut b, "ViewModelPropertyList", &[("name", S("screens"))]);
@@ -889,6 +945,18 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
         obj(&mut b, "ViewModelPropertyNumber", &[("name", S(name))]);
     }
     obj(&mut b, "ViewModelPropertyString", &[("name", S("label"))]);
+    if extra {
+        obj(&mut b, "ViewModelPropertyNumber", &[("name", S("level"))]);
+        obj(&mut b, "ViewModelPropertyColor", &[("name", S("tint"))]);
+        obj(&mut b, "ViewModelPropertyString", &[("name", S("caption"))]);
+    }
+    if picture {
+        obj(
+            &mut b,
+            "ViewModelPropertyAssetImage",
+            &[("name", S("picture"))],
+        );
+    }
     obj(&mut b, "ViewModelInstance", &[("viewModelId", U(3))]);
     for id in [0, 1] {
         obj(
@@ -902,9 +970,27 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
         "ViewModelInstanceString",
         &[("viewModelPropertyId", U(2)), ("propertyValue", S(""))],
     );
+    for &(kind, id, _, value) in extras {
+        obj(
+            &mut b,
+            kind,
+            &[("viewModelPropertyId", U(id)), ("propertyValue", value)],
+        );
+    }
+    if picture {
+        obj(
+            &mut b,
+            "ViewModelInstanceAssetImage",
+            &[
+                ("viewModelPropertyId", U(6)),
+                ("propertyValue", U(u64::from(u32::MAX))),
+            ],
+        );
+    }
     // A placement of "unit x" at `id`, under `parent`, as the compiler
-    // writes one (`id` to `id + 5`): the host, its machine, its inline
-    // model and the model's three values, `prop` bound to `screen`'s model.
+    // writes one (`id` to `id + 5`, then one more per extra value): the
+    // host, its machine, its inline model and the model's values, `prop`
+    // bound to `screen`'s model, each extra as `shown` has it or bound.
     let placement =
         |b: &mut Vec<u8>, parent: u64, id: u64, name: &str, screen: u8, artboard: u64| {
             obj(
@@ -952,6 +1038,36 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
                     ("propertyValue", S("label")),
                 ],
             );
+            let name = if screen == 0 { "A" } else { "B" };
+            let (written, bound) = (shown(name), bound_on(name));
+            for (index, (&(kind, property, key, unwritten), written)) in
+                extras.iter().zip(written).enumerate()
+            {
+                obj(
+                    b,
+                    kind,
+                    &[
+                        ("parentId", U(id + 2)),
+                        ("viewModelPropertyId", U(property)),
+                        ("propertyValue", if bound { unwritten } else { written }),
+                    ],
+                );
+                if bound {
+                    bind(b, key, &[screen, index as u8 + 1]);
+                }
+            }
+            if picture {
+                let none = u64::from(u32::MAX);
+                obj(
+                    b,
+                    "ViewModelInstanceAssetImage",
+                    &[
+                        ("parentId", U(id + 2)),
+                        ("viewModelPropertyId", U(6)),
+                        ("propertyValue", U(if screen == 0 { none } else { 0 })),
+                    ],
+                );
+            }
         };
     // A box at `id` under the Screen: the component, its style and its
     // record (`id` to `id + 2`), then a Fill and its color when painted.
@@ -991,7 +1107,14 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
     use InPlaceCarry::*;
     let transfers = matches!(
         kind,
-        Transfer | TransferElsewhere | TransferMixed | TransferBox | TransferZoom
+        Transfer
+            | TransferElsewhere
+            | TransferMixed
+            | TransferBox
+            | TransferZoom
+            | TransferWritten
+            | TransferWrittenBound
+            | TransferWrittenBoundOnB
     );
     for (screen, card, key) in [("A", (120.0, 90.0), 1), ("B", (200.0, 140.0), 2)] {
         let model = u8::from(screen == "B");
@@ -1031,7 +1154,7 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             2
         };
         placement(&mut b, 3, unit, "unit", model, component); // to unit + 5
-        let note = unit + 6;
+        let note = unit + 6 + extras.len() as u64 + u64::from(picture);
         let note_key = match (kind, screen) {
             (TransferMixed | TransferBox, "A") => 3,
             (TransferMixed | TransferBox, _) => 4,
@@ -1175,7 +1298,12 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
     // (outgoing, incoming, outgoing flight, incoming flight, transfers)
     let t1: &[(u64, u64, u64, u64, bool)] = match kind {
         Duo | Unkeyed | TwoInCard => &[(1, 2, 11, 12, false)],
-        Transfer | TransferElsewhere | TransferZoom => &[(1, 2, 11, 11, true)],
+        Transfer
+        | TransferElsewhere
+        | TransferZoom
+        | TransferWritten
+        | TransferWrittenBound
+        | TransferWrittenBoundOnB => &[(1, 2, 11, 11, true)],
         TransferTwoKeys => &[(1, 2, 11, 12, true)],
         CopiesOneKey => &[(1, 2, 11, 11, false)],
         TransferMixed => &[(1, 2, 11, 11, true), (3, 4, 13, 14, false)],

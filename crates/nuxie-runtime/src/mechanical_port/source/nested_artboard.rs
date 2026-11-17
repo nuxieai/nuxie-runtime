@@ -665,6 +665,34 @@ impl NestedArtboard {
         }
     }
 
+    /// `own`, an inline view model instance of the placement `owner`, as the
+    /// file has it: the object at the same place in its Screen's definition,
+    /// which nothing binds or writes. None when there is none.
+    pub(crate) fn as_the_file_has_it(owner: &CoreHandle, own: &CoreHandle) -> Option<CoreHandle> {
+        let screen = owner
+            .with(|owner| {
+                owner
+                    .as_nested_artboard()
+                    .and_then(Self::parent_artboard_handle)
+            })
+            .flatten()?;
+        screen
+            .with_downcast::<Artboard, _>(|screen| {
+                let index = usize::try_from(screen.object_index(own)).ok()?;
+                let definition = screen.artboard_source_handle()?;
+                definition
+                    .with_downcast::<Artboard, _>(|definition| {
+                        definition.objects().get(index).cloned().flatten()
+                    })
+                    .flatten()
+            })
+            .flatten()
+            .filter(|definition| {
+                definition.with(|definition| definition.as_view_model_instance().is_some())
+                    == Some(true)
+            })
+    }
+
     /// Nuxie live-move hook: mounts a fresh instance of `artboard` in this
     /// emptied host and binds it now, as load leaves a mounted host. The
     /// instance is nested as a runtime swap nests one
@@ -738,35 +766,7 @@ impl NestedArtboard {
             });
         // Each instance as the file has it: the same object in the Screen's
         // definition, which nothing binds or writes.
-        let screen = owner
-            .with(|owner| {
-                owner
-                    .as_nested_artboard()
-                    .and_then(Self::parent_artboard_handle)
-            })
-            .flatten();
-        let pristine = |own: CoreHandle| {
-            screen
-                .as_ref()
-                .and_then(|screen| {
-                    screen
-                        .with_downcast::<Artboard, _>(|screen| {
-                            let index = usize::try_from(screen.object_index(&own)).ok()?;
-                            let definition = screen.artboard_source_handle()?;
-                            definition
-                                .with_downcast::<Artboard, _>(|definition| {
-                                    definition.objects().get(index).cloned().flatten()
-                                })
-                                .flatten()
-                        })
-                        .flatten()
-                })
-                .filter(|definition| {
-                    definition.with(|definition| definition.as_view_model_instance().is_some())
-                        == Some(true)
-                })
-                .unwrap_or(own)
-        };
+        let pristine = |own: CoreHandle| Self::as_the_file_has_it(owner, &own).unwrap_or(own);
         let arena = instance.core_handle().retain_arena();
         let globals = globals
             .into_iter()

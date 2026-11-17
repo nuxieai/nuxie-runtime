@@ -1,5 +1,7 @@
 # Nuxie runtime C distribution
 
+The 1.2.0 release plays Magic Move in place: a Screen change flies matched elements, texts, images, videos and component placements inside the live scene, read from the in-place file format the Nuxie compiler writes. Scripting runs on the new memory-safe Luau VM. It preserves ABI v4 and existing scene handles.
+
 The 1.1.0 release adds the reference-counted shared command-queue executor for native SDK operations. It preserves ABI v4 and existing scene handles. Hosts can submit owned callbacks, close admission while draining accepted work, observe termination, and wait safely from other threads. See [the executor contract](nux-capi-executor.md).
 
 The supported Apple binary is rooted at `nux-apple-product-extension`. That

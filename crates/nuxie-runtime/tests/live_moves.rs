@@ -15362,4 +15362,1205 @@ return function() return {init=init,advance=advance} end
         assert_eq!(holds(&s.pa), Some(original.core_handle()), "home");
         shows_close(&model, (0.3, RED, "one"), "home");
     }
+
+    // B4: the slot suites' cancel, values and sleep rows, on an in-place
+    // page. Each test is the slot test of the same name less `in_place_`,
+    // with the page's placements for its slots.
+
+    const VALUES: InPlaceCarry = InPlaceCarry::TransferValues {
+        two_way_text: false,
+        reference: false,
+    };
+
+    impl Page {
+        fn list(&self) -> CoreHandle {
+            self.root
+                .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+                .unwrap()
+        }
+        fn item(&self, index: i32) -> CoreHandle {
+            self.list()
+                .with_downcast::<ArtboardComponentList, _>(|l| l.list_item(index))
+                .flatten()
+                .unwrap()
+        }
+        /// Keeps the rows at `keep` and removes the others, as a host
+        /// retires a Screen.
+        fn keep_rows(&self, keep: &[i32]) {
+            let items: Vec<_> = keep.iter().map(|&index| self.item(index)).collect();
+            ArtboardComponentList::update_list_occurrence(&self.list(), &items);
+        }
+        fn row(&self, name: &str) -> RuntimeArtboardInstanceHandle {
+            screens(&self.root).unwrap()[name].clone()
+        }
+        fn page_model(&self) -> RuntimeOwnedViewModelHandle {
+            let model = self
+                .root
+                .data_context()
+                .unwrap()
+                .with_context(|c| c.main_view_model_instance())
+                .unwrap();
+            RuntimeOwnedViewModelHandle::from_native(self._file.clone(), model).unwrap()
+        }
+        /// `step_end` with no frame after it, as the slot suites end a step.
+        fn end_at_once(&mut self, to: &str, step: &str) {
+            self.moves.step_end(&self.root, to, Some(step)).unwrap();
+        }
+        /// A cut: a step with no name, which flies nothing.
+        fn cut(&mut self, to: &str) {
+            self.moves.step_begin(&self.root, to, None).unwrap();
+            self.moves.step_end(&self.root, to, None).unwrap();
+        }
+        fn land_in_b(&mut self) {
+            self.begin("B", "t1");
+            self.fly(1.0);
+            self.end_at_once("B", "t1");
+        }
+        /// Where the page draws the unit's button: each draw's matrix.
+        fn buttons(&self) -> Vec<String> {
+            self.factory.borrow_mut().clear();
+            let mut renderer = self.factory.borrow().make_renderer();
+            self.root.draw(&mut renderer);
+            let stream = self.factory.borrow().stream();
+            nuxie_render_stream::frame_draws(
+                &nuxie_render_stream::stream_ops(&stream).unwrap(),
+                &[],
+            )
+            .iter()
+            .filter(|draw| draw.rgb() == Some(BUTTON))
+            .map(|draw| format!("{:?}", draw.matrix))
+            .collect()
+        }
+    }
+
+    /// Row 8, decision 297: after a transfer, a fade or cut back moves
+    /// nothing. The Screen returned to shows its own copy from the first
+    /// frame, and the Screen left keeps the transferred instance, still
+    /// running. The same after the Screen's row is removed and added again.
+    #[test]
+    fn in_place_a_fade_back_after_a_transfer_shows_each_screens_own_copy() {
+        let mut s = Page::new(InPlaceCarry::Transfer);
+        let flown = holds(&s.pa).unwrap();
+        let running = machine(&s.pa);
+        s.begin("B", "t1");
+        s.advance(0.1);
+        s.end_at_once("B", "t1");
+        let own = holds(&s.pa).expect("A has its own copy");
+        s.moves.step_begin(&s.root, "A", None).unwrap();
+        assert_eq!(holds(&s.pa), Some(own.clone()), "A's own copy, at once");
+        assert_eq!(holds(&s.pb), Some(flown.clone()), "nothing comes home");
+        s.moves.step_end(&s.root, "A", None).unwrap();
+        s.advance(0.1);
+        assert_eq!(holds(&s.pa), Some(own));
+        assert_eq!(holds(&s.pb), Some(flown));
+        assert!(machine(&s.pb).downgrade().ptr_eq(&running.downgrade()));
+
+        let mut s = Page::new(InPlaceCarry::Transfer);
+        let flown = holds(&s.pa).unwrap();
+        s.begin("B", "t1");
+        s.end_at_once("B", "t1");
+        let (a, b) = (s.item(0), s.item(1));
+        ArtboardComponentList::update_list_occurrence(&s.list(), std::slice::from_ref(&b));
+        s.advance(0.0);
+        ArtboardComponentList::update_list_occurrence(&s.list(), &[a, b]);
+        s.advance(0.0);
+        let home = placement(&s.row("A"), "unit");
+        let own = holds(&home).expect("the new A row has its own copy");
+        s.cut("A");
+        s.advance(0.0);
+        assert_eq!(holds(&home), Some(own));
+        assert_eq!(holds(&s.pb), Some(flown));
+    }
+
+    /// Row 8: a transfer A to B, then B to a third Screen. Each Screen the
+    /// instance left holds a copy of its own, and cuts back move nothing.
+    #[test]
+    fn in_place_cutting_back_after_a_third_screen_shows_each_screens_own_copy() {
+        let mut s = Page::new(InPlaceCarry::TransferThree);
+        let original = holds(&s.pa).unwrap();
+        s.begin("B", "t1");
+        s.end_at_once("B", "t1");
+        s.begin("R2", "third");
+        s.advance(0.1);
+        s.end_at_once("R2", "third");
+        let r2 = placement(&s.row("R2"), "unit");
+        let (a, b) = (holds(&s.pa).unwrap(), holds(&s.pb).unwrap());
+        assert!(a != original && b != original && a != b);
+        assert_eq!(holds(&r2), Some(original.clone()));
+        s.cut("B");
+        assert_eq!(holds(&s.pb), Some(b));
+        s.cut("A");
+        assert_eq!(holds(&s.pa), Some(a));
+        assert_eq!(holds(&r2), Some(original));
+    }
+
+    /// Row 10: a number and a color blend from what the instance shows to
+    /// the arriving Screen's, and its bindings drive them after landing.
+    #[test]
+    fn in_place_incoming_number_and_color_blend_then_bindings_drive_after_landing() {
+        let mut s = Page::new(VALUES);
+        let unit = child(&s.pa).unwrap();
+        let model = vm(&unit);
+        // The start is the current instance value, rather than its old
+        // source.
+        set(&property(&model, "prop"), 575, 30.0);
+        s.begin("B", "t1");
+        for (p, number, color) in [
+            (0.0, 30.0, 0x20406080),
+            (0.5, 115.0, 0x80b09880),
+            (1.0, 200.0, 0xe0c0a080),
+        ] {
+            s.fly(p);
+            close(val(&property(&model, "prop"), 575), number);
+            assert_eq!(color_value(&model, "accent"), color, "at {p}");
+        }
+        s.end_at_once("B", "t1");
+        assert_eq!(holds(&s.pb), Some(unit.core_handle()));
+        set(&property(&vm(&s.b), "offset"), 575, 321.0);
+        assert!(CoreRegistry::set_color_handle(
+            &property(&vm(&s.b), "accent"),
+            555,
+            0x12345678
+        ));
+        s.advance(0.0);
+        close(val(&property(&model, "prop"), 575), 321.0);
+        assert_eq!(color_value(&model, "accent"), 0x12345678);
+    }
+
+    /// Row 10: the color cases of the slot suites, flown in place.
+    #[test]
+    fn in_place_color_ends_blend_as_through_slots() {
+        // Flies the unit's `accent` from `from`, its current value, to `to`,
+        // B's value, and reads it at each progress, in hex.
+        let blend = |from: u32, to: u32, progresses: &[f32]| -> Vec<String> {
+            let mut s = Page::new(VALUES);
+            let model = vm(&child(&s.pa).unwrap());
+            assert!(CoreRegistry::set_color_handle(
+                &property(&model, "accent"),
+                555,
+                from as i32
+            ));
+            assert!(CoreRegistry::set_color_handle(
+                &property(&vm(&s.b), "accent"),
+                555,
+                to as i32
+            ));
+            s.begin("B", "t1");
+            let reads = progresses
+                .iter()
+                .map(|&p| {
+                    s.fly(p);
+                    format!("{:#010x}", color_value(&model, "accent"))
+                })
+                .collect();
+            s.end_at_once("B", "t1");
+            reads
+        };
+        let (purple, clear) = (0xffa67dc1, 0x00000000);
+        let at = [0.25, 0.5, 0.75];
+        // A clear end keeps the other end's color.
+        assert_eq!(
+            [blend(purple, clear, &at), blend(clear, purple, &at)],
+            [
+                ["0xbfa67dc1", "0x80a67dc1", "0x40a67dc1"],
+                ["0x40a67dc1", "0x80a67dc1", "0xbfa67dc1"]
+            ]
+        );
+        assert_eq!(
+            blend(0x82ffffff, 0x00000000, &[1.0 - f32::EPSILON]),
+            ["0x00ffffff"]
+        );
+        // A faint end counts by its strength.
+        assert_eq!(blend(0x0f000000, 0xffffffff, &[0.5]), ["0x87f1f1f1"]);
+        // Clear to clear stays clear, and each end is exact.
+        let halfway = blend(0x00a67dc1, 0x00000000, &[0.5]);
+        assert!(halfway[0].starts_with("0x00"), "{halfway:?}");
+        for (from, to) in [
+            (0xffa67dc1u32, 0x00000000u32),
+            (0x00000000, 0xffa67dc1),
+            (0x0f000000, 0xffffffff),
+        ] {
+            assert_eq!(
+                blend(from, to, &[0.0, 1.0]),
+                [format!("{from:#010x}"), format!("{to:#010x}")]
+            );
+        }
+        // Equal strength colors blend as before.
+        assert_eq!(blend(0xff204060, 0xff60a0c0, &[0.5]), ["0xff407090"]);
+    }
+
+    /// Row 10: a live change on the arriving Screen during the flight moves
+    /// the blend's end, and landing samples the latest value.
+    #[test]
+    fn in_place_incoming_values_follow_live_destination_changes_during_flight() {
+        let mut s = Page::new(VALUES);
+        let model = vm(&child(&s.pa).unwrap());
+        s.begin("B", "t1");
+        s.fly(0.5);
+        close(val(&property(&model, "prop"), 575), 105.0);
+        set(&property(&vm(&s.b), "offset"), 575, 310.0);
+        assert!(CoreRegistry::set_color_handle(
+            &property(&vm(&s.b), "accent"),
+            555,
+            0x6080a0c0
+        ));
+        s.advance(0.0);
+        close(val(&property(&model, "prop"), 575), 160.0);
+        assert_eq!(color_value(&model, "accent"), 0x407090b0);
+        s.fly(1.0);
+        close(val(&property(&model, "prop"), 575), 310.0);
+        assert_eq!(color_value(&model, "accent"), 0x6080a0c0);
+        set(&property(&vm(&s.b), "offset"), 575, 410.0);
+        s.end_at_once("B", "t1");
+        close(val(&property(&model, "prop"), 575), 410.0);
+    }
+
+    /// Row 10: the values follow the progress the step's own timeline keys.
+    #[test]
+    fn in_place_values_follow_the_same_native_keyed_progress_as_the_pose() {
+        let mut s = Page::new(InPlaceCarry::TransferPlayed { overshoot: false });
+        let model = vm(&child(&s.pa).unwrap());
+        s.begin("B", "t1");
+        s.advance(0.5);
+        close(val(&s.moves.flight_controls(&s.root)[0], 62033), 0.5);
+        close(val(&property(&model, "prop"), 575), 105.0);
+    }
+
+    /// Row 28: a key that runs past 1 leaves the record's progress at 1.25.
+    /// The values and the pose both take the clamped 1: `prop` lands at 200,
+    /// not 247.5, and the instance draws where a flight at 1 draws it.
+    #[test]
+    fn in_place_values_follow_the_poses_clamped_progress_when_a_key_overshoots() {
+        let mut s = Page::new(InPlaceCarry::TransferPlayed { overshoot: true });
+        let model = vm(&child(&s.pa).unwrap());
+        s.begin("B", "t1");
+        let start = val(&property(&model, "prop"), 575);
+        assert!((start - 200.0).abs() > 1.0, "prop starts away from 200");
+        s.advance(0.5);
+        close(val(&s.moves.flight_controls(&s.root)[0], 62033), 1.25);
+        close(val(&property(&model, "prop"), 575), 200.0);
+        let mut at_one = Page::new(InPlaceCarry::Transfer);
+        at_one.begin("B", "t1");
+        at_one.fly(1.0);
+        let landed = at_one.buttons();
+        assert_eq!(landed.len(), 1);
+        assert_eq!(s.buttons(), landed);
+    }
+
+    /// Row 10: a number converted on its way from a two-way source blends
+    /// in the converted space and writes nothing back to the source.
+    #[test]
+    fn in_place_converted_two_way_numbers_blend_without_writing_back_presentation_values() {
+        use source::data_bind::converters::{
+            data_converter_operation::ArithmeticOperation,
+            data_converter_operation_value::DataConverterOperationValue,
+        };
+        use source::viewmodel::viewmodel_instance::ViewModelInstance;
+        let mut s = Page::new(InPlaceCarry::Transfer);
+        let model = vm(&child(&s.pa).unwrap());
+        let fresh = child(&s.pb).unwrap();
+        let fresh_model = vm(&fresh);
+        let target = property(&fresh_model, "prop");
+        let converter =
+            s.pb.insert_sibling(DataConverterOperationValue::new(
+                ArithmeticOperation::Multiply,
+                2.0,
+            ))
+            .unwrap();
+        let mut binds = s.b.with_artboard(|b| b.data_bind_handles());
+        binds.extend(fresh.with_artboard(|b| b.data_bind_handles()));
+        binds.extend(
+            fresh_model
+                .with_downcast::<ViewModelInstance, _>(|v| v.value_data_binds().to_vec())
+                .unwrap(),
+        );
+        let mut configured = 0;
+        for bind in binds {
+            if bind
+                .with(|o| o.as_data_bind().and_then(|b| b.target()))
+                .flatten()
+                .as_ref()
+                == Some(&target)
+            {
+                assert!(CoreRegistry::set_uint_handle(&bind, 587, 2 | 8));
+                bind.with_mut(|o| {
+                    o.as_data_bind_mut()
+                        .unwrap()
+                        .set_converter(Some(converter.clone()))
+                });
+                configured += 1;
+            }
+        }
+        assert!(configured > 0);
+        s.begin("B", "t1");
+        s.fly(0.5);
+        close(val(&property(&model, "prop"), 575), 205.0);
+        close(val(&property(&vm(&s.b), "offset"), 575), 200.0);
+        set(&property(&vm(&s.b), "offset"), 575, 310.0);
+        s.advance(0.0);
+        close(val(&property(&model, "prop"), 575), 315.0);
+        close(val(&property(&vm(&s.b), "offset"), 575), 310.0);
+        s.end_at_once("B", "t1");
+        close(val(&property(&model, "prop"), 575), 620.0);
+        close(val(&property(&vm(&s.b), "offset"), 575), 310.0);
+    }
+
+    /// Row 10: the instance flies into a row the host added for the step,
+    /// blending its number and color, and lands bound to that row.
+    #[test]
+    fn in_place_a_unit_flying_into_a_row_added_for_the_step_blends_its_number_and_color() {
+        for settle in [false, true] {
+            let mut s = Page::new(VALUES);
+            let unit = child(&s.pa).unwrap();
+            let model = vm(&unit);
+            let context = unit.data_context().unwrap();
+            // Removes row B and inserts its Screen model again, as a host
+            // adds the arriving row for a step.
+            let page = s.page_model();
+            let incoming = page.list_item_by_property_name_path("screens", 1).unwrap();
+            assert!(page.remove_list_item_by_property_name_path("screens", 1));
+            s.advance(0.0);
+            assert!(!screens(&s.root).unwrap().contains_key("B"));
+            assert!(page.insert_list_item_by_property_name_path("screens", 1, &incoming));
+            // Waking the row flushes the insert before any advance, as the
+            // SDK does; it may then settle one frame.
+            set_row_collapsed(&s.list(), 1, false).unwrap();
+            if settle {
+                s.advance(0.0);
+            }
+            s.begin("B", "t1");
+            s.fly(0.5);
+            let at_half = val(&property(&model, "prop"), 575);
+            assert!(
+                (at_half - 105.0).abs() < 0.002,
+                "settle {settle}: expected 105 halfway, got {at_half}"
+            );
+            assert_eq!(color_value(&model, "accent"), 0x80b09880, "settle {settle}");
+            s.end_at_once("B", "t1");
+            s.advance(0.0);
+            let row = s.row("B");
+            let home = placement(&row, "unit");
+            assert_eq!(holds(&home), Some(unit.core_handle()));
+            assert!(context.ptr_eq(&unit.data_context().unwrap()));
+            assert!(
+                context
+                    .with_context(|c| c.parent())
+                    .unwrap()
+                    .ptr_eq(&row.data_context().unwrap())
+            );
+            close(val(&property(&model, "prop"), 575), 200.0);
+            assert_eq!(color_value(&model, "accent"), 0xe0c0a080);
+            set(&property(&vm(&row), "offset"), 575, 321.0);
+            assert!(CoreRegistry::set_color_handle(
+                &property(&vm(&row), "accent"),
+                555,
+                0x12345678
+            ));
+            s.advance(0.0);
+            let followed = val(&property(&model, "prop"), 575);
+            assert!(
+                (followed - 321.0).abs() < 0.002,
+                "settle {settle}: expected 321 after landing, got {followed}"
+            );
+            assert_eq!(color_value(&model, "accent"), 0x12345678, "settle {settle}");
+        }
+    }
+
+    /// Row 11: a string switches at take-off; a private value stays.
+    #[test]
+    fn in_place_incoming_string_switches_at_takeoff_and_private_values_stay() {
+        let mut s = Page::new(VALUES);
+        let model = vm(&child(&s.pa).unwrap());
+        assert_eq!(string_value(&model, "label"), "outgoing");
+        set(&property(&model, "count"), 575, 7.0);
+        s.begin("B", "t1");
+        assert_eq!(string_value(&model, "label"), "incoming");
+        close(val(&property(&model, "prop"), 575), 10.0);
+        close(val(&property(&model, "count"), 575), 7.0);
+        s.fly(0.5);
+        s.end_at_once("B", "t1");
+        close(val(&property(&model, "count"), 575), 7.0);
+    }
+
+    /// Row 11: with no frame between them, take-off and landing give the
+    /// instance B's values and the copy A gets A's (decision 297). A cut
+    /// back to A moves nothing.
+    #[test]
+    fn in_place_takeoff_landing_and_refill_without_an_advance_adopt_their_placements_values_at_once()
+     {
+        let mut s = Page::new(VALUES);
+        let model = vm(&child(&s.pa).unwrap());
+        s.begin("B", "t1");
+        s.end_at_once("B", "t1");
+        close(val(&property(&model, "prop"), 575), 200.0);
+        assert_eq!(color_value(&model, "accent"), 0xe0c0a080);
+        assert!(s.moves.flight_controls(&s.root).is_empty());
+        let own = vm(&child(&s.pa).unwrap());
+        assert_ne!(own, model);
+        close(val(&property(&own, "prop"), 575), 10.0);
+        assert_eq!(color_value(&own, "accent"), 0x20406080);
+        s.moves.step_begin(&s.root, "A", None).unwrap();
+        close(val(&property(&own, "prop"), 575), 10.0);
+        close(val(&property(&model, "prop"), 575), 200.0);
+        s.moves.step_end(&s.root, "A", None).unwrap();
+    }
+
+    /// Row 12: a two-way prop authored target-first keeps that order on the
+    /// carried instance and on each refilled copy, through a move and back.
+    #[test]
+    fn in_place_a_target_first_two_way_prop_keeps_its_order_through_a_move_the_refill_and_back() {
+        use source::data_bind::{
+            data_bind::{DataBind, SOURCE_TO_TARGET_FIRST, TWO_WAY},
+            data_bind_context::DataBindContext,
+        };
+        let mut s = Page::new(InPlaceCarry::Transfer);
+        // Author the prop binds in the Screen containers. Both ends matter:
+        // take-off discards B's own instance and keeps its authored bind
+        // before deriving the carried instance's.
+        for (row, at, path) in [(&s.a, &s.pa, 0), (&s.b, &s.pb, 1)] {
+            let prop = property(&vm(&child(at).unwrap()), "prop");
+            let container = row.core_handle().data_bind_container().unwrap();
+            let binds = container.data_binds().to_vec();
+            for bind in binds {
+                if bind
+                    .with(|o| o.as_data_bind().and_then(DataBind::target))
+                    .flatten()
+                    == Some(prop.clone())
+                {
+                    container.remove_and_delete_data_bind(&bind);
+                }
+            }
+            let mut bind = DataBindContext::default();
+            bind.base.base = DataBind::new(TWO_WAY, 575, 0);
+            bind.decode_source_path_ids(&[path, 0]);
+            let bind = at.insert_sibling(bind).unwrap();
+            bind.with_mut(|o| o.as_data_bind_mut().unwrap().set_target(Some(prop)));
+            container.add_data_bind(bind);
+        }
+        let original = child(&s.pa).unwrap();
+        let prop = property(&vm(&original), "prop");
+        let assert_order = |at: &CoreHandle, flown: bool| {
+            let unit = child(at).unwrap();
+            assert_eq!(unit.core_handle() == original.core_handle(), flown);
+            let prop = property(&vm(&unit), "prop");
+            let binds: Vec<_> = unit
+                .core_handle()
+                .data_bind_container()
+                .unwrap()
+                .data_binds()
+                .to_vec()
+                .into_iter()
+                .filter(|bind| {
+                    bind.with(|o| {
+                        o.as_data_bind().is_some_and(|b| {
+                            b.is_instance_value_bind() && b.target() == Some(prop.clone())
+                        })
+                    }) == Some(true)
+                })
+                .collect();
+            assert_eq!(binds.len(), 1, "one derived prop binding");
+            binds[0].with(|o| {
+                let bind = o.as_data_bind().unwrap();
+                assert_ne!(bind.base.flags() & TWO_WAY, 0, "prop remains two-way");
+                assert_eq!(
+                    bind.base.flags() & SOURCE_TO_TARGET_FIRST,
+                    0,
+                    "prop remains target-first"
+                );
+            });
+        };
+        s.begin("B", "t1");
+        s.advance(0.1);
+        s.end_at_once("B", "t1");
+        s.advance(0.0);
+        assert_order(&s.pb, true);
+        assert_order(&s.pa, false);
+        set(&prop, 575, 321.0);
+        s.advance(0.0);
+        close(val(&property(&vm(&s.b), "offset"), 575), 321.0);
+        s.begin("A", "back");
+        s.fly(0.5);
+        s.end_at_once("A", "back");
+        s.advance(0.0);
+        assert_order(&s.pa, true);
+        assert_order(&s.pb, false);
+    }
+
+    /// Row 12: landing half way with a newer source takes that source before
+    /// anything writes back, and the order is one-time.
+    #[test]
+    fn in_place_target_first_two_way_midpoint_landing_adopts_source_before_writeback() {
+        for latest in [200.0, 310.0] {
+            let mut s = Page::new(VALUES);
+            target_first_props(&s.b, &s.pb, &["prop", "accent"]);
+            let unit = child(&s.pa).unwrap();
+            let model = vm(&unit);
+            let destination = vm(&s.b);
+            s.begin("B", "t1");
+            s.fly(0.5);
+            close(val(&property(&model, "prop"), 575), 105.0);
+            assert_eq!(color_value(&model, "accent"), 0x80b09880);
+            // No further follow: landing must sample the latest source.
+            set(&property(&destination, "offset"), 575, latest);
+            assert!(CoreRegistry::set_color_handle(
+                &property(&destination, "accent"),
+                555,
+                0x6080a0c0
+            ));
+            s.end_at_once("B", "t1");
+            close(val(&property(&destination, "offset"), 575), latest);
+            close(val(&property(&model, "prop"), 575), latest);
+            assert_eq!(color_value(&destination, "accent"), 0x6080a0c0);
+            assert_eq!(color_value(&model, "accent"), 0x6080a0c0);
+            assert_target_first_prop(&unit, &property(&model, "prop"));
+            set(&property(&model, "prop"), 575, 444.0);
+            assert!(CoreRegistry::set_color_handle(
+                &property(&model, "accent"),
+                555,
+                0x12345678
+            ));
+            s.advance(0.0);
+            close(val(&property(&destination, "offset"), 575), 444.0);
+            assert_eq!(color_value(&destination, "accent"), 0x12345678);
+        }
+    }
+
+    /// Row 28: a cancel after the arriving row goes mid-flight takes the
+    /// instance home bound to A's source before anything writes back.
+    #[test]
+    fn in_place_target_first_two_way_cancel_after_midflight_row_removal_adopts_its_placements_source()
+     {
+        let mut s = Page::new(VALUES);
+        target_first_props(&s.a, &s.pa, &["prop", "accent"]);
+        target_first_props(&s.b, &s.pb, &["prop", "accent"]);
+        let unit = child(&s.pa).unwrap();
+        let model = vm(&unit);
+        let home = vm(&s.a);
+        let destination = vm(&s.b);
+        s.begin("B", "t1");
+        s.fly(0.5);
+        close(val(&property(&model, "prop"), 575), 105.0);
+        s.keep_rows(&[0]);
+        s.advance(0.0);
+        assert_eq!(holds(&s.pa), Some(unit.core_handle()));
+        assert!(s.moves.flight_controls(&s.root).is_empty());
+        close(val(&property(&home, "offset"), 575), 10.0);
+        close(val(&property(&destination, "offset"), 575), 200.0);
+        close(val(&property(&model, "prop"), 575), 10.0);
+        assert_eq!(color_value(&home, "accent"), 0x20406080);
+        assert_eq!(color_value(&destination, "accent"), 0xe0c0a080);
+        assert_eq!(color_value(&model, "accent"), 0x20406080);
+        assert_target_first_prop(&unit, &property(&model, "prop"));
+        set(&property(&model, "prop"), 575, 88.0);
+        s.advance(0.0);
+        close(val(&property(&home, "offset"), 575), 88.0);
+        close(val(&property(&destination, "offset"), 575), 200.0);
+    }
+
+    /// Row 12's third case. Through slots a test drops a flight's value
+    /// projection while its binding stays. In place the blend lives in the
+    /// flight, so the case is the step ending under it: the leaving Screen
+    /// goes half way, with or without target writes and a newer source
+    /// queued, and the instance stays at B. Neither order writes the blend
+    /// back.
+    #[test]
+    fn in_place_target_first_two_way_ended_flight_adopts_live_source_before_writeback() {
+        for queued_target in [false, true] {
+            let mut s = Page::new(InPlaceCarry::Transfer);
+            target_first_props(&s.b, &s.pb, &["prop"]);
+            let unit = child(&s.pa).unwrap();
+            let target = property(&vm(&unit), "prop");
+            let source = property(&vm(&s.b), "offset");
+            s.begin("B", "t1");
+            s.fly(0.5);
+            close(val(&target, 575), 105.0);
+            if queued_target {
+                set(&target, 575, 104.0);
+                set(&target, 575, 105.0);
+                set(&source, 575, 310.0);
+            }
+            s.keep_rows(&[1]);
+            s.advance(0.0);
+            assert!(s.moves.flight_controls(&s.root).is_empty());
+            assert_eq!(holds(&s.pb), Some(unit.core_handle()));
+            let expected = if queued_target { 310.0 } else { 200.0 };
+            close(val(&source, 575), expected);
+            close(val(&target, 575), expected);
+            assert_target_first_prop(&unit, &target);
+            set(&target, 575, 444.0);
+            s.advance(0.0);
+            close(val(&source, 575), 444.0);
+        }
+    }
+
+    /// Row 13: text typed into a field no Screen binds reaches B's prop
+    /// source, one-way or two-way, and B's prop drives the field after.
+    #[test]
+    fn in_place_unbound_typed_text_writes_the_incoming_prop_source_in_both_directions() {
+        use source::text::text_input::TextInput;
+        for (two_way_text, settle) in [(false, false), (true, false), (false, true), (true, true)] {
+            let mut s = Page::new(InPlaceCarry::TransferValues {
+                two_way_text,
+                reference: false,
+            });
+            let unit = child(&s.pa).unwrap();
+            let model = vm(&unit);
+            let field = unit
+                .with_artboard(|b| b.find_handle::<TextInput>("edit"))
+                .unwrap();
+            assert!(
+                field
+                    .with_downcast_mut::<TextInput, _>(|f| f.text_input("typed locally"))
+                    .unwrap()
+            );
+            if settle {
+                s.advance(0.0);
+                assert_eq!(string_value(&model, "text"), "typed locally");
+            }
+            s.begin("B", "t1");
+            assert_eq!(string_value(&vm(&s.b), "text"), "typed locally");
+            s.end_at_once("B", "t1");
+            assert_eq!(string_value(&vm(&s.b), "text"), "typed locally");
+            assert_eq!(string_value(&model, "text"), "typed locally");
+            assert_eq!(
+                CoreRegistry::get_string_handle(&field, 817).as_deref(),
+                Some("typed locally")
+            );
+            assert!(CoreRegistry::set_string_handle(
+                &property(&vm(&s.b), "text"),
+                561,
+                "later".into()
+            ));
+            s.advance(0.0);
+            assert_eq!(
+                CoreRegistry::get_string_handle(&field, 817).as_deref(),
+                Some("later"),
+                "two-way {two_way_text}, settle {settle}"
+            );
+        }
+    }
+
+    /// Row 13: text a model holds but nobody typed does not override B's.
+    #[test]
+    fn in_place_authored_unbound_text_does_not_override_the_incoming_prop() {
+        let mut s = Page::new(VALUES);
+        let model = vm(&child(&s.pa).unwrap());
+        assert!(CoreRegistry::set_string_handle(
+            &property(&model, "text"),
+            561,
+            "authored".into()
+        ));
+        s.advance(0.0);
+        s.begin("B", "t1");
+        s.end_at_once("B", "t1");
+        assert_eq!(string_value(&vm(&s.b), "text"), "destination text");
+        assert_eq!(string_value(&model, "text"), "destination text");
+    }
+
+    /// Row 13: typed text in a field A binds is A's, and B's source keeps
+    /// its own.
+    #[test]
+    fn in_place_outgoing_bound_typed_text_does_not_write_the_incoming_source() {
+        use source::data_bind::{data_bind::DataBind, data_bind_context::DataBindContext};
+        use source::text::text_input::TextInput;
+        let mut s = Page::new(VALUES);
+        let unit = child(&s.pa).unwrap();
+        let model = vm(&unit);
+        let mut bind = DataBindContext::default();
+        bind.base.base = DataBind::new(0, 561, 0);
+        bind.decode_source_path_ids(&[0, 3]);
+        let bind = s.pa.insert_sibling(bind).unwrap();
+        bind.with_mut(|o| {
+            o.as_data_bind_mut()
+                .unwrap()
+                .set_target(Some(property(&model, "text")))
+        });
+        s.a.with_artboard_mut(|b| b.add_data_bind(bind));
+        s.advance(0.0);
+        let field = unit
+            .with_artboard(|b| b.find_handle::<TextInput>("edit"))
+            .unwrap();
+        assert!(
+            field
+                .with_downcast_mut::<TextInput, _>(|f| f.text_input("new edit"))
+                .unwrap()
+        );
+        s.begin("B", "t1");
+        s.end_at_once("B", "t1");
+        assert_eq!(string_value(&vm(&s.b), "text"), "destination text");
+        assert_eq!(string_value(&model, "text"), "destination text");
+        assert_eq!(
+            CoreRegistry::get_string_handle(&field, 817).as_deref(),
+            Some("destination text")
+        );
+    }
+
+    /// Row 18: the carried instance's model outlives the row it came from.
+    #[test]
+    fn in_place_moved_vm_survives_removing_its_original_row() {
+        let mut s = Page::new(InPlaceCarry::Transfer);
+        let model = vm(&child(&s.pa).unwrap());
+        let count = property(&model, "count");
+        set(&count, 575, 7.0);
+        s.begin("B", "t1");
+        s.end_at_once("B", "t1");
+        // Hold no handle on A's Screen, so only the carry's lease can keep
+        // the model alive once A's row goes.
+        s.a = s.b.clone();
+        s.keep_rows(&[1]);
+        set(&count, 575, 8.0);
+        s.advance(0.1);
+        assert_eq!(vm(&child(&s.pb).unwrap()), model);
+        close(val(&count, 575), 8.0);
+        assert!(
+            validate_move(&s.pb, &s.pa).is_err(),
+            "a lease does not make a removed row mounted"
+        );
+    }
+
+    /// Row 19: removing the arriving Screen mid-flight puts the instance
+    /// back where it took off as the list changes, before any plan call,
+    /// and ends the step; forward and Back. Back, removing the leaving
+    /// Screen differs from the slot path by shape: through slots the
+    /// instance flies in a flight slot on that Screen and goes with it; in
+    /// place it flies in the arriving placement, A's, so it stays there with
+    /// A's values (B2's cancel: home only when home is mounted and empty).
+    #[test]
+    fn in_place_removing_the_arriving_screen_puts_the_instance_back() {
+        let mut s = Page::new(InPlaceCarry::Transfer);
+        let unit = holds(&s.pa).unwrap();
+        s.begin("B", "t1");
+        s.advance(0.1);
+        s.keep_rows(&[0]);
+        assert_eq!(
+            holds(&s.pa),
+            Some(unit.clone()),
+            "back before any plan call"
+        );
+        s.moves.after_advance(&s.root).unwrap();
+        assert_eq!(holds(&s.pa), Some(unit));
+        assert!(s.moves.flight_controls(&s.root).is_empty(), "the step ends");
+        s.cut("A");
+
+        let mut s = Page::new(InPlaceCarry::Transfer);
+        let unit = holds(&s.pa).unwrap();
+        s.begin("B", "t1");
+        s.end_at_once("B", "t1");
+        s.begin("A", "back");
+        s.fly(0.5);
+        s.keep_rows(&[1]);
+        assert_eq!(
+            holds(&s.pb),
+            Some(unit.clone()),
+            "back before any plan call"
+        );
+        s.advance(0.0);
+        assert_eq!(holds(&s.pb), Some(unit));
+        assert!(s.moves.flight_controls(&s.root).is_empty(), "the step ends");
+        s.cut("B");
+
+        let mut s = Page::new(InPlaceCarry::Transfer);
+        s.begin("B", "t1");
+        s.end_at_once("B", "t1");
+        let flown = holds(&s.pb).unwrap();
+        s.begin("A", "back");
+        s.fly(0.5);
+        s.keep_rows(&[0]);
+        s.moves.after_advance(&s.root).unwrap();
+        assert_eq!(holds(&s.pa), Some(flown.clone()), "it stays where it flew");
+        assert!(s.moves.flight_controls(&s.root).is_empty(), "the step ends");
+        // Its blend ended with the step: it shows A's value, not the
+        // half-way one.
+        close(
+            val(&property(&vm(&child(&s.pa).unwrap()), "prop"), 575),
+            10.0,
+        );
+        assert_eq!(s.count(BUTTON), 1, "one occurrence");
+    }
+
+    /// Row 20: removing the Screen that holds the carried instance leaves
+    /// the Screen it left its own copy.
+    #[test]
+    fn in_place_removing_the_holder_leaves_the_other_screen_its_own_copy() {
+        let mut s = Page::new(InPlaceCarry::Transfer);
+        let unit = holds(&s.pa).unwrap();
+        s.begin("B", "t1");
+        s.end_at_once("B", "t1");
+        let own = holds(&s.pa).unwrap();
+        assert_ne!(own, unit);
+        s.keep_rows(&[0]);
+        s.advance(0.0);
+        assert_eq!(holds(&s.pa), Some(own));
+    }
+
+    /// Row 20: removing a third Screen, which holds the twice-carried
+    /// instance, leaves the kept Screens their own copies.
+    #[test]
+    fn in_place_removing_a_third_holder_leaves_the_kept_screens_their_own_copies() {
+        let mut s = Page::new(InPlaceCarry::TransferThree);
+        let original = holds(&s.pa).unwrap();
+        s.begin("B", "t1");
+        s.end_at_once("B", "t1");
+        s.begin("R2", "third");
+        s.end_at_once("R2", "third");
+        let (a, b) = (holds(&s.pa).unwrap(), holds(&s.pb).unwrap());
+        assert!(a != original && b != original);
+        s.keep_rows(&[0, 1]);
+        assert_eq!(holds(&s.pa), Some(a.clone()));
+        s.cut("B");
+        assert_eq!(holds(&s.pb), Some(b));
+        assert_eq!(holds(&s.pa), Some(a));
+    }
+
+    /// Row 21: a landed instance follows B while A, the Screen it left,
+    /// sleeps.
+    #[test]
+    fn in_place_a_landed_unit_follows_its_new_screen_while_its_home_sleeps() {
+        let mut s = Page::new(VALUES);
+        let unit = child(&s.pa).unwrap();
+        let model = vm(&unit);
+        set(&property(&model, "prop"), 575, 30.0);
+        s.begin("B", "t1");
+        for (p, number, color) in [
+            (0.0, 30.0, 0x20406080),
+            (0.5, 115.0, 0x80b09880),
+            (1.0, 200.0, 0xe0c0a080),
+        ] {
+            s.fly(p);
+            close(val(&property(&model, "prop"), 575), number);
+            assert_eq!(color_value(&model, "accent"), color);
+        }
+        s.end_at_once("B", "t1");
+        // The SDK retires the Screen the unit came from right after End.
+        set_row_collapsed(&s.list(), 0, true).unwrap();
+        assert_eq!(holds(&s.pb), Some(unit.core_handle()));
+        set(&property(&vm(&s.b), "offset"), 575, 321.0);
+        assert!(CoreRegistry::set_color_handle(
+            &property(&vm(&s.b), "accent"),
+            555,
+            0x12345678
+        ));
+        s.advance(0.0);
+        close(val(&property(&model, "prop"), 575), 321.0);
+        assert_eq!(color_value(&model, "accent"), 0x12345678);
+    }
+
+    /// Row 21: the landed instance's own writes reach B while A sleeps.
+    #[test]
+    fn in_place_a_landed_units_own_writes_reach_its_new_screen_while_its_home_sleeps() {
+        for latest in [200.0, 310.0] {
+            let mut s = Page::new(VALUES);
+            target_first_props(&s.b, &s.pb, &["prop", "accent"]);
+            let unit = child(&s.pa).unwrap();
+            let model = vm(&unit);
+            let destination = vm(&s.b);
+            s.begin("B", "t1");
+            s.fly(0.5);
+            close(val(&property(&model, "prop"), 575), 105.0);
+            assert_eq!(color_value(&model, "accent"), 0x80b09880);
+            set(&property(&destination, "offset"), 575, latest);
+            assert!(CoreRegistry::set_color_handle(
+                &property(&destination, "accent"),
+                555,
+                0x6080a0c0
+            ));
+            s.end_at_once("B", "t1");
+            set_row_collapsed(&s.list(), 0, true).unwrap();
+            close(val(&property(&destination, "offset"), 575), latest);
+            close(val(&property(&model, "prop"), 575), latest);
+            assert_eq!(color_value(&destination, "accent"), 0x6080a0c0);
+            assert_eq!(color_value(&model, "accent"), 0x6080a0c0);
+            assert_target_first_prop(&unit, &property(&model, "prop"));
+            set(&property(&model, "prop"), 575, 444.0);
+            assert!(CoreRegistry::set_color_handle(
+                &property(&model, "accent"),
+                555,
+                0x12345678
+            ));
+            s.advance(0.0);
+            close(val(&property(&destination, "offset"), 575), 444.0);
+            assert_eq!(color_value(&destination, "accent"), 0x12345678);
+        }
+    }
+
+    /// Row 21: a change written while the Screen that shows the instance
+    /// sleeps waits for its wake, whether or not A sleeps too.
+    #[test]
+    fn in_place_a_landed_unit_sleeps_and_wakes_with_the_screen_that_shows_it() {
+        for home_awake in [true, false] {
+            let what = if home_awake {
+                "home awake"
+            } else {
+                "home asleep"
+            };
+            let mut s = Page::new(VALUES);
+            let model = vm(&child(&s.pa).unwrap());
+            s.land_in_b();
+            close_in(what, val(&property(&model, "prop"), 575), 200.0);
+            if !home_awake {
+                set_row_collapsed(&s.list(), 0, true).unwrap();
+            }
+            set_row_collapsed(&s.list(), 1, true).unwrap();
+            set(&property(&vm(&s.b), "offset"), 575, 555.0);
+            s.advance(0.0);
+            close_in(
+                &format!("{what}, showing Screen asleep"),
+                val(&property(&model, "prop"), 575),
+                200.0,
+            );
+            set_row_collapsed(&s.list(), 1, false).unwrap();
+            s.advance(0.0);
+            close_in(
+                &format!("{what}, showing Screen woken"),
+                val(&property(&model, "prop"), 575),
+                555.0,
+            );
+        }
+    }
+
+    /// Row 21: waking A later changes nothing for the landed instance, and
+    /// A's own bindings no longer drive it.
+    #[test]
+    fn in_place_waking_the_home_later_changes_nothing_for_a_landed_unit() {
+        let mut s = Page::new(VALUES);
+        let model = vm(&child(&s.pa).unwrap());
+        set(&property(&model, "prop"), 575, 30.0);
+        s.land_in_b();
+        set_row_collapsed(&s.list(), 0, true).unwrap();
+        set(&property(&vm(&s.b), "offset"), 575, 321.0);
+        assert!(CoreRegistry::set_color_handle(
+            &property(&vm(&s.b), "accent"),
+            555,
+            0x12345678
+        ));
+        s.advance(0.0);
+        set_row_collapsed(&s.list(), 0, false).unwrap();
+        s.advance(0.0);
+        close(val(&property(&model, "prop"), 575), 321.0);
+        assert_eq!(color_value(&model, "accent"), 0x12345678);
+        set(&property(&vm(&s.a), "offset"), 575, 999.0);
+        s.advance(0.0);
+        close(val(&property(&model, "prop"), 575), 321.0);
+    }
+
+    /// Row 21: Back after A slept returns the instance bound to A alone,
+    /// one binding per prop A binds.
+    #[test]
+    fn in_place_back_after_the_home_slept_returns_the_unit_with_its_own_bindings() {
+        use source::data_bind::data_bind::DataBind;
+        let mut s = Page::new(VALUES);
+        let unit = child(&s.pa).unwrap();
+        let model = vm(&unit);
+        s.land_in_b();
+        set_row_collapsed(&s.list(), 0, true).unwrap();
+        // Back in the SDK's order: wake the home, Begin, fly, End, sleep B.
+        set_row_collapsed(&s.list(), 0, false).unwrap();
+        s.begin("A", "back");
+        s.fly(1.0);
+        s.end_at_once("A", "back");
+        set_row_collapsed(&s.list(), 1, true).unwrap();
+        assert_eq!(holds(&s.pa), Some(unit.core_handle()));
+        set(&property(&vm(&s.a), "offset"), 575, 77.0);
+        s.advance(0.0);
+        close(val(&property(&model, "prop"), 575), 77.0);
+        set(&property(&vm(&s.b), "offset"), 575, 88.0);
+        s.advance(0.0);
+        close(val(&property(&model, "prop"), 575), 77.0);
+        set_row_collapsed(&s.list(), 1, false).unwrap();
+        s.advance(0.0);
+        close(val(&property(&model, "prop"), 575), 77.0);
+        // One instance-value binding per prop A binds: prop, label and
+        // accent. A's text has no Screen binding.
+        let mut ids: Vec<u32> = unit
+            .core_handle()
+            .data_bind_container()
+            .unwrap()
+            .data_binds()
+            .to_vec()
+            .into_iter()
+            .filter_map(|bind| {
+                bind.with(|o| {
+                    o.as_data_bind()
+                        .filter(|b| b.is_instance_value_bind())
+                        .and_then(DataBind::target)
+                })
+                .flatten()
+            })
+            .map(|target| {
+                target
+                    .with(|o| {
+                        o.as_view_model_instance_value()
+                            .map(|v| v.view_model_property_id())
+                    })
+                    .flatten()
+                    .unwrap()
+            })
+            .collect();
+        ids.sort_unstable();
+        assert_eq!(ids, [1, 2, 3]);
+    }
+
+    /// Row 21: the landed instance's model reference reaches B through its
+    /// polled two-way binding while A sleeps, and waits while B sleeps.
+    #[test]
+    fn in_place_a_landed_units_model_reference_writes_back_while_its_home_sleeps() {
+        use source::viewmodel::{
+            viewmodel_instance::ViewModelInstance,
+            viewmodel_instance_viewmodel::ViewModelInstanceViewModel,
+        };
+        fn referenced(model: &CoreHandle) -> Option<CoreHandle> {
+            property(model, "ref")
+                .with_downcast::<ViewModelInstanceViewModel, _>(|v| {
+                    v.reference_view_model_instance()
+                })
+                .flatten()
+        }
+        let land_and_repoint = |sleep: &[i32]| {
+            let mut s = Page::new(InPlaceCarry::TransferValues {
+                two_way_text: false,
+                reference: true,
+            });
+            let model = vm(&child(&s.pa).unwrap());
+            let second = s
+                ._file
+                .with_file(|f| f.create_view_model_instance_named("Ref", "second"))
+                .unwrap();
+            s.land_in_b();
+            let landing = referenced(&vm(&s.b));
+            assert!(landing.is_some());
+            assert_ne!(landing, Some(second.clone()));
+            for &row in sleep {
+                set_row_collapsed(&s.list(), row, true).unwrap();
+            }
+            assert!(ViewModelInstance::replace_view_model_by_name(
+                &model,
+                "ref",
+                second.clone()
+            ));
+            s.advance(0.0);
+            (s, landing, second)
+        };
+        let (s, _, second) = land_and_repoint(&[]);
+        assert_eq!(referenced(&vm(&s.b)), Some(second), "home awake");
+        let (s, _, second) = land_and_repoint(&[0]);
+        assert_eq!(referenced(&vm(&s.b)), Some(second), "home asleep");
+        let (mut s, landing, second) = land_and_repoint(&[0, 1]);
+        assert_eq!(referenced(&vm(&s.b)), landing, "B asleep keeps its own");
+        set_row_collapsed(&s.list(), 1, false).unwrap();
+        s.advance(0.0);
+        assert_eq!(referenced(&vm(&s.b)), Some(second), "B woken");
+    }
+
+    /// Row 26: an in-place page with a transfer builds bookkeeping, and all
+    /// of it is reclaimed when the page goes.
+    #[test]
+    fn in_place_live_occurrence_builds_and_reclaims_bookkeeping_round6() {
+        let before = hosted_scene::bookkeeping_counts();
+        for _ in 0..8 {
+            let s = Page::new(InPlaceCarry::Transfer);
+            assert!(hosted_scene::bookkeeping_counts().revisions > before.revisions);
+            assert!(hosted_scene::bookkeeping_counts().indexed_handles > before.indexed_handles);
+            drop(s);
+            assert_eq!(hosted_scene::bookkeeping_counts(), before);
+        }
+    }
+
+    /// Row 26: dropping the page with the instance in the air, its home row
+    /// asleep and a frame open reclaims everything.
+    #[test]
+    fn in_place_dropping_an_in_flight_occurrence_reclaims_all_bookkeeping_round6() {
+        let before = hosted_scene::bookkeeping_counts();
+        let mut s = Page::new(InPlaceCarry::Transfer);
+        s.begin("B", "t1");
+        set_row_collapsed(&s.list(), 0, true).unwrap();
+        let model = RuntimeOwnedViewModelHandle::from_native(s._file.clone(), vm(&s.root)).unwrap();
+        let scope = s
+            .moves
+            .frame_scope(&s.root, std::slice::from_ref(&model))
+            .unwrap()
+            .unwrap();
+        let during = hosted_scene::bookkeeping_counts();
+        assert!(during.loan_lists > before.loan_lists);
+        assert!(during.row_indices > before.row_indices);
+        assert!(during.slot_states > before.slot_states);
+        assert_eq!(during.active_frames, 1);
+        let weak = s.root.downgrade();
+        drop(s);
+        assert!(weak.upgrade().is_none());
+        assert_eq!(hosted_scene::bookkeeping_counts(), before);
+        drop((scope, model));
+    }
+
+    /// Row 29: the carried field's accessibility node sleeps and wakes with
+    /// the Screen that shows it; the copy A keeps has a field of its own.
+    #[test]
+    fn in_place_sleeping_row_cut_restores_semantics_round4() {
+        let mut s = Page::new(InPlaceCarry::Transfer);
+        s.machine.with_instance_mut(|m| m.enable_semantics());
+        let manager = s.machine.with_instance(|m| m.semantic_manager()).unwrap();
+        let unit = child(&s.pa).unwrap();
+        let id = semantic_field_id(&unit);
+        let shows =
+            |id| manager.with_semantic_manager_mut(|m| m.snapshot().iter().any(|n| n.id == id));
+        assert!(shows(id));
+        s.begin("B", "t1");
+        s.end_at_once("B", "t1");
+        let own = child(&s.pa).unwrap();
+        let own_id = semantic_field_id(&own);
+        assert_ne!(own_id, id);
+        set_row_collapsed(&s.list(), 1, true).unwrap();
+        assert!(!shows(id));
+        s.cut("A");
+        assert_eq!(holds(&s.pa), Some(own.core_handle()));
+        assert!(
+            shows(own_id),
+            "a cut out of a sleeping row shows A's own field"
+        );
+        assert!(!shows(id), "the carried copy sleeps with its row");
+        set_row_collapsed(&s.list(), 1, false).unwrap();
+        assert_eq!(semantic_field_id(&unit), id);
+        assert!(shows(id), "waking the row restores the carried field");
+    }
+
+    /// Row 29: a list inside the component keeps its nodes through sleep,
+    /// wake and a carry, and its own content is not a carry host.
+    #[test]
+    fn in_place_nested_list_descendants_follow_the_same_native_collapse_path() {
+        let s = Page::new(InPlaceCarry::TransferNestedList);
+        let unit = child(&s.pa).unwrap();
+        let inner = unit
+            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("inner"))
+            .unwrap();
+        ArtboardComponentList::update_list_occurrence(&inner, &[s.item(1)]);
+        let row = inner
+            .with_downcast::<ArtboardComponentList, _>(|l| l.artboard_instance(0))
+            .flatten()
+            .unwrap();
+        let hosts = row.with_artboard(|b| b.nested_artboards().to_vec());
+        let nested_unit = child(&hosts[0]).unwrap();
+        s.machine.with_instance_mut(|m| m.enable_semantics());
+        let manager = s.machine.with_instance(|m| m.semantic_manager()).unwrap();
+        let id = semantic_field_id(&nested_unit);
+        let visible =
+            || manager.with_semantic_manager_mut(|m| m.snapshot().iter().any(|n| n.id == id));
+        assert!(visible());
+        set_row_collapsed(&s.list(), 0, true).unwrap();
+        assert!(!visible());
+        set_row_collapsed(&s.list(), 0, false).unwrap();
+        assert!(visible(), "wake restores a unit's nested list descendants");
+        // Ordinary nested content follows its Screen's collapse. Only
+        // Page.screens rows sleep live or carry.
+        assert!(set_row_collapsed(&inner, 0, true).is_err());
+        assert!(empty_slot(&hosts[0]).is_err());
+        set_row_collapsed(&s.list(), 0, true).unwrap();
+        set_row_collapsed(&s.list(), 0, false).unwrap();
+        assert!(visible());
+        empty_slot(&s.pb).unwrap();
+        carry(&s.pa, &s.pb, false).unwrap();
+        set_row_collapsed(&s.list(), 1, true).unwrap();
+        assert!(!visible());
+        carry(&s.pb, &s.pa, false).unwrap();
+        assert!(visible());
+        assert_eq!(semantic_field_id(&nested_unit), id);
+    }
 }

@@ -120,7 +120,7 @@ const fn n(default: f32) -> Field {
 const FIELDS: [Field; (LAST_KEY - FIRST_KEY + 1) as usize] = [
     e(4),   // 61000 display
     e(1),   // 61001 boxSizing
-    e(2),   // 61002 position
+    e(3),   // 61002 position
     e(4),   // 61003 overflowX
     e(4),   // 61004 overflowY
     e(2),   // 61005 direction

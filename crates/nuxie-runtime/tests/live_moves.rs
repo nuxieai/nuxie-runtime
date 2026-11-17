@@ -8478,6 +8478,27 @@ mod paint_order {
         );
     }
 
+    /// Test 5b with E holding a `position: viewport` child in its flow, as
+    /// the compiler writes an inline svg, with its shape an absolute box
+    /// inside it. A viewport is not positioned for painting and keeps what
+    /// it places, so, unlike an escaping child, the child and its shape
+    /// stay in E's run under the earlier dim: at rest, and in every frame
+    /// of the flight both ways.
+    #[test]
+    fn paint_order_05b_viewport_child_stays_under_the_dim() {
+        let mut s = PaintScene::new(PaintCase::EscapingChild(fixture::ChildKind::Viewport));
+        let rest = s.painted("B", "at rest");
+        rest.meets("E child", "dim");
+        rest.under("E", "dim");
+        rest.under("E child", "dim");
+        s.both_ways(|s, way, p| {
+            let f = s.frame(way, p);
+            f.meets("E", "dim");
+            f.under("E", "dim");
+            f.under("E child", "dim");
+        });
+    }
+
     /// Test 6, clipping holder: E (20, 20, 100 by 60) inside H (0, 0, 300
     /// by 150, `overflow: hidden`), a badge after E in H covering it (60,
     /// 40, 40 by 40), and a box C after H covering E (0, 50, 200 by 100).

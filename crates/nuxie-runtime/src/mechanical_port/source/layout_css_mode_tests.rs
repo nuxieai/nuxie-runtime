@@ -7122,6 +7122,283 @@ fn css_stacking_clipping_card_keeps_its_positive_badge_atomic() {
     ));
 }
 
+// `position: viewport` (3): what the compiler writes on an inline svg. It
+// places its absolute descendants as a relative box does, but paints in
+// flow as one unit, as a browser paints replaced content
+// (docs/CSS_LAYOUT.md 2.1 and 4.4). The badge is the Screen's card badge,
+// earlier in tree order; the icon is the svg; the glyph is its shape.
+
+const ICON: (&str, u32) = ("Icon", 0xff3e_63dd);
+const GLYPH: (&str, u32) = ("Glyph", 0xff11_2233);
+const BACK: (&str, u32) = ("Back", 0xff44_5566);
+const VIEWPORT: u64 = 3;
+
+/// An absolute badge at (10, 10), 60 by 40.
+fn viewport_badge(extra: &[P]) -> B {
+    painted(
+        BADGE.0,
+        BADGE.1,
+        [
+            vec![
+                U(POSITION, 2),
+                U(INSET_TOP_KIND, 1),
+                F(INSET_TOP, 10.0),
+                U(INSET_LEFT_KIND, 1),
+                F(INSET_LEFT, 10.0),
+            ],
+            width(60.0).to_vec(),
+            height(40.0).to_vec(),
+            extra.to_vec(),
+        ]
+        .concat(),
+    )
+}
+
+/// An absolute box at its containing block's top-left, 50 by 50.
+fn viewport_shape((name, color): (&'static str, u32), extra: &[P]) -> B {
+    painted(
+        name,
+        color,
+        [
+            vec![
+                U(POSITION, 2),
+                U(INSET_TOP_KIND, 1),
+                F(INSET_TOP, 0.0),
+                U(INSET_LEFT_KIND, 1),
+                F(INSET_LEFT, 0.0),
+            ],
+            width(50.0).to_vec(),
+            height(50.0).to_vec(),
+            extra.to_vec(),
+        ]
+        .concat(),
+    )
+}
+
+/// The icon, 100 by 100 in flow, at `position` (3 unless a test compares),
+/// clipping when `clips`, holding `children`.
+fn viewport_icon(position: u64, clips: bool, extra: &[P], children: Vec<B>) -> B {
+    let mut props = vec![U(POSITION, position), F(FLEX_SHRINK, 0.0)];
+    if clips {
+        props.extend([U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)]);
+    }
+    props.extend_from_slice(extra);
+    B {
+        children,
+        ..painted(
+            ICON.0,
+            ICON.1,
+            [props, width(100.0).to_vec(), height(100.0).to_vec()].concat(),
+        )
+    }
+}
+
+fn svg_icon(extra: &[P]) -> B {
+    viewport_icon(VIEWPORT, true, extra, vec![viewport_shape(GLYPH, &[])])
+}
+
+/// The bug: a viewport after an earlier absolute sibling paints under it,
+/// and the overlap hits the sibling. A relative icon, the lowering before
+/// the viewport, paints over it.
+#[test]
+fn css_viewport_after_an_absolute_sibling_paints_under_it() {
+    let f = stacking_scene(vec![viewport_badge(&[]), svg_icon(&[])], false);
+    assert_stacking_order(&f, &[ICON, GLYPH, BADGE], (30.0, 30.0));
+    let f = stacking_scene(
+        vec![
+            viewport_badge(&[]),
+            viewport_icon(1, true, &[], vec![viewport_shape(GLYPH, &[])]),
+        ],
+        false,
+    );
+    assert_stacking_order(&f, &[BADGE, ICON, GLYPH], (30.0, 30.0));
+}
+
+/// The matched-element form: the viewport inside a static wrapper does not
+/// leave it to paint over an earlier absolute sibling of the wrapper.
+#[test]
+fn css_viewport_in_a_static_wrapper_paints_under_an_earlier_absolute_sibling() {
+    let f = stacking_scene(
+        vec![
+            viewport_badge(&[]),
+            css("Wrapper", vec![], vec![svg_icon(&[])]),
+        ],
+        false,
+    );
+    assert_stacking_order(&f, &[ICON, GLYPH, BADGE], (30.0, 30.0));
+}
+
+/// Inside a positioned parent, beside an earlier absolute sibling there.
+#[test]
+fn css_viewport_in_a_positioned_parent_paints_under_an_earlier_absolute_sibling() {
+    let f = stacking_scene(
+        vec![B {
+            children: vec![viewport_badge(&[]), svg_icon(&[])],
+            ..stacking_box(CARD, &[U(POSITION, 1)])
+        }],
+        false,
+    );
+    assert_stacking_order(&f, &[CARD, ICON, GLYPH, BADGE], (30.0, 30.0));
+}
+
+/// Before an absolute sibling it paints under it too (tree order would say
+/// the same), and over a negative z-index box.
+#[test]
+fn css_viewport_paints_under_a_later_absolute_sibling_and_over_a_negative_one() {
+    let f = stacking_scene(vec![svg_icon(&[]), viewport_badge(&[])], false);
+    assert_stacking_order(&f, &[ICON, GLYPH, BADGE], (30.0, 30.0));
+    let f = stacking_scene(
+        vec![svg_icon(&[]), viewport_badge(&stacking_z(-1.0))],
+        false,
+    );
+    assert_stacking_order(&f, &[BADGE, ICON, GLYPH], (30.0, 30.0));
+}
+
+/// Its own opacity below 1 makes it a stacking context, which paints with
+/// positioned boxes in tree order: over the earlier badge.
+#[test]
+fn css_viewport_with_opacity_paints_over_an_earlier_absolute_sibling() {
+    let f = stacking_scene(
+        vec![
+            viewport_badge(&[]),
+            B {
+                component: vec![F(BOX_OPACITY, 0.99)],
+                ..viewport_icon(VIEWPORT, false, &[], vec![viewport_shape(GLYPH, &[])])
+            },
+        ],
+        false,
+    );
+    assert_stacking_order(&f, &[BADGE, ICON, GLYPH], (30.0, 30.0));
+}
+
+/// Its z-index applies only where a static box's would: ignored in block
+/// flow, applied to a flex item.
+#[test]
+fn css_viewport_z_index_applies_only_to_a_flex_item() {
+    let children = || vec![viewport_badge(&[]), svg_icon(&stacking_z(5.0))];
+    let f = stacking_scene(children(), false);
+    assert_stacking_order(&f, &[ICON, GLYPH, BADGE], (30.0, 30.0));
+    let f = stacking_scene(children(), true);
+    assert_stacking_order(&f, &[BADGE, ICON, GLYPH], (30.0, 30.0));
+}
+
+/// What a viewport places stays inside it, in tree order, under a later
+/// in-flow sibling, whether or not it clips, including a shape that is a
+/// stacking context of its own (opacity below 1) before a plain one.
+#[test]
+fn css_viewport_keeps_its_absolute_children_in_tree_order() {
+    for clips in [true, false] {
+        let f = stacking_scene(
+            vec![
+                viewport_icon(
+                    VIEWPORT,
+                    clips,
+                    &[],
+                    vec![
+                        B {
+                            component: vec![F(BOX_OPACITY, 0.99)],
+                            ..viewport_shape(BACK, &[])
+                        },
+                        viewport_shape(GLYPH, &[]),
+                    ],
+                ),
+                stacking_box(LATER, &[F(MARGIN_TOP, -70.0)]),
+            ],
+            false,
+        );
+        assert_stacking_order(&f, &[ICON, BACK, GLYPH, LATER], (20.0, 40.0));
+    }
+}
+
+/// Layout: a viewport is the containing block of its absolute children,
+/// and its own insets move nothing, as a static box's do not. A relative
+/// box with the same insets moves.
+#[test]
+fn css_viewport_places_its_absolute_children_and_ignores_its_insets() {
+    let insets = [
+        U(INSET_TOP_KIND, 1),
+        F(INSET_TOP, 30.0),
+        U(INSET_LEFT_KIND, 1),
+        F(INSET_LEFT, 30.0),
+    ];
+    let glyph = || {
+        painted(
+            GLYPH.0,
+            GLYPH.1,
+            [
+                vec![
+                    U(POSITION, 2),
+                    U(INSET_TOP_KIND, 1),
+                    F(INSET_TOP, 5.0),
+                    U(INSET_LEFT_KIND, 1),
+                    F(INSET_LEFT, 5.0),
+                ],
+                width(20.0).to_vec(),
+                height(20.0).to_vec(),
+            ]
+            .concat(),
+        )
+    };
+    let scene_at = |position: u64| {
+        frame(vec![
+            painted("Spacer", 0xff00_0001, [width(100.0), height(20.0)].concat()),
+            viewport_icon(position, true, &insets, vec![glyph()]),
+        ])
+    };
+    let f = scene_at(VIEWPORT);
+    assert_eq!(f.bounds(ICON.0)[..2], [0.0, 20.0]);
+    assert_eq!(f.bounds(GLYPH.0)[..2], [5.0, 5.0]);
+    let f = scene_at(1);
+    assert_eq!(f.bounds(ICON.0)[..2], [30.0, 50.0]);
+    assert_eq!(f.bounds(GLYPH.0)[..2], [5.0, 5.0]);
+}
+
+/// A translated (Rive) child placed absolutely stays positioned beside a
+/// viewport: it paints over the viewport, whatever their tree order.
+#[test]
+fn css_translated_absolute_child_paints_over_a_viewport() {
+    let f = frame(vec![
+        B {
+            name: "Red",
+            component: vec![
+                F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0),
+                F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 50.0),
+            ],
+            style: vec![U(
+                LayoutComponentStyleBase::POSITION_TYPE_VALUE_PROPERTY_KEY,
+                2,
+            )],
+            paints: vec![Paint::Fill(0xff00_0001)],
+            ..B::default()
+        },
+        svg_icon(&[]),
+    ]);
+    let names = f.draw_names_top_first();
+    let at = |name: &str| names.iter().position(|n| n == name).unwrap();
+    assert!(at("Red") < at(ICON.0), "{names:?}");
+    assert!(at("Red") < at(GLYPH.0), "{names:?}");
+}
+
+/// Writing `position` to viewport at run time sorts again.
+#[test]
+fn css_viewport_written_at_run_time_sorts_again() {
+    let f = stacking_scene(
+        vec![
+            viewport_badge(&[]),
+            viewport_icon(1, true, &[], vec![viewport_shape(GLYPH, &[])]),
+        ],
+        false,
+    );
+    assert_stacking_order(&f, &[BADGE, ICON, GLYPH], (30.0, 30.0));
+    assert!(CoreRegistry::set_uint_handle(
+        &f.record(ICON.0),
+        POSITION.into(),
+        VIEWPORT as u32
+    ));
+    f.advance(2);
+    assert_stacking_order(&f, &[ICON, GLYPH, BADGE], (30.0, 30.0));
+}
+
 /// A box's own paint stays at the bottom of its stack whatever order its
 /// drawables arrive in. A retained remount (a late font or catalog
 /// registration re-creating the text inside a box) appends the re-created

@@ -5873,6 +5873,11 @@ pub enum ChildKind {
     Box,
     Shape,
     Element(ElementKind),
+    /// A paintless `position: viewport` box in E's flow, 30 by 20 at E's
+    /// top-left (its insets ignored), clipping, holding an absolute box at
+    /// its top-left that paints it, as the compiler writes an svg and its
+    /// shape.
+    Viewport,
 }
 
 /// An `ElementKind` pair (docs/live-moves.md, Flying in place, A2b): unit
@@ -6472,6 +6477,49 @@ impl PaintUnit {
                 objects
             }
             ChildKind::Element(kind) => self.kind_objects(kind, id, parent, "child", &css, inner),
+            ChildKind::Viewport => {
+                let mut viewport = vec![
+                    ("parentId", U(id)),
+                    ("position", U(3)),
+                    ("overflowX", U(2)),
+                    ("overflowY", U(2)),
+                ];
+                viewport.extend(css.iter().skip(1).cloned());
+                let mut shape = vec![
+                    ("parentId", U(id + 3)),
+                    ("position", U(2)),
+                    ("insetLeftKind", U(1)),
+                    ("insetTopKind", U(1)),
+                ];
+                shape.extend(css_size(30.0, 20.0));
+                vec![
+                    (
+                        "LayoutComponent",
+                        vec![
+                            ("name", S("viewport")),
+                            ("parentId", U(parent)),
+                            ("styleId", U(id + 1)),
+                        ],
+                    ),
+                    ("LayoutComponentStyle", vec![("parentId", U(id))]),
+                    ("LayoutCssStyle", viewport),
+                    (
+                        "LayoutComponent",
+                        vec![
+                            ("name", S("child")),
+                            ("parentId", U(id)),
+                            ("styleId", U(id + 4)),
+                        ],
+                    ), // id + 3
+                    ("LayoutComponentStyle", vec![("parentId", U(id + 3))]),
+                    ("LayoutCssStyle", shape),
+                    ("Fill", vec![("parentId", U(id + 3))]), // id + 6
+                    (
+                        "SolidColor",
+                        vec![("parentId", U(id + 6)), ("colorValue", color)],
+                    ),
+                ]
+            }
         }
     }
     /// The objects of its one element, from object `id`, under `parent`,

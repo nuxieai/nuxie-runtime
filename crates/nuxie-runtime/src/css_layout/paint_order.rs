@@ -105,7 +105,15 @@ fn placement(child: &CoreHandle, parent: Container) -> ((u8, i32), bool) {
     use crate::source::layout::layout_style_applier::YGPositionType;
     child
         .with(|object| {
-            let read = |css: super::CssValues<'_>| (css.choice(keys::POSITION) != 0, css.z_index());
+            // A viewport (3) places its absolute descendants but is not
+            // positioned for painting: it paints in flow, as a replaced box.
+            let read = |css: super::CssValues<'_>| {
+                let position = css.choice(keys::POSITION);
+                (
+                    (position == 1 || position == 2, position == 3),
+                    css.z_index(),
+                )
+            };
             let layout = object.as_layout_component();
             let css_box = layout.is_some_and(|layout| layout.is_css_mode());
             let slot_record = layout
@@ -118,12 +126,12 @@ fn placement(child: &CoreHandle, parent: Container) -> ((u8, i32), bool) {
                 Some(layout) => layout
                     .with_style(|style| style.position_type() == YGPositionType::Absolute)
                     .filter(|absolute| *absolute)
-                    .map(|_| (true, None)),
+                    .map(|_| ((true, false), None)),
                 None => slot_record
                     .as_ref()
                     .and_then(|record| super::record::with_values(record, read)),
             };
-            let (positioned, z) = values.unwrap_or((false, None));
+            let ((positioned, viewport), z) = values.unwrap_or(((false, false), None));
             let z = z.filter(|_| positioned || parent.flex_or_grid);
             // A CSS slot takes the layer of the frame it places, and stays
             // atomic (css_layout/hosted_frame.rs).
@@ -144,7 +152,10 @@ fn placement(child: &CoreHandle, parent: Container) -> ((u8, i32), bool) {
             let masked = object.as_drawable().is_some_and(|drawable| {
                 !drawable.layer_masks().is_empty() || !drawable.source_of_layer_masks().is_empty()
             });
-            let atomic = !css_box || masked || layout.is_some_and(|layout| layout.clips());
+            // A viewport keeps its subtree together whether or not it clips:
+            // what it places paints inside it, in its own order.
+            let atomic =
+                !css_box || masked || viewport || layout.is_some_and(|layout| layout.clips());
             (layer, context || atomic)
         })
         .unwrap_or(((1, 0), true))

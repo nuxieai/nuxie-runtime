@@ -33,7 +33,7 @@
         "int": 61002
       },
       "initialValue": "0",
-      "description": "CSS position: 0 static, 1 relative, 2 absolute.",
+      "description": "CSS position: 0 static, 1 relative, 2 absolute, 3 viewport (compiler-written: lays out as relative with its insets ignored, and paints in flow as one unit).",
       "bindable": true,
       "animates": false
     },

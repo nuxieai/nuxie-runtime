@@ -387,7 +387,6 @@ pub(crate) struct CssBoxGeometry {
     pub radii: crate::css_layout::paint::Radii,
     pub padding: Aabb,
     pub inner: crate::css_layout::paint::Radii,
-    pub overflow: taffy::geometry::Point<taffy::style::Overflow>,
 }
 
 /// What makes a paint special in CSS mode, read from its children.
@@ -3264,8 +3263,8 @@ impl LayoutComponent {
     }
     /// A CSS box's geometry in its own space (docs/CSS_LAYOUT.md, 4): its
     /// border box with CSS radii (points from the style, percentages from
-    /// the record, scaled together when they overlap), its padding box with
-    /// the inner radii, and its computed overflow. None in translated mode.
+    /// the record, scaled together when they overlap), and its padding box
+    /// with the inner radii. None in translated mode.
     pub(crate) fn css_box_geometry(&self) -> Option<CssBoxGeometry> {
         let (width, height) = (self.layout.width(), self.layout.height());
         self.css_geometry_of(Aabb::new(0.0, 0.0, width, height))
@@ -3309,13 +3308,8 @@ impl LayoutComponent {
                 }
             })
             .unwrap_or([0.0; 4]);
-        let (percents, overflow) = self.with_css(|css| {
-            (
-                std::array::from_fn(|corner| {
-                    css.number(keys::RADIUS_TOP_LEFT_PERCENT + corner as u16)
-                }),
-                css.overflow(),
-            )
+        let percents: [f32; 4] = self.with_css(|css| {
+            std::array::from_fn(|corner| css.number(keys::RADIUS_TOP_LEFT_PERCENT + corner as u16))
         })?;
         // A flying unit draws its flight slot's corners in place of its own
         // point and percent radii (docs/live-moves.md).
@@ -3330,7 +3324,6 @@ impl LayoutComponent {
             radii,
             padding: paint::padding_box(bounds, border),
             inner: paint::inner_radii(radii, border),
-            overflow,
         })
     }
     /// The paths this box's special paints (BoxBorder and BoxShadow) draw
@@ -3441,13 +3434,9 @@ impl LayoutComponent {
             return;
         };
         // The box's own paint follows its BoxPaint; its clip does not.
-        let CssBoxGeometry {
-            padding,
-            inner,
-            overflow,
-            ..
-        } = geometry;
+        let CssBoxGeometry { padding, inner, .. } = geometry;
         let CssBoxGeometry { bounds, radii, .. } = painted;
+        let clips = self.clipped_axes();
         let world = self.base.base.base.base.world_transform();
         let mut paths_owner = self.mutable_render_paths();
         let paths = &mut *paths_owner;
@@ -3467,13 +3456,7 @@ impl LayoutComponent {
             .rewind_as(false, nuxie_render_api::FillRule::Clockwise);
         paths.world.add_path(&paths.background, Some(&world));
         let mut clip = RawPath::default();
-        let visible = taffy::style::Overflow::Visible;
-        paint::add_overflow_clip(
-            &mut clip,
-            padding,
-            inner,
-            (overflow.x != visible, overflow.y != visible),
-        );
+        paint::add_overflow_clip(&mut clip, padding, inner, clips);
         paths
             .clip
             .rewind_as(false, nuxie_render_api::FillRule::Clockwise);

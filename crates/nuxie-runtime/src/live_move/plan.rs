@@ -860,6 +860,11 @@ impl Plan {
                     &mut carried.values,
                 )?;
                 carried.written.take_off();
+                // The placement it left keeps the instance's frame at rest
+                // for the step, as an anchor keeps the frame a flight slot
+                // carries: its Screen sorts it, and the lift's cover reads
+                // it, as it rested.
+                carried.link();
                 settle_row(&flight.row);
             }
         }
@@ -955,6 +960,16 @@ impl Plan {
                 [version(&pair.copies[0])?, version(&pair.copies[1])?],
                 &active,
             )?;
+        }
+        // A placement a transfer left sorts by the carried instance's frame:
+        // when that changed how it sorts, its Screen sorts again before the
+        // search for what covers each anchor walks it.
+        let mut contexts_changed = false;
+        for flight in &self.lifted {
+            contexts_changed |= flight.read_context();
+        }
+        if contexts_changed {
+            settle_frame(&settle_order);
         }
         let mut boards: Vec<(CoreHandle, Vec<&super::in_place::InPlaceFlight>)> = Vec::new();
         for flight in &self.lifted {

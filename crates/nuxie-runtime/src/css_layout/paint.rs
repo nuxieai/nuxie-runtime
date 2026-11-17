@@ -145,31 +145,47 @@ pub fn add_rounded_rect(path: &mut RawPath, bounds: Aabb, radii: Radii) {
 /// How far a clip reaches on an axis that does not clip.
 const UNCLIPPED: f32 = 1.0e7;
 
-/// The clip `overflow` implies, or None when both axes are visible. Both
-/// axes clipping: the padding box with its inner radii. One axis: a band
-/// across that axis's padding edges, unbounded along the other.
+/// The rectangle the clip `overflow` implies cuts to, in the box's space,
+/// or None when both axes are visible: the padding box on each axis that
+/// clips, unbounded along one that does not. The one rule for which box an
+/// overflow clip cuts to, read by paint ([`add_overflow_clip`]) and by a
+/// transferring flight's cover (live_move/follow.rs, `PlacedAtRest`).
+pub fn overflow_clip_rect(padding: Aabb, clips: (bool, bool)) -> Option<Aabb> {
+    let (x, y) = clips;
+    (x || y).then(|| {
+        let (left, right) = if x {
+            (padding.left(), padding.right())
+        } else {
+            (-UNCLIPPED, UNCLIPPED)
+        };
+        let (top, bottom) = if y {
+            (padding.top(), padding.bottom())
+        } else {
+            (-UNCLIPPED, UNCLIPPED)
+        };
+        Aabb::new(left, top, right, bottom)
+    })
+}
+
+/// The clip `overflow` implies, or None when both axes are visible: its
+/// rectangle ([`overflow_clip_rect`]), with the inner radii when both axes
+/// clip.
 pub fn add_overflow_clip(
     path: &mut RawPath,
     padding: Aabb,
     inner: Radii,
     clips: (bool, bool),
 ) -> bool {
-    match clips {
-        (false, false) => false,
-        (true, true) => {
-            add_rounded_rect(path, padding, inner);
-            true
-        }
-        (x, _) => {
-            let band = if x {
-                Aabb::new(padding.left(), -UNCLIPPED, padding.right(), UNCLIPPED)
-            } else {
-                Aabb::new(-UNCLIPPED, padding.top(), UNCLIPPED, padding.bottom())
-            };
-            add_rounded_rect(path, band, [Vec2D::default(); 4]);
-            true
-        }
-    }
+    let Some(rect) = overflow_clip_rect(padding, clips) else {
+        return false;
+    };
+    let radii = if clips.0 && clips.1 {
+        inner
+    } else {
+        [Vec2D::default(); 4]
+    };
+    add_rounded_rect(path, rect, radii);
+    true
 }
 
 /// Whether `point`, in the box's space, is inside the clip `overflow`

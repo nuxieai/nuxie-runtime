@@ -629,7 +629,7 @@ fn flight_shadow([alpha, red, green, blue, blur, x, y]: [f32; 7]) -> Option<Flig
 /// Whether a slot is a stacking context in its Screen's paint order, as the
 /// sort reads it: it has a CSS record, and its own opacity or the frame at
 /// rest in it makes one (css_layout/hosted_frame.rs).
-fn anchor_context(anchor: &CoreHandle) -> bool {
+pub(super) fn anchor_context(anchor: &CoreHandle) -> bool {
     anchor
         .with(|o| {
             o.as_container_component()
@@ -895,6 +895,15 @@ impl Resting {
         held
     }
 
+    /// Reads `slot` as a slot whose frame flies, which holds only its
+    /// place: its frame's own keyed layout, and its descendants', count for
+    /// nothing at rest, as for a flight slot's frame in flight.
+    fn frame_flies(&mut self, slot: &CoreHandle) {
+        if let Some(frame) = layout_instance(slot) {
+            self.held.insert(frame.core_handle(), false);
+        }
+    }
+
     /// Whether a sibling in flow that holds keyed layout can move `level`,
     /// because `level` follows the flow. `level` names the level as its
     /// parent's layout lists it: itself, and the node it holds its place
@@ -927,18 +936,21 @@ impl Resting {
 }
 
 /// What covers each of `anchors`, lifted copies' anchors on the upper Screen
-/// `board`: walking its sorted list from where the anchor paints
-/// (`paint_order::anchor_positions`, as the sort places its lift) toward
-/// the top, the first that draws something and covers the
-/// anchor's resting box. A lift entry, an entry of a lifted copy (`lifted`,
-/// which draws in its lift) and an entry of the anchor itself never cover
-/// it. One frame reads every anchor on a Screen at once: the list, each
-/// entry's walk up to the Screen (`draws_for` for every anchor in one walk)
-/// and the resting boxes are read once for all of them. Both copies of a
-/// pair share their upper Screen's anchor, so they share its cover.
+/// `board`, each with the element its lift sorts as (the anchor, or the
+/// placement a transferring unit carries in it) and what take-off recorded
+/// of where that placement rests (`TakeOff`): walking its sorted list from
+/// where that element paints (`paint_order::anchor_positions`, as the sort
+/// places its lift) toward the top, the first that draws something and covers what the
+/// anchor draws at rest (`cover_box`). A lift entry, an entry of a lifted
+/// copy (`lifted`, which draws in its lift) and an entry of the anchor
+/// itself never cover it. One frame reads every anchor on a Screen at once:
+/// the list, each entry's walk up to the Screen (`draws_for` for every
+/// anchor in one walk) and the resting boxes are read once for all of them.
+/// Both copies of a pair share their upper Screen's anchor, so they share
+/// its cover.
 pub(super) fn lift_covers(
     board: &CoreHandle,
-    anchors: &[CoreHandle],
+    anchors: &[(CoreHandle, CoreHandle, TakeOff)],
     lifted: &std::collections::HashSet<RuntimeDrawableOccurrence>,
 ) -> Vec<Option<RuntimeDrawableOccurrence>> {
     use crate::css_layout::lift::lift_of;
@@ -946,12 +958,12 @@ pub(super) fn lift_covers(
         .with_downcast::<Artboard, _>(|board| board.drawables().to_vec())
         .unwrap_or_default();
     let mut index = HashMap::new();
-    let mut unique: Vec<&CoreHandle> = Vec::new();
+    let mut unique: Vec<&(CoreHandle, CoreHandle, TakeOff)> = Vec::new();
     let of = anchors
         .iter()
-        .map(|anchor| {
-            *index.entry(anchor).or_insert_with(|| {
-                unique.push(anchor);
+        .map(|pair| {
+            *index.entry(&pair.0).or_insert_with(|| {
+                unique.push(pair);
                 unique.len() - 1
             })
         })
@@ -983,7 +995,10 @@ pub(super) fn lift_covers(
         })
         .collect::<Vec<_>>();
     let mut rest = Resting::new(board);
-    let elements: Vec<CoreHandle> = unique.iter().map(|anchor| (*anchor).clone()).collect();
+    let elements: Vec<CoreHandle> = unique
+        .iter()
+        .map(|(_, sorts_as, _)| sorts_as.clone())
+        .collect();
     let positions = crate::css_layout::paint_order::anchor_positions(
         board,
         crate::css_layout::paint_order::container_of(board),
@@ -993,7 +1008,8 @@ pub(super) fn lift_covers(
     let covers = (0..unique.len())
         .map(|n| {
             let at = positions[n];
-            let anchor_box = anchor_box(&mut rest, unique[n]);
+            let (anchor, _, take_off) = unique[n];
+            let anchor_box = cover_box(&mut rest, anchor, take_off);
             list[..at]
                 .iter()
                 .zip(&draws[..at])
@@ -1011,6 +1027,159 @@ pub(super) fn lift_covers(
         })
         .collect::<Vec<_>>();
     of.into_iter().map(|n| covers[n].clone()).collect()
+}
+
+/// What a lifted copy's anchor draws at rest on its Screen: its resting
+/// box, joined for a transfer with the box the placement it carries draws
+/// at rest (`PlacedAtRest`). None, covered by whatever it meets, when keyed
+/// layout moves the anchor, or when where a transfer's placement rests is
+/// unknown.
+fn cover_box(rest: &mut Resting, anchor: &CoreHandle, take_off: &TakeOff) -> Option<Aabb> {
+    let resting = anchor_box(rest, anchor)?;
+    let drawn = match take_off {
+        TakeOff::NoTransfer => return Some(resting),
+        TakeOff::Unknown => return None,
+        TakeOff::Recorded(placed) => match placed.drawn(rest, anchor) {
+            Drawn::Box(drawn) => drawn,
+            Drawn::Nothing => return Some(resting),
+            Drawn::Unknown => return None,
+        },
+    };
+    Some(Aabb::new(
+        resting.left().min(drawn.left()),
+        resting.top().min(drawn.top()),
+        resting.right().max(drawn.right()),
+        resting.bottom().max(drawn.bottom()),
+    ))
+}
+
+/// What a lift's cover knows, from take-off, of where the placement it
+/// sorts as rests inside its anchor. Every reader matches all three, so a
+/// record that failed is never read as no transfer.
+#[derive(Clone)]
+pub(super) enum TakeOff {
+    /// Not a transfer: the lift carries no placement, and its anchor's
+    /// resting box is what it draws at rest.
+    NoTransfer,
+    /// A transfer, and where its placement rests, recorded at take-off.
+    Recorded(PlacedAtRest),
+    /// A transfer whose placement had no resting place at take-off, read
+    /// as the slot path reads a slot whose frame flies (`PlacedAtRest::
+    /// record`): its own host record is keyed, a keyed sibling pushes it,
+    /// or a level it rests on is not measured. Unknown, so it is covered by
+    /// whatever it meets, the safe side `Resting` takes.
+    Unknown,
+}
+
+/// What a recorded placement draws at rest now.
+enum Drawn {
+    Box(Aabb),
+    /// The anchor's clip leaves nothing of it.
+    Nothing,
+    /// The anchor has no resting place now, or the instance is gone.
+    Unknown,
+}
+
+/// Where the placement a transfer carries rests inside its lift's anchor,
+/// recorded at take-off, before anything moves, as `remember` keeps a slot's
+/// size and pivot: its place in the anchor's resting space, its size, the
+/// pivot and gate its own frame placed by, and the anchor's padding box,
+/// which its clip cuts to. While the anchor flies, what is inside it lays
+/// out for the flight, so the cover reads none of it: it puts the carried
+/// instance's own turn and scale on these facts, in the anchor's resting
+/// space, as `slot_box` reads a slot's.
+#[derive(Clone)]
+pub(super) struct PlacedAtRest {
+    /// The instance the transfer carries, whose frame the lift draws,
+    /// whatever fills the placement later.
+    instance: crate::RuntimeArtboardInstanceWeakHandle,
+    inset: Mat2D,
+    size: Vec2D,
+    pivot: Option<Vec2D>,
+    gate: bool,
+    padding: Aabb,
+}
+
+impl PlacedAtRest {
+    /// `placement`, a child of `anchor` (`hosted_scene::boxed_placement`),
+    /// at rest inside it, read now, for the carried `instance`. It is read
+    /// as the slot path reads a slot whose frame flies: the frame in it
+    /// flies, so its own keyed layout and its descendants' reach no one at
+    /// rest (`Resting::frame_flies`). Unknown only when the placement or
+    /// the anchor has no resting place even so: the placement's own host
+    /// record is keyed, a keyed sibling pushes it, or a level is not
+    /// measured.
+    pub(super) fn record(
+        anchor: &CoreHandle,
+        placement: &CoreHandle,
+        instance: crate::RuntimeArtboardInstanceWeakHandle,
+    ) -> TakeOff {
+        Self::read(anchor, placement, instance).map_or(TakeOff::Unknown, TakeOff::Recorded)
+    }
+
+    fn read(
+        anchor: &CoreHandle,
+        placement: &CoreHandle,
+        instance: crate::RuntimeArtboardInstanceWeakHandle,
+    ) -> Option<Self> {
+        let board = anchor
+            .with(|o| o.as_component().and_then(|c| c.artboard_handle()))
+            .flatten()?;
+        let mut rest = Resting::new(&board);
+        rest.frame_flies(placement);
+        let (anchor_world, world) = (rest.world(anchor)?, rest.world(placement)?);
+        let mut inverse = Mat2D::identity();
+        if !anchor_world.invert(&mut inverse) {
+            return None;
+        }
+        let frame = read(placement, hosted_frame::frame_at_rest).ok()?;
+        let padding = anchor
+            .with(|o| o.as_layout_component()?.css_box_geometry())
+            .flatten()?
+            .padding;
+        Some(Self {
+            instance,
+            inset: inverse * world,
+            size: slot_size(placement).ok()?,
+            pivot: hosted_frame::rest_pivot(&frame),
+            gate: frame.gate,
+            padding,
+        })
+    }
+
+    /// The box it draws at rest, in the Screen's space: the anchor's
+    /// resting world, its recorded place, and the carried instance's turn
+    /// and scale about its recorded pivot, at its recorded size, cut to
+    /// what the anchor's clip cuts to now, by paint's own rule
+    /// (`paint::overflow_clip_rect`) on its recorded padding box.
+    fn drawn(&self, rest: &mut Resting, anchor: &CoreHandle) -> Drawn {
+        let (Some(world), Some(instance)) = (rest.world(anchor), self.instance.upgrade()) else {
+            return Drawn::Unknown;
+        };
+        let frame = instance.core_handle();
+        let turn = hosted_frame::rest_transform_about(Some(&frame), self.gate, self.pivot);
+        let clips = anchor
+            .with(|o| o.as_layout_component().map(|l| l.clipped_axes()))
+            .flatten()
+            .unwrap_or_default();
+        let Some(clip) = crate::css_layout::paint::overflow_clip_rect(self.padding, clips) else {
+            return Drawn::Box(transformed_box(world * self.inset * turn, self.size));
+        };
+        let inside = transformed_box(self.inset * turn, self.size);
+        let (left, top) = (inside.left().max(clip.left()), inside.top().max(clip.top()));
+        let (right, bottom) = (
+            inside.right().min(clip.right()),
+            inside.bottom().min(clip.bottom()),
+        );
+        if left < right && top < bottom {
+            Drawn::Box(transformed_box(
+                world * Mat2D::from_translation(Vec2D::new(left, top)),
+                Vec2D::new(right - left, bottom - top),
+            ))
+        } else {
+            Drawn::Nothing
+        }
+    }
 }
 
 /// A lifted copy's anchor's resting box on its Screen. An anchor that is

@@ -32,6 +32,10 @@ pub(crate) struct LiftState {
     pub(crate) element: CoreHandle,
     /// The upper Screen's own copy, where the lift paints.
     pub(crate) anchor: CoreHandle,
+    /// A transferring unit's lift: the component placement it carries inside
+    /// the anchor. The lift sorts as that placement sorts, as a flight slot
+    /// sorts as the slot it carries, while its cover still reads the anchor.
+    pub(crate) placed_as: Option<CoreHandle>,
     /// What covers the anchor on the upper Screen, read each frame; None
     /// paints the lift on top.
     pub(crate) coverer: Option<RuntimeDrawableOccurrence>,
@@ -62,6 +66,7 @@ impl Lift {
             row,
             element,
             anchor,
+            placed_as: None,
             coverer: None,
             matrix: Mat2D::identity(),
             opacity: 1.0,

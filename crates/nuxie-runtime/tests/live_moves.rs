@@ -9649,83 +9649,256 @@ mod paint_order {
     /// flown in place as one instance (`PaintShape::InPlaceCarry`), draws
     /// what its slot page draws flying it as one instance, every frame of a
     /// go and a Back, at rest after each, and through the same cancels as
-    /// `in_place_matches_the_slot_path`.
-    ///
-    /// Six cases differ, each in where the flying instance draws against one
-    /// later neighbor, C, at the first frame of a step (UNIV-6476). Each is
-    /// asserted exactly as it differs today, so a fix to lift placement turns
-    /// its row red and the table shrinks:
-    /// - Taking off, a component whose own root is turned or scaled draws
-    ///   past its box; the cover reads the box, misses C that only the
-    ///   overflow touches, and draws the instance above C, where the slot
-    ///   path draws it under.
-    /// - A turned or faded root sorts its placement above C at rest. A lift
-    ///   is placed where its element, the box, paints, below C, where the
-    ///   slot path keeps the instance above; this shows from the take-off,
-    ///   and on the way back too.
+    /// `in_place_matches_the_slot_path`. That covers a component whose own
+    /// root is turned, scaled or faded (UNIV-6476): its lift sorts as the
+    /// placement it carries, and its cover reads where the root draws past
+    /// its box.
     #[test]
     fn in_place_a_transfer_matches_the_slot_path() {
-        let frames: Vec<f32> = (0..=20).map(|n| n as f32 * 0.05).collect();
+        let ran = known_differences(
+            in_place_cases().into_iter().filter(|&case| {
+                let shaped = |shape| fixture::css_paint_fixture_shaped(case, shape);
+                shaped(PaintShape::Slots) != shaped(PaintShape::SlotCopies)
+                    && shaped(PaintShape::InPlaceCarry).is_ok()
+            }),
+            [PaintShape::Slots, PaintShape::InPlaceCarry],
+            &[],
+        );
+        eprintln!("transferring cases: {ran:?}");
+        assert!(!ran.is_empty(), "some paint case transfers");
+    }
+
+    /// UNIV-6476: a box holding one component placement, as the compiler
+    /// publishes a component, flown in place as two copies
+    /// (`PaintShape::InPlaceBoxedCopies`), against the slot page flying two
+    /// copies, for every paint case that transfers: Layout mode, clips and
+    /// a component root turned or faded among them. Two copies carry no
+    /// placement, so each lift sorts where its box paints, in flow: where a
+    /// turned or faded root sorts its placement above a later neighbor, C,
+    /// the lift draws under C from the take-off, where the slot page draws
+    /// the copy above it. The cases whose root draws past its box under its
+    /// turn or scale are left out: two copies read their cover from the box
+    /// (UNIV-6483, whose repro they are).
+    #[test]
+    fn in_place_a_boxed_placement_flying_as_two_copies() {
         let (e, c) = (
             fixture::paint_color("E") & 0x00ff_ffff,
             fixture::paint_color("C") & 0x00ff_ffff,
         );
-        // (case, first frame that differs, slot order, in-place order)
-        let expected: [(PaintCase, &str, [u32; 2], [u32; 2]); 6] = [
-            (PaintCase::Resting(6), "go at 0", [e, c], [c, e]),
-            (PaintCase::Resting(7), "go at 0", [e, c], [c, e]),
-            (PaintCase::Resting(9), "go at 0", [e, c], [c, e]),
-            (PaintCase::Resting(10), "go at 0", [e, c], [c, e]),
-            (PaintCase::TurnedFrame, "go at 0", [c, e], [e, c]),
-            (
-                PaintCase::FadeAtRest { native: false },
-                "go at 0",
-                [c, e],
+        let ran = known_differences(
+            in_place_cases().into_iter().filter(|&case| {
+                let shaped = |shape| fixture::css_paint_fixture_shaped(case, shape);
+                !matches!(case, PaintCase::Resting(6 | 7 | 9 | 10))
+                    && shaped(PaintShape::Slots) != shaped(PaintShape::SlotCopies)
+                    && shaped(PaintShape::InPlaceBoxedCopies).is_ok()
+            }),
+            [PaintShape::SlotCopies, PaintShape::InPlaceBoxedCopies],
+            &[
+                (PaintCase::TurnedFrame, "go at 0", [c, e], [e, c]),
+                (
+                    PaintCase::FadeAtRest { native: false },
+                    "go at 0",
+                    [c, e],
+                    [e, c],
+                ),
+            ],
+        );
+        assert!(
+            ran.contains(&PaintCase::TurnedFrame),
+            "the position cases run"
+        );
+    }
+
+    /// E and C as `s` draws them at `p` on the upper Screen, in order.
+    fn e_and_c(s: &PaintScene, way: Way, p: f32) -> Vec<u32> {
+        let (e, c) = (rgb("E"), rgb("C"));
+        let mut drawn: Vec<u32> = s
+            .frame(way, p)
+            .draws
+            .iter()
+            .map(|(color, _)| *color)
+            .filter(|color| *color == e || *color == c)
+            .collect();
+        drawn.dedup();
+        drawn
+    }
+
+    /// UNIV-6476: a clip the transfer's anchor gains while it flies cuts
+    /// the cover as it cuts what the lift draws. In `Resting(7)` only E's
+    /// turned corner, past its box, touches C; with B's E clipping
+    /// (`overflow: hidden`), the lift draws as it does when E clips from
+    /// the take-off.
+    #[test]
+    fn in_place_a_transfer_cover_takes_a_clip_switched_on_while_it_flies() {
+        use nuxie_runtime::css_layout::keys::{OVERFLOW_X, OVERFLOW_Y};
+        let order = |clip: Option<f32>| {
+            let mut s = PaintScene::shaped(PaintCase::Resting(7), PaintShape::InPlaceCarry);
+            let clips = |s: &PaintScene| {
+                let record = record_of(&s.layout("B", "E"));
+                for key in [OVERFLOW_X, OVERFLOW_Y] {
+                    assert!(CoreRegistry::set_uint_handle(&record, key as i32, 2));
+                }
+            };
+            if clip == Some(0.0) {
+                clips(&s);
+                s.advance(0.0);
+            }
+            s.begin("B", "go");
+            s.to(0.0);
+            if clip == Some(0.25) {
+                clips(&s);
+            }
+            s.to(0.25);
+            s.to(0.5);
+            e_and_c(&s, Way::Go, 0.5)
+        };
+        let at_take_off = order(Some(0.0));
+        assert_ne!(order(None), at_take_off, "the clip changes the cover");
+        assert_eq!(order(Some(0.25)), at_take_off);
+    }
+
+    /// UNIV-6476: a clip on one axis cuts the cover on that axis only, as
+    /// it cuts what the lift draws. In `Resting(7)` E's turned corner
+    /// reaches C past E's right edge, between its top and bottom: with B's
+    /// E clipping only down (`overflow-y: clip`), C covers the lift as with
+    /// no clip; clipping only across (`overflow-x: clip`) cuts the corner,
+    /// so C does not.
+    #[test]
+    fn in_place_a_transfer_cover_keeps_overflow_on_an_axis_it_does_not_clip() {
+        use nuxie_runtime::css_layout::keys::{OVERFLOW_X, OVERFLOW_Y};
+        let order = |clip: &[u16]| {
+            let mut s = PaintScene::shaped(PaintCase::Resting(7), PaintShape::InPlaceCarry);
+            let record = record_of(&s.layout("B", "E"));
+            for key in clip {
+                assert!(CoreRegistry::set_uint_handle(&record, *key as i32, 1));
+            }
+            s.advance(0.0);
+            s.begin("B", "go");
+            s.to(0.0);
+            s.to(0.5);
+            e_and_c(&s, Way::Go, 0.5)
+        };
+        let (e, c) = (rgb("E"), rgb("C"));
+        assert_eq!(order(&[]), [e, c], "C covers the turned corner");
+        assert_eq!(order(&[OVERFLOW_Y]), [e, c]);
+        assert_eq!(
+            order(&[OVERFLOW_X]),
+            [c, e],
+            "a clip across cuts the corner"
+        );
+    }
+
+    /// UNIV-6476: Back, the lift's anchor is the box the instance leaves,
+    /// and its cover reads the instance it carries, though the placement
+    /// it left is filled again while it flies (`refill_slot`) with a copy
+    /// turned another way.
+    #[test]
+    fn in_place_a_transfer_cover_reads_the_instance_it_carries() {
+        let order = |refill: bool| {
+            let mut s = PaintScene::shaped(PaintCase::Resting(7), PaintShape::InPlaceCarry);
+            s.fly(Way::Go, |_, _| {});
+            s.begin("A", "back");
+            s.to(0.25);
+            if refill {
+                let left = s.slot("B", "E unit");
+                refill_slot(&left).unwrap();
+                set(&child(&left).unwrap().core_handle(), 15, 0.001);
+            }
+            s.to(0.5);
+            e_and_c(&s, Way::Back, 0.5)
+        };
+        let (e, c) = (rgb("E"), rgb("C"));
+        assert_eq!(order(false), [e, c], "C covers the turned corner");
+        assert_eq!(order(true), [e, c]);
+    }
+
+    /// UNIV-6476: a transfer's cover reads the placement it carries as the
+    /// slot path reads a slot whose frame flies: the frame's own keyed
+    /// layout reaches no one at rest. In `Resting(7)` only E's turned
+    /// corner, past its box, touches C. With E's own layout keyed
+    /// (constant, so nothing moves), both paths still measure that corner,
+    /// and C covers the lift, though the box alone misses C.
+    #[test]
+    fn in_place_a_transfer_measures_a_frame_that_keys_its_own_layout() {
+        let order = |shape: PaintShape, keyed: bool| {
+            let mut s = PaintScene::shaped(PaintCase::Resting(7), shape);
+            let name = if shape == PaintShape::Slots {
+                "E"
+            } else {
+                "E unit"
+            };
+            if keyed {
+                for screen in ["A", "B"] {
+                    let root = child(&s.slot(screen, name)).unwrap().core_handle();
+                    assert!(nuxie_runtime::css_layout::record::mark_layout_keyed(
+                        &record_of(&root)
+                    ));
+                }
+            }
+            s.advance(0.0);
+            s.begin("B", "go");
+            s.to(0.0);
+            s.to(0.5);
+            e_and_c(&s, Way::Go, 0.5)
+        };
+        let (e, c) = (rgb("E"), rgb("C"));
+        for shape in [PaintShape::Slots, PaintShape::InPlaceCarry] {
+            assert_eq!(
+                order(shape, false),
                 [e, c],
-            ),
-        ];
+                "{shape:?}: C covers the turned corner"
+            );
+            assert_eq!(
+                order(shape, true),
+                [e, c],
+                "{shape:?}: with E's layout keyed"
+            );
+        }
+    }
+
+    /// Each of `cases` in `shapes` draws the same (`equivalent_shapes`),
+    /// except the `expected` ones, which differ exactly as given: (case,
+    /// first frame that differs, slot order, in-place order). A known
+    /// difference that matches fails, so its row is dropped. The cases run.
+    fn known_differences(
+        cases: impl IntoIterator<Item = PaintCase>,
+        shapes: [PaintShape; 2],
+        expected: &[(PaintCase, &str, [u32; 2], [u32; 2])],
+    ) -> Vec<PaintCase> {
+        let frames: Vec<f32> = (0..=20).map(|n| n as f32 * 0.05).collect();
         let order = |o: [u32; 2]| format!("{:?}", o.map(Some));
         let (mut ran, mut failed) = (Vec::new(), Vec::new());
-        for case in in_place_cases() {
-            let shaped = |shape| fixture::css_paint_fixture_shaped(case, shape);
-            let transfers = shaped(PaintShape::Slots) != shaped(PaintShape::SlotCopies);
-            if !transfers || shaped(PaintShape::InPlaceCarry).is_err() {
-                continue;
-            }
+        for case in cases {
             ran.push(case);
-            let run = std::panic::catch_unwind(|| {
-                equivalent_shapes(case, [PaintShape::Slots, PaintShape::InPlaceCarry], &frames)
-            });
-            if let Err(err) = run {
-                let why = err
-                    .downcast_ref::<String>()
-                    .cloned()
-                    .or_else(|| err.downcast_ref::<&str>().map(|s| (*s).to_owned()))
-                    .unwrap_or_default();
-                if let Some((_, label, slots, in_place)) =
-                    expected.iter().find(|(known, ..)| *known == case)
-                {
-                    let as_known = why.contains(&format!("{case:?} {label}: draw order"))
-                        && why.contains(&format!("left: {}", order(*slots)))
-                        && why.contains(&format!("right: {}", order(*in_place)));
-                    if as_known {
-                        continue;
+            let run = std::panic::catch_unwind(|| equivalent_shapes(case, shapes, &frames));
+            let known = expected.iter().find(|(known, ..)| *known == case);
+            match (run, known) {
+                (Ok(()), None) => {}
+                (Ok(()), Some(_)) => failed.push(format!(
+                    "{case:?}: a known difference now matches; drop its row"
+                )),
+                (Err(err), known) => {
+                    let why = err
+                        .downcast_ref::<String>()
+                        .cloned()
+                        .or_else(|| err.downcast_ref::<&str>().map(|s| (*s).to_owned()))
+                        .unwrap_or_default();
+                    let as_known = known.is_some_and(|(_, label, slots, in_place)| {
+                        why.contains(&format!("{case:?} {label}: draw order"))
+                            && why.contains(&format!("left: {}", order(*slots)))
+                            && why.contains(&format!("right: {}", order(*in_place)))
+                    });
+                    if !as_known {
+                        failed.push(format!("{case:?}: {why}"));
                     }
                 }
-                failed.push(format!("{case:?}: {why}"));
-            } else if expected.iter().any(|(known, ..)| *known == case) {
-                failed.push(format!(
-                    "{case:?}: a known difference now matches; drop its row"
-                ));
             }
         }
-        for (known, ..) in &expected {
+        for (known, ..) in expected {
             if !ran.contains(known) {
-                failed.push(format!("{known:?}: a known difference no longer transfers"));
+                failed.push(format!("{known:?}: a known difference did not run"));
             }
         }
-        eprintln!("transferring cases: {ran:?}");
-        assert!(!ran.is_empty(), "some paint case transfers");
         assert!(
             failed.is_empty(),
             "{} of {} cases differ:\n{}",
@@ -9733,6 +9906,7 @@ mod paint_order {
             ran.len(),
             failed.join("\n")
         );
+        ran
     }
 
     fn equivalent(case: PaintCase, frames: &[f32]) {

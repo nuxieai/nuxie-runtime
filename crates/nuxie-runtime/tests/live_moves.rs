@@ -10704,11 +10704,14 @@ mod paint_order {
     /// follow) after a size write to an unmatched box; (7) a flying frame's
     /// advance and follow after the step's first, when both ends are the
     /// same size; (8) a frame at rest's advance and follow, which (7) is
-    /// held to. A stripped page has no step, so it times (1), (6) and (8)
-    /// only. Also the layout passes of the last frame at rest and the last
+    /// held to; (9) a step with one transfer, `PaintCase::LargeTransfer`:
+    /// its begin, a flying frame's advance and follow half way, and its
+    /// end, together. In place it is `PaintShape::InPlaceCarry`, where the
+    /// unit flies as one instance. A stripped page has no step, so it times
+    /// (1), (6) and (8) only. Also the layout passes of the last frame at rest and the last
     /// of (7). The steps' timings take both ways, "go" and "back", half the
     /// frames each, so no step is played only to return.
-    fn large_timings(shape: PaintShape) -> ([Option<f64>; 8], u64, Option<u64>) {
+    fn large_timings(shape: PaintShape) -> ([Option<f64>; 9], u64, Option<u64>) {
         use nuxie_runtime::source::artboard::Artboard;
         use std::time::{Duration, Instant};
         const FRAMES: usize = 200;
@@ -10749,6 +10752,7 @@ mod paint_order {
                 Some(median_us(write)),
                 None,
                 Some(median_us(idle)),
+                None,
             ];
             return (times, rest_passes, None);
         }
@@ -10777,6 +10781,22 @@ mod paint_order {
                 same.end(screen, step);
             }
         }
+        let carry = if shape == PaintShape::InPlace {
+            PaintShape::InPlaceCarry
+        } else {
+            shape
+        };
+        let mut one = PaintScene::shaped(PaintCase::LargeTransfer, carry);
+        let mut transfer = Vec::new();
+        for _ in 0..FRAMES / 2 {
+            for (screen, step) in [("B", "go"), ("A", "back")] {
+                transfer.push(time(&mut || {
+                    one.begin(screen, step);
+                    one.to(0.5);
+                    one.end(screen, step);
+                }));
+            }
+        }
         let times = [
             Some(median_us(rest)),
             Some(median_us(begin)),
@@ -10786,8 +10806,24 @@ mod paint_order {
             Some(median_us(write)),
             Some(median_us(alike)),
             Some(median_us(idle)),
+            Some(median_us(transfer)),
         ];
         (times, rest_passes, Some(alike_passes))
+    }
+
+    /// The bench's step with one transfer (9) loads and steps, both ways,
+    /// on both shapes it times: through slots, and in place with the unit
+    /// as one instance. The bench itself runs only by hand.
+    #[test]
+    fn the_bench_step_with_one_transfer_runs_on_both_shapes() {
+        for shape in [PaintShape::Slots, PaintShape::InPlaceCarry] {
+            let mut s = PaintScene::shaped(PaintCase::LargeTransfer, shape);
+            for (screen, step) in [("B", "go"), ("A", "back")] {
+                s.begin(screen, step);
+                s.to(0.5);
+                s.end(screen, step);
+            }
+        }
     }
 
     /// 4.5's bench: in place against slots on a Screen pair the size of the
@@ -10802,7 +10838,7 @@ mod paint_order {
     #[test]
     #[ignore = "a timing run: only for the in-place bench, in a release build"]
     fn bench_in_place_against_slots_on_a_large_screen() {
-        const NAMES: [&str; 8] = [
+        const NAMES: [&str; 9] = [
             "(1) rest frame",
             "(2) step begin",
             "(3) flying advance and follow",
@@ -10811,6 +10847,7 @@ mod paint_order {
             "(6) rest size write",
             "(7) flying, ends the same size",
             "(8) rest advance and follow",
+            "(9) a step with one transfer",
         ];
         const RUNS: usize = 5;
         let (mut slots, mut in_place, mut stripped) = (Vec::new(), Vec::new(), Vec::new());
@@ -10820,7 +10857,7 @@ mod paint_order {
             stripped.push(large_timings(PaintShape::Stripped));
         }
         // One timing's median and spread over a shape's runs.
-        type Run = ([Option<f64>; 8], u64, Option<u64>);
+        type Run = ([Option<f64>; 9], u64, Option<u64>);
         let stats = |runs: &[Run], line: usize| -> Option<(f64, f64)> {
             let mut times: Vec<f64> = runs.iter().filter_map(|run| run.0[line]).collect();
             if times.is_empty() {

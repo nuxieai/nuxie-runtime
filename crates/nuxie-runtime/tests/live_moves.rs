@@ -10926,6 +10926,7 @@ mod paint_order {
         paint_order_05b_escaping_text_child_flies_under_the_dim,
         paint_order_05b_escaping_image_child_flies_under_the_dim,
         paint_order_05b_escaping_component_child_flies_under_the_dim,
+        paint_order_05b_viewport_child_stays_under_the_dim,
         paint_order_06_clipping_holder_flight_paints_outside_the_clip,
         paint_order_07_badge_in_a_plain_card_covers_the_flight,
         paint_order_08_overlay_in_an_auto_z_wrapper_covers_the_flight,

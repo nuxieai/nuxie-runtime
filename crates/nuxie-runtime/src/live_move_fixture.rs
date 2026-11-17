@@ -845,6 +845,28 @@ pub enum InPlaceCarry {
     /// `TransferWritten` on A, `TransferWrittenBound` on B: A writes the
     /// three values, B binds them.
     TransferWrittenBoundOnB,
+    /// `Transfer`, with the values of the slot suites' values page. "Unit"
+    /// gains `accent` (a color, property 3) and `text` (a string, property
+    /// 4) after `label`. Each Screen's model gains `accent`, `label` and
+    /// `text` after `offset`: A's 0x20406080, "outgoing" and "destination
+    /// text", B's 0xe0c0a080, "incoming" and "destination text". Each
+    /// placement binds `accent` and `label` to its Screen's; B's alone binds
+    /// `text`, two-way where `two_way_text`. The field "edit" binds its text
+    /// two-way to the unit's `text`. With `reference`, "Unit" and each
+    /// Screen's model also hold `ref`, a reference to view model "Ref"
+    /// (instances "first" and "second"), which each placement binds two-way.
+    TransferValues { two_way_text: bool, reference: bool },
+    /// `Transfer`, with a third Screen "R2" (model `offset` 390, card keyed
+    /// 3, painted 0xffaa2222) and a step "third", B to R2, that transfers the
+    /// unit through R2's flight record 13.
+    TransferThree,
+    /// `Transfer`, with B's own machine playing t1's flight timeline, as a
+    /// Screen's machine plays it in a published file, once, not looping.
+    /// With `overshoot`, the timeline keys record 11's progress past 1: 0 at
+    /// its start, 1.25 half way, 1 at its end.
+    TransferPlayed { overshoot: bool },
+    /// `Transfer`, with an empty list "inner" in the component.
+    TransferNestedList,
 }
 
 /// An in-place page shaped as the compiler publishes a matched component
@@ -873,6 +895,16 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
     let bound = bound_on("A") || bound_on("B");
     let extra = bound || kind == InPlaceCarry::TransferWritten;
     let picture = kind == InPlaceCarry::TransferWritten;
+    let (values, two_way_text, reference) = match kind {
+        InPlaceCarry::TransferValues {
+            two_way_text,
+            reference,
+        } => (true, two_way_text, reference),
+        _ => (false, false, false),
+    };
+    let three = kind == InPlaceCarry::TransferThree;
+    // R2's model follows "Unit", and "Ref" follows R2's.
+    let ref_model = 4 + u64::from(three);
     // What each Screen's placement shows of `level`, `tint` and `caption`.
     let shown = |screen: &str| -> [V<'static>; 3] {
         if screen == "A" {
@@ -897,34 +929,73 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
         var(&mut b, n);
     }
     obj(&mut b, "Backboard", &[]);
-    for (name, offset) in [("A", 10.0), ("B", 200.0)] {
-        obj(&mut b, "ViewModel", &[("name", S(name))]);
-        obj(&mut b, "ViewModelPropertyNumber", &[("name", S("offset"))]);
-        if bound {
-            obj(&mut b, "ViewModelPropertyNumber", &[("name", S("level"))]);
-            obj(&mut b, "ViewModelPropertyColor", &[("name", S("tint"))]);
-            obj(&mut b, "ViewModelPropertyString", &[("name", S("caption"))]);
+    // A Screen's view model and its one instance.
+    let screen_model = |b: &mut Vec<u8>, name: &str, offset: f32, model: u64| {
+        obj(b, "ViewModel", &[("name", S(name))]);
+        obj(b, "ViewModelPropertyNumber", &[("name", S("offset"))]);
+        if values {
+            obj(b, "ViewModelPropertyColor", &[("name", S("accent"))]);
+            obj(b, "ViewModelPropertyString", &[("name", S("label"))]);
+            obj(b, "ViewModelPropertyString", &[("name", S("text"))]);
+            if reference {
+                obj(
+                    b,
+                    "ViewModelPropertyViewModel",
+                    &[("name", S("ref")), ("viewModelReferenceId", U(ref_model))],
+                );
+            }
         }
+        if bound {
+            obj(b, "ViewModelPropertyNumber", &[("name", S("level"))]);
+            obj(b, "ViewModelPropertyColor", &[("name", S("tint"))]);
+            obj(b, "ViewModelPropertyString", &[("name", S("caption"))]);
+        }
+        obj(b, "ViewModelInstance", &[("viewModelId", U(model))]);
         obj(
-            &mut b,
-            "ViewModelInstance",
-            &[("viewModelId", U(u64::from(name == "B")))],
-        );
-        obj(
-            &mut b,
+            b,
             "ViewModelInstanceNumber",
             &[("viewModelPropertyId", U(0)), ("propertyValue", F(offset))],
         );
         if bound {
             for (id, (&(kind, ..), value)) in (1..).zip(extras.iter().zip(shown(name))) {
                 obj(
-                    &mut b,
+                    b,
                     kind,
                     &[("viewModelPropertyId", U(id)), ("propertyValue", value)],
                 );
             }
         }
-    }
+        if values {
+            let (accent, label) = match name {
+                "A" => (0x20406080, "outgoing"),
+                _ => (0xe0c0a080, "incoming"),
+            };
+            obj(
+                b,
+                "ViewModelInstanceColor",
+                &[
+                    ("viewModelPropertyId", U(1)),
+                    ("propertyValue", Color(accent)),
+                ],
+            );
+            for (id, text) in [(2, label), (3, "destination text")] {
+                obj(
+                    b,
+                    "ViewModelInstanceString",
+                    &[("viewModelPropertyId", U(id)), ("propertyValue", S(text))],
+                );
+            }
+            if reference {
+                obj(
+                    b,
+                    "ViewModelInstanceViewModel",
+                    &[("viewModelPropertyId", U(4)), ("propertyValue", U(0))],
+                );
+            }
+        }
+    };
+    screen_model(&mut b, "A", 10.0, 0);
+    screen_model(&mut b, "B", 200.0, 1);
     obj(&mut b, "ViewModel", &[("name", S("Page"))]);
     obj(&mut b, "ViewModelPropertyList", &[("name", S("screens"))]);
     obj(&mut b, "ViewModelInstance", &[("viewModelId", U(2))]);
@@ -933,7 +1004,7 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
         "ViewModelInstanceList",
         &[("viewModelPropertyId", U(0))],
     );
-    for model in [0, 1] {
+    for model in [0, 1].into_iter().chain(three.then_some(4)) {
         obj(
             &mut b,
             "ViewModelInstanceListItem",
@@ -945,6 +1016,17 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
         obj(&mut b, "ViewModelPropertyNumber", &[("name", S(name))]);
     }
     obj(&mut b, "ViewModelPropertyString", &[("name", S("label"))]);
+    if values {
+        obj(&mut b, "ViewModelPropertyColor", &[("name", S("accent"))]);
+        obj(&mut b, "ViewModelPropertyString", &[("name", S("text"))]);
+        if reference {
+            obj(
+                &mut b,
+                "ViewModelPropertyViewModel",
+                &[("name", S("ref")), ("viewModelReferenceId", U(ref_model))],
+            );
+        }
+    }
     if extra {
         obj(&mut b, "ViewModelPropertyNumber", &[("name", S("level"))]);
         obj(&mut b, "ViewModelPropertyColor", &[("name", S("tint"))]);
@@ -986,6 +1068,44 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
                 ("propertyValue", U(u64::from(u32::MAX))),
             ],
         );
+    }
+    if values {
+        obj(
+            &mut b,
+            "ViewModelInstanceColor",
+            &[("viewModelPropertyId", U(3)), ("propertyValue", Color(0))],
+        );
+        obj(
+            &mut b,
+            "ViewModelInstanceString",
+            &[("viewModelPropertyId", U(4)), ("propertyValue", S(""))],
+        );
+        if reference {
+            obj(
+                &mut b,
+                "ViewModelInstanceViewModel",
+                &[("viewModelPropertyId", U(5)), ("propertyValue", U(0))],
+            );
+        }
+    }
+    if three {
+        screen_model(&mut b, "R2", 390.0, 4);
+    }
+    if reference {
+        obj(&mut b, "ViewModel", &[("name", S("Ref"))]);
+        obj(&mut b, "ViewModelPropertyNumber", &[("name", S("n"))]);
+        for (name, n) in [("first", 1.0), ("second", 2.0)] {
+            obj(
+                &mut b,
+                "ViewModelInstance",
+                &[("name", S(name)), ("viewModelId", U(ref_model))],
+            );
+            obj(
+                &mut b,
+                "ViewModelInstanceNumber",
+                &[("viewModelPropertyId", U(0)), ("propertyValue", F(n))],
+            );
+        }
     }
     // A placement of "unit x" at `id`, under `parent`, as the compiler
     // writes one (`id` to `id + 5`, then one more per extra value): the
@@ -1038,6 +1158,62 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
                     ("propertyValue", S("label")),
                 ],
             );
+            if values {
+                bind(b, 561, &[screen, 2]);
+                obj(
+                    b,
+                    "ViewModelInstanceColor",
+                    &[
+                        ("parentId", U(id + 2)),
+                        ("viewModelPropertyId", U(3)),
+                        ("propertyValue", Color(0)),
+                    ],
+                );
+                bind(b, 555, &[screen, 1]);
+                obj(
+                    b,
+                    "ViewModelInstanceString",
+                    &[
+                        ("parentId", U(id + 2)),
+                        ("viewModelPropertyId", U(4)),
+                        ("propertyValue", S("")),
+                    ],
+                );
+                // B's alone binds `text`.
+                if screen == 1 {
+                    obj(
+                        b,
+                        "DataBindContext",
+                        &[
+                            ("propertyKey", U(561)),
+                            ("sourcePathIds", Bytes(&[screen, 3])),
+                            ("flags", U(if two_way_text { 2 } else { 0 })),
+                        ],
+                    );
+                }
+                if reference {
+                    // A model reference can't push, so this two-way binding
+                    // is polled.
+                    obj(
+                        b,
+                        "ViewModelInstanceViewModel",
+                        &[
+                            ("parentId", U(id + 2)),
+                            ("viewModelPropertyId", U(5)),
+                            ("propertyValue", U(0)),
+                        ],
+                    );
+                    obj(
+                        b,
+                        "DataBindContext",
+                        &[
+                            ("propertyKey", U(577)),
+                            ("sourcePathIds", Bytes(&[screen, 4])),
+                            ("flags", U(2)),
+                        ],
+                    );
+                }
+            }
             let name = if screen == 0 { "A" } else { "B" };
             let (written, bound) = (shown(name), bound_on(name));
             for (index, (&(kind, property, key, unwritten), written)) in
@@ -1115,46 +1291,68 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             | TransferWritten
             | TransferWrittenBound
             | TransferWrittenBoundOnB
+            | TransferValues { .. }
+            | TransferThree
+            | TransferPlayed { .. }
+            | TransferNestedList
     );
-    for (screen, card, key) in [("A", (120.0, 90.0), 1), ("B", (200.0, 140.0), 2)] {
-        let model = u8::from(screen == "B");
-        obj(
-            &mut b,
-            "Artboard",
-            &[
-                ("name", S(screen)),
-                ("viewModelId", U(u64::from(model))),
-                ("width", F(400.0)),
-                ("height", F(300.0)),
-                ("styleId", U(2)),
-                ("clip", B(false)),
-            ],
-        ); // 0
+    let third = three.then_some(("R2", (160.0, 100.0), 3));
+    for (screen, card, key) in [("A", (120.0, 90.0), 1), ("B", (200.0, 140.0), 2)]
+        .into_iter()
+        .chain(third)
+    {
+        let model: u8 = match screen {
+            "A" => 0,
+            "B" => 1,
+            _ => 4,
+        };
+        // Only B of `TransferPlayed` has a machine: it plays B's first
+        // timeline, t1's.
+        let played = screen == "B" && matches!(kind, TransferPlayed { .. });
+        let mut board = vec![
+            ("name", S(screen)),
+            ("viewModelId", U(u64::from(model))),
+            ("width", F(400.0)),
+            ("height", F(300.0)),
+            ("styleId", U(2)),
+            ("clip", B(false)),
+        ];
+        if played {
+            board.push(("defaultStateMachineId", U(0)));
+        }
+        obj(&mut b, "Artboard", &board); // 0
         // B's card rests at (150, 0), so no point is on both Screens' units.
         let mut root = vec![
             ("parentId", U(0)),
             ("display", U(1)),
             ("columnGap", F(10.0)),
         ];
-        if screen == "B" {
-            root.push(("paddingLeft", F(150.0)));
+        match screen {
+            "B" => root.push(("paddingLeft", F(150.0))),
+            "R2" => root.push(("paddingTop", F(150.0))),
+            _ => {}
         }
         obj(&mut b, "LayoutCssStyle", &root); // 1
         obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
-        let card_paint = transfers.then_some(if screen == "A" {
-            0xff22aa22
-        } else {
-            0xff2222aa
+        let card_paint = transfers.then_some(match screen {
+            "A" => 0xff22aa22,
+            "B" => 0xff2222aa,
+            _ => 0xffaa2222,
         });
         boxed(&mut b, 3, "card", card, key, card_paint); // 3 to 5, or 7
         let unit = if card_paint.is_some() { 8 } else { 6 };
+        // "unit x" follows the Screens' artboards, and "unit y" the page's.
         let component = if kind == TransferElsewhere && screen == "B" {
             4
         } else {
             2
-        };
+        } + u64::from(three);
         placement(&mut b, 3, unit, "unit", model, component); // to unit + 5
-        let note = unit + 6 + extras.len() as u64 + u64::from(picture);
+        let note = unit
+            + 6
+            + extras.len() as u64
+            + u64::from(picture)
+            + if values { 2 + u64::from(reference) } else { 0 };
         let note_key = match (kind, screen) {
             (TransferMixed | TransferBox, "A") => 3,
             (TransferMixed | TransferBox, _) => 4,
@@ -1183,9 +1381,43 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             }
             // A transferring t1's flight timeline, its first: record 11's
             // progress from 0 to 1, and nothing keying its fade.
-            if transfers {
+            if let TransferPlayed { overshoot } = kind {
+                obj(
+                    &mut b,
+                    "LinearAnimation",
+                    &[("name", S("fly")), ("fps", U(60)), ("duration", U(60))],
+                );
+                obj(&mut b, "KeyedObject", &[("objectId", U(note + 5))]);
+                obj(&mut b, "KeyedProperty", &[("propertyKey", U(62033))]);
+                let keys: &[(u64, f32)] = if overshoot {
+                    &[(0, 0.0), (30, 1.25), (60, 1.0)]
+                } else {
+                    &[(0, 0.0), (60, 1.0)]
+                };
+                for &(frame, value) in keys {
+                    obj(
+                        &mut b,
+                        "KeyFrameDouble",
+                        &[
+                            ("frame", U(frame)),
+                            ("value", F(value)),
+                            ("interpolationType", U(1)),
+                        ],
+                    );
+                }
+            } else if transfers {
                 timeline(&mut b, "fly", note + 5, 62033, 0.0, 1.0);
             }
+        }
+        if screen == "R2" {
+            obj(
+                &mut b,
+                "LiveFlight",
+                &[("parentId", U(0)), ("key", U(13)), ("sizeMode", U(1))],
+            );
+        }
+        if played {
+            machine(&mut b, true);
         }
         if screen == "A" {
             let next = note + 5;
@@ -1220,6 +1452,17 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
         "TextInput",
         &[("name", S("edit")), ("parentId", U(0)), ("text", S(""))],
     ); // 4
+    if values {
+        obj(
+            &mut b,
+            "DataBindContext",
+            &[
+                ("propertyKey", U(817)),
+                ("sourcePathIds", Bytes(&[3, 4])),
+                ("flags", U(2)),
+            ],
+        );
+    }
     obj(&mut b, "FocusData", &[("parentId", U(4))]); // 5
     obj(
         &mut b,
@@ -1260,6 +1503,13 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             "ScriptedDrawable",
             &[("parentId", U(0)), ("name", S("script"))],
         ); // 13
+    }
+    if kind == TransferNestedList {
+        obj(
+            &mut b,
+            "ArtboardComponentList",
+            &[("name", S("inner")), ("parentId", U(0))],
+        );
     }
     timeline(&mut b, "walk", 3, 13, 0.0, 100.0);
     machine(&mut b, true);
@@ -1303,7 +1553,11 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
         | TransferZoom
         | TransferWritten
         | TransferWrittenBound
-        | TransferWrittenBoundOnB => &[(1, 2, 11, 11, true)],
+        | TransferWrittenBoundOnB
+        | TransferValues { .. }
+        | TransferThree
+        | TransferPlayed { .. }
+        | TransferNestedList => &[(1, 2, 11, 11, true)],
         TransferTwoKeys => &[(1, 2, 11, 12, true)],
         CopiesOneKey => &[(1, 2, 11, 11, false)],
         TransferMixed => &[(1, 2, 11, 11, true), (3, 4, 13, 14, false)],
@@ -1315,7 +1569,12 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
         &[]
     };
     let mut next = 2;
-    for (name, from, to, units) in [("t1", "A", "B", t1), ("back", "B", "A", back)] {
+    let third: &[(u64, u64, u64, u64, bool)] = if three { &[(2, 3, 13, 13, true)] } else { &[] };
+    for (name, from, to, units) in [
+        ("t1", "A", "B", t1),
+        ("back", "B", "A", back),
+        ("third", "B", "R2", third),
+    ] {
         if units.is_empty() {
             continue;
         }

@@ -41,7 +41,8 @@ pub(crate) struct SlotState {
     origin_home: Option<CoreHandle>,
     /// On a flight slot: where it paints on its Screen while it flies.
     pub(crate) paint: Option<FlightPaint>,
-    /// On an anchor: the flight slot carrying the frame at rest in it.
+    /// On an anchor: the slot carrying the frame at rest in it
+    /// (`live_move_carried_by`).
     pub(crate) carried_by: Option<CoreHandle>,
     /// The CSS-slot gate the frame's hosting set, kept while the slot is empty.
     pub(crate) gate: bool,
@@ -85,12 +86,25 @@ impl NestedArtboard {
             .as_ref()
             .and_then(|state| state.placeholder_root.clone())
     }
-    /// On an anchor: the flight slot carrying the frame at rest in it. Like
+    /// On an anchor: the slot carrying the frame at rest in it, a flight slot
+    /// or, in place, the placement a transferring unit carried it into. Like
     /// the accessors below, this borrows no artboard.
     pub(crate) fn live_move_carried_by(&self) -> Option<CoreHandle> {
         self.live_move
             .as_ref()
             .and_then(|state| state.carried_by.clone())
+    }
+    /// Whether this slot carries the frame at rest in `anchor`: as a flight
+    /// slot placed at it, or as a placement holding the instance a transfer
+    /// carried out of it in place.
+    pub(crate) fn live_move_carries_for(&self, anchor: &CoreHandle) -> bool {
+        self.live_move.as_ref().is_some_and(|state| {
+            state
+                .paint
+                .as_ref()
+                .is_some_and(|paint| paint.anchor == *anchor)
+                || (state.paint.is_none() && state.origin_home.as_ref() == Some(anchor))
+        })
     }
     /// The CSS-slot gate the frame's hosting set, as `remember` kept it.
     pub(crate) fn live_move_gate(&self) -> bool {
@@ -207,10 +221,7 @@ pub(crate) fn reconcile_slot(host: &CoreHandle, hosts: &HashSet<CoreHandle>) {
         .flatten()
         .is_some_and(|flight| {
             !hosts.contains(&flight)
-                || read(&flight, NestedArtboard::live_move_paint)
-                    .ok()
-                    .flatten()
-                    .is_none_or(|(anchor, _)| anchor != *host)
+                || !read(&flight, |flight| flight.live_move_carries_for(host)).unwrap_or(false)
         });
     host.with_mut(|o| {
         let Some(state) = o

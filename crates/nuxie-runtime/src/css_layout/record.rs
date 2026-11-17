@@ -319,6 +319,15 @@ pub(crate) fn is_layout_keyed(record: &CoreHandle) -> bool {
         .unwrap_or(false)
 }
 
+/// Marks `record` as one a timeline keys for its layout, as import does for
+/// a timeline that keys one of its layout keys.
+#[cfg(feature = "test-support")]
+pub fn mark_layout_keyed(record: &CoreHandle) -> bool {
+    record
+        .with_downcast_mut::<LayoutCssStyle, _>(LayoutCssStyle::mark_layout_keyed)
+        .is_some()
+}
+
 /// The artboard `owner` draws on: itself, when it is one.
 fn owner_artboard(owner: &CoreHandle) -> Option<CoreHandle> {
     if owner.is_type_of(crate::source::generated::artboard_base::ArtboardBase::TYPE_KEY) {

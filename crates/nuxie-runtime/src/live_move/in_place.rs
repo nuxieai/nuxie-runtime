@@ -562,9 +562,57 @@ pub(super) struct Carried {
     /// The instance it carries, to tell it from another that fills the
     /// placement it left while it flies.
     instance: crate::RuntimeArtboardInstanceWeakHandle,
+    /// Whether the placement it left sorts as a stacking context, as last
+    /// read: it does by the carried instance's frame (`link`).
+    context: Cell<Option<bool>>,
+    /// Where the placement its lift sorts as rests inside the lift's
+    /// anchor, recorded at take-off for the lift's cover; unknown until
+    /// then.
+    placed: super::follow::TakeOff,
 }
 
 impl Carried {
+    /// After the carry: the placement it left names the one that holds its
+    /// instance as carrying its frame at rest (`frame_at_rest`).
+    pub(super) fn link(&self) {
+        let to = self.to.clone();
+        self.from.with_mut(|o| {
+            if let Some(slot) = o.as_nested_artboard_mut() {
+                slot.live_move_mut().carried_by = Some(to);
+            }
+        });
+    }
+
+    /// Whether the placement it left now sorts differently: it sorts by the
+    /// carried instance's frame, whose turn, scale or opacity can change
+    /// while it flies, and only the Screen the instance flies in is told.
+    /// When it changed, its own Screen is marked to sort again, as a slot
+    /// flight's anchor is (`Flight::read_context`).
+    fn read_context(&self, row: &CoreHandle) -> bool {
+        let context = super::follow::anchor_context(&self.from);
+        let changed = self
+            .context
+            .replace(Some(context))
+            .is_some_and(|last| last != context);
+        if changed && let Some(dirty) = row.artboard_dirty_handle() {
+            dirty.mark_css_draw_order_dirty();
+        }
+        changed
+    }
+
+    /// Ends `link`, when the placement left still names the one it set.
+    fn unlink(&self) {
+        self.from.with_mut(|o| {
+            if let Some(state) = o
+                .as_nested_artboard_mut()
+                .and_then(|slot| slot.live_move.as_mut())
+                && state.carried_by.as_ref() == Some(&self.to)
+            {
+                state.carried_by = None;
+            }
+        });
+    }
+
     /// What a transferring unit carries from `from`, an element of
     /// `from_row`, to `to`: the one placement inside each. Read before
     /// anything moves; refused unless each holds exactly one, the leaving
@@ -592,6 +640,8 @@ impl Carried {
             values: super::values::FlightValues::default(),
             written,
             instance: instance.downgrade(),
+            context: Cell::new(None),
+            placed: super::follow::TakeOff::Unknown,
         })
     }
 }
@@ -654,7 +704,20 @@ impl InPlaceFlight {
     }
 
     /// The arriving copy of a transferring unit, the only copy it flies.
-    pub(super) fn carrying(mut self, carried: Carried) -> Self {
+    /// Its lift sorts as the placement it carries inside its anchor, as a
+    /// flight slot sorts as the slot it carries. Where that placement rests
+    /// inside the anchor is recorded now, before anything moves, for the
+    /// lift's cover.
+    pub(super) fn carrying(mut self, mut carried: Carried) -> Self {
+        let anchor = self.lift.0.borrow().anchor.clone();
+        let placed_as = if anchor == self.to {
+            carried.to.clone()
+        } else {
+            carried.from.clone()
+        };
+        carried.placed =
+            super::follow::PlacedAtRest::record(&anchor, &placed_as, carried.instance.clone());
+        self.lift.0.borrow_mut().placed_as = Some(placed_as);
         self.carried = Some(carried);
         self
     }
@@ -777,6 +840,14 @@ impl InPlaceFlight {
         lift.clip_space = space.unwrap_or_default();
     }
 
+    /// Whether the placement a transfer left changed how it sorts since the
+    /// last read; its Screen is then marked to sort again.
+    pub(super) fn read_context(&self) -> bool {
+        self.carried
+            .as_ref()
+            .is_some_and(|carried| carried.read_context(&self.from_row))
+    }
+
     /// What covers each copy's anchor on `board`, the upper Screen of every
     /// one of `copies`, stored in its lift. True when one changed, so the
     /// Screen sorts again.
@@ -786,7 +857,20 @@ impl InPlaceFlight {
             .unwrap_or_default();
         let anchors = copies
             .iter()
-            .map(|copy| copy.lift.0.borrow().anchor.clone())
+            .map(|copy| {
+                let lift = copy.lift.0.borrow();
+                let sorts_as = lift
+                    .placed_as
+                    .clone()
+                    .unwrap_or_else(|| lift.anchor.clone());
+                let placed = copy
+                    .carried
+                    .as_ref()
+                    .map_or(super::follow::TakeOff::NoTransfer, |carried| {
+                        carried.placed.clone()
+                    });
+                (lift.anchor.clone(), sorts_as, placed)
+            })
             .collect::<Vec<_>>();
         let mut changed = false;
         for (copy, coverer) in copies.iter().zip(lift_covers(board, &anchors, &skip)) {
@@ -854,6 +938,9 @@ impl InPlaceFlight {
         }
         set_opacity_root(&self.element, OpacityRoot::None);
         self.flying.set_paint(None, None);
+        if let Some(carried) = &self.carried {
+            carried.unlink();
+        }
         let leaving = self.carried.as_ref().map(|carried| &carried.leaving);
         let rows: &[&CoreHandle] = if leaving.is_some() {
             &[&self.row, &self.board, &self.from_row]

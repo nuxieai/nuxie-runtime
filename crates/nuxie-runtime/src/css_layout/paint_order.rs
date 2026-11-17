@@ -462,7 +462,8 @@ pub(crate) fn anchor_positions(
         .collect()
 }
 
-/// A lift entry to place: its anchor element and what covers it.
+/// A lift entry to place: the element it sorts as (its anchor, or the
+/// placement a transferring unit carries in it) and what covers it.
 pub(crate) struct Lifted {
     pub(crate) entry: RuntimeDrawableOccurrence,
     pub(crate) anchor: CoreHandle,

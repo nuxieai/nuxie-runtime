@@ -2179,7 +2179,10 @@ impl Artboard {
                 let state = lift.0.borrow();
                 crate::css_layout::paint_order::Lifted {
                     entry,
-                    anchor: state.anchor.clone(),
+                    anchor: state
+                        .placed_as
+                        .clone()
+                        .unwrap_or_else(|| state.anchor.clone()),
                     coverer: state.coverer.clone(),
                 }
             })

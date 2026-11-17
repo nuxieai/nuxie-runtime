@@ -7170,6 +7170,10 @@ struct PaintSpec {
     /// B's model has a string "subtitle" of this value, after its numbers,
     /// and the file embeds the font its text draws with.
     subtitle: Option<&'static str>,
+    /// In place, more unit keys whose resting slots are written as boxed
+    /// placements, as the transferring ones are
+    /// (`PaintShape::InPlaceBoxedCopies`).
+    boxed: Vec<u64>,
 }
 impl PaintSpec {
     fn new(units: Vec<PaintUnit>, a: Vec<PaintEl>, b: Vec<PaintEl>) -> Self {
@@ -7190,7 +7194,17 @@ impl PaintSpec {
             page_clips: false,
             ease: None,
             subtitle: None,
+            boxed: Vec::new(),
         }
+    }
+    /// The unit keys a step transfers.
+    fn transferring(&self) -> Vec<u64> {
+        self.steps
+            .iter()
+            .flat_map(|(_, _, _, units)| units)
+            .filter(|unit| unit[4] == 1)
+            .flat_map(|unit| [unit[0], unit[1]])
+            .collect()
     }
     fn root_grid(mut self, tracks: &[f32]) -> Self {
         self.root_grid = tracks.to_vec();
@@ -8142,11 +8156,9 @@ fn paint_screen(
         in_place,
         unit_tracks: Vec::new(),
         carried: spec
-            .steps
-            .iter()
-            .flat_map(|(_, _, _, units)| units)
-            .filter(|unit| unit[4] == 1)
-            .flat_map(|unit| [unit[0], unit[1]])
+            .transferring()
+            .into_iter()
+            .chain(spec.boxed.iter().copied())
             .collect(),
         unexpressible: None,
     };
@@ -9071,6 +9083,11 @@ pub enum PaintShape {
     /// unit, "`name` unit", that fills it, as the compiler places a
     /// component. Every other unit is as `InPlace` writes it.
     InPlaceCarry,
+    /// `InPlace`, two copies of each unit that transfers, with that unit's
+    /// resting slots written as `InPlaceCarry` writes them: a box holding
+    /// one placement. What a box holding a placement does when it flies as
+    /// two copies.
+    InPlaceBoxedCopies,
 }
 
 /// The page for one paint case in `shape`, or why the case has no such
@@ -9087,6 +9104,12 @@ pub fn css_paint_fixture_shaped(
         PaintShape::InPlace => paint_file_shaped(&spec.two_copies().record_keys(), true),
         PaintShape::Stripped => paint_file_shaped(&spec.two_copies().stripped(), true),
         PaintShape::InPlaceCarry => paint_file_shaped(&spec.record_keys(), true),
+        PaintShape::InPlaceBoxedCopies => {
+            let boxed = spec.transferring();
+            let mut spec = spec.two_copies().record_keys();
+            spec.boxed = boxed;
+            paint_file_shaped(&spec, true)
+        }
     }
 }
 

@@ -108,9 +108,10 @@ pub(crate) struct FrameAtRest {
     pub gate: bool,
 }
 
-/// The frame at rest in `slot`. An empty slot reads the frame in the flight
-/// slot its link names while that flight slot's placement names it back;
-/// any other empty slot reads none.
+/// The frame at rest in `slot`. An empty slot reads the frame in the slot
+/// its link names while that slot names it back: a flight slot by its
+/// placement, or in place the placement a transfer carried its instance
+/// into, by where that instance took off. Any other empty slot reads none.
 pub(crate) fn frame_at_rest(slot: &NestedArtboard) -> FrameAtRest {
     let layout = slot.live_move_layout_instance();
     if let Some(frame) = slot.source_artboard() {
@@ -124,13 +125,13 @@ pub(crate) fn frame_at_rest(slot: &NestedArtboard) -> FrameAtRest {
         };
     }
     let this = slot.base.handle();
-    let frame = slot.live_move_carried_by().and_then(|flight| {
-        flight
+    let frame = slot.live_move_carried_by().and_then(|carrier| {
+        carrier
             .with(|o| {
-                let flight = o.as_nested_artboard()?;
-                let (anchor, _) = flight.live_move_paint()?;
-                (Some(anchor) == this)
-                    .then(|| flight.source_artboard())
+                let carrier = o.as_nested_artboard()?;
+                this.as_ref()
+                    .is_some_and(|this| carrier.live_move_carries_for(this))
+                    .then(|| carrier.source_artboard())
                     .flatten()
             })
             .flatten()
@@ -147,17 +148,32 @@ pub(crate) fn frame_at_rest(slot: &NestedArtboard) -> FrameAtRest {
 /// pivot its slot places it by. A property a timeline keys is motion, taken at
 /// its rest, identity; every other keeps its value.
 pub(crate) fn rest_transform(rest: &FrameAtRest) -> Mat2D {
-    let Some(frame) = &rest.frame else {
+    rest_transform_about(rest.frame.as_ref(), rest.gate, rest_pivot(rest))
+}
+
+/// The pivot its slot turns the frame at rest about: the layout's origin
+/// when that is a pivot only.
+pub(crate) fn rest_pivot(rest: &FrameAtRest) -> Option<Vec2D> {
+    rest.layout.as_ref().and_then(|layout| {
+        layout.with_artboard(|b| b.origin_is_pivot_only().then(|| b.origin_offset()))
+    })
+}
+
+/// `rest_transform` with the gate and pivot given, as a transfer's cover
+/// recorded them at take-off (live_move/follow.rs, `PlacedAtRest`).
+pub(crate) fn rest_transform_about(
+    frame: Option<&CoreHandle>,
+    gate: bool,
+    pivot: Option<Vec2D>,
+) -> Mat2D {
+    let Some(frame) = frame else {
         return Mat2D::identity();
     };
-    let pivot = rest.layout.as_ref().and_then(|layout| {
-        layout.with_artboard(|b| b.origin_is_pivot_only().then(|| b.origin_offset()))
-    });
     frame
         .with_downcast::<Artboard, _>(|frame| {
             let values = frame.base.base.rest_values();
             self_transform(
-                rest.gate.then(|| Vec2D::new(values.x, values.y)),
+                gate.then(|| Vec2D::new(values.x, values.y)),
                 values.rotation,
                 Vec2D::new(values.scale_x, values.scale_y),
                 Vec2D::new(1.0, 1.0),

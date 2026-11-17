@@ -31630,7 +31630,9 @@ static DEF_366_PROPERTIES: &[Property] = &[
         alternates: &[],
         declared_type: "uint8",
         runtime_type: FieldKind::Uint,
-        description: Some("CSS position: 0 static, 1 relative, 2 absolute, 3 viewport (compiler-written: lays out as relative with its insets ignored, and paints in flow as one unit)."),
+        description: Some(
+            "CSS position: 0 static, 1 relative, 2 absolute, 3 viewport (compiler-written: lays out as relative with its insets ignored, and paints in flow as one unit).",
+        ),
         initial_value: Some("0"),
         initial_value_runtime: None,
         group: None,

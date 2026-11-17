@@ -333,6 +333,10 @@ struct Ink {
     stack: Vec<[f32; 6]>,
     current: Option<[f32; 6]>,
     xs: Vec<f32>,
+    /// Each paint's color, as last set.
+    colors: std::collections::HashMap<u64, u32>,
+    /// When set, only paths drawn with a paint of this color are recorded.
+    only: Option<u32>,
 }
 thread_local! {
     static INK: RefCell<Ink> = RefCell::new(Ink::default());
@@ -371,10 +375,18 @@ unsafe extern "C" fn ink_transform(_: *mut std::ffi::c_void, m: *const f32) {
         ]);
     });
 }
-unsafe extern "C" fn ink_draw(_: *mut std::ffi::c_void, _: u64, _: u64) {
+unsafe extern "C" fn ink_draw(_: *mut std::ffi::c_void, _: u64, paint: u64) {
     INK.with_borrow_mut(|ink| {
+        if ink.only.is_some() && ink.colors.get(&paint) != ink.only.as_ref() {
+            return;
+        }
         let x = ink.current.unwrap_or(IDENTITY)[4];
         ink.xs.push(x);
+    });
+}
+unsafe extern "C" fn ink_color(_: *mut std::ffi::c_void, paint: u64, color: u32) {
+    INK.with_borrow_mut(|ink| {
+        ink.colors.insert(paint, color);
     });
 }
 fn ink_callbacks() -> NuxRenderCallbacks {
@@ -391,6 +403,7 @@ fn ink_callbacks() -> NuxRenderCallbacks {
         restore: Some(ink_restore),
         transform: Some(ink_transform),
         draw_path: Some(ink_draw),
+        render_paint_color: Some(ink_color),
         ..NuxRenderCallbacks::default()
     }
 }
@@ -407,8 +420,23 @@ struct FadePage {
 }
 impl FadePage {
     unsafe fn on_b(callbacks: &NuxRenderCallbacks) -> Self {
+        INK.with_borrow_mut(|ink| ink.only = None);
+        unsafe { Self::on_b_of(&fixture::fixture(2), callbacks) }
+    }
+    /// `on_b` on the in-place page, whose unit transfers between two keyed
+    /// component placements. Its Screens draw boxes of their own too, so
+    /// only the unit's red button is recorded.
+    unsafe fn in_place_on_b(callbacks: &NuxRenderCallbacks) -> Self {
+        INK.with_borrow_mut(|ink| ink.only = Some(0xffff0000));
         unsafe {
-            let bytes = fixture::fixture(2);
+            Self::on_b_of(
+                &fixture::in_place_carry_fixture(fixture::InPlaceCarry::Transfer),
+                callbacks,
+            )
+        }
+    }
+    unsafe fn on_b_of(bytes: &[u8], callbacks: &NuxRenderCallbacks) -> Self {
+        unsafe {
             let caps = NuxVideoPlaybackCapabilities {
                 playback_available: 1,
                 ..Default::default()
@@ -616,6 +644,66 @@ fn a_fade_after_a_transfer_draws_each_screens_own_copy_once() {
 fn a_fade_after_a_transfer_retired_before_its_end_draws_each_copy_once() {
     unsafe {
         let page = FadePage::on_b(&ink_callbacks());
+        page.call(
+            nux_player_step_begin(page.player, sv("A"), ptr::null()),
+            "fade begin",
+        );
+        page.collapse_b();
+        for i in 0..3 {
+            page.frame(1.0 / 60.0, "a frame before End");
+            assert_eq!(page.ink(), [Where::A], "frame {i} before End");
+        }
+        page.call(
+            nux_player_step_end(page.player, sv("A"), ptr::null()),
+            "fade end",
+        );
+        page.frame(1.0 / 60.0, "a frame after End");
+        assert_eq!(page.ink(), [Where::A], "after End");
+    }
+}
+
+/// `a_fade_after_a_transfer_draws_each_screens_own_copy_once` on the
+/// in-place page: after t1 the unit rests in B's placement and A's holds a
+/// copy of its own, and a fade draws each once.
+#[test]
+fn in_place_a_fade_after_a_transfer_draws_each_screens_own_copy_once() {
+    for retire in [Retire::Collapse, Retire::Remove] {
+        unsafe {
+            let page = FadePage::in_place_on_b(&ink_callbacks());
+            page.call(
+                nux_player_step_begin(page.player, sv("A"), ptr::null()),
+                "fade begin",
+            );
+            for i in 0..10 {
+                page.frame(1.0 / 60.0, "a fade frame");
+                assert_eq!(
+                    page.ink(),
+                    [Where::A, Where::B],
+                    "{retire:?}: fade frame {i}"
+                );
+            }
+            page.call(
+                nux_player_step_end(page.player, sv("A"), ptr::null()),
+                "fade end",
+            );
+            match retire {
+                Retire::Collapse => page.collapse_b(),
+                Retire::Remove => page.remove_b(),
+            }
+            for i in 0..3 {
+                page.frame(1.0 / 60.0, "a frame on A");
+                assert_eq!(page.ink(), [Where::A], "{retire:?}: frame {i} on A");
+            }
+        }
+    }
+}
+
+/// `a_fade_after_a_transfer_retired_before_its_end_draws_each_copy_once`
+/// on the in-place page.
+#[test]
+fn in_place_a_fade_after_a_transfer_retired_before_its_end_draws_each_copy_once() {
+    unsafe {
+        let page = FadePage::in_place_on_b(&ink_callbacks());
         page.call(
             nux_player_step_begin(page.player, sv("A"), ptr::null()),
             "fade begin",

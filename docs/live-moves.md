@@ -15,6 +15,7 @@ The shared Rust page-player follow-up, record-free page opt-in, pending list edi
 | `crates/nuxie-runtime/src/live_move/records.rs` | Record creation, cloning, deserialization, lifecycle validation, and registry access to flight controls. Invalid parents produce a diagnostic and are dropped. |
 | `live_move/transport.rs` | Atomic instance and playback transport, binding adoption, focus repair, semantic reparenting, and slot-owned frozen layout leaves, which also keep the frame's CSS-slot gate. `refill_slot` gives an emptied slot a fresh instance of its own definition. `settle_leaving_rows`, the list's unmount hook, puts an instance in the air on a leaving row back where it took off. `end_placement` clears a flight's paint placement at every way it ends. |
 | `live_move/plan.rs` | Published-step discovery, which units transfer, two-copy steps, the refill of a slot a transferred unit left, take-off at the step's first frame, the cancel (`Plan::settle`), and pruning on membership changes. A plan holds entries: one flight, or a zoomed pair's two, which every walk over the plan's flights takes whole. Take-off seeds each flight's paint placement and links its anchor to the flight carrying its element. |
+| `live_move/in_place.rs`, `live_move/values.rs` | A step flown in place (Flying in place), and the values a carried instance takes from the placement it arrives at (`WrittenValues`). |
 | `live_move/plan/zoom.rs` | A zoomed pair: the ends it reads once when its step starts, its box by the step unit's rule, each version solved onto the box, each version's size, and the hand-over between them. |
 | `live_move/follow.rs` | One draw-pose projection shared by both endpoints and the flight parent, shortest rotation, scale or layout sizing, opacity, path offsets, and update-only settlement of flight rows. After the poses, each flight reads its anchor's context and what covers the anchor at rest, from resting boxes. |
 | `live_move/drawn.rs` | The one reader of where an element is drawn: `drawn(component, When)` gives the whole matrix from its content to the page's drawing space, in the order the draw applies it. `When::Live` is the draw-pose projection, on any component, a unit frame among them. `When::Rest` is that matrix corrected at each CSS level a timeline keys: layout as laid out when read, a static or bound value kept, and each keyed transform property at identity, so a key that ends off identity rests at identity. A level with a zero scale when read can't be corrected, and stays as it draws. The host's fit is outside this space. |
@@ -165,11 +166,39 @@ Every reader of where a flying element is reads one answer (`Flying`, `live_move
 | --- | --- |
 | `LayoutCssStyle.flightKey` (61108, uint) | The element's flight key, 0 for none. Unique among a Screen's elements. Not keyable or bindable; it is stored outside the record's value slots, so no runtime write or animation reaches it. |
 | `LiveFlight` (62003, properties 62031 to 62047) | One flying copy of one step, a child of the Screen that holds the step's flight timeline. It hosts nothing. `key` (unique among the Screen's flight records), `sizeMode` (0 scale, 1 layout), and the fifteen keyable doubles a flight slot's `LiveSlot` has, with the same defaults and validity rule: progress, the two path offsets, fade, four corners and seven shadow controls. |
-| `LiveStepUnit` (62002) | Unchanged. In an in-place file `outgoingUnitKey` and `incomingUnitKey` name the two elements' flight keys, and `outgoingFlightKey` and `incomingFlightKey` name two flight records. |
+| `LiveStepUnit` (62002) | Unchanged. In an in-place file `outgoingUnitKey` and `incomingUnitKey` name the two elements' flight keys, and `outgoingFlightKey` and `incomingFlightKey` name two flight records, or one record twice when the unit sets `transfers`. |
 
 A file is one shape. At import, a file that holds any `LiveFlight` record is an in-place file, and one that holds both `LiveFlight` and `LiveSlot` records is refused. In an in-place file a step unit that sets `transfers` names one flight record and flies one instance; any other unit names two and flies two copies, as in a slot file. A flight key shared by two elements of one Screen, or by two flight records of one Screen, is refused. Flight records outside a Screen are dropped with a diagnostic, as flight slots are. A file without flight records reads no in-place state: no hold begins and no bookkeeping is kept for it (`a_file_without_flight_records_reads_no_in_place_state`).
 
 A reader that predates these records skips them only when the file's property table lists their keys; otherwise it marks the file malformed (`mechanical_port/source/file.rs`, `read_runtime_object`). Before general release this is a hard cutover: the phones take this runtime before any file carries the records.
+
+### A transferring unit
+
+A step unit that sets `transfers` flies one instance in place, as it does through slots. Each of its two keyed elements must be a box holding exactly one component placement, the shape the compiler publishes for a component. Any other keyed element that transfers is refused by name at take-off, before anything is marked (`in_place_a_file_says_what_transfers_or_is_refused`, `in_place_a_refused_transfer_marks_and_moves_nothing`).
+
+- **Take-off.** The plan carries the leaving placement's live instance into the arriving placement (`transport::carry`), which releases the arriving placement's own never-shown instance. The instance keeps everything it holds: its timelines' time, its machines' state, its scripts' private values, focus, semantic ids and video ids. It flies as one in-place flight of the arriving box. The box it left is left out of its own Screen's draw for the step (the in-place `lifts.away` mark), so one occurrence draws. A transferring unit ignores `zoom`.
+- **Values.** A value the arriving placement binds arrives through its binding: a number or a color blends over the flight, and any other kind switches at take-off. A value the placements write takes the arriving placement's written value (`live_move/values.rs`, `WrittenValues`):
+  - A number or a color written differently on the two placements blends, as a bound one does.
+  - A string, a boolean, an enum or a symbol list index switches at take-off, and is then the instance's own, so a change made during the flight stays.
+  - A value written the same on both is left as the instance has it.
+  - A list, a trigger and a model reference hold no one written value. An image, a font, a blob and an artboard keep what they held as they left, even where the arriving placement writes another ([UNIV-6481](https://universe.basis.dev/issue/UNIV-6481)).
+  - A test over the format's type tree places every kind of view model value in one of these groups.
+  - The blend follows only while the Screen the instance flies in is awake, as a slot flight sleeps with its Screen.
+- **Landing.** The instance stays in the arriving placement. The placement it left gets a fresh copy at its entry state (`refill_slot`), as a slot does.
+- **Cancel.** The instance goes back where it came from only when that placement is still mounted and empty, and otherwise stays where it flew. Each placement left empty is refilled. Removing the arriving Screen half way puts the instance back through the unmount hook, going forward and on Back.
+- **The emptied placement.** While the instance is away, the placement it left keeps its box through the frozen placeholder an emptied slot keeps, so its neighbors do not move. That box is frozen for the step: when the leaving Screen is resized during a step, a percentage-sized placement the instance left does not follow until landing. That is how an emptied slot behaves; two copies in place follow the parent, since each keeps its own instance.
+
+Where the two paths differ:
+- On Back with the leaving Screen removed half way, the instance stays in the arriving placement, where it flies. Through slots it flies in a flight slot on the leaving Screen, so it goes with that Screen and the arriving slot gets a fresh copy.
+- In six paint cases of the equivalence test, the flying instance draws on the other side of one later neighbor at a step's first frame ([UNIV-6476](https://universe.basis.dev/issue/UNIV-6476)). Neither case shows on Duo, because the compiler puts a component's transform and opacity on its box.
+- Only the in-place path takes written values. A transfer between slots keeps the leaving slot's written values.
+
+Tests:
+- `tests/live_moves.rs`, `mod in_place_carry`: each runtime row of the slot suites' inventory, named after the slot test with `in_place_` in front.
+- `paint_order::in_place_a_transfer_matches_the_slot_path`: every paint case that transfers, 60 of them, every frame of a go, a Back and their cancels.
+- The C calls on an in-place page: `nux-capi/src/live_move_tests.rs` and `nux-capi/tests/live_moves_frame_membership.rs`, also prefixed `in_place_`.
+- `tests/page_player_membership.rs`: `in_place_a_screen_removed_between_frames_leaves_the_other_screen_its_own_copy`.
+- The large-Screen bench (`bench_in_place_against_slots_on_a_large_screen`) times a step with one transfer as line (9), one instance in place against one through slots.
 
 ### The layout hold
 

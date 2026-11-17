@@ -29,6 +29,13 @@ impl Page {
     /// list, and A is created, with its spare copies put away, by one row
     /// wake before the first frame.
     fn resting_on_a(bytes: &[u8]) -> Self {
+        Self::open(bytes, None)
+    }
+    /// `resting_on_a`, playing the artboard named `name`.
+    fn resting_on_a_named(bytes: &[u8], name: &str) -> Self {
+        Self::open(bytes, Some(name))
+    }
+    fn open(bytes: &[u8], name: Option<&str>) -> Self {
         let mut factory = PersistentFactory::new(RecordingFactory::new());
         let file = File::import(
             bytes,
@@ -38,7 +45,13 @@ impl Page {
             None,
         )
         .expect("fixture imports");
-        let mut board = ArtboardInstance::from_native(file.clone(), 0).unwrap();
+        let index = name.map_or(0, |name| {
+            file.with_file(|f| {
+                (0..f.artboard_count()).find(|&index| f.artboard_name_at(index) == name)
+            })
+            .unwrap_or_else(|| panic!("no artboard {name}"))
+        });
+        let mut board = ArtboardInstance::from_native(file.clone(), index).unwrap();
         let root = board.native_handle();
         let model = file
             .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
@@ -416,6 +429,57 @@ fn a_frame_with_nothing_pending_runs_no_flush() {
 #[test]
 fn a_screen_removed_between_frames_leaves_the_other_screen_its_own_copy() {
     let mut page = Page::resting_on_a(&fixture::fixture(2));
+    page.insert_b();
+    page.wake(1);
+    ok(page.step(0.0), "B's first frame");
+    let home = page
+        .row("A")
+        .with_artboard(|b| b.find_all_handles::<NestedArtboard>())[0]
+        .clone();
+    let unit = child(&home).unwrap();
+    page.begin("B", "t1");
+    for _ in 0..3 {
+        ok(page.step(1.0 / 60.0), "a flight frame");
+    }
+    page.end("B", "t1");
+    ok(page.step(1.0 / 60.0), "the first frame in B");
+    let own = child(&home).expect("A holds a copy of its own");
+    assert_ne!(
+        own.core_handle(),
+        unit.core_handle(),
+        "the unit has landed in B"
+    );
+    assert!(page.vm.remove_list_item_by_property_name_path("screens", 1));
+    ok(page.step(0.0), "the frame after B's removal");
+    assert!(!screens(&page.root()).unwrap().contains_key("B"));
+    assert_eq!(
+        child(&home).map(|c| c.core_handle()),
+        Some(own.core_handle()),
+        "A keeps its own copy"
+    );
+    assert!(
+        page.screen_model(0)
+            .borrow_mut()
+            .set_number_by_property_name("offset", 77.0)
+    );
+    ok(page.step(1.0 / 60.0), "the frame after A's offset changes");
+    close(
+        number(&vm(&own), "prop"),
+        77.0,
+        "the copy's prop follows A's offset",
+    );
+}
+
+/// R4 on the in-place page: the unit transfers between two keyed component
+/// placements. Once it lands in B's placement, A's holds a copy of its own
+/// with A's bindings, and removing B, which takes the landed unit with it,
+/// leaves it so.
+#[test]
+fn in_place_a_screen_removed_between_frames_leaves_the_other_screen_its_own_copy() {
+    let mut page = Page::resting_on_a_named(
+        &fixture::in_place_carry_fixture(fixture::InPlaceCarry::Transfer),
+        "Page",
+    );
     page.insert_b();
     page.wake(1);
     ok(page.step(0.0), "B's first frame");

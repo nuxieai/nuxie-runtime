@@ -867,6 +867,13 @@ pub enum InPlaceCarry {
     TransferPlayed { overshoot: bool },
     /// `Transfer`, with an empty list "inner" in the component.
     TransferNestedList,
+    /// `Transfer`, with a video "clip" in the component, of the file's one
+    /// video asset, as the slot suites' unit has one.
+    TransferVideo,
+    /// `Transfer`, with semantics on each Screen's card (role 9, "card"),
+    /// after its note, as the slot suites' semantic page has them on each
+    /// slot.
+    TransferSemantics,
 }
 
 /// An in-place page shaped as the compiler publishes a matched component
@@ -924,11 +931,22 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
     } else {
         &[]
     };
+    let video = kind == InPlaceCarry::TransferVideo;
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
         var(&mut b, n);
     }
     obj(&mut b, "Backboard", &[]);
+    if video {
+        obj(
+            &mut b,
+            "VideoAsset",
+            &[
+                ("sourceKey", S("asset:mascot")),
+                ("contentType", S("video/mp4")),
+            ],
+        );
+    }
     // A Screen's view model and its one instance.
     let screen_model = |b: &mut Vec<u8>, name: &str, offset: f32, model: u64| {
         obj(b, "ViewModel", &[("name", S(name))]);
@@ -1295,6 +1313,8 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             | TransferThree
             | TransferPlayed { .. }
             | TransferNestedList
+            | TransferVideo
+            | TransferSemantics
     );
     let third = three.then_some(("R2", (160.0, 100.0), 3));
     for (screen, card, key) in [("A", (120.0, 90.0), 1), ("B", (200.0, 140.0), 2)]
@@ -1366,6 +1386,15 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             note_key,
             Some(0xff3333cc),
         ); // to note + 4
+        if kind == TransferSemantics {
+            obj(
+                &mut b,
+                "SemanticData",
+                &[("parentId", U(3)), ("role", U(9)), ("label", S("card"))],
+            );
+        }
+        // The first object after the note and the card's semantics.
+        let after = note + 5 + u64::from(kind == TransferSemantics);
         if screen == "B" {
             let records: &[u64] = match kind {
                 TransferMixed => &[11, 12, 13, 14],
@@ -1387,7 +1416,7 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
                     "LinearAnimation",
                     &[("name", S("fly")), ("fps", U(60)), ("duration", U(60))],
                 );
-                obj(&mut b, "KeyedObject", &[("objectId", U(note + 5))]);
+                obj(&mut b, "KeyedObject", &[("objectId", U(after))]);
                 obj(&mut b, "KeyedProperty", &[("propertyKey", U(62033))]);
                 let keys: &[(u64, f32)] = if overshoot {
                     &[(0, 0.0), (30, 1.25), (60, 1.0)]
@@ -1406,7 +1435,7 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
                     );
                 }
             } else if transfers {
-                timeline(&mut b, "fly", note + 5, 62033, 0.0, 1.0);
+                timeline(&mut b, "fly", after, 62033, 0.0, 1.0);
             }
         }
         if screen == "R2" {
@@ -1420,7 +1449,7 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             machine(&mut b, true);
         }
         if screen == "A" {
-            let next = note + 5;
+            let next = after;
             match kind {
                 Unkeyed => {
                     boxed(&mut b, next, "spare", (100.0, 80.0), 0, None);
@@ -1511,6 +1540,13 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             &[("name", S("inner")), ("parentId", U(0))],
         );
     }
+    if video {
+        obj(
+            &mut b,
+            "Video",
+            &[("name", S("clip")), ("parentId", U(0)), ("assetId", U(0))],
+        );
+    }
     timeline(&mut b, "walk", 3, 13, 0.0, 100.0);
     machine(&mut b, true);
     obj(
@@ -1557,7 +1593,9 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
         | TransferValues { .. }
         | TransferThree
         | TransferPlayed { .. }
-        | TransferNestedList => &[(1, 2, 11, 11, true)],
+        | TransferNestedList
+        | TransferVideo
+        | TransferSemantics => &[(1, 2, 11, 11, true)],
         TransferTwoKeys => &[(1, 2, 11, 12, true)],
         CopiesOneKey => &[(1, 2, 11, 11, false)],
         TransferMixed => &[(1, 2, 11, 11, true), (3, 4, 13, 14, false)],
@@ -5731,6 +5769,11 @@ pub enum PaintCase {
     Large {
         same_size: bool,
     },
+    /// `Large { same_size: false }` with one unit more, "mascot", 60 by 40,
+    /// in each Screen's header, that each step transfers through one flight
+    /// slot, "mascot flight" (flight key 4000). For the bench's step with
+    /// one transfer (B5).
+    LargeTransfer,
     /// A box E holding a text that wraps, between N1 and N2 in a flex row
     /// on each Screen: `a` points wide on A, 300 on B, so the text refills
     /// its box as E flies.
@@ -8399,7 +8442,7 @@ fn zoom_pair(
 }
 
 /// `PaintCase::Large`'s page.
-fn large_spec(same_size: bool) -> PaintSpec {
+fn large_spec(same_size: bool, transfer: bool) -> PaintSpec {
     const PICTURES: u64 = 33;
     const TEXTS: u64 = 31;
     /// The extra boxes that make 70 on each Screen: 2 holders, 33 rows or
@@ -8470,9 +8513,20 @@ fn large_spec(same_size: bool) -> PaintSpec {
         els.extend(EXTRA.map(|extra| bx(extra, css_at(0.0, 830.0, 402.0, 10.0)).paintless()));
         els
     };
+    let mut a = screen("list", rows);
     let mut b = screen("grid", tiles);
+    if transfer {
+        // Unit keys run to 66 and flight keys to 1131.
+        const KEY: u64 = 4000;
+        units.push(unit("mascot", 60.0, 40.0));
+        a.push(at_rest("mascot", KEY, 330.0, 2.0, 60.0, 40.0));
+        b.push(at_rest("mascot", KEY, 10.0, 2.0, 60.0, 40.0));
+        flights.push(fly("mascot", KEY, KEY));
+        go.push([KEY, KEY, KEY, KEY, 1]);
+        back.push([KEY, KEY, KEY, KEY, 1]);
+    }
     b.extend(flights);
-    let mut spec = PaintSpec::new(units, screen("list", rows), b);
+    let mut spec = PaintSpec::new(units, a, b);
     spec.size = (402.0, 874.0);
     spec.steps = vec![("go", "A", "B", go), ("back", "B", "A", back)];
     spec
@@ -10180,7 +10234,8 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
         PaintCase::Reader { kind, flies } => reader_spec(kind, flies),
         PaintCase::Zoom(case) => zoom_spec(case),
         PaintCase::Element(kind, case) => element_spec(kind, case),
-        PaintCase::Large { same_size } => large_spec(same_size),
+        PaintCase::Large { same_size } => large_spec(same_size, false),
+        PaintCase::LargeTransfer => large_spec(false, true),
         PaintCase::EmptiedCover { copies } => {
             let e = || rest("E", 1, css_at(100.0, 100.0, 100.0, 60.0));
             let w_on_a = css_at(180.0, 170.0, 200.0, 120.0);

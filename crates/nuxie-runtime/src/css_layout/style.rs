@@ -395,12 +395,20 @@ pub(crate) fn apply_hosted_item(values: CssValues<'_>, style: &mut Style) {
 }
 
 fn apply_item(values: CssValues<'_>, style: &mut Style) {
-    style.position = match values.choice(keys::POSITION) {
-        1 => Position::Relative,
+    let position = values.choice(keys::POSITION);
+    style.position = match position {
+        // A viewport is the containing block of its absolute descendants,
+        // as a relative box is, and ignores its own insets, as a static box
+        // does (docs/CSS_LAYOUT.md 2.1).
+        1 | 3 => Position::Relative,
         2 => Position::Absolute,
         _ => Position::Static,
     };
-    style.inset = values.sides(keys::INSET_TOP_KIND, 3, |key| values.inset(key));
+    style.inset = if position == 3 {
+        Rect::auto()
+    } else {
+        values.sides(keys::INSET_TOP_KIND, 3, |key| values.inset(key))
+    };
     style.margin = values.sides(keys::MARGIN_TOP_KIND, 3, |key| values.margin(key));
     style.size = Size {
         width: values.size(keys::WIDTH_KIND),

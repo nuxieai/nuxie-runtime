@@ -201,7 +201,10 @@ pub(crate) fn is_carry_host(host: &CoreHandle) -> bool {
     is_live_slot(host) || (is_keyed_placement(host) && in_screen_row(host))
 }
 fn is_keyed_placement(host: &CoreHandle) -> bool {
-    if !host.with(|o| o.as_nested_artboard().is_some()).unwrap_or(false) {
+    if !host
+        .with(|o| o.as_nested_artboard().is_some())
+        .unwrap_or(false)
+    {
         return false;
     }
     if is_keyed(host) {
@@ -210,20 +213,32 @@ fn is_keyed_placement(host: &CoreHandle) -> bool {
     let Some(element) = host.with(|o| o.component_parent_handle()).flatten() else {
         return false;
     };
+    boxed_placement(&element).as_ref() == Some(host) && is_keyed(&element)
+}
+/// The one nested artboard directly inside `element`, a layout box that is
+/// not an artboard: the component placement the compiler wraps in a box.
+/// None for anything else, or for a box holding none or more than one.
+pub(crate) fn boxed_placement(element: &CoreHandle) -> Option<CoreHandle> {
     let placements = element
         .with(|o| {
             let boxed = o.as_layout_component().is_some_and(|l| !l.is_artboard());
             o.as_container_component().filter(|_| boxed).map(|c| {
                 c.children()
                     .iter()
-                    .filter(|c| c.with(|o| o.as_nested_artboard().is_some()).unwrap_or(false))
+                    .filter(|c| {
+                        c.with(|o| o.as_nested_artboard().is_some())
+                            .unwrap_or(false)
+                    })
                     .cloned()
                     .collect::<Vec<_>>()
             })
         })
         .flatten()
         .unwrap_or_default();
-    placements.len() == 1 && placements[0] == *host && is_keyed(&element)
+    match placements.as_slice() {
+        [one] => Some(one.clone()),
+        _ => None,
+    }
 }
 /// Whether `element`'s own CSS record carries a flight key.
 fn is_keyed(element: &CoreHandle) -> bool {
@@ -245,7 +260,10 @@ fn is_keyed(element: &CoreHandle) -> bool {
 /// Whether `host` sits directly on a mounted row of the Page's screens list.
 fn in_screen_row(host: &CoreHandle) -> bool {
     let Some(board) = host
-        .with(|o| o.as_nested_artboard().and_then(|s| s.parent_artboard_handle()))
+        .with(|o| {
+            o.as_nested_artboard()
+                .and_then(|s| s.parent_artboard_handle())
+        })
         .flatten()
     else {
         return false;

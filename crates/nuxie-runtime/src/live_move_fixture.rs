@@ -472,9 +472,6 @@ pub enum InPlaceFixture {
     Plain,
     /// `Plain` without its flight keys or flight records: the same Screens.
     Stripped,
-    /// `Plain` with its step unit setting `transfers` and naming one flight
-    /// record, which a slot file may do.
-    Transfers,
     /// `Plain` with a `LiveSlot` on A too, hosting a unit artboard.
     WithSlot,
     /// `Plain` with a second box on B, "badge", sharing card's key.
@@ -786,11 +783,7 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
                 ("outgoingUnitKey", U(1)),
                 ("incomingUnitKey", U(2)),
                 ("outgoingFlightKey", U(11)),
-                (
-                    "incomingFlightKey",
-                    U(if kind == Transfers { 11 } else { 12 }),
-                ),
-                ("transfers", B(kind == Transfers)),
+                ("incomingFlightKey", U(12)),
             ],
         ); // 3
         if kind == Nested {
@@ -820,6 +813,25 @@ pub enum InPlaceCarry {
     Unkeyed,
     /// A's card holds a second placement, "second unit", beside "unit".
     TwoInCard,
+    /// The unit transfers: step t1 (A to B) through flight record 11, step
+    /// back (B to A) through record 12. A's card paints 0xff22aa22 and B's
+    /// 0xff2222aa, and the component also holds a scripted drawable
+    /// "script" with no script of its own.
+    Transfer,
+    /// `Transfer`, with B's placement of another component, "unit y".
+    TransferElsewhere,
+    /// `Transfer`, with the notes keyed (3 on A, 4 on B) and flying in t1 as
+    /// two copies through records 13 and 14.
+    TransferMixed,
+    /// t1 transfers the notes, keyed 3 and 4 through record 13: boxes that
+    /// hold no placement.
+    TransferBox,
+    /// `Transfer`, with t1's unit also zoomed (`zoom` 1).
+    TransferZoom,
+    /// t1's unit transfers through two flight records, 11 and 12.
+    TransferTwoKeys,
+    /// t1's unit flies two copies through one flight record, 11.
+    CopiesOneKey,
 }
 
 /// An in-place page shaped as the compiler publishes a matched component
@@ -834,8 +846,8 @@ pub enum InPlaceCarry {
 /// moves, a text field "edit" with focus data, a painted shape "button" whose
 /// pointer down sets the machine's "hits" to 9, and semantics on itself
 /// ("unit"), the field and the button. B holds flight records 11 and 12, and
-/// step t1 flies the two cards as two copies, as in-place files do until
-/// they transfer.
+/// step t1 flies the two cards as two copies; `InPlaceCarry`'s transferring
+/// kinds fly the unit as one instance instead.
 pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
     use V::*;
     let mut b = b"RIVE".to_vec();
@@ -846,7 +858,11 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
     for (name, offset) in [("A", 10.0), ("B", 200.0)] {
         obj(&mut b, "ViewModel", &[("name", S(name))]);
         obj(&mut b, "ViewModelPropertyNumber", &[("name", S("offset"))]);
-        obj(&mut b, "ViewModelInstance", &[("viewModelId", U(u64::from(name == "B")))]);
+        obj(
+            &mut b,
+            "ViewModelInstance",
+            &[("viewModelId", U(u64::from(name == "B")))],
+        );
         obj(
             &mut b,
             "ViewModelInstanceNumber",
@@ -856,7 +872,11 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
     obj(&mut b, "ViewModel", &[("name", S("Page"))]);
     obj(&mut b, "ViewModelPropertyList", &[("name", S("screens"))]);
     obj(&mut b, "ViewModelInstance", &[("viewModelId", U(2))]);
-    obj(&mut b, "ViewModelInstanceList", &[("viewModelPropertyId", U(0))]);
+    obj(
+        &mut b,
+        "ViewModelInstanceList",
+        &[("viewModelPropertyId", U(0))],
+    );
     for model in [0, 1] {
         obj(
             &mut b,
@@ -885,71 +905,94 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
     // A placement of "unit x" at `id`, under `parent`, as the compiler
     // writes one (`id` to `id + 5`): the host, its machine, its inline
     // model and the model's three values, `prop` bound to `screen`'s model.
-    let placement = |b: &mut Vec<u8>, parent: u64, id: u64, name: &str, screen: u8| {
-        obj(
-            b,
-            "NestedArtboardLayout",
-            &[
-                ("name", S(name)),
-                ("parentId", U(parent)),
-                ("artboardId", U(2)),
-                ("instanceWidth", F(100.0)),
-                ("instanceHeight", F(80.0)),
-                ("instanceWidthScaleType", U(0)),
-                ("instanceHeightScaleType", U(0)),
-                ("isStateful", B(true)),
-            ],
-        );
-        obj(b, "NestedStateMachine", &[("parentId", U(id)), ("animationId", U(0))]);
-        obj(b, "ViewModelInstance", &[("viewModelId", U(3)), ("parentId", U(id))]);
-        for property in [0, 1] {
+    let placement =
+        |b: &mut Vec<u8>, parent: u64, id: u64, name: &str, screen: u8, artboard: u64| {
             obj(
                 b,
-                "ViewModelInstanceNumber",
+                "NestedArtboardLayout",
                 &[
-                    ("parentId", U(id + 2)),
-                    ("viewModelPropertyId", U(property)),
-                    ("propertyValue", F(0.0)),
+                    ("name", S(name)),
+                    ("parentId", U(parent)),
+                    ("artboardId", U(artboard)),
+                    ("instanceWidth", F(100.0)),
+                    ("instanceHeight", F(80.0)),
+                    ("instanceWidthScaleType", U(0)),
+                    ("instanceHeightScaleType", U(0)),
+                    ("isStateful", B(true)),
                 ],
             );
-        }
-        bind(b, 575, &[screen, 0]);
-        obj(
-            b,
-            "ViewModelInstanceString",
-            &[
-                ("parentId", U(id + 2)),
-                ("viewModelPropertyId", U(2)),
-                ("propertyValue", S("label")),
-            ],
-        );
-    };
+            obj(
+                b,
+                "NestedStateMachine",
+                &[("parentId", U(id)), ("animationId", U(0))],
+            );
+            obj(
+                b,
+                "ViewModelInstance",
+                &[("viewModelId", U(3)), ("parentId", U(id))],
+            );
+            for property in [0, 1] {
+                obj(
+                    b,
+                    "ViewModelInstanceNumber",
+                    &[
+                        ("parentId", U(id + 2)),
+                        ("viewModelPropertyId", U(property)),
+                        ("propertyValue", F(0.0)),
+                    ],
+                );
+            }
+            bind(b, 575, &[screen, 0]);
+            obj(
+                b,
+                "ViewModelInstanceString",
+                &[
+                    ("parentId", U(id + 2)),
+                    ("viewModelPropertyId", U(2)),
+                    ("propertyValue", S("label")),
+                ],
+            );
+        };
     // A box at `id` under the Screen: the component, its style and its
     // record (`id` to `id + 2`), then a Fill and its color when painted.
-    let boxed = |b: &mut Vec<u8>, id: u64, name: &str, size: (f32, f32), key: u64, paint: Option<u32>| {
-        obj(
-            b,
-            "LayoutComponent",
-            &[("name", S(name)), ("parentId", U(0)), ("styleId", U(id + 1))],
-        );
-        obj(b, "LayoutComponentStyle", &[("parentId", U(id))]);
-        let mut record = vec![
-            ("parentId", U(id)),
-            ("flexShrink", F(0.0)),
-            ("widthKind", U(1)),
-            ("width", F(size.0)),
-            ("heightKind", U(1)),
-            ("height", F(size.1)),
-        ];
-        if key != 0 {
-            record.push(("flightKey", U(key)));
-        }
-        obj(b, "LayoutCssStyle", &record);
-        if let Some(color) = paint {
-            obj(b, "Fill", &[("parentId", U(id))]);
-            obj(b, "SolidColor", &[("parentId", U(id + 3)), ("colorValue", Color(color))]);
-        }
-    };
+    let boxed =
+        |b: &mut Vec<u8>, id: u64, name: &str, size: (f32, f32), key: u64, paint: Option<u32>| {
+            obj(
+                b,
+                "LayoutComponent",
+                &[
+                    ("name", S(name)),
+                    ("parentId", U(0)),
+                    ("styleId", U(id + 1)),
+                ],
+            );
+            obj(b, "LayoutComponentStyle", &[("parentId", U(id))]);
+            let mut record = vec![
+                ("parentId", U(id)),
+                ("flexShrink", F(0.0)),
+                ("widthKind", U(1)),
+                ("width", F(size.0)),
+                ("heightKind", U(1)),
+                ("height", F(size.1)),
+            ];
+            if key != 0 {
+                record.push(("flightKey", U(key)));
+            }
+            obj(b, "LayoutCssStyle", &record);
+            if let Some(color) = paint {
+                obj(b, "Fill", &[("parentId", U(id))]);
+                obj(
+                    b,
+                    "SolidColor",
+                    &[("parentId", U(id + 3)), ("colorValue", Color(color))],
+                );
+            }
+        };
+    use InPlaceCarry::*;
+    let transfers = matches!(
+        kind,
+        Transfer | TransferElsewhere | TransferMixed | TransferBox | TransferZoom
+    );
     for (screen, card, key) in [("A", (120.0, 90.0), 1), ("B", (200.0, 140.0), 2)] {
         let model = u8::from(screen == "B");
         obj(
@@ -965,32 +1008,71 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             ],
         ); // 0
         // B's card rests at (150, 0), so no point is on both Screens' units.
-        let mut root = vec![("parentId", U(0)), ("display", U(1)), ("columnGap", F(10.0))];
+        let mut root = vec![
+            ("parentId", U(0)),
+            ("display", U(1)),
+            ("columnGap", F(10.0)),
+        ];
         if screen == "B" {
             root.push(("paddingLeft", F(150.0)));
         }
         obj(&mut b, "LayoutCssStyle", &root); // 1
         obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
-        boxed(&mut b, 3, "card", card, key, None); // 3 to 5
-        placement(&mut b, 3, 6, "unit", model); // 6 to 11
-        boxed(&mut b, 12, "note", (60.0, 40.0), 0, Some(0xff3333cc)); // 12 to 16
+        let card_paint = transfers.then_some(if screen == "A" {
+            0xff22aa22
+        } else {
+            0xff2222aa
+        });
+        boxed(&mut b, 3, "card", card, key, card_paint); // 3 to 5, or 7
+        let unit = if card_paint.is_some() { 8 } else { 6 };
+        let component = if kind == TransferElsewhere && screen == "B" {
+            4
+        } else {
+            2
+        };
+        placement(&mut b, 3, unit, "unit", model, component); // to unit + 5
+        let note = unit + 6;
+        let note_key = match (kind, screen) {
+            (TransferMixed | TransferBox, "A") => 3,
+            (TransferMixed | TransferBox, _) => 4,
+            _ => 0,
+        };
+        boxed(
+            &mut b,
+            note,
+            "note",
+            (60.0, 40.0),
+            note_key,
+            Some(0xff3333cc),
+        ); // to note + 4
         if screen == "B" {
-            for record in [11, 12] {
+            let records: &[u64] = match kind {
+                TransferMixed => &[11, 12, 13, 14],
+                TransferBox => &[11, 12, 13],
+                _ => &[11, 12],
+            };
+            for &record in records {
                 obj(
                     &mut b,
                     "LiveFlight",
                     &[("parentId", U(0)), ("key", U(record)), ("sizeMode", U(1))],
                 );
-            } // 17, 18
+            }
+            // A transferring t1's flight timeline, its first: record 11's
+            // progress from 0 to 1, and nothing keying its fade.
+            if transfers {
+                timeline(&mut b, "fly", note + 5, 62033, 0.0, 1.0);
+            }
         }
         if screen == "A" {
+            let next = note + 5;
             match kind {
-                InPlaceCarry::Duo => {}
-                InPlaceCarry::Unkeyed => {
-                    boxed(&mut b, 17, "spare", (100.0, 80.0), 0, None); // 17 to 19
-                    placement(&mut b, 17, 20, "spare unit", model); // 20 to 25
+                Unkeyed => {
+                    boxed(&mut b, next, "spare", (100.0, 80.0), 0, None);
+                    placement(&mut b, next, next + 3, "spare unit", model, 2);
                 }
-                InPlaceCarry::TwoInCard => placement(&mut b, 3, 17, "second unit", model),
+                TwoInCard => placement(&mut b, 3, next, "second unit", model, 2),
+                _ => {}
             }
         }
     }
@@ -1016,7 +1098,11 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
         &[("name", S("edit")), ("parentId", U(0)), ("text", S(""))],
     ); // 4
     obj(&mut b, "FocusData", &[("parentId", U(4))]); // 5
-    obj(&mut b, "Shape", &[("name", S("button")), ("parentId", U(0))]); // 6
+    obj(
+        &mut b,
+        "Shape",
+        &[("name", S("button")), ("parentId", U(0))],
+    ); // 6
     obj(
         &mut b,
         "Rectangle",
@@ -1029,23 +1115,46 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
         ],
     ); // 7
     obj(&mut b, "Fill", &[("parentId", U(6))]); // 8
-    obj(&mut b, "SolidColor", &[("parentId", U(8)), ("colorValue", Color(0xffff0000))]); // 9
+    obj(
+        &mut b,
+        "SolidColor",
+        &[("parentId", U(8)), ("colorValue", Color(0xffff0000))],
+    ); // 9
     for (parent, role, label) in [(0, 9, "unit"), (4, 6, "field"), (6, 1, "button")] {
         obj(
             &mut b,
             "SemanticData",
-            &[("parentId", U(parent)), ("role", U(role)), ("label", S(label))],
+            &[
+                ("parentId", U(parent)),
+                ("role", U(role)),
+                ("label", S(label)),
+            ],
         ); // 10 to 12
+    }
+    if transfers {
+        obj(
+            &mut b,
+            "ScriptedDrawable",
+            &[("parentId", U(0)), ("name", S("script"))],
+        ); // 13
     }
     timeline(&mut b, "walk", 3, 13, 0.0, 100.0);
     machine(&mut b, true);
-    obj(&mut b, "StateMachineNumber", &[("name", S("hits")), ("value", F(0.0))]);
+    obj(
+        &mut b,
+        "StateMachineNumber",
+        &[("name", S("hits")), ("value", F(0.0))],
+    );
     obj(
         &mut b,
         "StateMachineListenerSingle",
         &[("targetId", U(6)), ("listenerTypeValue", U(2))],
     );
-    obj(&mut b, "ListenerNumberChange", &[("inputId", U(0)), ("value", F(9.0))]);
+    obj(
+        &mut b,
+        "ListenerNumberChange",
+        &[("inputId", U(0)), ("value", F(9.0))],
+    );
     obj(
         &mut b,
         "Artboard",
@@ -1057,30 +1166,82 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             ("defaultStateMachineId", U(0)),
         ],
     ); // 0
-    obj(&mut b, "ArtboardComponentList", &[("name", S("screens")), ("parentId", U(0))]); // 1
+    obj(
+        &mut b,
+        "ArtboardComponentList",
+        &[("name", S("screens")), ("parentId", U(0))],
+    ); // 1
     bind(&mut b, 800, &[2, 0]);
-    obj(
-        &mut b,
-        "LiveStep",
-        &[
+    // (outgoing, incoming, outgoing flight, incoming flight, transfers)
+    let t1: &[(u64, u64, u64, u64, bool)] = match kind {
+        Duo | Unkeyed | TwoInCard => &[(1, 2, 11, 12, false)],
+        Transfer | TransferElsewhere | TransferZoom => &[(1, 2, 11, 11, true)],
+        TransferTwoKeys => &[(1, 2, 11, 12, true)],
+        CopiesOneKey => &[(1, 2, 11, 11, false)],
+        TransferMixed => &[(1, 2, 11, 11, true), (3, 4, 13, 14, false)],
+        TransferBox => &[(3, 4, 13, 13, true)],
+    };
+    let back: &[(u64, u64, u64, u64, bool)] = if transfers && kind != TransferBox {
+        &[(2, 1, 12, 12, true)]
+    } else {
+        &[]
+    };
+    let mut next = 2;
+    for (name, from, to, units) in [("t1", "A", "B", t1), ("back", "B", "A", back)] {
+        if units.is_empty() {
+            continue;
+        }
+        let mut step_props = vec![
             ("parentId", U(0)),
-            ("name", S("t1")),
-            ("fromArtboard", S("A")),
-            ("toArtboard", S("B")),
-        ],
-    ); // 2
-    obj(
-        &mut b,
-        "LiveStepUnit",
-        &[
-            ("parentId", U(2)),
-            ("outgoingUnitKey", U(1)),
-            ("incomingUnitKey", U(2)),
-            ("outgoingFlightKey", U(11)),
-            ("incomingFlightKey", U(12)),
-        ],
-    ); // 3
+            ("name", S(name)),
+            ("fromArtboard", S(from)),
+            ("toArtboard", S(to)),
+        ];
+        if transfers && name == "t1" {
+            step_props.push(("flightAnimationId", U(0)));
+        }
+        obj(&mut b, "LiveStep", &step_props);
+        let step = next;
+        next += 1;
+        for &(outgoing, incoming, outgoing_flight, incoming_flight, transfer) in units {
+            let mut props = vec![
+                ("parentId", U(step)),
+                ("outgoingUnitKey", U(outgoing)),
+                ("incomingUnitKey", U(incoming)),
+                ("outgoingFlightKey", U(outgoing_flight)),
+                ("incomingFlightKey", U(incoming_flight)),
+            ];
+            if transfer {
+                props.push(("transfers", B(true)));
+            }
+            if kind == TransferZoom && name == "t1" {
+                props.push(("zoom", U(1)));
+            }
+            obj(&mut b, "LiveStepUnit", &props);
+            next += 1;
+        }
+    }
     machine(&mut b, false);
+    if kind == TransferElsewhere {
+        // Another component, of the same model and size: a CSS root and a
+        // machine, nothing more.
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S("unit y")),
+                ("width", F(100.0)),
+                ("height", F(80.0)),
+                ("viewModelId", U(3)),
+                ("styleId", U(2)),
+                ("clip", B(false)),
+                ("defaultStateMachineId", U(0)),
+            ],
+        );
+        obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]);
+        obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]);
+        machine(&mut b, false);
+    }
     b
 }
 
@@ -6501,6 +6662,7 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit, inner: u64) {
             masks: Vec::new(),
             in_place: false,
             unit_tracks: Vec::new(),
+            carried: Default::default(),
             unexpressible: None,
         };
         let tracks = match keyed {
@@ -6816,6 +6978,9 @@ struct PaintArt<'a> {
     /// The keyed units' own tracks, on their inline boxes, for the Screen's
     /// timeline (in place).
     unit_tracks: Vec<PaintTrack>,
+    /// In place: the unit keys of units a step transfers, whose resting
+    /// slots are written as boxed placements (`PaintShape::InPlaceCarry`).
+    carried: std::collections::HashSet<u64>,
     /// Why this page has no in-place shape, when it has none.
     unexpressible: Option<&'static str>,
 }
@@ -6895,6 +7060,51 @@ impl PaintArt<'_> {
             );
         }
     }
+    /// A resting slot of a unit that transfers, in place: a paintless box with
+    /// the slot's name, record, own properties and origin, and `key` as its
+    /// flight key, holding one placement of the unit that fills it, with the
+    /// slot's model and machine (`PaintShape::InPlaceCarry`).
+    fn boxed_unit(&mut self, el: &PaintEl, parent: u64, unit: &str, key: u64) {
+        use V::*;
+        let id = self.next;
+        let (artboard, u) = self.unit(unit);
+        if u.element.is_some() {
+            self.unexpressible = Some("an element unit is not a component placement");
+            return;
+        }
+        let mut props = vec![
+            ("name", S(&el.name)),
+            ("parentId", U(parent)),
+            ("styleId", U(id + 1)),
+            ("clip", B(false)),
+        ];
+        props.extend_from_slice(&el.props);
+        self.add("LayoutComponent", &props);
+        self.binds(&el.binds);
+        self.add("LayoutComponentStyle", &[("parentId", U(id))]);
+        let mut css = el.css.clone();
+        css.push(("flightKey", U(key)));
+        self.record(el, id, &css);
+        self.origin(el, id);
+        let name = format!("{} unit", el.name);
+        let placement = self.add(
+            "NestedArtboardLayout",
+            &[
+                ("name", S(&name)),
+                ("parentId", U(id)),
+                ("artboardId", U(artboard)),
+            ],
+        );
+        self.names.insert(name, placement);
+        let mut filling = vec![("parentId", U(placement))];
+        filling.extend(filling_css());
+        self.add("LayoutCssStyle", &filling);
+        if u.modeled() {
+            self.scale_model(placement, u.scale);
+        }
+        self.unit_machine(u, placement);
+    }
+
     /// A resting slot in place: its unit's content inline as a box with the
     /// slot's name, record and own properties, the unit's own transform,
     /// opacity, corner, fill and children, and `key` as its flight key. A
@@ -7147,6 +7357,9 @@ impl PaintArt<'_> {
                 for kid in &el.kids {
                     self.emit(kid, id);
                 }
+            }
+            PaintKind::Slot { unit, key } if self.in_place && self.carried.contains(&key) => {
+                self.boxed_unit(el, parent, unit, key)
             }
             PaintKind::Slot { unit, key } if self.in_place => {
                 self.inline_unit(el, parent, unit, key)
@@ -7541,6 +7754,13 @@ fn paint_screen(
         masks: Vec::new(),
         in_place,
         unit_tracks: Vec::new(),
+        carried: spec
+            .steps
+            .iter()
+            .flat_map(|(_, _, _, units)| units)
+            .filter(|unit| unit[4] == 1)
+            .flat_map(|unit| [unit[0], unit[1]])
+            .collect(),
         unexpressible: None,
     };
     if let (true, Some(color)) = (upper, spec.backing) {
@@ -8457,6 +8677,13 @@ pub enum PaintShape {
     /// `InPlace`'s page without flight keys, flight records or steps: the
     /// same Screens, which the records must cost nothing beside.
     Stripped,
+    /// In place with each unit that transfers flying as one instance, the
+    /// page `Slots` is compared with: each of its resting slots written as
+    /// a paintless box with the slot's name, record and own properties and
+    /// the slot's unit key as its flight key, holding one placement of the
+    /// unit, "`name` unit", that fills it, as the compiler places a
+    /// component. Every other unit is as `InPlace` writes it.
+    InPlaceCarry,
 }
 
 /// The page for one paint case in `shape`, or why the case has no such
@@ -8472,6 +8699,7 @@ pub fn css_paint_fixture_shaped(
         PaintShape::SlotCopies => Ok(paint_file(&spec.two_copies())),
         PaintShape::InPlace => paint_file_shaped(&spec.two_copies().record_keys(), true),
         PaintShape::Stripped => paint_file_shaped(&spec.two_copies().stripped(), true),
+        PaintShape::InPlaceCarry => paint_file_shaped(&spec.record_keys(), true),
     }
 }
 

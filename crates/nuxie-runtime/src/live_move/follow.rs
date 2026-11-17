@@ -927,8 +927,9 @@ impl Resting {
 }
 
 /// What covers each of `anchors`, lifted copies' anchors on the upper Screen
-/// `board`: walking its sorted list from the first entry that draws for the
-/// anchor toward the top, the first that draws something and covers the
+/// `board`: walking its sorted list from where the anchor paints
+/// (`paint_order::anchor_positions`, as the sort places its lift) toward
+/// the top, the first that draws something and covers the
 /// anchor's resting box. A lift entry, an entry of a lifted copy (`lifted`,
 /// which draws in its lift) and an entry of the anchor itself never cover
 /// it. One frame reads every anchor on a Screen at once: the list, each
@@ -982,11 +983,16 @@ pub(super) fn lift_covers(
         })
         .collect::<Vec<_>>();
     let mut rest = Resting::new(board);
+    let elements: Vec<CoreHandle> = unique.iter().map(|anchor| (*anchor).clone()).collect();
+    let positions = crate::css_layout::paint_order::anchor_positions(
+        board,
+        crate::css_layout::paint_order::container_of(board),
+        &list,
+        &elements,
+    );
     let covers = (0..unique.len())
         .map(|n| {
-            let at = draws
-                .iter()
-                .position(|item| item.as_ref().is_some_and(|found| found.contains(&n)))?;
+            let at = positions[n];
             let anchor_box = anchor_box(&mut rest, unique[n]);
             list[..at]
                 .iter()

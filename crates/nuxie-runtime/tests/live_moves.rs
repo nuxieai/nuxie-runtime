@@ -8416,6 +8416,68 @@ mod paint_order {
         });
     }
 
+    /// Test 5b, after Catzy's story cards: a full-screen absolute dim first
+    /// in tree order, then E in the flow holding an absolute child, which
+    /// sorts after the dim at rest in place. The child's drawn place is its
+    /// containing block's (E's unit in the slot shape, the Screen in place,
+    /// E being static), so only its order is read. E's lift is placed where E
+    /// paints, under the dim, as its slot is, not where its child paints:
+    /// E and everything its lift draws come before the dim in every frame.
+    fn escaping_child_flies_under_the_dim(kind: fixture::ChildKind, drawn: &[&str]) {
+        let mut s = PaintScene::new(PaintCase::EscapingChild(kind));
+        let rest = s.painted("B", "at rest");
+        rest.meets("E", "dim");
+        rest.under("E", "dim");
+        s.both_ways(|s, way, p| {
+            let f = s.frame(way, p);
+            f.meets("E", "dim");
+            for name in drawn {
+                f.under(name, "dim");
+            }
+        });
+    }
+    #[test]
+    fn paint_order_05b_escaping_box_child_flies_under_the_dim() {
+        escaping_child_flies_under_the_dim(fixture::ChildKind::Box, &["E", "E child"]);
+    }
+    /// Test 5b with E drawing nothing of its own, only its child's shape,
+    /// as Catzy's close button draws only its svg. E has no entry in its own
+    /// run, so its lift is read where its parent paints, still under the dim.
+    #[test]
+    fn paint_order_05b_bare_box_with_an_escaping_shape_flies_under_the_dim() {
+        let mut s = PaintScene::new(PaintCase::BareEscapingShape);
+        let rest = s.painted("B", "at rest");
+        assert!(rest.find("E").is_none(), "E draws nothing of its own");
+        s.both_ways(|s, way, p| {
+            s.frame(way, p).under("E child", "dim");
+        });
+    }
+    #[test]
+    fn paint_order_05b_escaping_shape_child_flies_under_the_dim() {
+        escaping_child_flies_under_the_dim(fixture::ChildKind::Shape, &["E", "E child"]);
+    }
+    #[test]
+    fn paint_order_05b_escaping_text_child_flies_under_the_dim() {
+        escaping_child_flies_under_the_dim(
+            fixture::ChildKind::Element(fixture::ElementKind::Text),
+            &["E"],
+        );
+    }
+    #[test]
+    fn paint_order_05b_escaping_image_child_flies_under_the_dim() {
+        escaping_child_flies_under_the_dim(
+            fixture::ChildKind::Element(fixture::ElementKind::Image),
+            &["E"],
+        );
+    }
+    #[test]
+    fn paint_order_05b_escaping_component_child_flies_under_the_dim() {
+        escaping_child_flies_under_the_dim(
+            fixture::ChildKind::Element(fixture::ElementKind::Placement),
+            &["E", "E inner"],
+        );
+    }
+
     /// Test 6, clipping holder: E (20, 20, 100 by 60) inside H (0, 0, 300
     /// by 150, `overflow: hidden`), a badge after E in H covering it (60,
     /// 40, 40 by 40), and a box C after H covering E (0, 50, 200 by 100).
@@ -10561,6 +10623,12 @@ mod paint_order {
         paint_order_03_calmly_lake_flies_under_the_scrim,
         paint_order_04_list_to_grid_pictures_fly_on_top,
         paint_order_05_catzy_flights_keep_the_dims_place,
+        paint_order_05b_escaping_box_child_flies_under_the_dim,
+        paint_order_05b_bare_box_with_an_escaping_shape_flies_under_the_dim,
+        paint_order_05b_escaping_shape_child_flies_under_the_dim,
+        paint_order_05b_escaping_text_child_flies_under_the_dim,
+        paint_order_05b_escaping_image_child_flies_under_the_dim,
+        paint_order_05b_escaping_component_child_flies_under_the_dim,
         paint_order_06_clipping_holder_flight_paints_outside_the_clip,
         paint_order_07_badge_in_a_plain_card_covers_the_flight,
         paint_order_08_overlay_in_an_auto_z_wrapper_covers_the_flight,

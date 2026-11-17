@@ -2111,6 +2111,18 @@ impl Artboard {
     /// Our layer: CSS boxes paint their children in CSS painting order
     /// (docs/CSS_LAYOUT.md, 4.4). Draw rules keep Rive's order. Whether it
     /// applied an order.
+    /// How this artboard orders its children in CSS painting order.
+    fn css_paint_kind(&self) -> crate::css_layout::paint_order::Container {
+        crate::css_layout::paint_order::Container {
+            css: self.base.base.is_css_mode(),
+            flex_or_grid: self
+                .base
+                .base
+                .with_css(|css| matches!(css.choice(crate::css_layout::keys::DISPLAY), 1 | 2))
+                .unwrap_or(false),
+        }
+    }
+
     fn apply_css_paint_order(&mut self) -> bool {
         use crate::css_layout::paint_order;
         if !self.draw_targets.empty() {
@@ -2142,14 +2154,7 @@ impl Artboard {
             .enumerate()
             .filter_map(|(index, object)| object.clone().map(|object| (object, index)))
             .collect::<std::collections::HashMap<_, _>>();
-        let kind = paint_order::Container {
-            css: root_css,
-            flex_or_grid: self
-                .base
-                .base
-                .with_css(|css| matches!(css.choice(crate::css_layout::keys::DISPLAY), 1 | 2))
-                .unwrap_or(false),
-        };
+        let kind = self.css_paint_kind();
         let items = std::mem::take(&mut self.drawables);
         self.drawables = paint_order::order(&root, kind, items, &file_order);
         true
@@ -2185,7 +2190,8 @@ impl Artboard {
             && let Some(root) =
                 crate::mechanical_port::source::core::CoreObject::core(self).handle()
         {
-            crate::css_layout::paint_order::place(&root, &mut self.drawables, lifts);
+            let kind = self.css_paint_kind();
+            crate::css_layout::paint_order::place(&root, kind, &mut self.drawables, lifts);
         } else {
             // Not a CSS list: a lift paints on top.
             for lift in lifts.into_iter().rev() {

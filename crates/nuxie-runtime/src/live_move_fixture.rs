@@ -5108,6 +5108,18 @@ pub enum ShadowCase {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PaintCase {
     AppStoreCard,
+    /// A full-screen absolute dim, then E in the flow, 100 by 60 at (20, 20)
+    /// on B and (20, 180) on A, holding an absolute child of this kind 10
+    /// from its containing block's right and bottom: E's unit in the slot
+    /// shape, the Screen in place, since E is static. The dim comes first in tree order and
+    /// paints over E, as Catzy's plans dim does over its story cards. The
+    /// child paints after the dim at rest in place, being positioned later
+    /// in tree order, and inside E's unit in the slot shape.
+    EscapingChild(ChildKind),
+    /// `EscapingChild(ChildKind::Shape)` with E bare: it draws nothing of
+    /// its own, only its child's shape, as Catzy's close button draws only
+    /// its svg.
+    BareEscapingShape,
     Match {
         red_above: bool,
     },
@@ -5301,6 +5313,18 @@ pub enum ElementKind {
     /// paints `paint_color("<unit> inner")` and holds a box "<unit> inner
     /// child", 30 by 20, 10 from its right and bottom.
     Placement,
+}
+
+/// What a unit's absolute child "child" (`PaintUnit::child`) is: a box
+/// painting `paint_color("<unit> child")`; a paintless box holding a shape
+/// that paints it, as the compiler writes an svg's shape; or one element,
+/// its record on it, as `ElementKind` writes one (a text paints
+/// `paint_color("<unit> text")`, a placement places "<unit> inner").
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChildKind {
+    Box,
+    Shape,
+    Element(ElementKind),
 }
 
 /// An `ElementKind` pair (docs/live-moves.md, Flying in place, A2b): unit
@@ -5733,7 +5757,8 @@ struct PaintUnit {
     corner: f32,
     /// Its static own scale, when it has one.
     own_scale: Option<(f32, f32)>,
-    /// It holds a box "`name` child", 30 by 20, 10 from its right and bottom.
+    /// It holds a child "child" (`child_kind`), 30 by 20, 10 from its
+    /// containing block's right and bottom.
     child: bool,
     /// A box shadow under its fill, as the compiler writes one, and whether
     /// it is inset.
@@ -5749,6 +5774,10 @@ struct PaintUnit {
     interpolated: bool,
     /// It is this one element, `ElementKind`, and nothing else.
     element: Option<ElementKind>,
+    /// What its child is, when it has one.
+    child_kind: ChildKind,
+    /// It has no fill, so it draws nothing of its own.
+    bare: bool,
     /// A placement's placed root's own turn and scale, about its center.
     root: Option<(f32, f32)>,
     /// A placement's placed root is a native layout artboard, not a CSS
@@ -5798,6 +5827,8 @@ fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
         padding: 0.0,
         interpolated: false,
         element: None,
+        child_kind: ChildKind::Box,
+        bare: false,
         root: None,
         native_root: false,
     }
@@ -5815,6 +5846,86 @@ impl PaintUnit {
         self.native_root = true;
         self
     }
+    /// It places "`name` inner": it is a placement, or its child is one.
+    fn places(&self) -> bool {
+        self.element == Some(ElementKind::Placement)
+            || (self.child && self.child_kind == ChildKind::Element(ElementKind::Placement))
+    }
+    /// It is, or its child is, an element of `kind`.
+    fn has_element(&self, kind: ElementKind) -> bool {
+        self.element == Some(kind) || (self.child && self.child_kind == ChildKind::Element(kind))
+    }
+    /// The objects of its child, from object `id`, under `parent`: the
+    /// child's record holds it 30 by 20 out of the flow, 10 from its
+    /// containing block's right and bottom. `inner` is the artboard a placement places.
+    fn child_objects(
+        &self,
+        id: u64,
+        parent: u64,
+        inner: u64,
+    ) -> Vec<(&'static str, Vec<(&'static str, V<'static>)>)> {
+        use V::*;
+        let mut css = vec![
+            ("position", U(2)),
+            ("insetRightKind", U(1)),
+            ("insetRight", F(10.0)),
+            ("insetBottomKind", U(1)),
+            ("insetBottom", F(10.0)),
+        ];
+        css.extend(css_size(30.0, 20.0));
+        let color = Color(paint_color(&format!("{} child", self.name)));
+        let boxed = |fill: bool| {
+            let mut record = vec![("parentId", U(id))];
+            record.extend(css.iter().cloned());
+            let mut objects = vec![
+                (
+                    "LayoutComponent",
+                    vec![
+                        ("name", S("child")),
+                        ("parentId", U(parent)),
+                        ("styleId", U(id + 1)),
+                    ],
+                ),
+                ("LayoutComponentStyle", vec![("parentId", U(id))]),
+                ("LayoutCssStyle", record),
+            ];
+            if fill {
+                objects.push(("Fill", vec![("parentId", U(id))]));
+                objects.push((
+                    "SolidColor",
+                    vec![("parentId", U(id + 3)), ("colorValue", color.clone())],
+                ));
+            }
+            objects
+        };
+        match self.child_kind {
+            ChildKind::Box => boxed(true),
+            ChildKind::Shape => {
+                let mut objects = boxed(false);
+                objects.extend([
+                    (
+                        "Shape",
+                        vec![("parentId", U(id)), ("x", F(15.0)), ("y", F(10.0))],
+                    ), // id + 3
+                    (
+                        "Rectangle",
+                        vec![
+                            ("parentId", U(id + 3)),
+                            ("width", F(30.0)),
+                            ("height", F(20.0)),
+                        ],
+                    ),
+                    ("Fill", vec![("parentId", U(id + 3))]), // id + 5
+                    (
+                        "SolidColor",
+                        vec![("parentId", U(id + 5)), ("colorValue", color)],
+                    ),
+                ]);
+                objects
+            }
+            ChildKind::Element(kind) => self.kind_objects(kind, id, parent, "child", &css, inner),
+        }
+    }
     /// The objects of its one element, from object `id`, under `parent`,
     /// named `name`: the element, the layout participant a text, an image or
     /// a video hosts, its CSS record `css` on the element, and what it
@@ -5827,8 +5938,20 @@ impl PaintUnit {
         css: &[(&'static str, V<'static>)],
         inner: u64,
     ) -> Vec<(&'static str, Vec<(&'static str, V<'a>)>)> {
-        use V::*;
         let kind = self.element.expect("an element unit");
+        self.kind_objects(kind, id, parent, name, css, inner)
+    }
+    /// `element_objects` for an element of `kind`.
+    fn kind_objects<'a>(
+        &self,
+        kind: ElementKind,
+        id: u64,
+        parent: u64,
+        name: &'a str,
+        css: &[(&'static str, V<'static>)],
+        inner: u64,
+    ) -> Vec<(&'static str, Vec<(&'static str, V<'a>)>)> {
+        use V::*;
         let mut objects = Vec::new();
         let mut record = vec![("parentId", U(id))];
         record.extend(css.iter().cloned());
@@ -5909,7 +6032,7 @@ fn inner_artboard(units: &[PaintUnit], name: &str) -> u64 {
     let placements = units
         .iter()
         .take_while(|u| u.name != name)
-        .filter(|u| u.element == Some(ElementKind::Placement))
+        .filter(|u| u.places())
         .count();
     (2 + units.len() + placements) as u64
 }
@@ -6104,6 +6227,15 @@ impl PaintUnit {
         self.child = true;
         self
     }
+    fn with_child_of(mut self, kind: ChildKind) -> Self {
+        self.child = true;
+        self.child_kind = kind;
+        self
+    }
+    fn bare(mut self) -> Self {
+        self.bare = true;
+        self
+    }
     fn modeled(&self) -> bool {
         self.scaled || self.bound_x
     }
@@ -6217,7 +6349,9 @@ fn element_unit(b: &mut Vec<u8>, u: &PaintUnit, inner: u64) {
     }
 }
 
-fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
+/// A box unit's artboard. `inner` is the artboard its child places, when
+/// its child is a placement.
+fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit, inner: u64) {
     use V::*;
     let mut props = vec![
         ("name", S(u.name)),
@@ -6274,19 +6408,25 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
     if let Some((shadow, inset)) = u.shadow {
         unit_shadow_paint(b, shadow.color, shadow, inset); // 3 to 6
     }
+    assert!(
+        !u.bare || (u.shadow.is_none() && u.text.is_none()),
+        "a bare unit has no shadow or text"
+    );
     let fill = if u.shadow.is_some() { 7 } else { 3 };
-    obj(b, "Fill", &[("parentId", U(0))]); // 3, or 7 after a shadow
-    obj(
-        b,
-        "SolidColor",
-        &[
-            ("parentId", U(fill)),
-            (
-                "colorValue",
-                Color(u.color.unwrap_or_else(|| paint_color(u.name))),
-            ),
-        ],
-    ); // 4, or 8
+    if !u.bare {
+        obj(b, "Fill", &[("parentId", U(0))]); // 3, or 7 after a shadow
+        obj(
+            b,
+            "SolidColor",
+            &[
+                ("parentId", U(fill)),
+                (
+                    "colorValue",
+                    Color(u.color.unwrap_or_else(|| paint_color(u.name))),
+                ),
+            ],
+        ); // 4, or 8
+    }
     if let Some(words) = u.text {
         unit_text(
             b,
@@ -6301,34 +6441,14 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
             !u.cached && !u.tappable && u.hosts.is_none(),
             "a unit with a child holds nothing else"
         );
-        obj(
-            b,
-            "LayoutComponent",
-            &[("name", S("child")), ("parentId", U(0)), ("styleId", U(6))],
-        ); // 5
-        obj(b, "LayoutComponentStyle", &[("parentId", U(5))]); // 6
-        let mut record = vec![
-            ("parentId", U(5)),
-            ("position", U(2)),
-            ("insetRightKind", U(1)),
-            ("insetRight", F(10.0)),
-            ("insetBottomKind", U(1)),
-            ("insetBottom", F(10.0)),
-        ];
-        record.extend(css_size(30.0, 20.0));
-        obj(b, "LayoutCssStyle", &record); // 7
-        obj(b, "Fill", &[("parentId", U(5))]); // 8
-        obj(
-            b,
-            "SolidColor",
-            &[
-                ("parentId", U(8)),
-                (
-                    "colorValue",
-                    Color(paint_color(&format!("{} child", u.name))),
-                ),
-            ],
-        ); // 9
+        assert!(
+            u.child_kind == ChildKind::Box || u.keyed.is_none(),
+            "a unit with a shape or an element child is not keyed"
+        );
+        let at = if u.bare { 3 } else { 5 };
+        for (kind, props) in u.child_objects(at, 0, inner) {
+            obj(b, kind, &props);
+        } // 5 on, or 3 when bare
     }
     if u.cached {
         assert!(
@@ -6882,17 +7002,19 @@ impl PaintArt<'_> {
             );
             self.add("BoxShadow", &[("parentId", U(feather))]);
         }
-        let fill = self.add("Fill", &[("parentId", U(id))]);
-        self.add(
-            "SolidColor",
-            &[
-                ("parentId", U(fill)),
-                (
-                    "colorValue",
-                    Color(u.color.unwrap_or_else(|| paint_color(u.name))),
-                ),
-            ],
-        );
+        if !u.bare {
+            let fill = self.add("Fill", &[("parentId", U(id))]);
+            self.add(
+                "SolidColor",
+                &[
+                    ("parentId", U(fill)),
+                    (
+                        "colorValue",
+                        Color(u.color.unwrap_or_else(|| paint_color(u.name))),
+                    ),
+                ],
+            );
+        }
         if let Some(words) = u.text {
             let text = self.next;
             unit_text(
@@ -6904,7 +7026,7 @@ impl PaintArt<'_> {
             );
             self.next += 5;
         }
-        if u.child {
+        if u.child && u.child_kind == ChildKind::Box {
             let mut css = vec![
                 ("position", U(2)),
                 ("insetRightKind", U(1)),
@@ -6917,6 +7039,11 @@ impl PaintArt<'_> {
                 &bx("child", css).color(paint_color(&format!("{} child", u.name))),
                 id,
             );
+        } else if u.child {
+            let inner = self.inner_artboard(u.name);
+            for (kind, props) in u.child_objects(self.next, id, inner) {
+                self.add(kind, &props);
+            }
         }
         if let Some(artboard) = u.hosts {
             self.add(
@@ -8069,7 +8196,7 @@ fn paint_file_shaped(spec: &PaintSpec, in_place: bool) -> Result<Vec<u8>, &'stat
         els.iter()
             .any(|el| matches!(el.kind, PaintKind::Words { .. }) || has_words(&el.kids))
     }
-    let elements = |kind: ElementKind| spec.units.iter().any(|u| u.element == Some(kind));
+    let elements = |kind: ElementKind| spec.units.iter().any(|u| u.has_element(kind));
     // An element pair names one asset, the file's first: a text's font, an
     // image's picture or a video's. Nothing else on its page names one.
     let kinds = [ElementKind::Text, ElementKind::Image, ElementKind::Video];
@@ -8238,11 +8365,11 @@ fn paint_file_shaped(spec: &PaintSpec, in_place: bool) -> Result<Vec<u8>, &'stat
         if u.element.is_some() {
             element_unit(&mut b, u, inner_artboard(&spec.units, u.name));
         } else {
-            paint_unit(&mut b, u);
+            paint_unit(&mut b, u, inner_artboard(&spec.units, u.name));
         }
     }
     for u in &spec.units {
-        if u.element == Some(ElementKind::Placement) {
+        if u.places() {
             placed_root(&mut b, u);
         }
     }
@@ -8599,6 +8726,21 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                 track("ribbon", 17, &[(0, 0.5), (60, 1.0)]),
             ])
         }
+        PaintCase::EscapingChild(_) | PaintCase::BareEscapingShape => PaintSpec::new(
+            vec![match case {
+                PaintCase::EscapingChild(kind) => unit("E", 100.0, 60.0).with_child_of(kind),
+                _ => unit("E", 100.0, 60.0)
+                    .with_child_of(ChildKind::Shape)
+                    .bare(),
+            }],
+            vec![at_rest("E", 1, 20.0, 180.0, 100.0, 60.0)],
+            vec![
+                bx("dim", css_at(0.0, 0.0, 400.0, 300.0)),
+                rest("E", 1, css_flow(100.0, 60.0, 20.0, 20.0)),
+                fly("E", 1, 11),
+            ],
+        )
+        .one_version(&[(1, 11)]),
         // E in an `overflow: hidden` holder H, a badge after E in H covering
         // it, and a box C after H covering E.
         PaintCase::ClippingHolder => PaintSpec::new(
@@ -9708,6 +9850,6 @@ pub fn css_paint_plain_host_fixture() -> Vec<u8> {
         &[("parentId", U(8)), ("colorValue", Color(paint_color("C")))],
     ); // 9
     machine(&mut b, false);
-    paint_unit(&mut b, &unit("E", 100.0, 60.0).turned(0.35));
+    paint_unit(&mut b, &unit("E", 100.0, 60.0).turned(0.35), 0);
     b
 }

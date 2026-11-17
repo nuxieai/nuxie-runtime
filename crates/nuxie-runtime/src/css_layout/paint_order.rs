@@ -360,6 +360,108 @@ fn spans(root: &CoreHandle, list: &[RuntimeDrawableOccurrence]) -> Vec<(usize, u
     spans
 }
 
+/// Where each of `elements`, elements of the artboard `root`, paints in
+/// its sorted list `list` (top first), as an index into it.
+///
+/// An element paints at its topmost entry in its own run. An entry is in an
+/// element's run when it draws for the element (lift.rs, `draws_for`) and no
+/// positioned or stacking descendant between them carries it out to a layer
+/// of an outer stacking context, where it sorts by its own layer and tree
+/// order, above or below the element's own paint. A clip, a mask, a non-CSS
+/// host or a stacking context in between keeps it in (`placement`), and an
+/// element that is itself atomic keeps everything it holds.
+///
+/// An element with no entry in its own run, such as a box whose only
+/// drawings are positioned descendants, paints in its nearest ancestor's.
+/// The root's is its flow: its topmost entry at the in-flow layer or below,
+/// or the list's end when every entry is positioned above the flow.
+///
+/// `root_kind` is how `root` orders its children: a sort of `root` may hold
+/// it borrowed, so it is never read. One walk per entry reads every element
+/// at once, and how each component joins its parent is read once.
+pub(crate) fn anchor_positions(
+    root: &CoreHandle,
+    root_kind: Container,
+    list: &[RuntimeDrawableOccurrence],
+    elements: &[CoreHandle],
+) -> Vec<usize> {
+    let parent_of = |c: &CoreHandle| c.with(|object| object.component_parent_handle()).flatten();
+    // Each element and its ancestors below the root: the components whose
+    // own run is asked for, with their topmost entry in it once found.
+    let mut asked: HashMap<CoreHandle, Option<usize>> = HashMap::new();
+    for element in elements {
+        let mut node = Some(element.clone());
+        while let Some(current) = node {
+            if &current == root || asked.contains_key(&current) {
+                break;
+            }
+            node = parent_of(&current);
+            asked.insert(current, None);
+        }
+    }
+    let mut flow = None;
+    // (layer, keeps what it holds) by component, as its parent sorts it.
+    let mut joins: HashMap<CoreHandle, (u8, bool)> = HashMap::new();
+    for (index, entry) in list.iter().enumerate() {
+        if super::lift::lift_of(entry).is_some() {
+            continue;
+        }
+        let Some(mut current) = owner_of(entry) else {
+            continue;
+        };
+        // The layer of the nearest boundary below `current` that carries the
+        // entry out, while no holding one is nearer.
+        let mut escaped: Option<u8> = None;
+        while &current != root {
+            let Some(parent) = parent_of(&current) else {
+                break;
+            };
+            let (layer, holds) = if &parent == root {
+                let (layer, atomic) = placement(&current, root_kind);
+                (layer.0, atomic)
+            } else {
+                *joins.entry(current.clone()).or_insert_with(|| {
+                    let (layer, atomic) = placement(&current, container_of(&parent));
+                    (layer.0, atomic)
+                })
+            };
+            if let Some(first) = asked.get_mut(&current)
+                && first.is_none()
+                && (escaped.is_none() || holds)
+            {
+                *first = Some(index);
+            }
+            if layer != 1 {
+                escaped = Some(layer);
+            } else if holds {
+                escaped = None;
+            }
+            if &parent == root {
+                if flow.is_none() && escaped.is_none_or(|layer| layer < 1) {
+                    flow = Some(index);
+                }
+                break;
+            }
+            current = parent;
+        }
+    }
+    let flow = flow.unwrap_or(list.len());
+    elements
+        .iter()
+        .map(|element| {
+            let mut node = Some(element.clone());
+            while let Some(current) = node {
+                match asked.get(&current) {
+                    Some(Some(index)) => return *index,
+                    Some(None) => node = parent_of(&current),
+                    None => break,
+                }
+            }
+            flow
+        })
+        .collect()
+}
+
 /// A lift entry to place: its anchor element and what covers it.
 pub(crate) struct Lifted {
     pub(crate) entry: RuntimeDrawableOccurrence,
@@ -377,9 +479,11 @@ pub(crate) struct Lifted {
 ///
 /// A lift entry of a copy flying in place (css_layout/lift.rs) is placed by
 /// the same rule, `lifts` in placing order. Its anchor is the upper Screen's
-/// own copy, an element of any kind: the first entry that draws for it.
+/// own copy, an element of any kind, read where it paints
+/// (`anchor_positions`), as a slot paints at its element's own place.
 pub(crate) fn place(
     root: &CoreHandle,
+    root_kind: Container,
     drawables: &mut Vec<RuntimeDrawableOccurrence>,
     lifts: Vec<Lifted>,
 ) {
@@ -423,14 +527,14 @@ pub(crate) fn place(
             Some((item, anchor, coverer))
         })
         .collect();
-    // A lift whose anchor draws nothing paints on top.
-    flights.extend(lifts.into_iter().map(|lift| {
-        let anchor = rest
-            .iter()
-            .position(|item| super::lift::draws_for(item, &lift.anchor, root))
-            .unwrap_or(0);
-        (lift.entry, anchor, lift.coverer)
-    }));
+    let anchors: Vec<_> = lifts.iter().map(|lift| lift.anchor.clone()).collect();
+    let at = anchor_positions(root, root_kind, &rest, &anchors);
+    flights.extend(
+        lifts
+            .into_iter()
+            .zip(at)
+            .map(|(lift, at)| (lift.entry, at, lift.coverer)),
+    );
     // By anchor, top first; flights that share an anchor keep file order.
     flights.sort_by_key(|(_, anchor, _)| *anchor);
     // The root's own top items stay above every unit and every flight.

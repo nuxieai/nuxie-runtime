@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "releaseTag": "android-runtime-v1.1.0",
+  "releaseTag": "android-runtime-v1.2.0",
   "maximums": {
     "archiveBytes": 28311552,
     "expandedBytes": 79691776,

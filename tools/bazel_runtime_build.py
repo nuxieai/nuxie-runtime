@@ -147,6 +147,7 @@ class BazelRuntime:
         flags = ["--config=release",
                  "--@rules_rust//rust/settings:lto=fat",
                  "--@rules_rust//rust/settings:codegen_units=1",
+                 "--@rules_rust//rust/settings:extra_exec_rustc_flag=-Cstrip=none",
                  "--@rules_rust//rust/settings:extra_rustc_flag=-Cdebuginfo=0"]
         jobs = os.environ.get("NUXIE_BAZEL_JOBS")
         if jobs and os.environ.get("NUXIE_CI_RUNNER_POLICY_VERSION") != "2":
@@ -156,7 +157,6 @@ class BazelRuntime:
         if "apple" in target:
             flags.extend([
                 "--@rules_rust//rust/settings:extra_rustc_flag=-Cstrip=none",
-                "--@rules_rust//rust/settings:extra_exec_rustc_flag=-Cstrip=none",
             ])
         return flags + BazelRuntime.platform_options(target, ios=ios, macos=macos)
 

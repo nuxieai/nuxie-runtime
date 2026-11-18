@@ -266,6 +266,14 @@ class ProvenanceConfigurationTests(unittest.TestCase):
 
 
 class AppleConfigurationTests(unittest.TestCase):
+    def test_android_shipping_builds_keep_host_macros_loadable_without_changing_product_stripping(self):
+        for target in ('aarch64-linux-android', 'x86_64-linux-android'):
+            with self.subTest(target=target), patch.dict('os.environ', {}, clear=True), \
+                    patch.object(BazelRuntime, 'platform_options', return_value=['--platforms=android']):
+                flags = BazelRuntime.options(target)
+            self.assertIn('--@rules_rust//rust/settings:extra_exec_rustc_flag=-Cstrip=none', flags)
+            self.assertNotIn('--@rules_rust//rust/settings:extra_rustc_flag=-Cstrip=none', flags)
+
     def test_device_simulator_and_macos_actions_use_matching_sdk_and_xcode(self):
         for target, sdk, triple in (
             ("aarch64-apple-ios", "iphoneos", "arm64-apple-ios15.0"),

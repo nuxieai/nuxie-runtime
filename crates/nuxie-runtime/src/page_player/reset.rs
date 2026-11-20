@@ -11,17 +11,18 @@ use std::collections::HashSet;
 
 use crate::mechanical_port::source::{
     animation::{
-        nested_simple_animation::NestedSimpleAnimation, nested_state_machine::NestedStateMachine,
+        nested_linear_animation::NestedLinearAnimation, nested_state_machine::NestedStateMachine,
         state_machine_instance::RuntimeStateMachineInstanceHandle,
     },
     artboard::{Artboard, RuntimeArtboardInstanceHandle},
-    artboard_component_list::ArtboardComponentList,
-    constraints::scrolling::scroll_constraint::ScrollConstraint,
     generated::{
+        animation::{
+            nested_simple_animation_base::NestedSimpleAnimationBase,
+            nested_state_machine_base::NestedStateMachineBase,
+        },
         constraints::scrolling::scroll_constraint_base::ScrollConstraintBase,
         core_registry::CoreRegistry,
     },
-    nested_artboard::NestedArtboard,
     text::text_input::TextInput,
 };
 use crate::{ArtboardInstance, CoreHandle, StateMachineInstance};
@@ -92,6 +93,11 @@ fn source_objects(artboard: &RuntimeArtboardInstanceHandle) -> Vec<Option<CoreHa
 /// Reset one object's own engine state, and everything inside it when it
 /// hosts artboards. `source` is the object the file holds at the same local
 /// id, when there is one.
+///
+/// Each kind is reached through the engine's shared capability, so every
+/// type of that kind is: a scroll constraint, a text input, a nested
+/// artboard of any host type (`NestedArtboard`, `NestedArtboardLayout`,
+/// `NestedArtboardLeaf`) and an artboard component list.
 fn reset_object(
     object: &CoreHandle,
     source: Option<&CoreHandle>,
@@ -106,30 +112,38 @@ fn reset_object(
         };
         let x = authored(ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY);
         let y = authored(ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY);
-        if let Some(changed) = object.with_downcast_mut::<ScrollConstraint, _>(|scroll| {
-            let moved = scroll.offset_x() != x
-                || scroll.offset_y() != y
-                || scroll.authored_scroll_offset_x() != x
-                || scroll.authored_scroll_offset_y() != y;
-            scroll.stop_physics();
-            scroll.set_authored_scroll_offset_x(x);
-            scroll.set_authored_scroll_offset_y(y);
-            scroll.set_offset_x(x);
-            scroll.set_offset_y(y);
-            moved
-        }) {
+        let reset = object.with_mut(|object| {
+            object.as_scroll_constraint_mut().map(|scroll| {
+                let moved = scroll.offset_x() != x
+                    || scroll.offset_y() != y
+                    || scroll.authored_scroll_offset_x() != x
+                    || scroll.authored_scroll_offset_y() != y;
+                scroll.stop_physics();
+                scroll.set_authored_scroll_offset_x(x);
+                scroll.set_authored_scroll_offset_y(y);
+                scroll.set_offset_x(x);
+                scroll.set_offset_y(y);
+                moved
+            })
+        });
+        if let Some(changed) = reset.flatten() {
             return changed;
         }
     }
-    if let Some(changed) = object.with_downcast_mut::<TextInput, _>(TextInput::reset_typed_text) {
+    let typed =
+        object.with_mut(|object| object.as_text_input_mut().map(TextInput::reset_typed_text));
+    if let Some(changed) = typed.flatten() {
         return changed;
     }
-    if let Some((instance, animations)) = object.with_downcast::<NestedArtboard, _>(|nested| {
-        (
-            nested.artboard_instance_default(),
-            nested.nested_animations().to_vec(),
-        )
-    }) {
+    let hosted = object.with(|object| {
+        object.as_nested_artboard().map(|nested| {
+            (
+                nested.artboard_instance_default(),
+                nested.nested_animations().to_vec(),
+            )
+        })
+    });
+    if let Some((instance, animations)) = hosted.flatten() {
         let mut changed = false;
         for animation in animations {
             changed |= reset_nested_animation(&animation);
@@ -139,17 +153,20 @@ fn reset_object(
         }
         return changed;
     }
-    if let Some(rows) = object.with_downcast::<ArtboardComponentList, _>(|list| {
-        (0..list.artboard_count())
-            .filter_map(|index| i32::try_from(index).ok())
-            .map(|index| {
-                (
-                    list.artboard_instance(index),
-                    list.state_machine_instance(index),
-                )
-            })
-            .collect::<Vec<_>>()
-    }) {
+    let rows = object.with_mut(|object| {
+        object.as_artboard_component_list_mut().map(|list| {
+            (0..list.artboard_count())
+                .filter_map(|index| i32::try_from(index).ok())
+                .map(|index| {
+                    (
+                        list.artboard_instance(index),
+                        list.state_machine_instance(index),
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+    });
+    if let Some(rows) = rows.flatten() {
         let mut changed = false;
         for (instance, machine) in rows {
             if let Some(machine) = machine {
@@ -164,20 +181,33 @@ fn reset_object(
     false
 }
 
+/// Reset one of a host's nested animations: a state machine back to its
+/// entry, and a simple animation's playhead to its start. A simple
+/// animation's playhead is engine-held, since it advances with time; a remap
+/// animation's playhead follows its time property, which the file, a bind or
+/// a host wrote, so a reset leaves it.
 fn reset_nested_animation(animation: &CoreHandle) -> bool {
-    if let Some(machine) = animation
-        .with_downcast::<NestedStateMachine, _>(NestedStateMachine::state_machine_instance)
-        .flatten()
-    {
-        return reset_machine(&machine);
+    if animation.is_type_of(NestedStateMachineBase::TYPE_KEY) {
+        // The registry has no subtype of NestedStateMachine and no shared
+        // capability for it: every nested machine is this one type.
+        return animation
+            .with_downcast::<NestedStateMachine, _>(NestedStateMachine::state_machine_instance)
+            .flatten()
+            .is_some_and(|machine| reset_machine(&machine));
     }
+    if !animation.is_type_of(NestedSimpleAnimationBase::TYPE_KEY) {
+        return false;
+    }
+    let speed = CoreRegistry::get_double_handle(
+        animation,
+        i32::from(NestedSimpleAnimationBase::SPEED_PROPERTY_KEY),
+    )
+    .unwrap_or(1.0);
     animation
-        .with_downcast_mut::<NestedSimpleAnimation, _>(|animation| {
-            let speed = animation.base.speed();
+        .with_mut(|animation| {
             animation
-                .base
-                .base
-                .animation_instance_mut()
+                .as_nested_linear_animation_mut()
+                .and_then(NestedLinearAnimation::animation_instance_mut)
                 .is_some_and(|instance| {
                     let before = instance.time();
                     instance.reset(speed);

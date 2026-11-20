@@ -222,7 +222,13 @@ impl<'a> SceneWriter<'a> {
     /// artboards (of any host type, and of list rows) to their entry states
     /// with their states' animations applied at the start, simple animations
     /// to their starting pose, and the presses and hovers the player's
-    /// listeners hold there are dropped. Whether anything was reset.
+    /// listeners hold there are dropped.
+    ///
+    /// A reset does not return, on a hosted state machine, the input values
+    /// its listeners set or its pointer latches (its scroll latch, drag
+    /// holders, drag owners and disabled pointer ids), nor the inputs of the
+    /// player's own machine, which is under no object. Whether anything was
+    /// reset.
     pub fn reset(&mut self, object: &SceneObject) -> Result<bool, SceneWriteError> {
         let handle = self
             .artboard

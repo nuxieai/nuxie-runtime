@@ -33,6 +33,11 @@
 //! A remap animation's playhead is not returned. It is its time property,
 //! which the file, a bind or a host wrote, so a fresh instance takes the
 //! same value, and the first frame applies it at the same time.
+//!
+//! What a reset does not return: on a hosted state machine, the input values
+//! its listeners set and its pointer latches (its scroll latch, drag holders,
+//! drag owners and disabled pointer ids), which `reset_state` keeps; and the
+//! inputs of the player's own machine, which is under no object.
 use std::collections::HashSet;
 
 use crate::mechanical_port::source::{

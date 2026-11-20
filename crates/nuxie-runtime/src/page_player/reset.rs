@@ -3,18 +3,23 @@
 //! The contract: after a reset inside a step, everything the engine holds
 //! under that object is what a freshly made instance of the same file would
 //! hold after its first settle, and the frame drawn after that same step
-//! shows it. Property values a host wrote are the only difference, and they
-//! stay.
+//! shows it, and from then on the two play the same. Property values a host
+//! wrote are the only difference, and they stay.
 //!
 //! A reset meets it in three parts, each in the engine's own place:
 //!
-//! 1. Return. Each engine-held value goes back to the value a fresh instance
-//!    starts from: a scroll position to the offsets the file gave its
-//!    constraint, with its physics stopped; typed text to the text last
-//!    written to the field; a nested or list-row machine to its entry state,
-//!    its listeners holding no pointer; a simple animation's playhead to its
-//!    start. The player's own listeners drop the presses and hovers they
-//!    hold on objects under the reset object.
+//! 1. Rebuild, or return in place. What the engine can make again from the
+//!    file is rebuilt, made as an instance of the file makes it, and
+//!    replaces what was there: a nested animation's playback (of a simple or
+//!    a remap animation), the layers of a nested machine, the edit state of a
+//!    text field, the physics of a scroll view, and a list's rows, each
+//!    row's artboard and machine. What other objects link to is returned in
+//!    place, each kind by its own `reset_in_place`, which names every field
+//!    it holds: a nested machine, which its parent's machine and its host
+//!    link to; a scroll view and a text field, which are objects of the
+//!    file; and a nested host's artboard, which its host, its layout and its
+//!    data context link to. The player's own listeners drop the presses and
+//!    hovers they hold on objects under the reset object.
 //! 2. First frame. Every nested artboard host the reset reached, of any host
 //!    type, and every artboard component list, is advanced by zero as a new
 //!    frame through the engine's advancing-component dispatch: the call a
@@ -30,32 +35,33 @@
 //!    content transform, reshaped text, layout and paint, for the frame
 //!    drawn after the step.
 //!
-//! A remap animation's playhead is not returned. It is its time property,
-//! which the file, a bind or a host wrote, so a fresh instance takes the
-//! same value, and the first frame applies it at the same time.
-//!
-//! What a reset does not return: on a hosted state machine, the input values
-//! its listeners set and its pointer latches (its scroll latch, drag holders,
-//! drag owners and disabled pointer ids), which `reset_state` keeps; and the
-//! inputs of the player's own machine, which is under no object.
+//! What a reset leaves as it is: on a nested machine, the values of its
+//! inputs, which its listeners and its host set, and its pointer latches
+//! (its scroll latch, drag holders, drag owners, disabled pointer ids and
+//! the pointers its hosted artboards hold); on a scroll view, whether a drag
+//! holds it; on a text field, whether it has focus; and the inputs of the
+//! player's own machine, which is under no object. A rebuild runs only when
+//! a driver calls a reset: a player with no driver, or a driver that never
+//! resets, runs none of it.
 use std::collections::HashSet;
 
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     advancing_component::AdvancingComponentHandle,
     animation::{
-        nested_linear_animation::NestedLinearAnimation, nested_state_machine::NestedStateMachine,
-        state_machine_instance::RuntimeStateMachineInstanceHandle,
+        nested_animation, nested_linear_animation::NestedLinearAnimation,
+        nested_state_machine::NestedStateMachine,
     },
     artboard::{Artboard, RuntimeArtboardInstanceHandle},
+    artboard_component_list::ArtboardComponentList,
+    constraints::scrolling::scroll_constraint::ScrollConstraint,
     generated::{
-        animation::{
-            nested_simple_animation_base::NestedSimpleAnimationBase,
-            nested_state_machine_base::NestedStateMachineBase,
-        },
+        animation::nested_state_machine_base::NestedStateMachineBase,
+        artboard_component_list_base::ArtboardComponentListBase,
         constraints::scrolling::scroll_constraint_base::ScrollConstraintBase,
         core_registry::CoreRegistry,
     },
+    math::vec2d::Vec2D,
     text::text_input::TextInput,
 };
 use crate::{ArtboardInstance, CoreHandle, StateMachineInstance};
@@ -168,34 +174,39 @@ fn reset_object(
     visited: &mut HashSet<(usize, usize, u64)>,
 ) -> bool {
     if object.is_type_of(ScrollConstraintBase::TYPE_KEY) {
+        let source = source.filter(|source| source.is_type_of(ScrollConstraintBase::TYPE_KEY));
         let authored = |key: u16| {
             source
-                .filter(|source| source.is_type_of(ScrollConstraintBase::TYPE_KEY))
                 .and_then(|source| CoreRegistry::get_double_handle(source, i32::from(key)))
                 .unwrap_or(0.0)
         };
-        let x = authored(ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY);
-        let y = authored(ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY);
-        let reset = object.with_mut(|object| {
-            object.as_scroll_constraint_mut().map(|scroll| {
-                let moved = scroll.offset_x() != x
-                    || scroll.offset_y() != y
-                    || scroll.authored_scroll_offset_x() != x
-                    || scroll.authored_scroll_offset_y() != y;
-                scroll.stop_physics();
-                scroll.set_authored_scroll_offset_x(x);
-                scroll.set_authored_scroll_offset_y(y);
-                scroll.set_offset_x(x);
-                scroll.set_offset_y(y);
-                moved
+        let authored = Vec2D::new(
+            authored(ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY),
+            authored(ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY),
+        );
+        // A copy of the file's physics, as an instance of the file copies it.
+        let physics = source
+            .and_then(|source| {
+                source
+                    .with(|source| source.as_scroll_constraint().map(ScrollConstraint::physics))
+                    .flatten()
+                    .flatten()
             })
+            .map(|physics| {
+                physics
+                    .clone_occurrence()
+                    .expect("live ScrollPhysics is cloneable")
+            });
+        let reset = object.with_mut(|object| {
+            object
+                .as_scroll_constraint_mut()
+                .map(|scroll| scroll.reset_in_place(authored, physics))
         });
         if let Some(changed) = reset.flatten() {
             return changed;
         }
     }
-    let typed =
-        object.with_mut(|object| object.as_text_input_mut().map(TextInput::reset_typed_text));
+    let typed = object.with_mut(|object| object.as_text_input_mut().map(TextInput::reset_in_place));
     if let Some(changed) = typed.flatten() {
         return changed;
     }
@@ -208,101 +219,79 @@ fn reset_object(
         })
     });
     if let Some((instance, animations)) = hosted.flatten() {
-        let mut changed = false;
+        let Some(instance) = instance else {
+            return false;
+        };
         for animation in animations {
-            changed |= reset_nested_animation(&animation);
+            reset_nested_animation(&animation, &instance);
         }
-        if let Some(instance) = instance {
-            changed |= reset_artboard(&instance, visited);
-        }
-        return changed;
+        reset_artboard(&instance, visited);
+        return true;
     }
-    let rows = object.with_mut(|object| {
-        object.as_artboard_component_list_mut().map(|list| {
-            (0..list.artboard_count())
-                .filter_map(|index| i32::try_from(index).ok())
-                .map(|index| {
-                    (
-                        list.artboard_instance(index),
-                        list.state_machine_instance(index),
-                    )
-                })
-                .collect::<Vec<_>>()
-        })
-    });
-    if let Some(rows) = rows.flatten() {
-        let mut changed = false;
-        for (instance, machine) in rows {
-            if let Some(machine) = machine {
-                changed |= reset_machine(&machine);
-            }
-            if let Some(instance) = instance {
-                changed |= reset_artboard(&instance, visited);
-            }
-        }
-        return changed;
+    if object.is_type_of(ArtboardComponentListBase::TYPE_KEY) {
+        return ArtboardComponentList::rebuild_rows_occurrence(object);
     }
     false
 }
 
-/// Return one of a host's nested animations to where a fresh instance
-/// starts it: a state machine at its entry, and a simple animation's
-/// playhead at its start. The first frame (module docs) applies them. A
-/// remap animation's playhead is its time property, which is not returned.
-fn reset_nested_animation(animation: &CoreHandle) -> bool {
+/// Reset one of a host's nested animations, which plays on `hosted`, the
+/// artboard the host holds: a state machine is returned in place
+/// (`StateMachineInstance::reset_in_place`), and a simple or a remap
+/// animation's playback is rebuilt.
+fn reset_nested_animation(animation: &CoreHandle, hosted: &RuntimeArtboardInstanceHandle) {
     if animation.is_type_of(NestedStateMachineBase::TYPE_KEY) {
         // The registry has no subtype of NestedStateMachine and no shared
         // capability for it: every nested machine is this one type.
-        return animation
+        let machine = animation
             .with_downcast::<NestedStateMachine, _>(NestedStateMachine::state_machine_instance)
-            .flatten()
-            .is_some_and(|machine| reset_machine(&machine));
+            .flatten();
+        if let Some(machine) = machine {
+            machine.with_instance_mut(
+                crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance::reset_in_place,
+            );
+        }
+        return;
     }
-    if !animation.is_type_of(NestedSimpleAnimationBase::TYPE_KEY) {
-        return false;
-    }
-    let speed = CoreRegistry::get_double_handle(
-        animation,
-        i32::from(NestedSimpleAnimationBase::SPEED_PROPERTY_KEY),
-    )
-    .unwrap_or(1.0);
-    animation
+    // The machine that hears the playback's events linked itself to it when
+    // that machine was made; the link moves to the rebuilt playback.
+    let links = animation
         .with_mut(|animation| {
             animation
                 .as_nested_linear_animation_mut()
                 .and_then(NestedLinearAnimation::animation_instance_mut)
-                .is_some_and(|instance| {
-                    let before = instance.time();
-                    instance.reset(speed);
-                    instance.time() != before
-                })
+                .map(|instance| std::mem::take(&mut instance.nested_event_notifier))
         })
-        .unwrap_or(false)
-}
-
-fn reset_machine(machine: &RuntimeStateMachineInstanceHandle) -> bool {
-    machine.with_instance_mut(|machine| {
-        machine.reset_state();
-        machine.mark_needs_advance();
+        .flatten();
+    let Some(links) = links else { return };
+    // How a host makes its animations' playback when it mounts an instance:
+    // a remap animation's then takes the time its property holds.
+    nested_animation::initialize_animation(animation, hosted.downgrade());
+    animation.with_mut(|animation| {
+        if let Some(instance) = animation
+            .as_nested_linear_animation_mut()
+            .and_then(NestedLinearAnimation::animation_instance_mut)
+        {
+            instance.nested_event_notifier = links;
+        }
     });
-    true
 }
 
-/// Everything in a hosted artboard is under the object that hosts it.
+/// Everything in a hosted artboard is under the object that hosts it: the
+/// artboard itself is returned in place (`Artboard::reset_in_place`), and
+/// each of its objects is reset by kind.
 fn reset_artboard(
     artboard: &RuntimeArtboardInstanceHandle,
     visited: &mut HashSet<(usize, usize, u64)>,
-) -> bool {
+) {
     if !visited.insert(artboard.core_handle().identity_key()) {
-        return false;
+        return;
     }
+    artboard.with_artboard_mut(|artboard| artboard.base.reset_in_place());
     let objects = artboard.with_artboard(|artboard| artboard.base.objects().to_vec());
     let sources = source_objects(artboard);
-    let mut changed = false;
     for (local_id, object) in objects.iter().enumerate() {
         let Some(object) = object else { continue };
         let source = sources.get(local_id).cloned().flatten();
-        changed |= reset_object(object, source.as_ref(), visited);
+        reset_object(object, source.as_ref(), visited);
     }
-    changed
 }

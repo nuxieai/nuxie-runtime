@@ -359,26 +359,7 @@ impl TextInput {
                     .is_type_of(crate::mechanical_port::source::generated::text::text_style_base::TextStyleBase::TYPE_KEY)
             })
             .cloned();
-        {
-            if let Some(style) = &self.text_style
-                && let Some((font, font_size)) = style
-                    .with_mut(|style| {
-                        style
-                            .as_text_style_mut()
-                            .map(|style| (style.font(), style.base.font_size()))
-                    })
-                    .flatten()
-                && let Some(font) = font
-            {
-                self.raw_text_input.set_font(Some(font));
-                self.raw_text_input.set_font_size(font_size);
-            }
-            self.raw_text_input.set_obscured(self.base.obscured());
-            self.raw_text_input
-                .set_max_characters(self.base.max_characters());
-            self.raw_text_input.set_max_lines(self.base.max_lines());
-            self.sync_displayed_text_from_source(false);
-        }
+        self.configure_edit_state();
         self.scroll_constraint = self
             .base
             .parent_handle()
@@ -410,6 +391,28 @@ impl TextInput {
         } else {
             StatusCode::Ok
         }
+    }
+    /// Give the edit state the field's style, its limits and its text, as
+    /// the field is set up when it is loaded.
+    fn configure_edit_state(&mut self) {
+        if let Some(style) = &self.text_style
+            && let Some((font, font_size)) = style
+                .with_mut(|style| {
+                    style
+                        .as_text_style_mut()
+                        .map(|style| (style.font(), style.base.font_size()))
+                })
+                .flatten()
+            && let Some(font) = font
+        {
+            self.raw_text_input.set_font(Some(font));
+            self.raw_text_input.set_font_size(font_size);
+        }
+        self.raw_text_input.set_obscured(self.base.obscured());
+        self.raw_text_input
+            .set_max_characters(self.base.max_characters());
+        self.raw_text_input.set_max_lines(self.base.max_lines());
+        self.sync_displayed_text_from_source(false);
     }
     fn update_after_transform_state(
         &mut self,
@@ -567,22 +570,78 @@ impl TextInput {
         self.sync_displayed_text_from_source(false);
         self.mark_shape_dirty();
     }
-    /// Put typed text back to the text last written from outside typing,
-    /// with the caret reset as any outside write resets it. Whether the field
-    /// held typed text.
-    pub fn reset_typed_text(&mut self) -> bool {
-        if !self.user_edited_text {
-            return false;
-        }
+    /// What a host's reset does to this field (the page player's
+    /// `SceneWriter::reset`). The field is an object of the file, so it is
+    /// returned in place: its text goes back to the text last written to it
+    /// from outside typing, the file's, a bind's or a host's. Its edit state
+    /// (the text being edited, the caret, the selection and the undo
+    /// history) is rebuilt from that text, made and set up as when the field
+    /// is loaded. Whether the field held typed text or a placed caret.
+    ///
+    /// Every field is named below with what the reset does to it, so a field
+    /// added later fails to compile until that is decided.
+    pub fn reset_in_place(&mut self) -> bool {
+        let edited = self.user_edited_text || self.caret_placed;
         let written = self.written_text.clone();
-        if self.base.set_text_value(written) {
-            self.text_changed();
+        let text_changed = self.base.set_text_value(written);
+        self.user_edited_text = false;
+        self.source_text = self.base.text().to_owned();
+        self.written_text = self.source_text.clone();
+        // The layout gives the field whether it hugs its width; the rebuilt
+        // edit state takes it as the old one had it.
+        let hugs_width = self.raw_text_input.hugs_width();
+        self.raw_text_input = RawTextInput::default();
+        self.raw_text_input.set_hugs_width(hugs_width);
+        self.configure_edit_state();
+        self.update_multiline(false);
+        self.update_alignment();
+        self.caret_placed = false;
+        self.is_dragging = false;
+        self.last_drag_world_position = Vec2D::new(f32::NAN, f32::NAN);
+        self.scroll_x = 0.0;
+        self.scroll_y = 0.0;
+        self.fallback_fonts_generation = super::text_engine::fallback_fonts_generation();
+        // Shapes the rebuilt edit state on the next update, which also
+        // restarts the cursor's blink.
+        self.mark_shape_dirty();
+        if text_changed {
             crate::mechanical_port::source::core::CoreObject::core_mut(self)
                 .notify_property_changed(TextInputBase::TEXT_PROPERTY_KEY);
-        } else {
-            self.user_edited_text = false;
         }
-        true
+        let Self {
+            // Returned above: the text, back to the written text, and the
+            // record of what was typed.
+            base: _,
+            source_text: _,
+            user_edited_text: _,
+            written_text: _,
+            // Rebuilt above: the edit state, with what a selection drag and
+            // its edge scrolling hold, and the fallback font generation it
+            // is shaped for.
+            raw_text_input: _,
+            caret_placed: _,
+            is_dragging: _,
+            last_drag_world_position: _,
+            scroll_x: _,
+            scroll_y: _,
+            fallback_fonts_generation: _,
+            // Returned by marking the shape dirty: the cursor's blink, and
+            // the bounds and shape report the next update makes.
+            cursor_blink_visible: _,
+            cursor_blink_seconds: _,
+            world_bounds: _,
+            shape_report: _,
+            // What the field's objects and its layout give it: its style, the
+            // scroll view it sits in and the size its layout gave it.
+            text_style: _,
+            scroll_constraint: _,
+            layout_width: _,
+            layout_height: _,
+            // Left as it is: whether the field has focus, which the focus
+            // manager holds and a reset does not move.
+            focused: _,
+        } = self;
+        edited || text_changed
     }
     pub fn selection_radius_changed(&mut self) {
         self.raw_text_input

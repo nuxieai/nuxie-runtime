@@ -105,6 +105,81 @@ static uint8_t* read_file(const char* path, size_t* out_len)
     return bytes;
 }
 
+/* A host driver that writes the artboard's width once, then nothing, and
+ * checks what a turn may and may not do. */
+typedef struct SmokeDriver
+{
+    NuxPlayer* player;
+    size_t rounds;
+    size_t round_zeroes;
+    size_t releases;
+    size_t reports;
+    NuxSceneWriter* last_writer;
+} SmokeDriver;
+
+#define SMOKE_WIDTH_PROPERTY_KEY 7
+
+static NuxStatus smoke_drive(void* context,
+                             const NuxPlayerDriverRound* round,
+                             NuxSceneWriter* writer)
+{
+    SmokeDriver* driver = (SmokeDriver*)context;
+    CHECK(round != NULL);
+    CHECK(writer != NULL);
+    CHECK(round->struct_size >= sizeof(NuxPlayerDriverRound));
+    CHECK(round->index < NUX_PLAYER_DRIVER_MAX_ROUNDS);
+    if (round->index == 0)
+    {
+        driver->round_zeroes += 1;
+    }
+    driver->rounds += 1;
+    driver->last_writer = writer;
+    for (size_t i = 0; i < round->report_count; i++)
+    {
+        const NuxPlayerDriverReport* report =
+            (const NuxPlayerDriverReport*)((const char*)round->reports +
+                                           i * round->report_stride);
+        CHECK(report->struct_size >= sizeof(NuxPlayerDriverReport));
+        CHECK(report->path_len == 0 || report->path != NULL);
+        driver->reports += 1;
+    }
+
+    /* The player is inside its step: it refuses another step and a driver
+     * change until the turn ends. */
+    NuxPlayerStep nested_step = {.struct_size = sizeof(NuxPlayerStep)};
+    NuxPlayerStepResult* nested = NULL;
+    CHECK(nux_player_step(driver->player, &nested_step, &nested) ==
+          NUX_STATUS_REENTRANT_CALL);
+    CHECK(nux_player_step_result_free(nested) == NUX_STATUS_OK);
+    CHECK(nux_player_driver_clear(driver->player) == NUX_STATUS_REENTRANT_CALL);
+
+    NuxSceneObject artboard = {.struct_size = sizeof(NuxSceneObject),
+                               .local_id = 0};
+    NuxSceneObject missing = {.struct_size = sizeof(NuxSceneObject),
+                              .local_id = 1000000};
+    CHECK(nux_scene_writer_set_number(writer, &missing,
+                                      SMOKE_WIDTH_PROPERTY_KEY, 1.0f, NULL) ==
+          NUX_STATUS_NOT_FOUND);
+    NuxStringView text = {.data = "x", .len = 1};
+    CHECK(nux_scene_writer_set_text(writer, &artboard,
+                                    SMOKE_WIDTH_PROPERTY_KEY, text, NULL) ==
+          NUX_STATUS_INVALID_ARGUMENT);
+    if (round->index == 0)
+    {
+        bool changed = false;
+        CHECK(nux_scene_writer_set_number(writer, &artboard,
+                                          SMOKE_WIDTH_PROPERTY_KEY, 321.0f,
+                                          &changed) == NUX_STATUS_OK);
+        CHECK(changed == (driver->round_zeroes == 1));
+    }
+    return NUX_STATUS_OK;
+}
+
+static void smoke_release_driver(void* context)
+{
+    ((SmokeDriver*)context)->releases += 1;
+}
+
 static int run_smoke(int argc, char** argv)
 {
     if (argc != 2)
@@ -344,6 +419,51 @@ static int run_smoke(int argc, char** argv)
     }
     CHECK(nux_player_step_result_free(step_result) == NUX_STATUS_OK);
 
+    /* A host driver: asked after the advance, asked again after the round
+     * that wrote, released when cleared, replaced, or its player freed. */
+    SmokeDriver smoke_driver = {.player = player};
+    NuxPlayerDriver driver_table = {
+        .struct_size = sizeof(NuxPlayerDriver),
+        .context = &smoke_driver,
+        .drive = smoke_drive,
+        .release = smoke_release_driver,
+    };
+    NuxPlayerDriver no_drive = driver_table;
+    no_drive.drive = NULL;
+    CHECK(nux_player_driver_set(player, &no_drive) == NUX_STATUS_NULL_ARGUMENT);
+    NuxPlayerDriver short_table = driver_table;
+    short_table.struct_size = 4;
+    CHECK(nux_player_driver_set(player, &short_table) ==
+          NUX_STATUS_INVALID_STRUCT_SIZE);
+    CHECK(nux_player_driver_clear(player) == NUX_STATUS_OK);
+    CHECK(nux_player_driver_set(player, &driver_table) == NUX_STATUS_OK);
+    NuxPlayerStep driven_step = {.struct_size = sizeof(NuxPlayerStep),
+                                 .elapsed_seconds = 0.016f};
+    CHECK(nux_player_step(player, &driven_step, &step_result) == NUX_STATUS_OK);
+    CHECK(smoke_driver.rounds == 2);
+    CHECK(smoke_driver.round_zeroes == 1);
+    CHECK(nux_player_step_result_scheduling(step_result, &scheduling) ==
+          NUX_STATUS_OK);
+    CHECK(scheduling.dirty);
+    CHECK(scheduling.render_required);
+    CHECK(nux_player_step_result_free(step_result) == NUX_STATUS_OK);
+    /* The writer ended with its turn. */
+    NuxSceneObject artboard_object = {.struct_size = sizeof(NuxSceneObject),
+                                      .local_id = 0};
+    CHECK(nux_scene_writer_reset(smoke_driver.last_writer, &artboard_object,
+                                 NULL) == NUX_STATUS_HANDLE_MISMATCH);
+    CHECK(nux_player_step(player, &driven_step, &step_result) == NUX_STATUS_OK);
+    CHECK(smoke_driver.rounds == 3);
+    CHECK(nux_player_step_result_free(step_result) == NUX_STATUS_OK);
+    CHECK(nux_player_driver_set(player, &driver_table) == NUX_STATUS_OK);
+    CHECK(smoke_driver.releases == 1);
+    CHECK(nux_player_driver_clear(player) == NUX_STATUS_OK);
+    CHECK(smoke_driver.releases == 2);
+    CHECK(nux_player_step(player, &driven_step, &step_result) == NUX_STATUS_OK);
+    CHECK(smoke_driver.rounds == 3);
+    CHECK(nux_player_step_result_free(step_result) == NUX_STATUS_OK);
+    CHECK(nux_player_driver_set(player, &driver_table) == NUX_STATUS_OK);
+
     CHECK(nux_state_machine_instance_set_bool(state_machine, "bool", true) ==
           NUX_STATUS_OK);
     CHECK(nux_state_machine_instance_set_number(state_machine, "num", 42.0f) ==
@@ -407,7 +527,9 @@ static int run_smoke(int argc, char** argv)
     CHECK(nux_artboard_instance_free(instance) == NUX_STATUS_OK);
     CHECK(nux_player_info(player, &player_info) == NUX_STATUS_OK);
     CHECK(counters.made != counters.released);
+    CHECK(smoke_driver.releases == 2);
     CHECK(nux_player_free(player) == NUX_STATUS_OK);
+    CHECK(smoke_driver.releases == 3);
     CHECK(nux_view_model_catalog_info(catalog, &catalog_info) == NUX_STATUS_OK);
     CHECK(nux_view_model_catalog_free(catalog) == NUX_STATUS_OK);
     CHECK(counters.made == counters.released);

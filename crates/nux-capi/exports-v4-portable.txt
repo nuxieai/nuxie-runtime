@@ -50,6 +50,8 @@ nux_font_set_fallback_proc
 nux_font_with_weight
 nux_player_acknowledge_presented
 nux_player_content_height
+nux_player_driver_clear
+nux_player_driver_set
 nux_player_enable_semantics
 nux_player_field_string_copy
 nux_player_field_string_set
@@ -108,6 +110,12 @@ nux_player_video_set_captions
 nux_player_video_set_loop_range
 nux_player_video_step
 nux_player_visit_videos
+nux_scene_writer_reset
+nux_scene_writer_set_bool
+nux_scene_writer_set_color
+nux_scene_writer_set_number
+nux_scene_writer_set_text
+nux_scene_writer_set_unsigned
 nux_semantic_snapshot_free
 nux_semantic_snapshot_info
 nux_semantic_snapshot_node

@@ -6947,6 +6947,112 @@ impl LayoutComponent {
         }
     }
 
+    /// What a host's reset does to this layout (the page player's
+    /// `SceneWriter::reset`). The layout is an object of the file and is
+    /// returned in place. A fresh instance has no interpolation in flight, so
+    /// one in flight ends where it was going, and both of its frames rest
+    /// there, as a snap leaves them. Whether one was in flight.
+    pub fn reset_in_place_occurrence(owner: &CoreHandle) -> bool {
+        let ended = owner
+            .with_mut(|object| object.as_layout_component_mut().map(Self::reset_in_place))
+            .flatten()
+            .unwrap_or(false);
+        if ended {
+            Self::propagate_size_occurrence(owner);
+            Self::place_css_content_occurrence(owner);
+        }
+        ended
+    }
+
+    /// `reset_in_place_occurrence` on this layout alone; the caller places
+    /// what it sizes. Every field is named below with what the reset does to
+    /// it, so a field added later fails to compile until that is decided.
+    fn reset_in_place(&mut self) -> bool {
+        let target = self.current_animation_data_ref().map(|data| data.to);
+        let in_flight = target.is_some_and(|target| {
+            self.animation
+                .as_ref()
+                .is_some_and(|animation| animation.in_flight)
+                || self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation)
+                || self.current_layout_frame() != target
+        });
+        if in_flight {
+            let resized = self.finish_layout_animation(true);
+            let frame = self.current_layout_frame();
+            if let Some(animation) = self.animation.as_mut() {
+                let data = BoxLayoutAnimationData::snapped(frame);
+                animation.a = data;
+                animation.b = data;
+                animation.in_flight = false;
+            }
+            self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
+            if resized {
+                CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
+            }
+            CoreCapabilities::world_transform_mark_dirty(self);
+        }
+        let Self {
+            // Ended above: the interpolation, the layout it shows, the item
+            // it places, and the flag that says it is smoothing.
+            animation: _,
+            layout: _,
+            css_content_layout: _,
+            layout_flags: _,
+            // What the file gives the layout, and what its solve and draw
+            // derive from that and remake when it changes: its properties,
+            // paints, style, solve tree and the solve's results, and the
+            // caches of what it last measured, placed and drew.
+            base: _,
+            paints: _,
+            provider: _,
+            style: _,
+            layout_data: _,
+            layout_children: _,
+            layout_tree: _,
+            layout_solving: _,
+            layout_tree_topology_dirty: _,
+            layout_children_changed: _,
+            virtual_grid_changed: _,
+            layout_padding: _,
+            solved_padding: _,
+            inherited_direction: _,
+            render_paths: _,
+            proxy: _,
+            group_picture: _,
+            measured_natural: _,
+            solved_border: _,
+            propagated_content: _,
+            placed_css_content_box: _,
+            css_transform_authored: _,
+            transform_keyed: _,
+            css_effect_state: _,
+            scroll_range: _,
+            grid_column_lines: _,
+            grid_row_lines: _,
+            grid_column_gap: _,
+            grid_row_gap: _,
+            grid_virtual_rows: _,
+            grid_virtual_columns: _,
+            // Set by what hosts or places it: sizes its host imposes, the
+            // item its CSS carrier supplies, and its cell in a virtual list.
+            width_override: _,
+            width_unit_value_override: _,
+            height_override: _,
+            height_unit_value_override: _,
+            forced_width: _,
+            forced_height: _,
+            css_scroll_thumb_size: _,
+            hosted_css_item: _,
+            css_slot_frame: _,
+            virtual_grid: _,
+            // Left as they are: a live move's flight, which the live move
+            // that set it ends.
+            flight_corners: _,
+            flight_shadow: _,
+        } = self;
+        in_flight
+    }
+
     pub fn animates(&self) -> bool {
         self.animation_style() != LayoutAnimationStyle::None
             && self.interpolation() != LayoutStyleInterpolation::Hold

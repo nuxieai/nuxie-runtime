@@ -1135,7 +1135,11 @@ const HOSTS: [Host; 4] = [
 /// halfway, "bounce" moves it down and back every two thirds of a second and
 /// reports "pong" a 120th of a second after its start, inside the first
 /// frame of each forward leg, and "lap" moves the dot down over 0.4 seconds
-/// in a loop and reports "lap" each time round.
+/// in a loop and reports "lap" each time round. The box resizes over half a second when
+/// its width changes, and holds, after the host, a drawn "Mark" that takes
+/// part in its layout, aligned to its right edge, so it moves as the box
+/// resizes, and a drawn "Canvas" painted with the "Swatch" artboard, whose
+/// one animation moves a drawn "Spot" right in a loop.
 fn hosting(host: Host) -> Scene {
     use crate::source::{
         animation::state_transition_flags::StateTransitionFlags,
@@ -1175,9 +1179,16 @@ fn hosting(host: Host) -> Scene {
             },
             event_base::EventBase,
             focus_data_base::FocusDataBase,
+            layout::{
+                layout_component_style_base::LayoutComponentStyleBase as Style,
+                layout_node_style_base::LayoutNodeStyleBase,
+                layout_participant_base::LayoutParticipantBase,
+                layout_sizing_style_base::LayoutSizingStyleBase,
+            },
             nested_animation_base::NestedAnimationBase,
             nested_artboard_base::NestedArtboardBase,
             nested_artboard_leaf_base::NestedArtboardLeafBase,
+            shapes::paint::paint_image_base::PaintImageBase,
             text::{
                 text_input_base::TextInputBase, text_style_base::TextStyleBase,
                 text_style_paint_base::TextStylePaintBase,
@@ -1236,10 +1247,11 @@ fn hosting(host: Host) -> Scene {
                 .end();
         }
     };
-    let style = |riv: &mut Riv, parent: u64, column: bool| {
+    let style = |riv: &mut Riv, parent: u64, column: bool, extra: &[P]| {
         riv.object(LayoutComponentStyleBase::TYPE_KEY)
             .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent);
         write(riv, &point_units());
+        write(riv, extra);
         if column {
             write(
                 riv,
@@ -1260,6 +1272,26 @@ fn hosting(host: Host) -> Scene {
             .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, style)
             .end();
     };
+    // A drawn 10 point square of `color` named `name`: the shape, at local
+    // id `shape`, its rectangle, its fill and the fill's color.
+    let square = |riv: &mut Riv, parent: u64, shape: u64, name: &str, color: u32| {
+        riv.object(ShapeBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent)
+            .string(ComponentBase::NAME_PROPERTY_KEY, name)
+            .end();
+        riv.object(RectangleBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, shape)
+            .float(ParametricPathBase::WIDTH_PROPERTY_KEY, 10.0)
+            .float(ParametricPathBase::HEIGHT_PROPERTY_KEY, 10.0)
+            .end();
+        riv.object(FillBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, shape)
+            .end();
+        riv.object(SolidColorBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, shape + 2)
+            .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, color)
+            .end();
+    };
     let mut riv = Riv::default();
     riv.object(BackboardBase::TYPE_KEY).end();
     riv.object(ElasticScrollPhysicsBase::TYPE_KEY).end();
@@ -1274,8 +1306,8 @@ fn hosting(host: Host) -> Scene {
         )
         .end();
     // Main: 0 artboard, 1 the box, 2 the host, then a nested host's 3
-    // machine and 4 to 6 simple animations, then the two styles and a nested
-    // host's three events.
+    // machine and 4 to 6 simple animations, then the two styles, a nested
+    // host's three events, then the mark, its participant and the canvas.
     let first_style = match host {
         Host::Nested(_) => 7,
         Host::ListRow => 3,
@@ -1317,8 +1349,21 @@ fn hosting(host: Host) -> Scene {
                 .end();
         }
     }
-    style(&mut riv, 0, false);
-    style(&mut riv, 1, false);
+    const CUSTOM: u64 = 2;
+    const LINEAR: u64 = 1;
+    const TOP_RIGHT: u64 = 2;
+    style(&mut riv, 0, false, &[]);
+    style(
+        &mut riv,
+        1,
+        false,
+        &[
+            U(Style::ANIMATION_STYLE_TYPE_PROPERTY_KEY, CUSTOM),
+            U(Style::INTERPOLATION_TYPE_PROPERTY_KEY, LINEAR),
+            F(Style::INTERPOLATION_TIME_PROPERTY_KEY, 0.5),
+            U(Style::LAYOUT_ALIGNMENT_TYPE_PROPERTY_KEY, TOP_RIGHT),
+        ],
+    );
     // A nested host's Main also has 9 to 11, the events its machine fires
     // when it hears the hosted artboard's 28 to 30.
     let listeners: &[(u64, u64)] = match host {
@@ -1333,27 +1378,42 @@ fn hosting(host: Host) -> Scene {
         }
         Host::ListRow => &[],
     };
-    machine(&mut riv, listeners, false);
-    // A drawn 10 point square of `color` named `name`: the shape, at local
-    // id `shape`, its rectangle, its fill and the fill's color.
-    let square = |riv: &mut Riv, parent: u64, shape: u64, name: &str, color: u32| {
-        riv.object(ShapeBase::TYPE_KEY)
-            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent)
-            .string(ComponentBase::NAME_PROPERTY_KEY, name)
-            .end();
-        riv.object(RectangleBase::TYPE_KEY)
-            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, shape)
-            .float(ParametricPathBase::WIDTH_PROPERTY_KEY, 10.0)
-            .float(ParametricPathBase::HEIGHT_PROPERTY_KEY, 10.0)
-            .end();
-        riv.object(FillBase::TYPE_KEY)
-            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, shape)
-            .end();
-        riv.object(SolidColorBase::TYPE_KEY)
-            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, shape + 2)
-            .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, color)
-            .end();
+    let mark = match host {
+        Host::Nested(_) => 12,
+        Host::ListRow => 5,
     };
+    square(&mut riv, 1, mark, "Mark", 0xff99_aabb);
+    riv.object(LayoutParticipantBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, mark)
+        .float(LayoutNodeStyleBase::WIDTH_PROPERTY_KEY, 10.0)
+        .float(LayoutNodeStyleBase::HEIGHT_PROPERTY_KEY, 10.0)
+        .uint(
+            LayoutSizingStyleBase::WIDTH_UNITS_VALUE_PROPERTY_KEY,
+            YGUnit::Point as u64,
+        )
+        .uint(
+            LayoutSizingStyleBase::HEIGHT_UNITS_VALUE_PROPERTY_KEY,
+            YGUnit::Point as u64,
+        )
+        .end();
+    let canvas = mark + 5;
+    riv.object(ShapeBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Canvas")
+        .end();
+    riv.object(RectangleBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, canvas)
+        .float(ParametricPathBase::WIDTH_PROPERTY_KEY, 20.0)
+        .float(ParametricPathBase::HEIGHT_PROPERTY_KEY, 20.0)
+        .end();
+    riv.object(FillBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, canvas)
+        .end();
+    riv.object(PaintImageBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, canvas + 2)
+        .uint(PaintImageBase::ARTBOARD_ID_PROPERTY_KEY, 2)
+        .end();
+    machine(&mut riv, listeners, false);
     // Child: 0 artboard, 1 the event, 2 to 5 the dot, 6 to 9 the bar,
     // 10 the viewport, 11 the list, 12 its scroll constraint, 13 a filled
     // tile box in the list and 14 and 15 its fill, 16 the field's box, 17
@@ -1412,11 +1472,11 @@ fn hosting(host: Host) -> Scene {
         .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 21)
         .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, 0xff00_0000)
         .end();
-    style(&mut riv, 0, true);
-    style(&mut riv, 10, true);
-    style(&mut riv, 11, false);
-    style(&mut riv, 13, false);
-    style(&mut riv, 16, false);
+    style(&mut riv, 0, true, &[]);
+    style(&mut riv, 10, true, &[]);
+    style(&mut riv, 11, false, &[]);
+    style(&mut riv, 13, false, &[]);
+    style(&mut riv, 16, false, &[]);
     // 28 to 30: the events the simple animations key.
     for name in ["half", "pong", "lap"] {
         riv.object(EventBase::TYPE_KEY)
@@ -1478,6 +1538,36 @@ fn hosting(host: Host) -> Scene {
         }
     }
     machine(&mut riv, &[], true);
+    // Swatch: 0 artboard and 1 to 4 the spot, which its one animation, 30
+    // frames at 60 a second, moves right in a loop.
+    riv.object(ArtboardBase::TYPE_KEY)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Swatch")
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 20.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 20.0)
+        .end();
+    square(&mut riv, 0, 1, "Spot", 0xffcc_ddee);
+    riv.object(LinearAnimationBase::TYPE_KEY)
+        .string(AnimationBase::NAME_PROPERTY_KEY, "drift")
+        .uint(LinearAnimationBase::FPS_PROPERTY_KEY, 60)
+        .uint(LinearAnimationBase::DURATION_PROPERTY_KEY, 30)
+        .uint(LinearAnimationBase::LOOP_VALUE_PROPERTY_KEY, 1)
+        .end();
+    riv.object(KeyedObjectBase::TYPE_KEY)
+        .uint(KeyedObjectBase::OBJECT_ID_PROPERTY_KEY, 1)
+        .end();
+    riv.object(KeyedPropertyBase::TYPE_KEY)
+        .uint(KeyedPropertyBase::PROPERTY_KEY_PROPERTY_KEY, u64::from(X))
+        .end();
+    for (frame, value) in [(0, 0.0), (30, 10.0)] {
+        riv.object(KeyFrameDoubleBase::TYPE_KEY)
+            .uint(KeyFrameBase::FRAME_PROPERTY_KEY, frame)
+            .float(KeyFrameDoubleBase::VALUE_PROPERTY_KEY, value)
+            .uint(
+                InterpolatingKeyFrameBase::INTERPOLATION_TYPE_PROPERTY_KEY,
+                1,
+            )
+            .end();
+    }
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let file = File::import(
         &riv.bytes(),
@@ -1568,8 +1658,9 @@ fn hosted_machine(played: &Played, host: Host) -> crate::RuntimeStateMachineInst
 /// What a `hosting` scene's player holds and shows: the hosted artboard's
 /// animated position of "Dot" and "Bar", its scroll offset, the list's
 /// world bounds and where the tile the list scrolls lands, the field's text,
-/// its machine's state and animation, the host's written width, and the
-/// whole draw of the artboard, transforms and paths.
+/// its machine's state and animation, the host's written width, the box's
+/// world bounds, where the mark lands, where the swatch's spot is in the
+/// paint, and the whole draw of the artboard, transforms and paths.
 #[derive(Debug, PartialEq)]
 struct Held {
     dot: (f32, f32),
@@ -1581,11 +1672,38 @@ struct Held {
     state: Option<String>,
     animation: Option<(String, f32)>,
     box_width: Option<f32>,
+    box_bounds: [f32; 4],
+    mark_at: (f32, f32),
+    swatch: f32,
     drawn: Vec<String>,
 }
 
 fn held(played: &Played, host: Host) -> Held {
     use crate::source::generated::text::text_input_base::TextInputBase;
+    use crate::source::shapes::paint::paint_image::PaintImage;
+    let world_at = |object: CoreHandle| {
+        object
+            .with(|object| {
+                object.as_world_transform_component().map(|object| {
+                    let world = object.world_transform();
+                    (world.tx(), world.ty())
+                })
+            })
+            .flatten()
+            .expect("a world transform")
+    };
+    let paint = played
+        .f
+        .artboard
+        .with_artboard(|board| board.find_all_handles::<PaintImage>()[0].clone());
+    let swatch = paint
+        .with_downcast::<PaintImage, _>(|paint| {
+            paint.artboard_source().map(|source| source.artboard())
+        })
+        .flatten()
+        .expect("the paint's artboard")
+        .with_artboard(|swatch| swatch.objects()[1].clone())
+        .expect("the spot");
     let board = hosted_board(played, host);
     let object = |local_id: usize| {
         board
@@ -1640,6 +1758,17 @@ fn held(played: &Played, host: Host) -> Held {
             &played.f.object("Box"),
             i32::from(LayoutComponentBase::WIDTH_PROPERTY_KEY),
         ),
+        box_bounds: played
+            .f
+            .object("Box")
+            .with_downcast::<LayoutComponent, _>(|layout| {
+                let bounds = layout.world_bounds();
+                [bounds.left(), bounds.top(), bounds.width(), bounds.height()]
+            })
+            .expect("the box"),
+        mark_at: world_at(played.f.object("Mark")),
+        swatch: CoreRegistry::get_double_handle(&swatch, i32::from(NodeBase::X_PROPERTY_KEY))
+            .expect("the spot's x"),
         // What the renderer is asked to draw: the factory's own lines, which
         // make the paths it draws the first time, are left out.
         drawn: played
@@ -1669,6 +1798,10 @@ fn without_ids(line: &str) -> String {
 /// The width a host writes to "Box" before it moves anything.
 const HOST_WIDTH: f32 = 180.0;
 
+/// The width the host writes to "Box" six frames before the reset, which
+/// the box resizes to over the half second its style gives it.
+const RESIZED_WIDTH: f32 = 120.0;
+
 /// When the played copy is reset, in frames played before it: 25 frames in,
 /// "bounce" is on its way back up, "once" is still moving and the machine is
 /// mixing "enter" into "slide"; 65 frames in, "bounce" is on its way back
@@ -1688,11 +1821,14 @@ const FRAMES_AFTER: usize = 50;
 /// the two play the same.
 ///
 /// The played copy takes a host write and plays `before` frames, moving
-/// everything it holds: its machine and animations play, the field takes
-/// typed text, and the scroll view is scrolled and then sent gliding by its
-/// physics. A driver then resets `target` (the root when None) inside a
-/// step. That step is compared with the first step of a second copy of the
-/// file made fresh and given the same host write, and the two copies then
+/// everything it holds: its machine and animations play, the paint's
+/// animation plays, the field takes typed text, the
+/// scroll view is scrolled and then sent gliding by its physics, and a
+/// second host write starts the box resizing, which moves the mark with it.
+/// A driver then resets `target` (the root when None) inside a step, with
+/// the resize in flight. That step is compared with the first step of a
+/// second copy of the file made fresh and given the last host write, and
+/// the two copies then
 /// play the same frames, compared on every one: positions, scroll, layout,
 /// text, machine state, the draw and the events each reports.
 fn reset_is_a_fresh_instance(host: Host, target: Option<&str>, before: usize) {
@@ -1706,7 +1842,7 @@ fn reset_is_a_fresh_instance(host: Host, target: Option<&str>, before: usize) {
         assert!(CoreRegistry::set_double_handle(
             &f.object("Box"),
             i32::from(LayoutComponentBase::WIDTH_PROPERTY_KEY),
-            HOST_WIDTH
+            RESIZED_WIDTH
         ));
         Played::started(f, false)
     };
@@ -1720,7 +1856,8 @@ fn reset_is_a_fresh_instance(host: Host, target: Option<&str>, before: usize) {
     let box_id = played.object("Box");
     let resetting = Rc::new(RefCell::new(false));
     let result = Rc::new(RefCell::new(None));
-    let (armed, log) = (resetting.clone(), result.clone());
+    let width = Rc::new(std::cell::Cell::new(HOST_WIDTH));
+    let (armed, log, written) = (resetting.clone(), result.clone(), width.clone());
     played.drive(move |round, scene| {
         if round.index != 0 {
             return;
@@ -1729,7 +1866,11 @@ fn reset_is_a_fresh_instance(host: Host, target: Option<&str>, before: usize) {
             *armed.borrow_mut() = false;
             *log.borrow_mut() = Some(scene.reset(&target));
         } else {
-            let _ = scene.set_number(&box_id, LayoutComponentBase::WIDTH_PROPERTY_KEY, HOST_WIDTH);
+            let _ = scene.set_number(
+                &box_id,
+                LayoutComponentBase::WIDTH_PROPERTY_KEY,
+                written.get(),
+            );
         }
     });
     let hosted = |played: &Played, local_id: usize| {
@@ -1740,6 +1881,9 @@ fn reset_is_a_fresh_instance(host: Host, target: Option<&str>, before: usize) {
     let mut last = None;
     let mut moved = None;
     for frame in 1..=before {
+        if frame == before - 6 {
+            width.set(RESIZED_WIDTH);
+        }
         if frame == before - 4 {
             // What a focused field does with typed text, and a scroll.
             assert_eq!(
@@ -1763,7 +1907,24 @@ fn reset_is_a_fresh_instance(host: Host, target: Option<&str>, before: usize) {
         last = moved.replace(held(&played, host));
     }
     let (last, moved) = (last.expect("a frame"), moved.expect("a frame"));
-    assert_eq!(moved.box_width, Some(HOST_WIDTH), "{case}: the host wrote");
+    assert_eq!(
+        moved.box_width,
+        Some(RESIZED_WIDTH),
+        "{case}: the host wrote"
+    );
+    assert!(
+        moved.box_bounds[2] > RESIZED_WIDTH + 0.5 && moved.box_bounds[2] < HOST_WIDTH - 0.5,
+        "{case}: the box is resizing: {:?}",
+        moved.box_bounds
+    );
+    assert_ne!(
+        moved.mark_at, last.mark_at,
+        "{case}: the mark moves with it"
+    );
+    assert_ne!(
+        moved.swatch, initial.swatch,
+        "{case}: the paint's animation played"
+    );
     assert_ne!(moved.text, initial.text, "{case}: typed into the field");
     assert!(
         moved.scroll != last.scroll && moved.scroll != (-150.0, 0.0),

@@ -209,13 +209,20 @@ impl<'a> SceneWriter<'a> {
         )
     }
 
-    /// Reset what the engine holds under `object`, the object included:
-    /// scroll positions go back to the offsets the file gave them, typed text
-    /// to the text last written to its field, nested artboards' state
-    /// machines to their entry states and their animations to their start,
-    /// and the presses and hovers the player's listeners hold there are
-    /// dropped. Other property values, whether a host, a bind or the file
-    /// wrote them, are left alone. Whether anything was reset.
+    /// Reset what the engine holds under `object`, the object included.
+    ///
+    /// After a reset inside a step, everything the engine holds under that
+    /// object is what a freshly made instance of the same file would hold
+    /// after its first settle, and the frame drawn after that same step
+    /// shows it. Property values a host wrote are the only difference, and
+    /// they stay.
+    ///
+    /// So scroll positions go back to the offsets the file gave them, typed
+    /// text to the text last written to its field, the machines of hosted
+    /// artboards (of any host type, and of list rows) to their entry states
+    /// with their states' animations applied at the start, simple animations
+    /// to their starting pose, and the presses and hovers the player's
+    /// listeners hold there are dropped. Whether anything was reset.
     pub fn reset(&mut self, object: &SceneObject) -> Result<bool, SceneWriteError> {
         let handle = self
             .artboard

@@ -1096,3 +1096,414 @@ fn a_write_that_begins_a_layout_transition_leaves_the_step_unsettled() {
     played.frames_until_settled();
     assert!(near(played.f.bounds("Card")[2], 200.0));
 }
+
+/// What hosts the "Child" artboard in `hosting`.
+#[derive(Clone, Copy, Debug)]
+enum Host {
+    /// A nested artboard of this host type, playing the child's machine
+    /// and, as a simple animation, its second animation.
+    Nested(u16),
+    /// The one row of an artboard component list, with the row's machine.
+    ListRow,
+}
+
+/// Every kind of host: each nested artboard host type, and a list row.
+const HOSTS: [Host; 4] = [
+    Host::Nested(crate::source::generated::nested_artboard_base::NestedArtboardBase::TYPE_KEY),
+    Host::Nested(
+        crate::source::generated::nested_artboard_layout_base::NestedArtboardLayoutBase::TYPE_KEY,
+    ),
+    Host::Nested(
+        crate::source::generated::nested_artboard_leaf_base::NestedArtboardLeafBase::TYPE_KEY,
+    ),
+    Host::ListRow,
+];
+
+/// A root "Main" whose "Box" holds `host`, hosting "Child": a machine that
+/// fires "entered" as it enters a half-second animation moving "Dot", a
+/// second half-second animation moving "Bar", a horizontal scroll view
+/// whose 400 point list sits in a 200 point viewport, and a field the file
+/// gives the text "hello world".
+fn hosting(host: Host) -> Scene {
+    use crate::source::{
+        artboard::Artboard,
+        artboard_component_list::ArtboardComponentList,
+        generated::{
+            animation::{
+                animation_state_base::AnimationStateBase, any_state_base::AnyStateBase,
+                entry_state_base::EntryStateBase, exit_state_base::ExitStateBase,
+                interpolating_keyframe_base::InterpolatingKeyFrameBase,
+                keyed_object_base::KeyedObjectBase, keyed_property_base::KeyedPropertyBase,
+                keyframe_base::KeyFrameBase, keyframe_double_base::KeyFrameDoubleBase,
+                linear_animation_base::LinearAnimationBase,
+                nested_simple_animation_base::NestedSimpleAnimationBase,
+                nested_state_machine_base::NestedStateMachineBase,
+                state_machine_base::StateMachineBase,
+                state_machine_fire_event_base::StateMachineFireEventBase,
+                state_machine_layer_base::StateMachineLayerBase,
+                state_transition_base::StateTransitionBase,
+            },
+            artboard_component_list_base::ArtboardComponentListBase,
+            assets::{
+                file_asset_base::FileAssetBase, file_asset_contents_base::FileAssetContentsBase,
+                font_asset_base::FontAssetBase,
+            },
+            constraints::{
+                draggable_constraint_base::DraggableConstraintBase,
+                scrolling::scroll_constraint_base::ScrollConstraintBase,
+            },
+            event_base::EventBase,
+            focus_data_base::FocusDataBase,
+            nested_animation_base::NestedAnimationBase,
+            nested_artboard_base::NestedArtboardBase,
+            nested_artboard_leaf_base::NestedArtboardLeafBase,
+            text::{
+                text_input_base::TextInputBase, text_style_base::TextStyleBase,
+                text_style_paint_base::TextStylePaintBase,
+            },
+        },
+        viewmodel::viewmodel_instance_list_item::ViewModelInstanceListItem,
+    };
+    // Layer states: 0 entry, 1 any, 2 exit, then the one that fires.
+    let machine = |riv: &mut Riv, fires: Option<u64>| {
+        riv.object(StateMachineBase::TYPE_KEY).end();
+        riv.object(StateMachineLayerBase::TYPE_KEY).end();
+        riv.object(EntryStateBase::TYPE_KEY).end();
+        if fires.is_some() {
+            riv.object(StateTransitionBase::TYPE_KEY)
+                .uint(StateTransitionBase::STATE_TO_ID_PROPERTY_KEY, 3)
+                .end();
+        }
+        riv.object(AnyStateBase::TYPE_KEY).end();
+        riv.object(ExitStateBase::TYPE_KEY).end();
+        if let Some(event) = fires {
+            riv.object(AnimationStateBase::TYPE_KEY)
+                .uint(AnimationStateBase::ANIMATION_ID_PROPERTY_KEY, 0)
+                .end();
+            riv.object(StateMachineFireEventBase::TYPE_KEY)
+                .uint(StateMachineFireEventBase::EVENT_ID_PROPERTY_KEY, event)
+                .end();
+        }
+    };
+    let style = |riv: &mut Riv, parent: u64, column: bool| {
+        riv.object(LayoutComponentStyleBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent);
+        write(riv, &point_units());
+        if column {
+            write(
+                riv,
+                &[U(
+                    LayoutComponentStyleBase::FLEX_DIRECTION_VALUE_PROPERTY_KEY,
+                    YGFlexDirection::Column as u64,
+                )],
+            );
+        }
+        riv.end();
+    };
+    let layout = |riv: &mut Riv, parent: u64, name: &str, size: (f32, f32), style: u64| {
+        riv.object(LayoutComponentBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent)
+            .string(ComponentBase::NAME_PROPERTY_KEY, name)
+            .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, size.0)
+            .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, size.1)
+            .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, style)
+            .end();
+    };
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    riv.object(FontAssetBase::TYPE_KEY)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "font")
+        .uint(FileAssetBase::ASSET_ID_PROPERTY_KEY, 2)
+        .end();
+    riv.object(FileAssetContentsBase::TYPE_KEY)
+        .byte_field(
+            FileAssetContentsBase::BYTES_PROPERTY_KEY,
+            include_bytes!("../../../../../fixtures/fonts/roboto-input.ttf"),
+        )
+        .end();
+    // Main: 0 artboard, 1 the box, 2 the host, then a nested host's 3
+    // machine and 4 simple animation, then the two styles.
+    let first_style = match host {
+        Host::Nested(_) => 5,
+        Host::ListRow => 3,
+    };
+    riv.object(ArtboardBase::TYPE_KEY)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Main")
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 400.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 300.0)
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, first_style)
+        .end();
+    layout(&mut riv, 0, "Box", (200.0, 100.0), first_style + 1);
+    match host {
+        Host::Nested(type_key) => {
+            riv.object(type_key)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1)
+                .string(ComponentBase::NAME_PROPERTY_KEY, "Nested")
+                .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1);
+            if type_key == NestedArtboardLeafBase::TYPE_KEY {
+                riv.uint(NestedArtboardLeafBase::FIT_PROPERTY_KEY, 1);
+            }
+            riv.end();
+            riv.object(NestedStateMachineBase::TYPE_KEY)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+                .uint(NestedAnimationBase::ANIMATION_ID_PROPERTY_KEY, 0)
+                .end();
+            riv.object(NestedSimpleAnimationBase::TYPE_KEY)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+                .uint(NestedAnimationBase::ANIMATION_ID_PROPERTY_KEY, 1)
+                .float(NestedSimpleAnimationBase::SPEED_PROPERTY_KEY, 1.0)
+                .bool(NestedSimpleAnimationBase::IS_PLAYING_PROPERTY_KEY, true)
+                .end();
+        }
+        Host::ListRow => {
+            riv.object(ArtboardComponentListBase::TYPE_KEY)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1)
+                .string(ComponentBase::NAME_PROPERTY_KEY, "Rows")
+                .end();
+        }
+    }
+    style(&mut riv, 0, false);
+    style(&mut riv, 1, false);
+    machine(&mut riv, None);
+    // Child: 0 artboard, 1 the event, 2 the dot, 3 the bar, 4 the viewport,
+    // 5 the list, 6 its scroll constraint, 7 the field's box, 8 the field,
+    // 9 its focus data, 10 its text style, 11 to 14 the styles.
+    riv.object(ArtboardBase::TYPE_KEY)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Child")
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0)
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 11)
+        .end();
+    riv.object(EventBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "entered")
+        .end();
+    for name in ["Dot", "Bar"] {
+        riv.object(NodeBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .string(ComponentBase::NAME_PROPERTY_KEY, name)
+            .end();
+    }
+    layout(&mut riv, 0, "Viewport", (200.0, 40.0), 12);
+    layout(&mut riv, 4, "List", (400.0, 40.0), 13);
+    riv.object(ScrollConstraintBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 5)
+        .uint(DraggableConstraintBase::DIRECTION_VALUE_PROPERTY_KEY, 0)
+        .end();
+    layout(&mut riv, 0, "Field box", (180.0, 40.0), 14);
+    riv.object(TextInputBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 7)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Field")
+        .string(TextInputBase::TEXT_PROPERTY_KEY, "hello world")
+        .end();
+    riv.object(FocusDataBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 8)
+        .end();
+    riv.object(TextStylePaintBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 8)
+        .uint(TextStyleBase::FONT_ASSET_ID_PROPERTY_KEY, 0)
+        .float(TextStyleBase::FONT_SIZE_PROPERTY_KEY, 16.0)
+        .end();
+    style(&mut riv, 0, true);
+    style(&mut riv, 4, true);
+    style(&mut riv, 5, false);
+    style(&mut riv, 7, false);
+    // 0 moves the dot and 1 the bar, from 0 to 100 over half a second.
+    for keyed in [2, 3] {
+        riv.object(LinearAnimationBase::TYPE_KEY)
+            .uint(LinearAnimationBase::FPS_PROPERTY_KEY, 60)
+            .uint(LinearAnimationBase::DURATION_PROPERTY_KEY, 30)
+            .end();
+        riv.object(KeyedObjectBase::TYPE_KEY)
+            .uint(KeyedObjectBase::OBJECT_ID_PROPERTY_KEY, keyed)
+            .end();
+        riv.object(KeyedPropertyBase::TYPE_KEY)
+            .uint(
+                KeyedPropertyBase::PROPERTY_KEY_PROPERTY_KEY,
+                u64::from(NodeBase::X_PROPERTY_KEY),
+            )
+            .end();
+        for (frame, value) in [(0, 0.0), (30, 100.0)] {
+            riv.object(KeyFrameDoubleBase::TYPE_KEY)
+                .uint(KeyFrameBase::FRAME_PROPERTY_KEY, frame)
+                .float(KeyFrameDoubleBase::VALUE_PROPERTY_KEY, value)
+                .uint(
+                    InterpolatingKeyFrameBase::INTERPOLATION_TYPE_PROPERTY_KEY,
+                    1,
+                )
+                .end();
+        }
+    }
+    machine(&mut riv, Some(1));
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &riv.bytes(),
+        RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
+        None,
+        None,
+        None,
+    )
+    .expect("the hosting scene imports");
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("the outer artboard");
+    if let Host::ListRow = host {
+        // Mount one row, as a bound list of one item does.
+        let list = artboard
+            .with_artboard(|board| board.find_all_handles::<ArtboardComponentList>()[0].clone());
+        let item = list
+            .retain_arena()
+            .expect("list arena")
+            .insert(ViewModelInstanceListItem::default());
+        ArtboardComponentList::update_list_occurrence(&list, &[item]);
+        let source = file
+            .with_file(|file| file.artboard_at_source(1))
+            .expect("row source");
+        let row = Artboard::nested_instance_from_handle(&source).expect("row instance");
+        ArtboardComponentList::add_artboard_at_occurrence(&list, row, 0, true);
+    }
+    Scene {
+        _file: file,
+        artboard,
+        factory,
+    }
+}
+
+/// The artboard `host` hosts in a `hosting` scene.
+fn hosted_board(played: &Played, host: Host) -> RuntimeArtboardInstanceHandle {
+    use crate::source::artboard_component_list::ArtboardComponentList;
+    match host {
+        Host::Nested(_) => played
+            .f
+            .object("Nested")
+            .with(|host| {
+                host.as_nested_artboard()
+                    .and_then(|nested| nested.artboard_instance_default())
+            })
+            .flatten(),
+        Host::ListRow => played
+            .f
+            .object("Rows")
+            .with_downcast::<ArtboardComponentList, _>(|list| list.artboard_instance(0))
+            .flatten(),
+    }
+    .expect("the hosted artboard")
+}
+
+/// What the engine holds in the artboard `host` hosts, moved away from the
+/// file: the machine has played its entry animation to the end, a nested
+/// host's simple animation has played to its end, the scroll view is
+/// scrolled and the field holds typed text. A reset of the object named
+/// `target`, or of the root when there is none, puts each back: the machine
+/// to its entry, the animations to their start, the scroll to the file's
+/// offset and the field to the text last written to it, the file's.
+fn reset_returns_hosted_state(host: Host, target: Option<&str>) {
+    use crate::source::{
+        generated::{
+            constraints::scrolling::scroll_constraint_base::ScrollConstraintBase,
+            text::text_input_base::TextInputBase,
+        },
+        text::text_input::TextInput,
+    };
+    let nested = matches!(host, Host::Nested(_));
+    let mut played = Played::new(hosting(host));
+    played.frames_until_settled();
+    let board = hosted_board(&played, host);
+    let [dot, bar, scroll, field] = [2, 3, 6, 8].map(|local_id| {
+        board
+            .with_artboard(|artboard| artboard.objects()[local_id].clone())
+            .expect("a hosted object")
+    });
+    let x = |node: &CoreHandle| {
+        CoreRegistry::get_double_handle(node, i32::from(NodeBase::X_PROPERTY_KEY)).expect("an x")
+    };
+    let text = |field: &CoreHandle| {
+        CoreRegistry::get_string_handle(field, i32::from(TextInputBase::TEXT_PROPERTY_KEY))
+            .expect("the field's text")
+    };
+    let offset = |scroll: &CoreHandle| {
+        scroll
+            .with_downcast(ScrollConstraint::offset_x)
+            .expect("a live scroll constraint")
+    };
+    assert_eq!(x(&dot), 100.0, "{host:?}: the entry animation played out");
+    if nested {
+        assert_eq!(x(&bar), 100.0, "{host:?}: the simple animation played out");
+    }
+    // What a focused field does with typed text.
+    assert_eq!(
+        field.with_downcast_mut::<TextInput, _>(|input| input.text_input("!")),
+        Some(true)
+    );
+    assert_ne!(
+        text(&field),
+        "hello world",
+        "{host:?}: typed into the field"
+    );
+    assert!(CoreRegistry::set_double_handle(
+        &scroll,
+        i32::from(ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY),
+        -50.0
+    ));
+    played.settle();
+    assert_eq!(offset(&scroll), -50.0, "{host:?}: scrolled");
+
+    let target = match target {
+        Some(name) => played.object(name),
+        None => SceneObject::root(played.local_id(&played.f.artboard.core_handle())),
+    };
+    let result = Rc::new(RefCell::new(None));
+    let log = result.clone();
+    played.drive(move |round, scene| {
+        if round.index == 0 && log.borrow().is_none() {
+            *log.borrow_mut() = Some(scene.reset(&target));
+        }
+    });
+    let reset = played.step(FRAME, vec![]);
+    assert_eq!(*result.borrow(), Some(Ok(true)), "{host:?}");
+    if nested {
+        assert_eq!(
+            names(&reset.events),
+            ["entered"],
+            "{host:?}: the machine entered again"
+        );
+    }
+    assert_eq!(offset(&scroll), 0.0, "{host:?}: the file's offset");
+    assert_eq!(text(&field), "hello world", "{host:?}: the written text");
+    played.step(FRAME, vec![]);
+    assert!(
+        x(&dot) < 50.0,
+        "{host:?}: the entry animation starts over: {}",
+        x(&dot)
+    );
+    if nested {
+        assert!(
+            x(&bar) < 50.0,
+            "{host:?}: the simple animation starts over: {}",
+            x(&bar)
+        );
+    }
+}
+
+#[test]
+fn reset_of_a_box_returns_what_a_nested_artboard_layout_hosts() {
+    reset_returns_hosted_state(HOSTS[1], Some("Box"));
+}
+
+#[test]
+fn reset_of_a_box_returns_what_a_nested_artboard_leaf_hosts() {
+    reset_returns_hosted_state(HOSTS[2], Some("Box"));
+}
+
+#[test]
+fn reset_of_a_box_returns_what_a_nested_artboard_and_a_list_row_host() {
+    reset_returns_hosted_state(HOSTS[0], Some("Box"));
+    reset_returns_hosted_state(HOSTS[3], Some("Box"));
+}
+
+#[test]
+fn reset_of_the_root_returns_what_every_host_type_hosts() {
+    for host in HOSTS {
+        reset_returns_hosted_state(host, None);
+    }
+}

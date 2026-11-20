@@ -6,8 +6,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use nuxie_scripting::luau::{Error, Table};
 use nuxie_runtime::{NoopScriptHost, ScriptInstance, ScriptMethod};
+use nuxie_scripting::luau::{Error, Table};
 use nuxie_scripting::vm::{ScriptVm, ScriptingLogLevel};
 
 // tests/unit_tests/runtime/scripting/scripting_context_test.cpp at

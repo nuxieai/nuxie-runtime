@@ -497,7 +497,10 @@ impl FadePage {
                 panic!("each Screen's copy draws once on both frames: {on_a:?}, {on_b:?}");
             };
             assert!(b - a > 100.0, "B's slot is to the right of A's: {a}, {b}");
-            assert!((a2 - a).abs() < 0.5, "A's copy draws in A's slot: {on_a:?}, {on_b:?}");
+            assert!(
+                (a2 - a).abs() < 0.5,
+                "A's copy draws in A's slot: {on_a:?}, {on_b:?}"
+            );
             page.at = Some((a, b));
             page
         }

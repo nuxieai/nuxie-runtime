@@ -25,7 +25,9 @@ macro_rules! fast_integer2 {
             [a0, a1, _]: [Value; 3],
             nparams: usize,
         ) -> Option<usize> {
-            let (Value::Integer(a), Value::Integer(b)) = (a0, a1) else { return None };
+            let (Value::Integer(a), Value::Integer(b)) = (a0, a1) else {
+                return None;
+            };
             if nparams < 2 || nresults > 1 {
                 return None;
             }
@@ -91,8 +93,12 @@ fn boolean(b: bool) -> Option<Value> {
 fast_integer1!(fast_tonumber, |a| Value::Number(a as f64));
 fast_integer1!(fast_neg, |a| Value::Integer(a.wrapping_neg()));
 fast_integer1!(fast_bnot, |a| Value::Integer(!a));
-fast_integer1!(fast_countrz, |a| Value::Integer(i64::from(a.trailing_zeros())));
-fast_integer1!(fast_countlz, |a| Value::Integer(i64::from(a.leading_zeros())));
+fast_integer1!(fast_countrz, |a| Value::Integer(i64::from(
+    a.trailing_zeros()
+)));
+fast_integer1!(fast_countlz, |a| Value::Integer(i64::from(
+    a.leading_zeros()
+)));
 fast_integer1!(fast_bswap, |a| Value::Integer(a.swap_bytes()));
 
 fast_integer2!(fast_add, |a, b| int(a.wrapping_add(b)));
@@ -104,10 +110,18 @@ fast_integer2!(fast_div, |a, b| a.checked_div(b).map(Value::Integer));
 fast_integer2!(fast_idiv, |a, b| {
     let q = a.checked_div(b)?;
     let r = a.checked_rem(b)?;
-    int(if q < 0 && r != 0 { q.wrapping_sub(1) } else { q })
+    int(if q < 0 && r != 0 {
+        q.wrapping_sub(1)
+    } else {
+        q
+    })
 });
-fast_integer2!(fast_udiv, |a, b| (a as u64).checked_div(b as u64).map(|q| Value::Integer(q as i64)));
-fast_integer2!(fast_urem, |a, b| (a as u64).checked_rem(b as u64).map(|r| Value::Integer(r as i64)));
+fast_integer2!(fast_udiv, |a, b| (a as u64)
+    .checked_div(b as u64)
+    .map(|q| Value::Integer(q as i64)));
+fast_integer2!(fast_urem, |a, b| (a as u64)
+    .checked_rem(b as u64)
+    .map(|r| Value::Integer(r as i64)));
 // Truncating remainder; `MIN % -1` is 0, a zero divisor falls through.
 fast_integer2!(fast_rem, |a, b| {
     if b == 0 {
@@ -120,8 +134,14 @@ fast_integer2!(fast_mod, |a, b| {
     if b == 0 {
         return None;
     }
-    let Some(r) = a.checked_rem(b) else { return int(0) };
-    int(if r != 0 && (a < 0) != (b < 0) { r.wrapping_add(b) } else { r })
+    let Some(r) = a.checked_rem(b) else {
+        return int(0);
+    };
+    int(if r != 0 && (a < 0) != (b < 0) {
+        r.wrapping_add(b)
+    } else {
+        r
+    })
 });
 fast_integer2!(fast_lt, |a, b| boolean(a < b));
 fast_integer2!(fast_le, |a, b| boolean(a <= b));
@@ -164,8 +184,12 @@ fast_integer2!(fast_arshift, |n, i| {
     })
 });
 // The count is taken mod 64 as unsigned.
-fast_integer2!(fast_lrotate, |n, s| int((n as u64).rotate_left(((s as u64) % 64) as u32) as i64));
-fast_integer2!(fast_rrotate, |n, s| int((n as u64).rotate_right(((s as u64) % 64) as u32) as i64));
+fast_integer2!(fast_lrotate, |n, s| int(
+    (n as u64).rotate_left(((s as u64) % 64) as u32) as i64
+));
+fast_integer2!(fast_rrotate, |n, s| int(
+    (n as u64).rotate_right(((s as u64) % 64) as u32) as i64
+));
 
 /// `luauF_integerclamp`: unordered bounds fall through.
 pub(crate) fn fast_clamp(
@@ -175,7 +199,9 @@ pub(crate) fn fast_clamp(
     args: [Value; 3],
     nparams: usize,
 ) -> Option<usize> {
-    let [Value::Integer(a), Value::Integer(lo), Value::Integer(hi)] = args else { return None };
+    let [Value::Integer(a), Value::Integer(lo), Value::Integer(hi)] = args else {
+        return None;
+    };
     if nparams < 3 || nresults > 1 || lo > hi {
         return None;
     }
@@ -192,13 +218,17 @@ fn fast_fold(
     nparams: usize,
     keep: fn(i64, i64) -> bool,
 ) -> Option<usize> {
-    let [Value::Integer(a1), Value::Integer(a2), _] = args else { return None };
+    let [Value::Integer(a1), Value::Integer(a2), _] = args else {
+        return None;
+    };
     if nparams < 2 || nresults > 1 {
         return None;
     }
     let mut r = if keep(a2, a1) { a2 } else { a1 };
     for i in 2..nparams {
-        let Value::Integer(x) = arg(vm, ra, &args, i) else { return None };
+        let Value::Integer(x) = arg(vm, ra, &args, i) else {
+            return None;
+        };
         if keep(x, r) {
             r = x;
         }
@@ -207,11 +237,23 @@ fn fast_fold(
     Some(1)
 }
 
-pub(crate) fn fast_min(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+pub(crate) fn fast_min(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
     fast_fold(vm, ra, nresults, args, nparams, |x, r| x < r)
 }
 
-pub(crate) fn fast_max(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+pub(crate) fn fast_max(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
     fast_fold(vm, ra, nresults, args, nparams, |x, r| x > r)
 }
 
@@ -225,13 +267,17 @@ fn fast_bits(
     op: fn(u64, u64) -> u64,
     out: fn(u64) -> Value,
 ) -> Option<usize> {
-    let [Value::Integer(a0), ..] = args else { return None };
+    let [Value::Integer(a0), ..] = args else {
+        return None;
+    };
     if nparams < 1 || nresults > 1 {
         return None;
     }
     let mut r = a0 as u64;
     for i in 1..nparams {
-        let Value::Integer(x) = arg(vm, ra, &args, i) else { return None };
+        let Value::Integer(x) = arg(vm, ra, &args, i) else {
+            return None;
+        };
         r = op(r, x as u64);
     }
     vm.set(ra, out(r));
@@ -242,20 +288,52 @@ fn integer(r: u64) -> Value {
     Value::Integer(r as i64)
 }
 
-pub(crate) fn fast_band(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+pub(crate) fn fast_band(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
     fast_bits(vm, ra, nresults, args, nparams, |a, b| a & b, integer)
 }
 
-pub(crate) fn fast_bor(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+pub(crate) fn fast_bor(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
     fast_bits(vm, ra, nresults, args, nparams, |a, b| a | b, integer)
 }
 
-pub(crate) fn fast_bxor(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+pub(crate) fn fast_bxor(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
     fast_bits(vm, ra, nresults, args, nparams, |a, b| a ^ b, integer)
 }
 
-pub(crate) fn fast_btest(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
-    fast_bits(vm, ra, nresults, args, nparams, |a, b| a & b, |r| Value::Boolean(r != 0))
+pub(crate) fn fast_btest(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    fast_bits(
+        vm,
+        ra,
+        nresults,
+        args,
+        nparams,
+        |a, b| a & b,
+        |r| Value::Boolean(r != 0),
+    )
 }
 
 /// `luauF_integerextract`: field `f` (0 to 63) of width `w` (default 1,
@@ -271,7 +349,9 @@ pub(crate) fn fast_extract(
     if nparams >= 3 && !matches!(a2, Value::Integer(_)) {
         return None;
     }
-    let (Value::Integer(n), Value::Integer(f)) = (a0, a1) else { return None };
+    let (Value::Integer(n), Value::Integer(f)) = (a0, a1) else {
+        return None;
+    };
     if nparams < 2 || nresults > 1 {
         return None;
     }
@@ -284,7 +364,10 @@ pub(crate) fn fast_extract(
     }
     // `w` is 1 to 64, so the shift is 0 to 63.
     let mask = u64::MAX.wrapping_shr(64u32.wrapping_sub(w as u32));
-    vm.set(ra, Value::Integer(((n as u64).wrapping_shr(f as u32) & mask) as i64));
+    vm.set(
+        ra,
+        Value::Integer(((n as u64).wrapping_shr(f as u32) & mask) as i64),
+    );
     Some(1)
 }
 
@@ -360,8 +443,14 @@ mod tests {
     fn conversions_and_bounds() {
         same(call(94, &[Value::Number(3.0)]), Some(i(3)));
         same(call(94, &[Value::Number(3.5)]), Some(Value::Nil));
-        same(call(94, &[Value::Number(9_223_372_036_854_775_808.0)]), Some(Value::Nil));
-        same(call(94, &[Value::Number(-9_223_372_036_854_775_808.0)]), Some(i(i64::MIN)));
+        same(
+            call(94, &[Value::Number(9_223_372_036_854_775_808.0)]),
+            Some(Value::Nil),
+        );
+        same(
+            call(94, &[Value::Number(-9_223_372_036_854_775_808.0)]),
+            Some(i(i64::MIN)),
+        );
         same(call(94, &[Value::Number(f64::NAN)]), Some(Value::Nil));
         same(call(94, &[i(3)]), None);
         same(call(95, &[i(-5)]), Some(Value::Number(-5.0)));
@@ -389,7 +478,10 @@ mod tests {
     #[test]
     fn bits() {
         same(call(109, &[i(0b1100)]), Some(i(0b1100)));
-        same(call(109, &[i(0b1100), i(0b1010), i(0b1000)]), Some(i(0b1000)));
+        same(
+            call(109, &[i(0b1100), i(0b1010), i(0b1000)]),
+            Some(i(0b1000)),
+        );
         same(call(110, &[i(1), i(2), i(4), i(8)]), Some(i(15)));
         same(call(112, &[i(3), i(5)]), Some(i(6)));
         same(call(127, &[i(3), i(4)]), Some(b(false)));
@@ -398,7 +490,10 @@ mod tests {
         same(call(111, &[i(0)]), Some(i(-1)));
         same(call(128, &[i(0)]), Some(i(64)));
         same(call(129, &[i(1)]), Some(i(63)));
-        same(call(130, &[i(0x0102_0304_0506_0708)]), Some(i(0x0807_0605_0403_0201)));
+        same(
+            call(130, &[i(0x0102_0304_0506_0708)]),
+            Some(i(0x0807_0605_0403_0201)),
+        );
     }
 
     #[test]

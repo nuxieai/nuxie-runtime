@@ -9,8 +9,8 @@
 //! the creation error. Neither path panics.
 
 use std::ffi::c_void;
-use std::rc::Rc;
 use std::fmt;
+use std::rc::Rc;
 
 use super::conversion::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 use super::error::{Error, Result};
@@ -333,7 +333,7 @@ impl Table {
 
     /// Looks up `table[key]` and calls it with `args` for no results; `false`
     /// when it is not a function (the old binding crate's `call_function_unit`).
-#[cfg_attr(debug_assertions, track_caller)]
+    #[cfg_attr(debug_assertions, track_caller)]
     pub fn call_function_unit(&self, key: impl IntoLua, args: impl IntoLuaMulti) -> Result<bool> {
         let f: Value = self.get(key)?;
         match f {
@@ -347,7 +347,7 @@ impl Table {
 
     /// Looks up `table[key]`, calls it for one result and reads that
     /// result's truthiness; `false` when it is not a function.
-#[cfg_attr(debug_assertions, track_caller)]
+    #[cfg_attr(debug_assertions, track_caller)]
     pub fn call_function_truthy(&self, key: impl IntoLua, args: impl IntoLuaMulti) -> Result<bool> {
         let f: Value = self.get(key)?;
         match f {
@@ -530,7 +530,11 @@ impl LuaString {
     /// The bytes; empty for a failed handle (the old binding crate: infallible).
     pub fn as_bytes(&self) -> Vec<u8> {
         self.raw()
-            .and_then(|raw| self.lua.0.with_vm(|vm| raw.as_bytes(vm).map_err(Error::from_vm)))
+            .and_then(|raw| {
+                self.lua
+                    .0
+                    .with_vm(|vm| raw.as_bytes(vm).map_err(Error::from_vm))
+            })
             .unwrap_or_default()
     }
 
@@ -538,7 +542,11 @@ impl LuaString {
     /// handle, which [`Self::as_bytes`] reads as empty.
     pub fn len(&self) -> usize {
         self.vm_value()
-            .and_then(|value| self.lua.0.with_vm(|vm| vm.objlen(&value).map_err(Error::from_vm)))
+            .and_then(|value| {
+                self.lua
+                    .0
+                    .with_vm(|vm| vm.objlen(&value).map_err(Error::from_vm))
+            })
             .unwrap_or(0)
     }
 
@@ -665,7 +673,11 @@ impl Buffer {
     /// infallible).
     pub fn to_vec(&self) -> Vec<u8> {
         self.raw()
-            .and_then(|raw| self.lua.0.with_vm(|vm| raw.to_vec(vm).map_err(Error::from_vm)))
+            .and_then(|raw| {
+                self.lua
+                    .0
+                    .with_vm(|vm| raw.to_vec(vm).map_err(Error::from_vm))
+            })
             .unwrap_or_default()
     }
 
@@ -731,9 +743,11 @@ impl Thread {
     /// The status; `Error` for a failed handle (the old binding crate:
     /// infallible).
     pub fn status(&self) -> ThreadStatus {
-        let state = self
-            .raw()
-            .and_then(|raw| self.lua.0.with_vm(|vm| raw.status(vm).map_err(Error::from_vm)));
+        let state = self.raw().and_then(|raw| {
+            self.lua
+                .0
+                .with_vm(|vm| raw.status(vm).map_err(Error::from_vm))
+        });
         match state {
             Ok(vm::ThreadState::Resumable) => ThreadStatus::Resumable,
             Ok(vm::ThreadState::Running) => ThreadStatus::Running,

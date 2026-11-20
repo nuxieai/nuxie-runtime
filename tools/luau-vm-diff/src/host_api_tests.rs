@@ -94,7 +94,10 @@ fn an_interrupt_error_is_catchable_and_positioned_like_lual_error() {
          return pcall(body)",
     )
     .unwrap();
-    assert_eq!(got, vec![HostValue::Boolean(false), text("=api:1: stopped")]);
+    assert_eq!(
+        got,
+        vec![HostValue::Boolean(false), text("=api:1: stopped")]
+    );
 }
 
 #[test]
@@ -102,7 +105,10 @@ fn a_parked_main_thread_refuses_calls_until_it_finishes() {
     let mut vm = Vm::new().expect("vm");
     let f = vm.create_function("one", |_, (): ()| Ok(1.0)).unwrap();
     let state = vm
-        .start(b"=api", &bytecode("local x = coroutine.yield(5) return x * 2"))
+        .start(
+            b"=api",
+            &bytecode("local x = coroutine.yield(5) return x * 2"),
+        )
         .unwrap();
     assert_eq!(state, RunState::Yielded(vec![HostValue::Number(5.0)]));
     match f.call::<_, f64>(&mut vm, ()) {
@@ -203,7 +209,9 @@ fn direct_fields_skip_index_for_their_keys() {
         .create_host_function("__index", move |ctx| {
             calls.set(calls.get() + 1);
             let key: String = ctx.get(2)?;
-            Err(HostError::new(format!("'{key}' is not a valid index of Mat4")))
+            Err(HostError::new(format!(
+                "'{key}' is not a valid index of Mat4"
+            )))
         })
         .unwrap();
     mt.raw_set(&mut vm, "__index", index).unwrap();
@@ -211,7 +219,10 @@ fn direct_fields_skip_index_for_their_keys() {
     vm.set_tag_metatable(TAG, Some(&mt)).unwrap();
     vm.register_direct_fields::<Mat4>(
         TAG,
-        &[("m11", |m| f64::from(m.0[0])), ("m44", |m| f64::from(m.0[15]))],
+        &[
+            ("m11", |m| f64::from(m.0[0])),
+            ("m44", |m| f64::from(m.0[15])),
+        ],
     )
     .unwrap();
     let mut values = [0f32; 16];
@@ -412,7 +423,9 @@ fn modules_load_with_their_own_environment() {
     assert_eq!(got.0[0].as_number(), Some(42.0));
     assert!(got.0[1].is_nil(), "no globals leak into the module");
     assert_eq!(
-        chunk.environment(&mut vm).unwrap().map(|t| vm.raw_equal(&Value::Table(t), &Value::Table(env.clone())).unwrap()),
+        chunk.environment(&mut vm).unwrap().map(|t| vm
+            .raw_equal(&Value::Table(t), &Value::Table(env.clone()))
+            .unwrap()),
         Some(true)
     );
     let main = vm.load(b"=main", &bytecode("return answer")).unwrap();
@@ -428,11 +441,7 @@ fn a_script_hitting_the_memory_limit_leaves_no_drift() {
     let mut vm = Vm::new().expect("vm");
     vm.collect();
     vm.set_memory_limit(Some(vm.used_memory() + 256 * 1024));
-    let err = run(
-        &mut vm,
-        "local t = {} for i = 1, 1e7 do t[i] = {i} end",
-    )
-    .unwrap_err();
+    let err = run(&mut vm, "local t = {} for i = 1, 1e7 do t[i] = {i} end").unwrap_err();
     assert!(err.is_memory(), "{err:?}");
     assert!(vm.memory_exhausted());
     assert_eq!(vm.accounting_drift(), 0);

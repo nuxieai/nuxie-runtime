@@ -12,29 +12,28 @@
 //! "Design" names the tests of `design-2`, "night" the earlier design's. The
 //! two number their tests apart, and both sets apply to this picture.
 use super::ore_gm_helper::*;
-use crate::RenderMode;
 use crate::deferred::cmd::{
     command_stream::CommandReader,
-    deferred_replayer::{DeferredFrame, DeferredReplayer, snapshot_frame},
+    deferred_replayer::{snapshot_frame, DeferredFrame, DeferredReplayer},
     deferred_session::{DeferredSession, SegmentTarget},
-    render_commands::{DrawImagePod, RenderCmd, payload_size_of},
+    render_commands::{payload_size_of, DrawImagePod, RenderCmd},
     render_handle::{CANVAS_HANDLE_FLAG, CANVAS_HANDLE_MASK},
 };
+use crate::RenderMode;
 use nuxie_runtime::css_layout::keys::{ABOVE_RANK, DISPLAY, FADE_OUTSIDE, OVERFLOW_X, OVERFLOW_Y};
 use nuxie_runtime::group_opacity_fixture::{
-    Block, BoxShadow, Host, Item, KEYED_SCREEN, MARKS, Overflow, Page, Scene, Unit,
-    artboard_record, bind_page, box_record, row_opacity, screen_row, set_row_opacity,
+    artboard_record, bind_page, box_record, row_opacity, screen_row, set_row_opacity, Block,
+    BoxShadow, Host, Item, Overflow, Page, Scene, Unit, KEYED_SCREEN, MARKS,
 };
 use nuxie_runtime::live_move::{
-    Flight, LiveMoves,
     records::{LiveFlight, LiveSlot},
-    slot_pose,
+    slot_pose, Flight, LiveMoves,
 };
 use nuxie_runtime::live_move_fixture::{
-    ABOVE_BADGE, ABOVE_BAR, FADING_BOX_UNIT, FlightWindow, MARK_BACKING, MARK_CHILD, MARK_FLIGHT,
-    MARK_PANEL, PaintCase, PaintShape, SCREEN_B_BACKING, ZoomCase, css_flight_over_backing_fixture,
-    css_flight_over_cached_backing_fixture, css_flight_under_fading_box_fixture,
-    css_paint_fixture_shaped, flight_animation_fixture,
+    css_flight_over_backing_fixture, css_flight_over_cached_backing_fixture,
+    css_flight_under_fading_box_fixture, css_paint_fixture_shaped, flight_animation_fixture,
+    FlightWindow, PaintCase, PaintShape, ZoomCase, ABOVE_BADGE, ABOVE_BAR, FADING_BOX_UNIT,
+    MARK_BACKING, MARK_CHILD, MARK_FLIGHT, MARK_PANEL, SCREEN_B_BACKING,
 };
 use nuxie_runtime::mechanical_port::source::{
     artboard::{Artboard, RuntimeDrawVisitor},
@@ -1773,7 +1772,14 @@ impl Journey {
     /// The page `bytes`, drawn at `size` over U, taking off for `to` by
     /// `step`, which flies one unit.
     fn on(bytes: &[u8], size: (u32, u32), to: &str, step: &str) -> Self {
-        let live = Live::new(bytes, U, size, false, RenderMode::RasterOrdering, Some("Page"));
+        let live = Live::new(
+            bytes,
+            U,
+            size,
+            false,
+            RenderMode::RasterOrdering,
+            Some("Page"),
+        );
         let model = live
             .file
             .with_file(|file| {

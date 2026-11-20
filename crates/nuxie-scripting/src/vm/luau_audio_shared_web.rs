@@ -62,12 +62,14 @@ impl Drop for DecodeReservation {
 struct Handle(Value);
 impl Handle {
     fn raw(&self, op: u32, bytes: &mut [u8], offset: u32, value: u32) -> Result<usize, String> {
-        let owner = self.0
+        let owner = self
+            .0
             .get("owner")
             .and_then(serde_json::Value::as_u64)
             .and_then(|n| u32::try_from(n).ok())
             .ok_or("invalid shared owner")?;
-        let id = self.0
+        let id = self
+            .0
             .get("id")
             .and_then(serde_json::Value::as_u64)
             .and_then(|n| u32::try_from(n).ok())
@@ -139,12 +141,18 @@ pub(super) fn encode_wire(value: &SharedValue) -> Result<Value, String> {
 }
 /// Transport has transferred one hold per descriptor to this decoder.
 pub(super) fn decode_wire(value: Value) -> Result<SharedValue, String> {
-    let bytes: Vec<u8> =
-        serde_json::from_value(value.get("bytes").cloned().unwrap_or_default()).map_err(|e| e.to_string())?;
-    let descriptors = value.get("holds").and_then(serde_json::Value::as_array).ok_or("invalid shared holds")?;
+    let bytes: Vec<u8> = serde_json::from_value(value.get("bytes").cloned().unwrap_or_default())
+        .map_err(|e| e.to_string())?;
+    let descriptors = value
+        .get("holds")
+        .and_then(serde_json::Value::as_array)
+        .ok_or("invalid shared holds")?;
     let mut holds = Vec::new();
     for descriptor in descriptors {
-        let kind = descriptor.get("kind").and_then(serde_json::Value::as_str).ok_or("invalid shared kind")?;
+        let kind = descriptor
+            .get("kind")
+            .and_then(serde_json::Value::as_str)
+            .ok_or("invalid shared kind")?;
         let handle = Handle(descriptor.clone());
         holds.push(match kind {
             "ring" => SharedValue::Ring(Arc::new(SharedRing(handle))),
@@ -269,7 +277,10 @@ impl SharedSnapshot {
             .ok_or("invalid shared sequence")?
             .parse::<u64>()
             .map_err(|e| e.to_string())?;
-        Ok(Some((sequence, decode_wire(value.get("encoded").cloned().unwrap_or_default())?)))
+        Ok(Some((
+            sequence,
+            decode_wire(value.get("encoded").cloned().unwrap_or_default())?,
+        )))
     }
     pub fn try_latest(&self) -> Result<Option<(u64, SharedValue)>, String> {
         self.read(false)

@@ -13,8 +13,8 @@ use nuxie_runtime::{
 };
 use std::{
     cell::{Cell, RefCell},
-    num::{NonZeroU32, NonZeroU64, NonZeroUsize},
     collections::{HashMap, VecDeque},
+    num::{NonZeroU32, NonZeroU64, NonZeroUsize},
     rc::{Rc, Weak},
     sync::{
         Arc, Mutex,
@@ -693,8 +693,7 @@ pub(super) fn poll(lua: &Lua, limit: usize) -> Result<bool> {
         if decode.is_none() && wait.is_none() {
             break;
         }
-        if let Some((index, _)) =
-            wait.filter(|(_, sequence)| decode.is_none_or(|d| *sequence < d))
+        if let Some((index, _)) = wait.filter(|(_, sequence)| decode.is_none_or(|d| *sequence < d))
         {
             let Some(wait) = registry.waits.borrow_mut().remove(index) else {
                 continue;

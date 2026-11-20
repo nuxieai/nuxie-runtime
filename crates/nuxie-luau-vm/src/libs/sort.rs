@@ -15,7 +15,7 @@ use crate::error::VmResult;
 use crate::meta::Meta;
 use crate::native::Args;
 use crate::value::{TableId, Value};
-use crate::vm::{MIN_STACK, Core};
+use crate::vm::{Core, MIN_STACK};
 
 pub(crate) fn sort(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;

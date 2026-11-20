@@ -19,11 +19,11 @@
 
 use crate::call::{CallMode, Exit, Flow, HostCall};
 use crate::error::{Error, ErrorKind, Throw, VmResult};
-use crate::host::{CallStatus, HostError, HostedCtx};
-use crate::meta::Meta;
 use crate::heap::{Function, NativeClosure};
-use crate::native::{Args, HostFnId, NativeFn};
+use crate::host::{CallStatus, HostError, HostedCtx};
 use crate::limits::Limits;
+use crate::meta::Meta;
+use crate::native::{Args, HostFnId, NativeFn};
 use crate::roots::Root;
 use crate::stack::Stack;
 use crate::thread::ThreadId;
@@ -130,7 +130,9 @@ impl<H: Host> Dispatch for Hosted<'_, H> {
         args: Args,
     ) -> Result<usize, HostError> {
         let Some(&HostEntry::Plain(f)) = self.fns.get(id.index()) else {
-            return Err(HostError::raw("internal error: not a plain host function entry"));
+            return Err(HostError::raw(
+                "internal error: not a plain host function entry",
+            ));
         };
         let pending = core.host_errors.len();
         let result = f(&mut PlainCtx {
@@ -209,7 +211,12 @@ impl<H: Host> PlainCtx<'_, H> {
 
     /// Pushes a function value for host entry `id` with `data`
     /// ([`HostedVm::host_function`]).
-    pub fn push_host_function(&mut self, name: &str, id: HostFnId, data: u32) -> Result<(), HostError> {
+    pub fn push_host_function(
+        &mut self,
+        name: &str,
+        id: HostFnId,
+        data: u32,
+    ) -> Result<(), HostError> {
         let func = native_for(self.fns, self.core.roots.vm_id(), id, data)?;
         let f = self.core.new_host_closure(name, func);
         let f = f.map_err(|t| self.core.host_throw(t))?;
@@ -227,7 +234,6 @@ impl<H: Host> PlainCtx<'_, H> {
     pub fn arg_count(&self) -> usize {
         self.args.nargs
     }
-
 }
 
 impl<H: Host> std::ops::Deref for PlainCtx<'_, H> {
@@ -338,9 +344,7 @@ impl<H: Host> HostedVm<H> {
     /// Refuses the API on top of a main thread parked in a yield.
     pub(crate) fn check_entry(&self) -> Result<(), Error> {
         let core = &self.core;
-        if core.host_depth == 0
-            && (core.has_frames() || core.current != core.main_thread)
-        {
+        if core.host_depth == 0 && (core.has_frames() || core.current != core.main_thread) {
             return Err(Error::Host(
                 "the main thread is suspended in a yield; resume it before calling into the VM"
                     .to_owned(),
@@ -415,18 +419,12 @@ impl<H: Host> HostedVm<H> {
     /// native of this entry names host state by its data, which the host
     /// releases when the collector frees the native: the sweep lists it,
     /// and [`HostedVm::drain_freed_natives`] hands it to the host.
-    pub fn add_host_fn(
-        &mut self,
-        entry: HostEntry<H>,
-        owns_data: bool,
-    ) -> Result<HostFnId, Error> {
+    pub fn add_host_fn(&mut self, entry: HostEntry<H>, owns_data: bool) -> Result<HostFnId, Error> {
         let vm = self.core.roots.vm_id();
         if let HostEntry::Full { k: Some(k), .. } = &entry
             && k.vm() != vm
         {
-            return Err(Error::Host(
-                "a continuation entry of another VM".to_owned(),
-            ));
+            return Err(Error::Host("a continuation entry of another VM".to_owned()));
         }
         let id = u32::try_from(self.fns.len())
             .map(|index| HostFnId::new(vm, index))
@@ -554,7 +552,9 @@ impl<H: Host> HostedVm<H> {
                 status,
             } => {
                 let Some(&HostEntry::Cont(f)) = self.fns.get(k.index()) else {
-                    return Err(HostError::raw("internal error: not a host continuation entry"));
+                    return Err(HostError::raw(
+                        "internal error: not a host continuation entry",
+                    ));
                 };
                 let mut ctx = HostedCtx {
                     vm: self,
@@ -642,7 +642,8 @@ impl<H: Host> HostedVm<H> {
         nresults: i32,
         loan: Lent<'_, H>,
     ) -> VmResult<()> {
-        self.core.push_call(func, nargs, nresults, CallMode::Counted)?;
+        self.core
+            .push_call(func, nargs, nresults, CallMode::Counted)?;
         self.core.mark_boundary();
         match self.execute(loan)? {
             Exit::Returned => Ok(()),
@@ -709,9 +710,16 @@ impl<H: Host> HostedVm<H> {
 /// The native for host entry `id` with `data`: frameless when the entry is
 /// plain. A continuation entry, one the host did not add, or one of
 /// another VM (`vm` is this VM's id) is refused.
-fn native_for<H: Host>(fns: &[HostEntry<H>], vm: u32, id: HostFnId, data: u32) -> Result<NativeFn, Error> {
+fn native_for<H: Host>(
+    fns: &[HostEntry<H>],
+    vm: u32,
+    id: HostFnId,
+    data: u32,
+) -> Result<NativeFn, Error> {
     if id.vm() != vm {
-        return Err(Error::Host("a host function entry of another VM".to_owned()));
+        return Err(Error::Host(
+            "a host function entry of another VM".to_owned(),
+        ));
     }
     match fns.get(id.index()) {
         Some(HostEntry::Plain(_)) => Ok(NativeFn::HostPlain(id, data)),
@@ -836,7 +844,10 @@ impl<H: Host> HostedCtx<'_, H> {
     /// C++ `luaL_tolstring`: pushes the value at `i` rendered as `tostring`
     /// does (`__tostring` honored).
     pub fn push_tostring(&mut self, i: isize) -> Result<(), HostError> {
-        let v = self.stack().slot(i).map_or(Value::Nil, |s| self.vm.core.get(s));
+        let v = self
+            .stack()
+            .slot(i)
+            .map_or(Value::Nil, |s| self.vm.core.get(s));
         let loan = reborrow::<H>(&mut self.loan);
         let s = self
             .vm
@@ -848,7 +859,10 @@ impl<H: Host> HostedCtx<'_, H> {
     /// C++ `lua_getfield`: pushes field `name` of the value at `i`,
     /// `__index` honored.
     pub fn push_field(&mut self, i: isize, name: &[u8]) -> Result<(), HostError> {
-        let object = self.stack().slot(i).map_or(Value::Nil, |s| self.vm.core.get(s));
+        let object = self
+            .stack()
+            .slot(i)
+            .map_or(Value::Nil, |s| self.vm.core.get(s));
         let loan = reborrow::<H>(&mut self.loan);
         let got = (|| {
             let key = Value::String(self.vm.core.heap.intern(name)?);
@@ -870,7 +884,12 @@ impl<H: Host> HostedCtx<'_, H> {
 
     /// Pushes a function value for host entry `id` with `data`
     /// ([`HostedVm::host_function`]).
-    pub fn push_host_function(&mut self, name: &str, id: HostFnId, data: u32) -> Result<(), HostError> {
+    pub fn push_host_function(
+        &mut self,
+        name: &str,
+        id: HostFnId,
+        data: u32,
+    ) -> Result<(), HostError> {
         let f = self.vm.new_host_function(name, id, data)?;
         self.stack().push(Value::Function(f))
     }

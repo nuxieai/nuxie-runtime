@@ -498,7 +498,10 @@ impl<'a> Cursor<'a> {
         self.rest.len()
     }
 
-    fn read_array<const N: usize>(&mut self, what: &str) -> Result<[u8; N], BytecodeValidationError> {
+    fn read_array<const N: usize>(
+        &mut self,
+        what: &str,
+    ) -> Result<[u8; N], BytecodeValidationError> {
         let Some((bytes, rest)) = self.rest.split_first_chunk::<N>() else {
             return Err(self.eof(N, what));
         };
@@ -655,7 +658,10 @@ mod hostile_input_tests {
         validate_luau_bytecode(chunk).expect("the embedded chunk is valid");
         for end in 0..chunk.len() {
             let prefix = chunk.get(..end).expect("prefix");
-            assert!(validate_luau_bytecode(prefix).is_err(), "prefix of {end} bytes");
+            assert!(
+                validate_luau_bytecode(prefix).is_err(),
+                "prefix of {end} bytes"
+            );
         }
     }
 
@@ -707,7 +713,11 @@ mod compiler_table_tests {
             assert_eq!(vm.number(), compiler as u8);
             assert_eq!(vm.name(), format!("{compiler:?}"), "opcode {byte}");
             assert_eq!(format!("{vm:?}"), format!("{compiler:?}"), "opcode {byte}");
-            assert_eq!(vm.length(), getOpLength(compiler) as usize, "length of {compiler:?}");
+            assert_eq!(
+                vm.length(),
+                getOpLength(compiler) as usize,
+                "length of {compiler:?}"
+            );
         }
     }
 
@@ -722,18 +732,28 @@ mod compiler_table_tests {
             (tag::CONSTANT_TABLE, LBC_CONSTANT_TABLE),
             (tag::CONSTANT_CLOSURE, LBC_CONSTANT_CLOSURE),
             (tag::CONSTANT_VECTOR, LBC_CONSTANT_VECTOR),
-            (tag::CONSTANT_TABLE_WITH_CONSTANTS, LBC_CONSTANT_TABLE_WITH_CONSTANTS),
+            (
+                tag::CONSTANT_TABLE_WITH_CONSTANTS,
+                LBC_CONSTANT_TABLE_WITH_CONSTANTS,
+            ),
             (tag::CONSTANT_INTEGER, LBC_CONSTANT_INTEGER),
             (tag::CONSTANT_CLASS_SHAPE, LBC_CONSTANT_CLASS_SHAPE),
             (tag::CONSTANT_VECTORD, LBC_CONSTANT_VECTORD),
         ];
-        assert_eq!(constants.len(), LBC_CONSTANT__COUNT.0 as usize, "every constant kind is listed");
+        assert_eq!(
+            constants.len(),
+            LBC_CONSTANT__COUNT.0 as usize,
+            "every constant kind is listed"
+        );
         for (vm, compiler) in constants {
             assert_eq!(u32::from(vm), compiler.0, "constant tag {compiler:?}");
         }
         assert_eq!(u32::from(tag::TYPE_VERSION_MIN), LBC_TYPE_VERSION_MIN.0);
         assert_eq!(u32::from(tag::TYPE_VERSION_MAX), LBC_TYPE_VERSION_MAX.0);
         assert_eq!(u16::from(tag::TYPE_FUNCTION), LBC_TYPE_FUNCTION.0);
-        assert_eq!(tag::FEEDBACK_CALL_TARGET, LuauFeedbackType::LFT_CALLTARGET as u8);
+        assert_eq!(
+            tag::FEEDBACK_CALL_TARGET,
+            LuauFeedbackType::LFT_CALLTARGET as u8
+        );
     }
 }

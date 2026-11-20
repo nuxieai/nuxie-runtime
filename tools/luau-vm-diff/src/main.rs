@@ -19,8 +19,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use luau_vm_diff::{
-    OPCODE_NAMES, REJECTED_OPCODES, UNEMITTED_OPCODES, opcodes, run_case,
-    snapshot_file_name,
+    OPCODE_NAMES, REJECTED_OPCODES, UNEMITTED_OPCODES, opcodes, run_case, snapshot_file_name,
 };
 
 fn main() -> ExitCode {
@@ -61,9 +60,7 @@ fn main() -> ExitCode {
         }
     };
     cases.sort();
-    if record
-        && let Err(error) = std::fs::create_dir_all(&snapshots)
-    {
+    if record && let Err(error) = std::fs::create_dir_all(&snapshots) {
         eprintln!("luau-vm-diff: {}: {error}", snapshots.display());
         return ExitCode::from(2);
     }

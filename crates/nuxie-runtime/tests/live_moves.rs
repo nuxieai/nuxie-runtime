@@ -2255,7 +2255,10 @@ fn a_transferred_landing_refills_the_screen_it_left() {
     assert_eq!(holds(&s.d), Some(flown.core_handle()));
     let own = child(&s.s).expect("the Screen left holds a copy of its own");
     assert_ne!(own.core_handle(), flown.core_handle());
-    assert_eq!(own.with_artboard(|b| b.artboard_source_handle()), definition);
+    assert_eq!(
+        own.with_artboard(|b| b.artboard_source_handle()),
+        definition
+    );
     // The first frame after landing: its entry state and its own Screen's
     // props (A's offset is 10, B's 200).
     s.advance(0.0);
@@ -2426,7 +2429,11 @@ fn a_cancel_puts_every_instance_back_before_the_next_frame() {
     s.advance(0.1);
     let (list, a) = screens_item(&s, 0);
     ArtboardComponentList::update_list_occurrence(&list, &[a]);
-    assert_eq!(holds(&s.s), Some(leaving.clone()), "back before any plan call");
+    assert_eq!(
+        holds(&s.s),
+        Some(leaving.clone()),
+        "back before any plan call"
+    );
     s.moves.after_advance(&s.root).unwrap();
     assert_eq!(holds(&s.s), Some(leaving));
     assert!(
@@ -11350,10 +11357,9 @@ mod drawn {
         // flight slots at that run's end: landed, the path offset, the
         // leaving copy faded out and the arriving one in.
         let mut s = Scene::from_bytes(&fixture::flight_animation_fixture(FlightWindow::Whole));
-        let header = s
-            .b
-            .with_artboard(|b| b.find_handle::<Node>("header"))
-            .unwrap();
+        let header =
+            s.b.with_artboard(|b| b.find_handle::<Node>("header"))
+                .unwrap();
         set(&header, 13, 250.0);
         let (leaving, arriving) = (record(&s, 11), record(&s, 12));
         writes(&leaving, &[(PROGRESS, 1.0), (PATH_X, 12.0), (FADE, 0.0)]);
@@ -11391,7 +11397,11 @@ mod drawn {
             writes(r, &[(PROGRESS, 1.0), (FADE, 0.0)]);
         }
         s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
-        reads(&leaving, "back's leaving copy", &[(PROGRESS, 0.0), (FADE, 1.0)]);
+        reads(
+            &leaving,
+            "back's leaving copy",
+            &[(PROGRESS, 0.0), (FADE, 1.0)],
+        );
         reads(&held, "back's held copy", &[(PROGRESS, 0.0), (FADE, 1.0)]);
 
         // A transferred flight: nothing keys its fade, so it keeps the
@@ -11400,7 +11410,11 @@ mod drawn {
         let flight = record(&s, 2);
         writes(&flight, &[(PROGRESS, 0.6)]);
         s.begin();
-        reads(&flight, "the transferred flight", &[(PROGRESS, 0.0), (FADE, 1.0)]);
+        reads(
+            &flight,
+            "the transferred flight",
+            &[(PROGRESS, 0.0), (FADE, 1.0)],
+        );
 
         // A zero-length flight begins at its end; a delayed window at its
         // first keys.

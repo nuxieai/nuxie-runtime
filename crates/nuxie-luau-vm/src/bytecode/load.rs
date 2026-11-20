@@ -10,20 +10,18 @@
 //! from the prototypes, and the prototypes from the returned closure, which
 //! the caller roots on the stack before the next safepoint.
 
-
-use super::verify::verify;
 use super::tag::{
     CONSTANT_BOOLEAN, CONSTANT_CLASS_SHAPE, CONSTANT_CLOSURE, CONSTANT_IMPORT, CONSTANT_INTEGER,
     CONSTANT_NIL, CONSTANT_NUMBER, CONSTANT_STRING, CONSTANT_TABLE, CONSTANT_TABLE_WITH_CONSTANTS,
     CONSTANT_VECTOR, CONSTANT_VECTORD, FEEDBACK_CALL_TARGET, TYPE_VERSION_MAX, TYPE_VERSION_MIN,
 };
+use super::verify::verify;
 use super::{LineInfo, Proto, VERSION_MAX, VERSION_MIN};
 use crate::error::{Error, ErrorKind, LoadError};
 use crate::heap::{Function, LuaClosure, MEMORY_ERROR_MESSAGE};
 use crate::table::TableError;
 use crate::value::{FnId, ProtoId, StrId, TableId, Value};
 use crate::vm::Core;
-
 
 fn malformed(what: &str) -> Error {
     Error::Load(LoadError::Malformed(what.to_owned()))

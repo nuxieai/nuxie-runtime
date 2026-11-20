@@ -1002,7 +1002,8 @@ mod owner_tests {
             string.set_value_owned("kept", HostOwnerToken::from_arc(owner.clone()))
         });
         let snapshot = Snapshot::capture(property.clone()).expect("snapshot");
-        property.with_downcast_mut::<ViewModelInstanceString, _>(|string| string.set_value("other"));
+        property
+            .with_downcast_mut::<ViewModelInstanceString, _>(|string| string.set_value("other"));
         snapshot.restore();
         let (value, kept) = property
             .with_downcast::<ViewModelInstanceString, _>(|string| {

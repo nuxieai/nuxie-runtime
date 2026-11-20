@@ -215,7 +215,9 @@ mod tests {
 
     /// The bytes `(i * 7 + 3) as u8` for `i` in `0..n`.
     fn pattern(n: usize) -> Vec<u8> {
-        (0..n).map(|i| (i.wrapping_mul(7).wrapping_add(3)) as u8).collect()
+        (0..n)
+            .map(|i| (i.wrapping_mul(7).wrapping_add(3)) as u8)
+            .collect()
     }
 
     /// Expected values printed by the vendored `luaS_hash` for the same

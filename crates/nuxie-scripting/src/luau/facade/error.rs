@@ -242,7 +242,6 @@ impl StdError for CallbackCause {}
 /// string.
 pub(crate) const NON_STRING_ERROR: &str = "<non-string error>";
 
-
 /// A Luau type name with a `'static` lifetime, for the conversion errors
 /// the old binding crate builds from `lua_typename`.
 pub(crate) fn static_type_name(name: &str) -> &'static str {
@@ -292,7 +291,9 @@ impl fmt::Display for Error {
             Error::MismatchedRegistryKey => {
                 write!(f, "registry key used with the wrong Lua instance")
             }
-            Error::RecursiveMutCallback => fmt::Display::fmt(&CallbackCause::RecursiveMutCallback, f),
+            Error::RecursiveMutCallback => {
+                fmt::Display::fmt(&CallbackCause::RecursiveMutCallback, f)
+            }
             Error::PreviouslyResumedPanic => {
                 write!(f, "previously resumed panic returned again")
             }

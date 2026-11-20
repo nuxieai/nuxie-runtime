@@ -173,26 +173,26 @@ pub(super) fn install_vector_global(lua: &Lua) -> Result<()> {
     lua.set_named_registry_value(VECTOR_METHODS_KEY, &vector)?;
     let value_metatable = lua.create_table();
     let fallback = lua.create_function(|lua, (value, key): (LuaVector, Value)| {
-            if let Some(component) = vector_component(value, &key)? {
-                return Ok(Value::Number(component as f64));
-            }
+        if let Some(component) = vector_component(value, &key)? {
+            return Ok(Value::Number(component as f64));
+        }
 
-            if let Value::String(name) = &key {
-                let name = name.to_str()?;
-                if VECTOR_INSTANCE_METHODS.contains(&name.as_str()) {
-                    let methods: Table = lua.named_registry_value(VECTOR_METHODS_KEY)?;
-                    let method: Value = methods.get(name.as_str())?;
-                    if !matches!(method, Value::Nil) {
-                        return Ok(method);
-                    }
+        if let Value::String(name) = &key {
+            let name = name.to_str()?;
+            if VECTOR_INSTANCE_METHODS.contains(&name.as_str()) {
+                let methods: Table = lua.named_registry_value(VECTOR_METHODS_KEY)?;
+                let method: Value = methods.get(name.as_str())?;
+                if !matches!(method, Value::Nil) {
+                    return Ok(method);
                 }
             }
+        }
 
-            Err(Error::runtime(format!(
-                "'{}' is not a valid index of Vector",
-                vector_index_name(&key)
-            )))
-        })?;
+        Err(Error::runtime(format!(
+            "'{}' is not a valid index of Vector",
+            vector_index_name(&key)
+        )))
+    })?;
     // Instance methods resolve in the VM. No method name is also a component
     // key, so trying methods first answers every key as the fallback would.
     let instance_methods = lua.create_table();
@@ -405,12 +405,24 @@ mod tests {
 
         // Without the native `vector` library the Rust constructors stay.
         let rust_only = Lua::new();
-        let library = rust_only.globals().get::<Value>("vector").expect("vector library");
-        rust_only.globals().set("vector", Value::Nil).expect("hide vector library");
+        let library = rust_only
+            .globals()
+            .get::<Value>("vector")
+            .expect("vector library");
+        rust_only
+            .globals()
+            .set("vector", Value::Nil)
+            .expect("hide vector library");
         install_vector_global(&rust_only).expect("Vector installs");
-        rust_only.globals().set("vector", library).expect("restore vector library");
+        rust_only
+            .globals()
+            .set("vector", library)
+            .expect("restore vector library");
 
-        let rust_xy = rust_only.load("return Vector.xy").eval::<Value>().expect("xy");
+        let rust_xy = rust_only
+            .load("return Vector.xy")
+            .eval::<Value>()
+            .expect("xy");
         let native_xy = native.load("return Vector.xy").eval::<Value>().expect("xy");
         let source = |lua: &Lua, value: &Value| match value {
             Value::Function(f) => function_source(lua, f),

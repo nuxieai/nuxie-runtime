@@ -495,7 +495,11 @@ fn in_place_a_screen_removed_between_frames_leaves_the_other_screen_its_own_copy
     page.end("B", "t1");
     ok(page.step(1.0 / 60.0), "the first frame in B");
     let own = child(&home).expect("A holds a copy of its own");
-    assert_ne!(own.core_handle(), unit.core_handle(), "the unit has landed in B");
+    assert_ne!(
+        own.core_handle(),
+        unit.core_handle(),
+        "the unit has landed in B"
+    );
     assert!(page.vm.remove_list_item_by_property_name_path("screens", 1));
     ok(page.step(0.0), "the frame after B's removal");
     assert!(!screens(&page.root()).unwrap().contains_key("B"));

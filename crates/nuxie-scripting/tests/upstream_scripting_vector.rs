@@ -61,8 +61,6 @@ fn vector_can_be_constructed() {
     );
 }
 
-
-
 /// `two_component_vectors_always_have_z_zero` on the safe VM: the same three
 /// producers, read through handles. (The upstream test also seeds stale
 /// stack slots under each result; the safe VM's vectors are whole values, so

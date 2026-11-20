@@ -268,7 +268,10 @@ impl Opcode {
 
     /// The C++ enumerator name, such as `LOP_GETTABLEKS`.
     pub fn name(self) -> &'static str {
-        op::NAMES.get(usize::from(self.0)).copied().unwrap_or_default()
+        op::NAMES
+            .get(usize::from(self.0))
+            .copied()
+            .unwrap_or_default()
     }
 }
 

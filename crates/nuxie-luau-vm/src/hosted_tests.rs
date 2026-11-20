@@ -56,7 +56,11 @@ fn collect(vm: &mut HostedVm<Probe>) {
 fn a_root_keeps_its_value_until_released() -> TestResult {
     let mut vm = hosted(Limits::default())?;
     let t = vm.core.heap.new_table(0, 0).map_err(|_| "table")?;
-    let root = vm.core.roots.insert(Value::Table(t)).map_err(|e| e.to_string())?;
+    let root = vm
+        .core
+        .roots
+        .insert(Value::Table(t))
+        .map_err(|e| e.to_string())?;
     let stats = vm.core.full_gc();
     check(stats.tables_freed == 0, "a rooted table was freed")?;
     check(vm.core.roots.release(root), "released")?;
@@ -69,10 +73,22 @@ fn a_root_keeps_its_value_until_released() -> TestResult {
 fn a_freed_userdata_key_and_owned_native_are_listed_exactly_once() -> TestResult {
     let mut vm = hosted(Limits::default())?;
     let owned = vm
-        .add_host_fn(HostEntry::Full { f: |_| Ok(0), k: None }, true)
+        .add_host_fn(
+            HostEntry::Full {
+                f: |_| Ok(0),
+                k: None,
+            },
+            true,
+        )
         .map_err(|e| e.to_string())?;
     let plain = vm
-        .add_host_fn(HostEntry::Full { f: |_| Ok(0), k: None }, false)
+        .add_host_fn(
+            HostEntry::Full {
+                f: |_| Ok(0),
+                k: None,
+            },
+            false,
+        )
         .map_err(|e| e.to_string())?;
     host_native(&mut vm, owned, 42).map_err(|_| "native")?;
     host_native(&mut vm, plain, 7).map_err(|_| "native")?;
@@ -88,11 +104,15 @@ fn a_freed_userdata_key_and_owned_native_are_listed_exactly_once() -> TestResult
     collect(&mut vm);
     let natives = vm.core.heap.take_freed_natives();
     let keys = vm.core.heap.take_freed_userdata();
-    check(natives == [(owned, 42)], "only the owning entry's native is listed")?;
+    check(
+        natives == [(owned, 42)],
+        "only the owning entry's native is listed",
+    )?;
     check(keys == [99], "the userdata's key is listed")?;
     collect(&mut vm);
     check(
-        vm.core.heap.take_freed_natives().is_empty() && vm.core.heap.take_freed_userdata().is_empty(),
+        vm.core.heap.take_freed_natives().is_empty()
+            && vm.core.heap.take_freed_userdata().is_empty(),
         "nothing is listed twice",
     )
 }
@@ -111,7 +131,10 @@ fn an_enter_that_only_pushes_is_collected_when_it_returns() -> TestResult {
         vm.enter(|ctx| ctx.stack().push_table(128, 0))
             .map_err(|e| format!("enter {n}: {e}"))?;
     }
-    check(vm.core.heap.recount() == vm.core.heap.total_bytes(), "no drift")
+    check(
+        vm.core.heap.recount() == vm.core.heap.total_bytes(),
+        "no drift",
+    )
 }
 
 #[test]
@@ -124,7 +147,13 @@ fn host_functions_made_and_released_are_collected() -> TestResult {
     };
     let mut vm = hosted(limits)?;
     let id = vm
-        .add_host_fn(HostEntry::Full { f: nothing, k: None }, false)
+        .add_host_fn(
+            HostEntry::Full {
+                f: nothing,
+                k: None,
+            },
+            false,
+        )
         .map_err(|e| e.to_string())?;
     for n in 0..10_000 {
         let root = vm
@@ -132,7 +161,10 @@ fn host_functions_made_and_released_are_collected() -> TestResult {
             .map_err(|e| format!("host_function {n}: {e}"))?;
         check(vm.core.roots.release(root), "released")?;
     }
-    check(vm.core.heap.recount() == vm.core.heap.total_bytes(), "no drift")
+    check(
+        vm.core.heap.recount() == vm.core.heap.total_bytes(),
+        "no drift",
+    )
 }
 
 #[test]
@@ -154,15 +186,27 @@ fn a_declared_payload_size_is_charged_and_credited() -> TestResult {
         vm.core.heap.new_userdata(ud(1 << 20)).is_err(),
         "a payload over the budget is a memory error",
     )?;
-    check(vm.core.heap.total_bytes() == before, "the refused payload was not charged")?;
-    vm.core.heap.new_userdata(ud(64 * 1024)).map_err(|_| "userdata")?;
+    check(
+        vm.core.heap.total_bytes() == before,
+        "the refused payload was not charged",
+    )?;
+    vm.core
+        .heap
+        .new_userdata(ud(64 * 1024))
+        .map_err(|_| "userdata")?;
     check(
         vm.core.heap.total_bytes() >= before.saturating_add(64 * 1024),
         "the declared size is charged",
     )?;
     collect(&mut vm);
-    check(vm.core.heap.total_bytes() == before, "and credited when collected")?;
-    check(vm.core.heap.recount() == vm.core.heap.total_bytes(), "no drift")
+    check(
+        vm.core.heap.total_bytes() == before,
+        "and credited when collected",
+    )?;
+    check(
+        vm.core.heap.recount() == vm.core.heap.total_bytes(),
+        "no drift",
+    )
 }
 
 /// Calls itself back through the driver until the core refuses.
@@ -188,10 +232,21 @@ fn reentry_from_a_host_function_is_bounded_and_unwinds() -> TestResult {
     };
     let mut vm = hosted(limits)?;
     let id = vm
-        .add_host_fn(HostEntry::Full { f: reenter, k: None }, false)
+        .add_host_fn(
+            HostEntry::Full {
+                f: reenter,
+                k: None,
+            },
+            false,
+        )
         .map_err(|e| e.to_string())?;
     let f = host_native(&mut vm, id, 0).map_err(|_| "native")?;
-    vm.host.me = Some(vm.core.roots.insert(Value::Function(f)).map_err(|e| e.to_string())?);
+    vm.host.me = Some(
+        vm.core
+            .roots
+            .insert(Value::Function(f))
+            .map_err(|e| e.to_string())?,
+    );
     let result = vm.call_function(Value::Function(f), &[], 0, None);
     check(result.is_err(), "the recursion ends in an error")?;
     check(vm.host.deepest == 8, "each nesting up to the limit ran")?;
@@ -208,7 +263,8 @@ fn plain_probe(ctx: &mut PlainCtx<'_, Probe>) -> Result<usize, HostError> {
         return Err(HostError::new("plain probe failed"));
     }
     let n = f64::from(ctx.data()) + ctx.arg_count() as f64;
-    ctx.push(Value::Number(n)).map_err(|_| HostError::memory())?;
+    ctx.push(Value::Number(n))
+        .map_err(|_| HostError::memory())?;
     Ok(1)
 }
 
@@ -218,12 +274,21 @@ fn a_plain_host_function_runs_with_its_data_and_its_host() -> TestResult {
     let id = vm
         .add_host_fn(HostEntry::Plain(plain_probe), false)
         .map_err(|e| e.to_string())?;
-    let f = vm.host_function("probe", id, 40).map_err(|e| e.to_string())?;
+    let f = vm
+        .host_function("probe", id, 40)
+        .map_err(|e| e.to_string())?;
     let f = vm.core.roots.get(f).map_err(|e| e.to_string())?;
     let args = [Value::Number(1.0), Value::Number(2.0)];
-    let result = vm.call_function(f, &args, 1, None).map_err(|_| "the call failed")?;
-    check(matches!(result, Value::Number(n) if n == 42.0), "data plus argument count")?;
-    let failing = vm.host_function("probe", id, 0).map_err(|e| e.to_string())?;
+    let result = vm
+        .call_function(f, &args, 1, None)
+        .map_err(|_| "the call failed")?;
+    check(
+        matches!(result, Value::Number(n) if n == 42.0),
+        "data plus argument count",
+    )?;
+    let failing = vm
+        .host_function("probe", id, 0)
+        .map_err(|e| e.to_string())?;
     let failing = vm.core.roots.get(failing).map_err(|e| e.to_string())?;
     check(
         vm.call_function(failing, &[], 1, None).is_err(),
@@ -238,7 +303,10 @@ fn a_host_function_needs_a_function_entry_of_its_host() -> TestResult {
     let k = vm
         .add_host_fn(HostEntry::Cont(|_, _| Ok(0)), false)
         .map_err(|e| e.to_string())?;
-    check(vm.host_function("k", k, 0).is_err(), "a continuation entry is refused")?;
+    check(
+        vm.host_function("k", k, 0).is_err(),
+        "a continuation entry is refused",
+    )?;
     check(
         vm.host_function("none", HostFnId::new(vm.roots.vm_id(), 7), 0)
             .is_err(),
@@ -260,24 +328,37 @@ fn a_host_function_id_of_another_vm_is_refused() -> TestResult {
     let foreign = b
         .add_host_fn(HostEntry::Plain(plain_probe), false)
         .map_err(|e| e.to_string())?;
-    check(own.index() == foreign.index(), "both are entry 0 of their table")?;
+    check(
+        own.index() == foreign.index(),
+        "both are entry 0 of their table",
+    )?;
     check(
         a.host_function("b", foreign, 0).is_err(),
         "host_function refuses another VM's entry at the same index",
     )?;
     check(
-        a.enter(|ctx| ctx.push_host_function("b", foreign, 0)).is_err(),
+        a.enter(|ctx| ctx.push_host_function("b", foreign, 0))
+            .is_err(),
         "push_host_function refuses it",
     )?;
     let k = b
         .add_host_fn(HostEntry::Cont(|_, _| Ok(0)), false)
         .map_err(|e| e.to_string())?;
     check(
-        a.add_host_fn(HostEntry::Full { f: nothing, k: Some(k) }, false)
-            .is_err(),
+        a.add_host_fn(
+            HostEntry::Full {
+                f: nothing,
+                k: Some(k),
+            },
+            false,
+        )
+        .is_err(),
         "a continuation of another VM is refused",
     )?;
-    check(a.host_function("a", own, 0).is_ok(), "its own entry is accepted")
+    check(
+        a.host_function("a", own, 0).is_ok(),
+        "its own entry is accepted",
+    )
 }
 
 #[test]
@@ -299,7 +380,10 @@ fn a_custom_host_drains_its_freed_natives() -> TestResult {
         host.plain_calls += 1;
         freed.push((id, data));
     });
-    check(freed == vec![(owning, 41)], "the freed native is handed out")?;
+    check(
+        freed == vec![(owning, 41)],
+        "the freed native is handed out",
+    )?;
     check(vm.host.plain_calls == 1, "with the host's state")?;
     vm.drain_freed_natives(|_, id, data| freed.push((id, data)));
     check(freed.len() == 1, "exactly once")
@@ -353,7 +437,10 @@ fn a_frame_builds_tables_and_reads_them_back() -> TestResult {
             Ok(s.string(-1).map(<[u8]>::to_vec))
         })
         .map_err(|e| e.to_string())?;
-    check(gain.as_deref() == Some(b"gain".as_slice()), "a string reads back")?;
+    check(
+        gain.as_deref() == Some(b"gain".as_slice()),
+        "a string reads back",
+    )?;
     check(vm.core.release_root(root), "released")?;
     check(
         vm.enter(|ctx| ctx.stack().push_root(root)).is_err(),
@@ -374,7 +461,10 @@ fn a_buffer_is_written_and_read_in_place() -> TestResult {
             Ok(s.buffer(-1).map(<[u8]>::to_vec))
         })
         .map_err(|e| e.to_string())?;
-    check(bytes == Some(vec![9, 2, 3, 4]), "the bytes are the buffer's")
+    check(
+        bytes == Some(vec![9, 2, 3, 4]),
+        "the bytes are the buffer's",
+    )
 }
 
 #[test]
@@ -397,7 +487,10 @@ fn a_call_from_a_frame_runs_and_its_error_unwinds() -> TestResult {
         })
         .map_err(|e| e.to_string())?;
     check(
-        matches!(caught.0, crate::host::CallStatus::Error(crate::error::ErrorKind::Runtime)),
+        matches!(
+            caught.0,
+            crate::host::CallStatus::Error(crate::error::ErrorKind::Runtime)
+        ),
         "pcall_top reports the error",
     )?;
     // `error` called from the host has no Lua position (`where_prefix`).
@@ -406,7 +499,10 @@ fn a_call_from_a_frame_runs_and_its_error_unwinds() -> TestResult {
         "its value on top",
     )?;
     check(caught.2 == 2, "in place of the function and its argument")?;
-    check(caught.3.as_deref() == Some(b"7".as_slice()), "a call returns its result")?;
+    check(
+        caught.3.as_deref() == Some(b"7".as_slice()),
+        "a call returns its result",
+    )?;
     let failed = vm.enter(|ctx| {
         ctx.stack().push_globals()?;
         ctx.push_field(-1, b"error")?;
@@ -469,8 +565,10 @@ fn a_plain_host_function_makes_host_functions() -> TestResult {
         .map_err(|e| e.to_string())?;
     check(n == Some(6.0), "the method ran with its data")?;
     check(
-        vm.enter(|ctx| ctx.push_host_function("k", HostFnId::new(ctx.vm.core.roots.vm_id(), 99), 0))
-            .is_err(),
+        vm.enter(|ctx| {
+            ctx.push_host_function("k", HostFnId::new(ctx.vm.core.roots.vm_id(), 99), 0)
+        })
+        .is_err(),
         "an entry the host did not add is refused",
     )
 }
@@ -501,5 +599,8 @@ fn a_steady_collection_cycle_keeps_the_collectors_storage() -> TestResult {
     for _ in 0..3 {
         cycle(&mut vm)?;
     }
-    check(vm.core.gc_storage() == warm, "a steady cycle reallocates nothing")
+    check(
+        vm.core.gc_storage() == warm,
+        "a steady cycle reallocates nothing",
+    )
 }

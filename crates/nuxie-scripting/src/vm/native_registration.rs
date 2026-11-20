@@ -170,7 +170,9 @@ enum Interleave {
 #[derive(Clone, Copy)]
 enum Mark {
     /// On the stack, in the walk started from this root.
-    Open { root: usize },
+    Open {
+        root: usize,
+    },
     Placed,
 }
 
@@ -311,7 +313,10 @@ mod tests {
 
     /// The recursive `sort` this module had before lane E2a, on a plain
     /// graph: the oracle for the order of every input it accepted.
-    fn recursive_sort(roots: &[usize], graph: &[Vec<usize>]) -> std::result::Result<Vec<usize>, ()> {
+    fn recursive_sort(
+        roots: &[usize],
+        graph: &[Vec<usize>],
+    ) -> std::result::Result<Vec<usize>, ()> {
         fn sort(
             index: usize,
             graph: &[Vec<usize>],
@@ -343,7 +348,14 @@ mod tests {
         let mut sorted = Vec::new();
         let (mut visited, mut visiting) = (BTreeSet::new(), BTreeSet::new());
         if let Some(next) = remaining.pop() {
-            sort(next, graph, &mut remaining, &mut sorted, &mut visited, &mut visiting)?;
+            sort(
+                next,
+                graph,
+                &mut remaining,
+                &mut sorted,
+                &mut visited,
+                &mut visiting,
+            )?;
         }
         Ok(sorted)
     }
@@ -384,8 +396,11 @@ mod tests {
     }
 
     fn assert_topological(order: &[usize], roots: &[usize], graph: &[Vec<usize>]) {
-        let placed: BTreeMap<usize, usize> =
-            order.iter().enumerate().map(|(at, &node)| (node, at)).collect();
+        let placed: BTreeMap<usize, usize> = order
+            .iter()
+            .enumerate()
+            .map(|(at, &node)| (node, at))
+            .collect();
         assert_eq!(placed.len(), order.len(), "placed once: {order:?}");
         assert_eq!(
             placed.keys().copied().collect::<BTreeSet<_>>(),
@@ -394,7 +409,10 @@ mod tests {
         );
         for (&node, &at) in &placed {
             for dependency in &graph[node] {
-                assert!(placed[dependency] < at, "{dependency} before {node}: {order:?}");
+                assert!(
+                    placed[dependency] < at,
+                    "{dependency} before {node}: {order:?}"
+                );
             }
         }
     }
@@ -411,7 +429,11 @@ mod tests {
 
     /// A random graph on `nodes` scripts; acyclic when every edge goes from
     /// a script to one of a lower rank in a random ranking.
-    fn random_graph(rng: &mut XorShift, nodes: usize, acyclic: bool) -> (Vec<usize>, Vec<Vec<usize>>) {
+    fn random_graph(
+        rng: &mut XorShift,
+        nodes: usize,
+        acyclic: bool,
+    ) -> (Vec<usize>, Vec<Vec<usize>>) {
         let mut rank: Vec<usize> = (0..nodes).collect();
         for at in (1..nodes).rev() {
             rank.swap(at, rng.next(at + 1));
@@ -437,7 +459,10 @@ mod tests {
     #[test]
     fn the_minimal_false_cycle_orders_dependencies_first() {
         let graph = vec![vec![], vec![0], vec![1]];
-        assert!(recursive_sort(&[0, 1, 2], &graph).is_err(), "the old sort's false cycle");
+        assert!(
+            recursive_sort(&[0, 1, 2], &graph).is_err(),
+            "the old sort's false cycle"
+        );
         assert_eq!(order(&[0, 1, 2], &graph).unwrap(), vec![0, 1, 2]);
     }
 
@@ -445,7 +470,10 @@ mod tests {
     fn a_real_cycle_is_still_reported_with_the_same_text() {
         let graph = vec![vec![1], vec![0]];
         let error = order(&[0, 1], &graph).unwrap_err();
-        assert_eq!(error.to_string(), "runtime error: cyclic script module dependency");
+        assert_eq!(
+            error.to_string(),
+            "runtime error: cyclic script module dependency"
+        );
         let self_loop = vec![vec![0]];
         assert!(order(&[0], &self_loop).is_err());
     }
@@ -477,7 +505,10 @@ mod tests {
                 }
                 Err(error) => {
                     assert!(cyclic, "false cycle: {roots:?} {graph:?}");
-                    assert_eq!(error.to_string(), "runtime error: cyclic script module dependency");
+                    assert_eq!(
+                        error.to_string(),
+                        "runtime error: cyclic script module dependency"
+                    );
                     cycles += 1;
                 }
             }

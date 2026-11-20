@@ -2,8 +2,8 @@
 //! `tests/unit_tests/runtime/scripting/scripting_scope_test.cpp`.
 #![cfg(feature = "luau-host")]
 
-use nuxie_scripting::luau::{Table, Value};
 use nuxie_binary::read_runtime_file_with_scripting;
+use nuxie_scripting::luau::{Table, Value};
 use nuxie_scripting::vm::ScriptVm;
 
 mod support;

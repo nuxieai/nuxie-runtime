@@ -57,7 +57,10 @@ pub(crate) fn arg(vm: &Core, ra: usize, args: &[Value; 3], i: usize) -> Value {
 }
 
 const fn plain(f: FastFn) -> Option<FastEntry> {
-    Some(FastEntry { f, allocates: false })
+    Some(FastEntry {
+        f,
+        allocates: false,
+    })
 }
 
 const fn allocating(f: FastFn) -> Option<FastEntry> {
@@ -250,7 +253,9 @@ macro_rules! fast_number2 {
             [a0, a1, _]: [Value; 3],
             nparams: usize,
         ) -> Option<usize> {
-            let (Value::Number(x), Value::Number(y)) = (a0, a1) else { return None };
+            let (Value::Number(x), Value::Number(y)) = (a0, a1) else {
+                return None;
+            };
             if nparams < 2 || nresults > 1 {
                 return None;
             }

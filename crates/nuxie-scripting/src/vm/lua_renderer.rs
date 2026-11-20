@@ -254,7 +254,10 @@ impl ScriptedRenderer {
         callback: impl FnOnce(&mut RendererScope<'_>) -> Result<R>,
     ) -> Result<R> {
         let mut scope = RendererScope::new(renderer);
-        let mut target = self.target.try_borrow_mut().map_err(|_| already_borrowed())?;
+        let mut target = self
+            .target
+            .try_borrow_mut()
+            .map_err(|_| already_borrowed())?;
         let previous = target.replace(RendererTarget::CallScoped(scope.token));
         drop(target);
         let _restore = RestoreTarget {
@@ -752,7 +755,9 @@ return instances
                 .is_ok()
         );
         // Without a loan (a call that did not carry the scope) neither does.
-        let error = inner_renderer.with_renderer_mut(None, |_| Ok(())).unwrap_err();
+        let error = inner_renderer
+            .with_renderer_mut(None, |_| Ok(()))
+            .unwrap_err();
         assert!(error.to_string().contains("no longer valid"), "{error}");
         assert!(inner_renderer.end(Some(&mut inner_scope)));
         assert!(
@@ -767,7 +772,9 @@ return instances
         use super::super::lua_mesh::MAX_IMAGE_MESH_INSTANCES;
         let vm = MeshInstancesTest::new();
         let lua = vm.vm.lua();
-        lua.globals().set("limit", MAX_IMAGE_MESH_INSTANCES).unwrap();
+        lua.globals()
+            .set("limit", MAX_IMAGE_MESH_INSTANCES)
+            .unwrap();
         lua.load(
             r#"
             local a = MeshInstances()
@@ -931,7 +938,10 @@ return instances
                     renderer.save();
                     // The parent's userdata is held by this host call.
                     let error = outer.with_renderer_mut(None, |_| Ok(())).unwrap_err();
-                    assert!(error.to_string().contains("already mutably borrowed"), "{error}");
+                    assert!(
+                        error.to_string().contains("already mutably borrowed"),
+                        "{error}"
+                    );
                     renderer.restore();
                 }
                 renderer.restore();

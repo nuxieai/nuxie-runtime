@@ -58,7 +58,11 @@ const SAMPLE_INTERVAL: Duration = Duration::from_millis(50);
 const KEPT_OUTPUT_BYTES: usize = 16 * 1024;
 
 fn strategy() -> &'static str {
-    if cfg!(panic = "abort") { "abort" } else { "unwind" }
+    if cfg!(panic = "abort") {
+        "abort"
+    } else {
+        "unwind"
+    }
 }
 
 fn corpus_dir() -> PathBuf {
@@ -107,7 +111,10 @@ fn parse_header(source: &str) -> Result<Header, String> {
         let (key, value) = field
             .split_once(':')
             .ok_or_else(|| format!("field without `:`: {field:?}"))?;
-        if fields.insert(key.trim().to_owned(), value.trim().to_owned()).is_some() {
+        if fields
+            .insert(key.trim().to_owned(), value.trim().to_owned())
+            .is_some()
+        {
             return Err(format!("field {key:?} given twice"));
         }
     }
@@ -200,7 +207,8 @@ fn new_vm(header: &Header) -> Result<(ScriptVm, PersistentFactory<NullFactory>),
     let mut factory = PersistentFactory::new(NullFactory::new());
     vm.install_render_factory(&mut factory)
         .map_err(|e| format!("factory: {e}"))?;
-    vm.install_rive_globals().map_err(|e| format!("globals: {e}"))?;
+    vm.install_rive_globals()
+        .map_err(|e| format!("globals: {e}"))?;
     if let Some(asset) = &header.view_models {
         let path = std::env::var_os("RIVE_RUNTIME_DIR")
             .map(PathBuf::from)
@@ -251,7 +259,11 @@ fn run_instance(
                 .map_err(text)?;
         }
         instance
-            .call_optional_method(ScriptMethod::Advance, &[ScriptValue::Number(1.0 / 60.0)], &mut host)
+            .call_optional_method(
+                ScriptMethod::Advance,
+                &[ScriptValue::Number(1.0 / 60.0)],
+                &mut host,
+            )
             .map_err(text)?;
         instance
             .call_optional_method(ScriptMethod::Update, &[], &mut host)
@@ -359,7 +371,11 @@ fn run_bytecode_case(header: &Header, name: &str, chunk: &[u8]) -> CaseResult {
     let mut variants = bytecode_variants(directive, chunk).map_err(|e| format!("harness: {e}"))?;
     // The unchanged chunk goes first and must run, so the variants are
     // known to reach past the loader's first checks.
-    let control = if payload { [&[0u8][..], chunk].concat() } else { chunk.to_vec() };
+    let control = if payload {
+        [&[0u8][..], chunk].concat()
+    } else {
+        chunk.to_vec()
+    };
     variants.insert(0, ("control".into(), control));
     let (mut ok, mut errors) = (0usize, 0usize);
     let mut refusals: BTreeSet<String> = BTreeSet::new();
@@ -482,9 +498,15 @@ impl Kind {
     }
 
     fn parse(text: &str) -> Option<Self> {
-        [Kind::Crash, Kind::Panic, Kind::Timeout, Kind::Memory, Kind::Outcome]
-            .into_iter()
-            .find(|kind| kind.name() == text)
+        [
+            Kind::Crash,
+            Kind::Panic,
+            Kind::Timeout,
+            Kind::Memory,
+            Kind::Outcome,
+        ]
+        .into_iter()
+        .find(|kind| kind.name() == text)
     }
 }
 
@@ -498,7 +520,10 @@ struct Verdict {
 
 /// Pid, parent pid and resident KiB of every process, from `ps`.
 fn process_table() -> Vec<(u32, u32, u64)> {
-    let Ok(output) = Command::new("ps").args(["-A", "-o", "pid=,ppid=,rss="]).output() else {
+    let Ok(output) = Command::new("ps")
+        .args(["-A", "-o", "pid=,ppid=,rss="])
+        .output()
+    else {
         return Vec::new();
     };
     String::from_utf8_lossy(&output.stdout)
@@ -605,7 +630,12 @@ fn crash_summary(output: &str, status: &str) -> String {
 fn judge(case: &str, header: &Header) -> Verdict {
     let started = Instant::now();
     let mut child = Command::new(std::env::current_exe().expect("test binary"))
-        .args(["hostile_corpus", "--exact", "--nocapture", "--test-threads=1"])
+        .args([
+            "hostile_corpus",
+            "--exact",
+            "--nocapture",
+            "--test-threads=1",
+        ])
         .env(CASE_ENV, case)
         .env("RUST_BACKTRACE", "1")
         .stdin(Stdio::null())
@@ -648,7 +678,10 @@ fn judge(case: &str, header: &Header) -> Verdict {
     let outcome = output
         .lines()
         // libtest's `test hostile_corpus ... ` can precede it on its line.
-        .find_map(|line| line.find(OUTCOME_PREFIX).map(|at| &line[at + OUTCOME_PREFIX.len()..]))
+        .find_map(|line| {
+            line.find(OUTCOME_PREFIX)
+                .map(|at| &line[at + OUTCOME_PREFIX.len()..])
+        })
         .unwrap_or("")
         .to_owned();
     let verdict = |failure| Verdict {
@@ -660,13 +693,24 @@ fn judge(case: &str, header: &Header) -> Verdict {
     };
     match (killed, status) {
         (Some(Kind::Memory), _) => {
-            return verdict(Some((Kind::Memory, format!("RSS {peak_kib} KiB past {MEMORY_CEILING_KIB} KiB"))));
+            return verdict(Some((
+                Kind::Memory,
+                format!("RSS {peak_kib} KiB past {MEMORY_CEILING_KIB} KiB"),
+            )));
         }
         (Some(kind), _) => {
-            return verdict(Some((kind, format!("killed after {:.1}s", elapsed.as_secs_f64()))));
+            return verdict(Some((
+                kind,
+                format!("killed after {:.1}s", elapsed.as_secs_f64()),
+            )));
         }
-        (None, Some(status)) if !status.success() || !output.contains(DROPPED_LINE) || outcome.is_empty() => {
-            return verdict(Some((Kind::Crash, crash_summary(&output, &status.to_string()))));
+        (None, Some(status))
+            if !status.success() || !output.contains(DROPPED_LINE) || outcome.is_empty() =>
+        {
+            return verdict(Some((
+                Kind::Crash,
+                crash_summary(&output, &status.to_string()),
+            )));
         }
         _ => {}
     }
@@ -694,7 +738,10 @@ fn judge(case: &str, header: &Header) -> Verdict {
     if matches {
         verdict(None)
     } else {
-        verdict(Some((Kind::Outcome, format!("expected {:?}, got: {outcome}", header.expect))))
+        verdict(Some((
+            Kind::Outcome,
+            format!("expected {:?}, got: {outcome}", header.expect),
+        )))
     }
 }
 
@@ -727,15 +774,26 @@ fn expected_failures() -> BTreeMap<String, ExpectedFailure> {
             "expected-failures.txt:{}: owner is H1, H2 or H3",
             number + 1
         );
-        assert!(!reason.is_empty(), "expected-failures.txt:{}: no reason", number + 1);
+        assert!(
+            !reason.is_empty(),
+            "expected-failures.txt:{}: no reason",
+            number + 1
+        );
         let kind = Kind::parse(kind)
             .unwrap_or_else(|| panic!("expected-failures.txt:{}: unknown kind {kind}", number + 1));
         if *strategy_field == "both" || *strategy_field == strategy() {
             let previous = out.insert(
                 (*case).to_owned(),
-                ExpectedFailure { kind, owner: (*owner).to_owned() },
+                ExpectedFailure {
+                    kind,
+                    owner: (*owner).to_owned(),
+                },
             );
-            assert!(previous.is_none(), "expected-failures.txt:{}: {case} listed twice", number + 1);
+            assert!(
+                previous.is_none(),
+                "expected-failures.txt:{}: {case} listed twice",
+                number + 1
+            );
         }
     }
     out
@@ -751,8 +809,14 @@ fn hostile_corpus() {
     assert!(!all.is_empty(), "no cases under {}", corpus_dir().display());
     let expected = expected_failures();
     let known: BTreeSet<&String> = all.iter().collect();
-    let missing: Vec<&String> = expected.keys().filter(|case| !known.contains(case)).collect();
-    assert!(missing.is_empty(), "expected-failures.txt names cases that do not exist: {missing:?}");
+    let missing: Vec<&String> = expected
+        .keys()
+        .filter(|case| !known.contains(case))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "expected-failures.txt names cases that do not exist: {missing:?}"
+    );
 
     let filter = std::env::var(FILTER_ENV).ok();
     let cases: Vec<(String, Header)> = all
@@ -810,7 +874,12 @@ fn hostile_corpus() {
         let status = match (&verdict.failure, listed) {
             (None, None) => "pass".to_owned(),
             (None, Some(entry)) => {
-                fixed.push(format!("{} (was {} for {})", verdict.case, entry.kind.name(), entry.owner));
+                fixed.push(format!(
+                    "{} (was {} for {})",
+                    verdict.case,
+                    entry.kind.name(),
+                    entry.owner
+                ));
                 "PASSES BUT LISTED".to_owned()
             }
             (Some((kind, detail)), Some(entry)) if *kind == entry.kind => {
@@ -848,14 +917,33 @@ fn hostile_corpus() {
         "hostile corpus (panic={}): {} cases, {} expected failures seen, {} unexpected, {} listed but passing, {} wrong kind; peak RSS {peak} KiB; slowest {slowest}",
         strategy(),
         verdicts.len(),
-        verdicts.iter().filter(|v| v.failure.is_some() && expected.contains_key(&v.case)).count(),
+        verdicts
+            .iter()
+            .filter(|v| v.failure.is_some() && expected.contains_key(&v.case))
+            .count(),
         unexpected.len(),
         fixed.len(),
         wrong_kind.len(),
     );
     let mut problems = Vec::new();
-    problems.extend(unexpected.iter().map(|line| format!("unexpected failure: {line}")));
-    problems.extend(fixed.iter().map(|line| format!("listed failure now passes, remove its line: {line}")));
-    problems.extend(wrong_kind.iter().map(|line| format!("listed failure changed kind: {line}")));
-    assert!(problems.is_empty(), "hostile corpus gate:\n{}", problems.join("\n"));
+    problems.extend(
+        unexpected
+            .iter()
+            .map(|line| format!("unexpected failure: {line}")),
+    );
+    problems.extend(
+        fixed
+            .iter()
+            .map(|line| format!("listed failure now passes, remove its line: {line}")),
+    );
+    problems.extend(
+        wrong_kind
+            .iter()
+            .map(|line| format!("listed failure changed kind: {line}")),
+    );
+    assert!(
+        problems.is_empty(),
+        "hostile corpus gate:\n{}",
+        problems.join("\n")
+    );
 }

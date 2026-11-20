@@ -162,10 +162,7 @@ fn strided_copy(
 enum Target<'a> {
     /// Source and destination are one buffer: a local copy of it, read and
     /// written in order (reads see earlier writes), written back once.
-    Shared {
-        bytes: Vec<u8>,
-        buffer: &'a Buffer,
-    },
+    Shared { bytes: Vec<u8>, buffer: &'a Buffer },
     /// Two buffers: reads from a copy of the source, writes straight to the
     /// destination (nothing written can be read back).
     Apart {
@@ -356,7 +353,10 @@ fn convert(
         }
     } else {
         let starts = positions(source_range.start, elements.source_stride)?
-            .zip(positions(destination_range.start, elements.destination_stride)?)
+            .zip(positions(
+                destination_range.start,
+                elements.destination_stride,
+            )?)
             .take(count);
         for (from, to) in starts {
             let element = Element {
@@ -390,7 +390,9 @@ impl Elements {
     fn convert(&self, element: Element, target: &mut Target<'_>) -> Result<()> {
         for (from, to) in self.scalars(element)? {
             let value = read_element(target.readable(), from, self.source_format)?;
-            encode(self.destination_format, value, |bytes| target.write(to, bytes))?;
+            encode(self.destination_format, value, |bytes| {
+                target.write(to, bytes)
+            })?;
         }
         Ok(())
     }
@@ -407,7 +409,10 @@ impl Elements {
     /// Where each scalar of `element` is read and written.
     fn scalars(&self, element: Element) -> Result<impl Iterator<Item = (usize, usize)>> {
         Ok(positions(element.source, self.source_format.width())?
-            .zip(positions(element.destination, self.destination_format.width())?)
+            .zip(positions(
+                element.destination,
+                self.destination_format.width(),
+            )?)
             .take(self.components))
     }
 }
@@ -477,7 +482,11 @@ fn positions(offset: usize, stride: impl TryInto<usize>) -> Result<impl Iterator
 }
 
 /// The byte range one side of a strided copy covers, after the bounds check.
-fn strided_span(side: &Strided<'_>, element_size: i64, count: i32) -> Result<std::ops::Range<usize>> {
+fn strided_span(
+    side: &Strided<'_>,
+    element_size: i64,
+    count: i32,
+) -> Result<std::ops::Range<usize>> {
     checked_strided_range(
         i64::from(side.offset),
         i64::from(side.stride),
@@ -539,11 +548,7 @@ fn write_element(target: &mut [u8], at: usize, format: BufferFormat, value: f64)
 }
 
 /// `value` in `format`'s bytes, handed to `put`.
-fn encode(
-    format: BufferFormat,
-    value: f64,
-    put: impl FnOnce(&[u8]) -> Result<()>,
-) -> Result<()> {
+fn encode(format: BufferFormat, value: f64, put: impl FnOnce(&[u8]) -> Result<()>) -> Result<()> {
     // Pinned C++ float-to-integer casts are undefined for NaN and values outside
     // the destination range. Follow the workspace policy in docs/PORTING.md
     // section 3.3: Rust casts deliberately saturate (and map NaN to zero).
@@ -741,8 +746,21 @@ mod tests {
     #[test]
     fn float_to_half_is_unchanged() {
         let edges = [
-            0.0f32, -0.0, 1.0, -1.0, 65504.0, 65520.0, 6.0e-8, 5.9e-8, 3.0e-8, 2.9e-8,
-            6.1035156e-5, f32::INFINITY, f32::NEG_INFINITY, f32::NAN, f32::MIN_POSITIVE,
+            0.0f32,
+            -0.0,
+            1.0,
+            -1.0,
+            65504.0,
+            65520.0,
+            6.0e-8,
+            5.9e-8,
+            3.0e-8,
+            2.9e-8,
+            6.1035156e-5,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::NAN,
+            f32::MIN_POSITIVE,
         ];
         for value in edges {
             assert_eq!(float_to_half(value), old_float_to_half(value), "{value}");
@@ -799,9 +817,21 @@ mod tests {
             let components = 1 + rng.next(4);
             let aliased = round % 2 == 0;
             let zero = rng.next(3) == 0;
-            let src_stride = if zero { 0 } else { components * src_format.width() + rng.next(3) };
-            let dst_stride = if zero { 0 } else { components * dst_format.width() + rng.next(3) };
-            let count = if zero { 1 + rng.next(3_000) } else { 1 + rng.next(4) };
+            let src_stride = if zero {
+                0
+            } else {
+                components * src_format.width() + rng.next(3)
+            };
+            let dst_stride = if zero {
+                0
+            } else {
+                components * dst_format.width() + rng.next(3)
+            };
+            let count = if zero {
+                1 + rng.next(3_000)
+            } else {
+                1 + rng.next(4)
+            };
             let src_offset = rng.next(8);
             let dst_offset = rng.next(8);
             let fits = |offset: usize, stride: usize, width: usize| {
@@ -824,21 +854,29 @@ mod tests {
                 // overlapping run is undefined.
                 let run = count * components * src_format.width();
                 let block = expected[src_offset..src_offset + run].to_vec();
-                let source = if aliased { &block } else { &other[src_offset..src_offset + run] };
+                let source = if aliased {
+                    &block
+                } else {
+                    &other[src_offset..src_offset + run]
+                };
                 expected[dst_offset..dst_offset + run].copy_from_slice(source);
             } else {
-            reference_convert(
-                &mut expected,
-                (!aliased).then_some(other.as_slice()),
-                (dst_offset, dst_format, dst_stride),
-                (src_offset, src_format, src_stride),
-                count,
-                components,
-            );
+                reference_convert(
+                    &mut expected,
+                    (!aliased).then_some(other.as_slice()),
+                    (dst_offset, dst_format, dst_stride),
+                    (src_offset, src_format, src_stride),
+                    count,
+                    components,
+                );
             }
 
             let destination = lua.create_buffer(&initial).unwrap();
-            let source = if aliased { destination.clone() } else { lua.create_buffer(&other).unwrap() };
+            let source = if aliased {
+                destination.clone()
+            } else {
+                lua.create_buffer(&other).unwrap()
+            };
             convert((
                 destination.clone(),
                 dst_offset as i32,
@@ -898,10 +936,22 @@ mod tests {
                 expected[to..to + element].copy_from_slice(&bytes);
             }
             let destination = lua.create_buffer(&initial).unwrap();
-            let source = if aliased { destination.clone() } else { lua.create_buffer(&other).unwrap() };
+            let source = if aliased {
+                destination.clone()
+            } else {
+                lua.create_buffer(&other).unwrap()
+            };
             strided_copy(
-                Strided { buffer: &destination, offset: dst_offset as i32, stride: dst_stride as i32 },
-                Strided { buffer: &source, offset: src_offset as i32, stride: src_stride as i32 },
+                Strided {
+                    buffer: &destination,
+                    offset: dst_offset as i32,
+                    stride: dst_stride as i32,
+                },
+                Strided {
+                    buffer: &source,
+                    offset: src_offset as i32,
+                    stride: src_stride as i32,
+                },
                 element as i32,
                 count as i32,
             )
@@ -948,7 +998,14 @@ mod tests {
             let (so, dof) = (rng.next(6), rng.next(6));
             let initial: Vec<u8> = (0..32).map(|_| rng.next(256) as u8).collect();
             let step = |bytes: &mut Vec<u8>, n: usize| {
-                reference_convert(bytes, None, (dof, FORMATS[df], 0), (so, FORMATS[sf], 0), n, components)
+                reference_convert(
+                    bytes,
+                    None,
+                    (dof, FORMATS[df], 0),
+                    (so, FORMATS[sf], 0),
+                    n,
+                    components,
+                )
             };
             let (mut one, mut two) = (initial.clone(), initial.clone());
             step(&mut one, 400);

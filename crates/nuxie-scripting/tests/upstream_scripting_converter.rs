@@ -2,8 +2,8 @@
 //! `tests/unit_tests/runtime/scripting/scripting_converter_test.cpp`.
 #![cfg(feature = "luau-host")]
 
-use nuxie_scripting::luau::{Function, Table};
 use nuxie_runtime::{ScriptDataConverterMethod, ScriptInstance, ScriptValue};
+use nuxie_scripting::luau::{Function, Table};
 use nuxie_scripting::vm::{LuaScriptInstance, ScriptVm};
 
 mod support;

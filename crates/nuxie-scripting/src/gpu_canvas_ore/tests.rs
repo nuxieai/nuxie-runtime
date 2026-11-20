@@ -326,9 +326,15 @@ fn integer_and_lua_numeric_string_descriptor_values_are_preserved() {
     ));
     assert_eq!(number(&desc, &mut None, "integer", 99.0).unwrap(), 16.0);
     assert_eq!(number(&desc, &mut None, "decimal", 99.0).unwrap(), 1.5);
-    assert_eq!(number(&desc, &mut None, "numericString", 99.0).unwrap(), 16.0);
+    assert_eq!(
+        number(&desc, &mut None, "numericString", 99.0).unwrap(),
+        16.0
+    );
     assert_eq!(number(&desc, &mut None, "invalid", 99.0).unwrap(), 99.0);
-    assert_eq!(string(&desc, &mut None, "integer").unwrap().as_deref(), Some("16"));
+    assert_eq!(
+        string(&desc, &mut None, "integer").unwrap().as_deref(),
+        Some("16")
+    );
     desc.set("large", 1e30).unwrap();
     let formatted: String = vm.lua().load("return tostring(1e30)").eval().unwrap();
     assert_eq!(string(&desc, &mut None, "large").unwrap(), Some(formatted));
@@ -700,9 +706,14 @@ fn texture_and_gpu_canvas_sizes_are_capped() {
         )
         .exec()
         .unwrap();
-    let error = Canvas::create(vm.lua(), RendererBindings::for_lua(vm.lua()).unwrap(), 9000, 2)
-        .err()
-        .unwrap();
+    let error = Canvas::create(
+        vm.lua(),
+        RendererBindings::for_lua(vm.lua()).unwrap(),
+        9000,
+        2,
+    )
+    .err()
+    .unwrap();
     assert!(
         error
             .to_string()
@@ -777,7 +788,10 @@ fn gpu_texture_charges_cover_formats_layers_and_samples() {
     assert_eq!(texture_bytes(&desc(TextureFormat::astc6x6, 7, 6)), 32);
     assert_eq!(texture_bytes(&desc(TextureFormat::astc8x8, 8, 8)), 16);
     // Codex review: Metal widens depth24plusStencil8 to 8 bytes a texel.
-    assert_eq!(texture_bytes(&desc(TextureFormat::depth24plusStencil8, 2, 2)), 32);
+    assert_eq!(
+        texture_bytes(&desc(TextureFormat::depth24plusStencil8, 2, 2)),
+        32
+    );
     let mut cube = desc(TextureFormat::r8unorm, 4, 4);
     cube.r#type = TextureType::cube;
     assert_eq!(texture_bytes(&cube), 6 * 16, "a cube has six faces");
@@ -869,7 +883,10 @@ fn gpu_descriptor_metamethods_reach_the_draw_renderer() {
         "buffer", "texture", "view", "upload", "sampler", "layout", "group", "pipeline", "pass",
         "color",
     ] {
-        assert!(drawn.raw_get::<bool>(name).unwrap_or(false), "{name} did not draw");
+        assert!(
+            drawn.raw_get::<bool>(name).unwrap_or(false),
+            "{name} did not draw"
+        );
     }
 }
 
@@ -985,7 +1002,10 @@ fn a_pass_keeps_the_charges_of_what_it_binds() {
         .unwrap();
     vm.lua().gc_collect().unwrap();
     assert_eq!(host_bytes_used(&vm) - base, 16 * 16 * 4);
-    vm.lua().load("attached:finish() attached = nil").exec().unwrap();
+    vm.lua()
+        .load("attached:finish() attached = nil")
+        .exec()
+        .unwrap();
     vm.lua().gc_collect().unwrap();
     assert_eq!(
         host_bytes_used(&vm) - base,
@@ -1005,9 +1025,7 @@ fn a_frame_that_loops_create_bind_drop_is_refused_at_the_budget() {
     let (vm, recorder) = recording_vm_and_recorder();
     crate::vm::host_memory_budget::HostMemoryBudget::install(vm.lua(), 64 * 1024).unwrap();
     vm.lua()
-        .load(
-            "view = GPUTexture.new {width = 4, height = 4, renderTarget = true}:view()",
-        )
+        .load("view = GPUTexture.new {width = 4, height = 4, renderTarget = true}:view()")
         .exec()
         .unwrap();
     let base = host_bytes_used(&vm);
@@ -1030,7 +1048,10 @@ fn a_frame_that_loops_create_bind_drop_is_refused_at_the_budget() {
     ];
     for script in loops {
         let rounds = refused(script);
-        assert!(rounds <= 64, "`{script}` was refused only after {rounds} rounds");
+        assert!(
+            rounds <= 64,
+            "`{script}` was refused only after {rounds} rounds"
+        );
         vm.lua().load("b = nil t = nil").exec().unwrap();
         vm.lua().gc_collect().unwrap();
         recorder.borrow_mut().resetFrame();

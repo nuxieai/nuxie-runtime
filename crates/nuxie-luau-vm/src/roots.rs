@@ -82,7 +82,9 @@ impl Roots {
             }
         };
         let Some(slot) = self.slots.get_mut(index as usize) else {
-            return Err(Error::Host("internal error: a free root slot is missing".to_owned()));
+            return Err(Error::Host(
+                "internal error: a free root slot is missing".to_owned(),
+            ));
         };
         slot.value = value;
         slot.live = true;
@@ -151,10 +153,14 @@ mod tests {
     #[test]
     fn a_released_root_is_stale_after_its_slot_is_reused() -> TestResult {
         let mut roots = Roots::new();
-        let a = roots.insert(Value::Number(1.0)).map_err(|e| e.to_string())?;
+        let a = roots
+            .insert(Value::Number(1.0))
+            .map_err(|e| e.to_string())?;
         check(roots.release(a), "released")?;
         check(!roots.release(a), "a second release is a no-op")?;
-        let b = roots.insert(Value::Number(2.0)).map_err(|e| e.to_string())?;
+        let b = roots
+            .insert(Value::Number(2.0))
+            .map_err(|e| e.to_string())?;
         check(a.index == b.index, "the slot is reused")?;
         check(
             matches!(roots.get(a), Err(Error::Host(m)) if m == "a stale root"),
@@ -171,8 +177,12 @@ mod tests {
     fn another_vms_root_is_refused() -> TestResult {
         let mut ours = Roots::new();
         let mut theirs = Roots::new();
-        let _mine = ours.insert(Value::Boolean(true)).map_err(|e| e.to_string())?;
-        let foreign = theirs.insert(Value::Boolean(false)).map_err(|e| e.to_string())?;
+        let _mine = ours
+            .insert(Value::Boolean(true))
+            .map_err(|e| e.to_string())?;
+        let foreign = theirs
+            .insert(Value::Boolean(false))
+            .map_err(|e| e.to_string())?;
         check(
             matches!(ours.get(foreign), Err(Error::Host(m)) if m.contains("other than the one")),
             "a foreign root is an error",

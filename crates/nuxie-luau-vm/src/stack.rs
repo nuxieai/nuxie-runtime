@@ -118,7 +118,9 @@ impl Stack<'_> {
             return Err(HostError::raw(format!("stack index {i} is not a table")));
         };
         if self.core.heap.table(t).readonly {
-            let throw = self.core.runtime_error("attempt to modify a readonly table");
+            let throw = self
+                .core
+                .runtime_error("attempt to modify a readonly table");
             return Err(self.fail(throw));
         }
         Ok(t)
@@ -274,7 +276,9 @@ impl Stack<'_> {
         let table = self.writable_table(t)?;
         let v = self.take()?;
         let k = self.take()?;
-        self.core.raw_set(table, k, v).map_err(|t| self.core.host_throw(t))
+        self.core
+            .raw_set(table, k, v)
+            .map_err(|t| self.core.host_throw(t))
     }
 
     /// C++ `lua_setfield` on a table without `__newindex`: pops a value
@@ -286,7 +290,9 @@ impl Stack<'_> {
             Err(t) => return Err(self.fail(t)),
         };
         let v = self.take()?;
-        self.core.raw_set(table, key, v).map_err(|t| self.core.host_throw(t))
+        self.core
+            .raw_set(table, key, v)
+            .map_err(|t| self.core.host_throw(t))
     }
 
     /// C++ `lua_rawseti`: pops a value and stores it at integer key `n`.

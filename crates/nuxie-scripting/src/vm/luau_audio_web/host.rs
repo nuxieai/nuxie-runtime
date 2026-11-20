@@ -67,7 +67,14 @@ pub(super) fn call(_op: u32, _input: &[u8], output: &mut [u8]) -> i32 {
 
 /// Runs binary shared-transport operation `op` on `bytes`; negative on failure.
 #[cfg(feature = "browser-audio-host")]
-pub(super) fn shared(op: u32, owner: u32, id: u32, bytes: &mut [u8], offset: u32, value: u32) -> f64 {
+pub(super) fn shared(
+    op: u32,
+    owner: u32,
+    id: u32,
+    bytes: &mut [u8],
+    offset: u32,
+    value: u32,
+) -> f64 {
     // SAFETY: the host reads and writes at most `bytes.len()` bytes at
     // `bytes`, during this call only, and keeps no address after it returns.
     unsafe {
@@ -83,7 +90,14 @@ pub(super) fn shared(op: u32, owner: u32, id: u32, bytes: &mut [u8], offset: u32
     }
 }
 #[cfg(not(feature = "browser-audio-host"))]
-pub(super) fn shared(op: u32, owner: u32, id: u32, bytes: &mut [u8], offset: u32, value: u32) -> f64 {
+pub(super) fn shared(
+    op: u32,
+    owner: u32,
+    id: u32,
+    bytes: &mut [u8],
+    offset: u32,
+    value: u32,
+) -> f64 {
     let _ = (op, owner, id, bytes, offset, value);
     -1.0
 }

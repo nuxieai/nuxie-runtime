@@ -55,6 +55,11 @@ impl Played {
     }
 
     fn start(f: Scene, bound: bool) -> Self {
+        Self::started(f, bound).0
+    }
+
+    /// As `start`, with the first step's output.
+    fn started(f: Scene, bound: bool) -> (Self, Output) {
         let mut board =
             ArtboardInstance::from_native_handle(f._file.clone(), 0, f.artboard.clone());
         let machine = board.state_machine_instance(0).expect("the state machine");
@@ -76,8 +81,8 @@ impl Played {
             playback: Playback::StateMachine(Box::new(machine)),
             player: PagePlayer::default(),
         };
-        played.step(0.0, vec![]);
-        played
+        let output = played.step(0.0, vec![]);
+        (played, output)
     }
 
     fn drive(&self, driver: impl FnMut(&DriverRound<'_>, &mut SceneWriter<'_>) + 'static) {
@@ -1120,28 +1125,40 @@ const HOSTS: [Host; 4] = [
 ];
 
 /// A root "Main" whose "Box" holds `host`, hosting "Child": a machine that
-/// fires "entered" as it enters a half-second animation moving the drawn
-/// "Dot", a second half-second animation moving the drawn "Bar", a
-/// horizontal scroll view whose 400 point list, holding a drawn tile, sits
-/// in a 200 point viewport, and a drawn field the file gives the text
-/// "hello world".
+/// fires "entered" as it enters "enter", a half-second animation moving the
+/// drawn "Dot" right, and 300 ms in begins a 400 ms transition to "slide",
+/// which moves it further; a horizontal scroll view with elastic physics
+/// whose 400 point list, holding a drawn tile, sits in a 200 point viewport;
+/// and a drawn field the file gives the text "hello world". A nested host
+/// also plays three simple animations of the drawn "Bar", each keying an
+/// event: "once" moves it right over half a second and reports "half"
+/// halfway, "bounce" moves it down and back every two thirds of a second and
+/// reports "pong" a 120th of a second after its start, inside the first
+/// frame of each forward leg, and "lap" moves the dot down over 0.4 seconds
+/// in a loop and reports "lap" each time round.
 fn hosting(host: Host) -> Scene {
     use crate::source::{
+        animation::state_transition_flags::StateTransitionFlags,
         artboard::Artboard,
         artboard_component_list::ArtboardComponentList,
         generated::{
             animation::{
-                animation_state_base::AnimationStateBase, any_state_base::AnyStateBase,
-                entry_state_base::EntryStateBase, exit_state_base::ExitStateBase,
+                animation_base::AnimationBase, animation_state_base::AnimationStateBase,
+                any_state_base::AnyStateBase, entry_state_base::EntryStateBase,
+                exit_state_base::ExitStateBase,
                 interpolating_keyframe_base::InterpolatingKeyFrameBase,
                 keyed_object_base::KeyedObjectBase, keyed_property_base::KeyedPropertyBase,
-                keyframe_base::KeyFrameBase, keyframe_double_base::KeyFrameDoubleBase,
+                keyframe_base::KeyFrameBase, keyframe_callback_base::KeyFrameCallbackBase,
+                keyframe_double_base::KeyFrameDoubleBase,
                 linear_animation_base::LinearAnimationBase,
+                listener_fire_event_base::ListenerFireEventBase,
                 nested_simple_animation_base::NestedSimpleAnimationBase,
                 nested_state_machine_base::NestedStateMachineBase,
                 state_machine_base::StateMachineBase,
                 state_machine_fire_event_base::StateMachineFireEventBase,
                 state_machine_layer_base::StateMachineLayerBase,
+                state_machine_listener_base::StateMachineListenerBase,
+                state_machine_listener_single_base::StateMachineListenerSingleBase,
                 state_transition_base::StateTransitionBase,
             },
             artboard_component_list_base::ArtboardComponentListBase,
@@ -1151,7 +1168,10 @@ fn hosting(host: Host) -> Scene {
             },
             constraints::{
                 draggable_constraint_base::DraggableConstraintBase,
-                scrolling::scroll_constraint_base::ScrollConstraintBase,
+                scrolling::{
+                    elastic_scroll_physics_base::ElasticScrollPhysicsBase,
+                    scroll_constraint_base::ScrollConstraintBase,
+                },
             },
             event_base::EventBase,
             focus_data_base::FocusDataBase,
@@ -1163,26 +1183,56 @@ fn hosting(host: Host) -> Scene {
                 text_style_paint_base::TextStylePaintBase,
             },
         },
+        listener_type::ListenerType,
         viewmodel::viewmodel_instance_list_item::ViewModelInstanceListItem,
     };
-    // Layer states: 0 entry, 1 any, 2 exit, then the one that fires.
-    let machine = |riv: &mut Riv, fires: Option<u64>| {
+    // Each listener hears an event of the hosted artboard, by local id, and
+    // fires an event of the machine's artboard, so the player reports it.
+    // Layer states: 0 entry, 1 any, 2 exit, then the ones that play.
+    let machine = |riv: &mut Riv, listeners: &[(u64, u64)], plays: bool| {
         riv.object(StateMachineBase::TYPE_KEY).end();
+        for &(heard, fired) in listeners {
+            riv.object(StateMachineListenerSingleBase::TYPE_KEY)
+                .uint(StateMachineListenerBase::TARGET_ID_PROPERTY_KEY, 2)
+                .uint(
+                    StateMachineListenerSingleBase::LISTENER_TYPE_VALUE_PROPERTY_KEY,
+                    ListenerType::Event as u64,
+                )
+                .uint(StateMachineListenerSingleBase::EVENT_ID_PROPERTY_KEY, heard)
+                .end();
+            riv.object(ListenerFireEventBase::TYPE_KEY)
+                .uint(ListenerFireEventBase::EVENT_ID_PROPERTY_KEY, fired)
+                .end();
+        }
         riv.object(StateMachineLayerBase::TYPE_KEY).end();
         riv.object(EntryStateBase::TYPE_KEY).end();
-        if fires.is_some() {
+        if plays {
             riv.object(StateTransitionBase::TYPE_KEY)
                 .uint(StateTransitionBase::STATE_TO_ID_PROPERTY_KEY, 3)
                 .end();
         }
         riv.object(AnyStateBase::TYPE_KEY).end();
         riv.object(ExitStateBase::TYPE_KEY).end();
-        if let Some(event) = fires {
+        if plays {
+            // 3 plays "enter" and fires "entered" as the layer enters it;
+            // 300 ms in, a 400 ms transition mixes to 4, which plays "slide".
             riv.object(AnimationStateBase::TYPE_KEY)
                 .uint(AnimationStateBase::ANIMATION_ID_PROPERTY_KEY, 0)
                 .end();
             riv.object(StateMachineFireEventBase::TYPE_KEY)
-                .uint(StateMachineFireEventBase::EVENT_ID_PROPERTY_KEY, event)
+                .uint(StateMachineFireEventBase::EVENT_ID_PROPERTY_KEY, 1)
+                .end();
+            riv.object(StateTransitionBase::TYPE_KEY)
+                .uint(StateTransitionBase::STATE_TO_ID_PROPERTY_KEY, 4)
+                .uint(
+                    StateTransitionBase::FLAGS_PROPERTY_KEY,
+                    u64::from(StateTransitionFlags::ENABLE_EXIT_TIME.0),
+                )
+                .uint(StateTransitionBase::EXIT_TIME_PROPERTY_KEY, 300)
+                .uint(StateTransitionBase::DURATION_PROPERTY_KEY, 400)
+                .end();
+            riv.object(AnimationStateBase::TYPE_KEY)
+                .uint(AnimationStateBase::ANIMATION_ID_PROPERTY_KEY, 4)
                 .end();
         }
     };
@@ -1212,6 +1262,7 @@ fn hosting(host: Host) -> Scene {
     };
     let mut riv = Riv::default();
     riv.object(BackboardBase::TYPE_KEY).end();
+    riv.object(ElasticScrollPhysicsBase::TYPE_KEY).end();
     riv.object(FontAssetBase::TYPE_KEY)
         .string(ComponentBase::NAME_PROPERTY_KEY, "font")
         .uint(FileAssetBase::ASSET_ID_PROPERTY_KEY, 2)
@@ -1223,9 +1274,10 @@ fn hosting(host: Host) -> Scene {
         )
         .end();
     // Main: 0 artboard, 1 the box, 2 the host, then a nested host's 3
-    // machine and 4 simple animation, then the two styles.
+    // machine and 4 to 6 simple animations, then the two styles and a nested
+    // host's three events.
     let first_style = match host {
-        Host::Nested(_) => 5,
+        Host::Nested(_) => 7,
         Host::ListRow => 3,
     };
     riv.object(ArtboardBase::TYPE_KEY)
@@ -1249,12 +1301,14 @@ fn hosting(host: Host) -> Scene {
                 .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
                 .uint(NestedAnimationBase::ANIMATION_ID_PROPERTY_KEY, 0)
                 .end();
-            riv.object(NestedSimpleAnimationBase::TYPE_KEY)
-                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
-                .uint(NestedAnimationBase::ANIMATION_ID_PROPERTY_KEY, 1)
-                .float(NestedSimpleAnimationBase::SPEED_PROPERTY_KEY, 1.0)
-                .bool(NestedSimpleAnimationBase::IS_PLAYING_PROPERTY_KEY, true)
-                .end();
+            for animation in 1..=3 {
+                riv.object(NestedSimpleAnimationBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+                    .uint(NestedAnimationBase::ANIMATION_ID_PROPERTY_KEY, animation)
+                    .float(NestedSimpleAnimationBase::SPEED_PROPERTY_KEY, 1.0)
+                    .bool(NestedSimpleAnimationBase::IS_PLAYING_PROPERTY_KEY, true)
+                    .end();
+            }
         }
         Host::ListRow => {
             riv.object(ArtboardComponentListBase::TYPE_KEY)
@@ -1265,7 +1319,21 @@ fn hosting(host: Host) -> Scene {
     }
     style(&mut riv, 0, false);
     style(&mut riv, 1, false);
-    machine(&mut riv, None);
+    // A nested host's Main also has 9 to 11, the events its machine fires
+    // when it hears the hosted artboard's 28 to 30.
+    let listeners: &[(u64, u64)] = match host {
+        Host::Nested(_) => {
+            for name in ["half", "pong", "lap"] {
+                riv.object(EventBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+                    .string(ComponentBase::NAME_PROPERTY_KEY, name)
+                    .end();
+            }
+            &[(28, 9), (29, 10), (30, 11)]
+        }
+        Host::ListRow => &[],
+    };
+    machine(&mut riv, listeners, false);
     // A drawn 10 point square of `color` named `name`: the shape, at local
     // id `shape`, its rectangle, its fill and the fill's color.
     let square = |riv: &mut Riv, parent: u64, shape: u64, name: &str, color: u32| {
@@ -1291,7 +1359,7 @@ fn hosting(host: Host) -> Scene {
     // tile box in the list and 14 and 15 its fill, 16 the field's box, 17
     // the field, 18 its focus data, 19 its text style, 20 the drawable that
     // draws its text and 21 and 22 that drawable's fill, 23 to 27 the
-    // styles.
+    // styles, 28 to 30 the events the simple animations key.
     riv.object(ArtboardBase::TYPE_KEY)
         .string(ComponentBase::NAME_PROPERTY_KEY, "Child")
         .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0)
@@ -1309,6 +1377,7 @@ fn hosting(host: Host) -> Scene {
     riv.object(ScrollConstraintBase::TYPE_KEY)
         .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 11)
         .uint(DraggableConstraintBase::DIRECTION_VALUE_PROPERTY_KEY, 0)
+        .uint(ScrollConstraintBase::PHYSICS_ID_PROPERTY_KEY, 0)
         .end();
     // The scroll moves the list's layout children, so the tile is a box.
     layout(&mut riv, 11, "Tile", (40.0, 40.0), 26);
@@ -1348,11 +1417,31 @@ fn hosting(host: Host) -> Scene {
     style(&mut riv, 11, false);
     style(&mut riv, 13, false);
     style(&mut riv, 16, false);
-    // 0 moves the dot and 1 the bar, from 0 to 100 over half a second.
-    for keyed in [2, 6] {
+    // 28 to 30: the events the simple animations key.
+    for name in ["half", "pong", "lap"] {
+        riv.object(EventBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .string(ComponentBase::NAME_PROPERTY_KEY, name)
+            .end();
+    }
+    // Each animation at 120 frames a second: its name, the object and
+    // property it keys from one value to another over its frames, its loop
+    // (0 one shot, 1 loop, 2 ping-pong) and the event it keys at a frame.
+    const X: u16 = NodeBase::X_PROPERTY_KEY;
+    const Y: u16 = NodeBase::Y_PROPERTY_KEY;
+    let animations: [(&str, u64, u16, (f32, f32), u64, u64, Option<(u64, u64)>); 5] = [
+        ("enter", 2, X, (0.0, 100.0), 60, 0, None),
+        ("once", 6, X, (0.0, 100.0), 60, 0, Some((28, 30))),
+        ("bounce", 6, Y, (0.0, 50.0), 40, 2, Some((29, 1))),
+        ("lap", 2, Y, (0.0, 50.0), 48, 1, Some((30, 24))),
+        ("slide", 2, X, (100.0, 200.0), 60, 0, None),
+    ];
+    for (name, keyed, property, (from, to), frames, loops, event) in animations {
         riv.object(LinearAnimationBase::TYPE_KEY)
-            .uint(LinearAnimationBase::FPS_PROPERTY_KEY, 60)
-            .uint(LinearAnimationBase::DURATION_PROPERTY_KEY, 30)
+            .string(AnimationBase::NAME_PROPERTY_KEY, name)
+            .uint(LinearAnimationBase::FPS_PROPERTY_KEY, 120)
+            .uint(LinearAnimationBase::DURATION_PROPERTY_KEY, frames)
+            .uint(LinearAnimationBase::LOOP_VALUE_PROPERTY_KEY, loops)
             .end();
         riv.object(KeyedObjectBase::TYPE_KEY)
             .uint(KeyedObjectBase::OBJECT_ID_PROPERTY_KEY, keyed)
@@ -1360,10 +1449,10 @@ fn hosting(host: Host) -> Scene {
         riv.object(KeyedPropertyBase::TYPE_KEY)
             .uint(
                 KeyedPropertyBase::PROPERTY_KEY_PROPERTY_KEY,
-                u64::from(NodeBase::X_PROPERTY_KEY),
+                u64::from(property),
             )
             .end();
-        for (frame, value) in [(0, 0.0), (30, 100.0)] {
+        for (frame, value) in [(0, from), (frames, to)] {
             riv.object(KeyFrameDoubleBase::TYPE_KEY)
                 .uint(KeyFrameBase::FRAME_PROPERTY_KEY, frame)
                 .float(KeyFrameDoubleBase::VALUE_PROPERTY_KEY, value)
@@ -1373,8 +1462,22 @@ fn hosting(host: Host) -> Scene {
                 )
                 .end();
         }
+        if let Some((event, frame)) = event {
+            riv.object(KeyedObjectBase::TYPE_KEY)
+                .uint(KeyedObjectBase::OBJECT_ID_PROPERTY_KEY, event)
+                .end();
+            riv.object(KeyedPropertyBase::TYPE_KEY)
+                .uint(
+                    KeyedPropertyBase::PROPERTY_KEY_PROPERTY_KEY,
+                    u64::from(EventBase::TRIGGER_PROPERTY_KEY),
+                )
+                .end();
+            riv.object(KeyFrameCallbackBase::TYPE_KEY)
+                .uint(KeyFrameBase::FRAME_PROPERTY_KEY, frame)
+                .end();
+        }
     }
-    machine(&mut riv, Some(1));
+    machine(&mut riv, &[], true);
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let file = File::import(
         &riv.bytes(),
@@ -1463,13 +1566,14 @@ fn hosted_machine(played: &Played, host: Host) -> crate::RuntimeStateMachineInst
 }
 
 /// What a `hosting` scene's player holds and shows: the hosted artboard's
-/// animated x of "Dot" and "Bar", its scroll offset, the list's world
-/// bounds and where the tile the list scrolls lands, the field's text, its machine's state and animation, the host's
-/// written width, and the whole draw of the artboard, transforms and paths.
+/// animated position of "Dot" and "Bar", its scroll offset, the list's
+/// world bounds and where the tile the list scrolls lands, the field's text,
+/// its machine's state and animation, the host's written width, and the
+/// whole draw of the artboard, transforms and paths.
 #[derive(Debug, PartialEq)]
 struct Held {
-    dot_x: f32,
-    bar_x: f32,
+    dot: (f32, f32),
+    bar: (f32, f32),
     scroll: (f32, f32),
     list_bounds: [f32; 4],
     tile_at: (f32, f32),
@@ -1488,9 +1592,11 @@ fn held(played: &Played, host: Host) -> Held {
             .with_artboard(|artboard| artboard.objects()[local_id].clone())
             .expect("a hosted object")
     };
-    let x = |local_id| {
-        CoreRegistry::get_double_handle(&object(local_id), i32::from(NodeBase::X_PROPERTY_KEY))
-            .expect("an x")
+    let at = |local_id| {
+        let get = |key: u16| {
+            CoreRegistry::get_double_handle(&object(local_id), i32::from(key)).expect("a position")
+        };
+        (get(NodeBase::X_PROPERTY_KEY), get(NodeBase::Y_PROPERTY_KEY))
     };
     let list_bounds = object(11)
         .with_downcast::<LayoutComponent, _>(|list| {
@@ -1508,8 +1614,8 @@ fn held(played: &Played, host: Host) -> Held {
             state.first_animation(|animation| (animation.name().to_string(), animation.time()))
         });
     Held {
-        dot_x: x(2),
-        bar_x: x(6),
+        dot: at(2),
+        bar: at(6),
         scroll: object(12)
             .with_downcast(|scroll: &ScrollConstraint| (scroll.offset_x(), scroll.offset_y()))
             .expect("a live scroll constraint"),
@@ -1563,34 +1669,48 @@ fn without_ids(line: &str) -> String {
 /// The width a host writes to "Box" before it moves anything.
 const HOST_WIDTH: f32 = 180.0;
 
-/// The reset contract, for one host kind and one reset object: after a
-/// reset inside a step, everything the engine holds under that object is
-/// what a freshly made instance of the same file holds after its first
-/// settle, and the frame drawn after that same step shows it. Property
-/// values a host wrote are the only difference, and they stay.
+/// When the played copy is reset, in frames played before it: 25 frames in,
+/// "bounce" is on its way back up, "once" is still moving and the machine is
+/// mixing "enter" into "slide"; 65 frames in, "bounce" is on its way back
+/// again and "once" ended long before.
+const RESETS_AFTER: [usize; 2] = [25, 65];
+
+/// Frames both copies play after the reset: enough for "lap" to go round,
+/// "bounce" to turn, "once" to end and the machine to start its transition
+/// again.
+const FRAMES_AFTER: usize = 50;
+
+/// The reset contract, for one host kind, one reset object and one moment:
+/// after a reset inside a step, everything the engine holds under that
+/// object is what a freshly made instance of the same file holds after its
+/// first settle, and the frame drawn after that same step shows it. Property
+/// values a host wrote are the only difference, and they stay. From then on
+/// the two play the same.
 ///
-/// The played copy takes a host write, then moves everything it holds: its
-/// machine plays its entry animation to the end, a nested host's simple
-/// animation plays to its end, the scroll view scrolls and the field takes
-/// typed text. A driver then resets `target` (the root when None) inside a
-/// step. That same step's result is compared, with no frame between, with a
-/// second copy of the file made fresh, given the same host write, and
-/// stepped once.
-fn reset_is_a_fresh_instance(host: Host, target: Option<&str>) {
+/// The played copy takes a host write and plays `before` frames, moving
+/// everything it holds: its machine and animations play, the field takes
+/// typed text, and the scroll view is scrolled and then sent gliding by its
+/// physics. A driver then resets `target` (the root when None) inside a
+/// step. That step is compared with the first step of a second copy of the
+/// file made fresh and given the same host write, and the two copies then
+/// play the same frames, compared on every one: positions, scroll, layout,
+/// text, machine state, the draw and the events each reports.
+fn reset_is_a_fresh_instance(host: Host, target: Option<&str>, before: usize) {
     use crate::source::{
         generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase,
         text::text_input::TextInput,
     };
-    let fresh = {
+    let case = format!("{host:?} reset after {before} frames");
+    let (mut fresh, first) = {
         let f = hosting(host);
         assert!(CoreRegistry::set_double_handle(
             &f.object("Box"),
             i32::from(LayoutComponentBase::WIDTH_PROPERTY_KEY),
             HOST_WIDTH
         ));
-        Played::new(f)
+        Played::started(f, false)
     };
-    let expected = held(&fresh, host);
+    let initial = held(&fresh, host);
 
     let mut played = Played::new(hosting(host));
     let target = match target {
@@ -1612,62 +1732,120 @@ fn reset_is_a_fresh_instance(host: Host, target: Option<&str>) {
             let _ = scene.set_number(&box_id, LayoutComponentBase::WIDTH_PROPERTY_KEY, HOST_WIDTH);
         }
     });
-    played.frames_until_settled();
-    let moved = held(&played, host);
-    assert_eq!(
-        moved.box_width,
-        Some(HOST_WIDTH),
-        "{host:?}: the host wrote"
-    );
-    assert_eq!(
-        moved.dot_x, 100.0,
-        "{host:?}: the entry animation played out"
-    );
-    if matches!(host, Host::Nested(_)) {
-        assert_eq!(
-            moved.bar_x, 100.0,
-            "{host:?}: the simple animation played out"
-        );
-    }
-    let board = hosted_board(&played, host);
-    let hosted = |local_id: usize| {
-        board
+    let hosted = |played: &Played, local_id: usize| {
+        hosted_board(played, host)
             .with_artboard(|artboard| artboard.objects()[local_id].clone())
             .expect("a hosted object")
     };
-    // What a focused field does with typed text.
-    assert_eq!(
-        hosted(17).with_downcast_mut::<TextInput, _>(|input| input.text_input("!")),
-        Some(true)
+    let mut last = None;
+    let mut moved = None;
+    for frame in 1..=before {
+        if frame == before - 4 {
+            // What a focused field does with typed text, and a scroll.
+            assert_eq!(
+                hosted(&played, 17)
+                    .with_downcast_mut::<TextInput, _>(|input| input.text_input("!")),
+                Some(true)
+            );
+            assert!(CoreRegistry::set_double_handle(
+                &hosted(&played, 12),
+                i32::from(ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY),
+                -50.0
+            ));
+        }
+        if frame == before - 2 {
+            // The physics glides the scroll view to its target over frames.
+            hosted(&played, 12).with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                scroll.scroll_to_position(-150.0, 0.0)
+            });
+        }
+        played.step(FRAME, vec![]);
+        last = moved.replace(held(&played, host));
+    }
+    let (last, moved) = (last.expect("a frame"), moved.expect("a frame"));
+    assert_eq!(moved.box_width, Some(HOST_WIDTH), "{case}: the host wrote");
+    assert_ne!(moved.text, initial.text, "{case}: typed into the field");
+    assert!(
+        moved.scroll != last.scroll && moved.scroll != (-150.0, 0.0),
+        "{case}: the scroll view is still gliding: {:?} then {:?}",
+        last.scroll,
+        moved.scroll
     );
-    assert!(CoreRegistry::set_double_handle(
-        &hosted(12),
-        i32::from(ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY),
-        -50.0
-    ));
-    played.settle();
-    let moved = held(&played, host);
-    assert_ne!(moved.text, expected.text, "{host:?}: typed into the field");
-    assert_ne!(moved.scroll, expected.scroll, "{host:?}: scrolled");
-    assert_ne!(moved.tile_at, expected.tile_at, "{host:?}: scrolled");
-    assert_ne!(moved.drawn, expected.drawn, "{host:?}: the draw moved");
+    if before == 25 {
+        let (name, time) = moved.animation.clone().expect("a playing state");
+        assert_eq!(name, "slide", "{case}");
+        assert!(
+            moved.dot.0 < 100.0 + 200.0 * time - 0.5,
+            "{case}: the machine is mixing \"enter\" into \"slide\": {:?}",
+            moved.dot
+        );
+    }
+    if matches!(host, Host::Nested(_)) {
+        assert!(
+            moved.bar.1 < last.bar.1,
+            "{case}: \"bounce\" is on its way back: {:?} then {:?}",
+            last.bar,
+            moved.bar
+        );
+        if before == 25 {
+            assert!(
+                moved.bar.0 > 0.0 && moved.bar.0 < 100.0,
+                "{case}: \"once\" is playing"
+            );
+        } else {
+            assert_eq!(moved.bar.0, 100.0, "{case}: \"once\" ended");
+        }
+    }
 
     *resetting.borrow_mut() = true;
-    played.step(FRAME, vec![]);
-    assert_eq!(*result.borrow(), Some(Ok(true)), "{host:?}");
-    assert_eq!(held(&played, host), expected, "{host:?}");
+    let output = played.step(FRAME, vec![]);
+    assert_eq!(*result.borrow(), Some(Ok(true)), "{case}");
+    assert_eq!(held(&played, host), initial, "{case}: the reset step");
+    assert!(
+        names(&output.events).ends_with(&names(&first.events)),
+        "{case}: the reset step reports {:?}, ending with what a fresh copy's first step reports, {:?}",
+        names(&output.events),
+        names(&first.events)
+    );
+    let mut reported = Vec::new();
+    for frame in 1..=FRAMES_AFTER {
+        let (output, expected) = (played.step(FRAME, vec![]), fresh.step(FRAME, vec![]));
+        assert_eq!(
+            held(&played, host),
+            held(&fresh, host),
+            "{case}: frame {frame} after the reset"
+        );
+        assert_eq!(
+            names(&output.events),
+            names(&expected.events),
+            "{case}: the events of frame {frame} after the reset"
+        );
+        reported.extend(names(&expected.events));
+    }
+    if matches!(host, Host::Nested(_)) {
+        for event in ["half", "pong", "lap"] {
+            assert!(
+                reported.iter().any(|name| name == event),
+                "{case}: {event} is reported: {reported:?}"
+            );
+        }
+    }
 }
 
 #[test]
 fn a_reset_of_a_box_holding_each_host_is_a_fresh_instance() {
     for host in HOSTS {
-        reset_is_a_fresh_instance(host, Some("Box"));
+        for before in RESETS_AFTER {
+            reset_is_a_fresh_instance(host, Some("Box"), before);
+        }
     }
 }
 
 #[test]
 fn a_reset_of_the_root_is_a_fresh_instance_for_each_host() {
     for host in HOSTS {
-        reset_is_a_fresh_instance(host, None);
+        for before in RESETS_AFTER {
+            reset_is_a_fresh_instance(host, None, before);
+        }
     }
 }

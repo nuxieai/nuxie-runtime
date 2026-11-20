@@ -11,8 +11,8 @@ The facts have deliberately separate meanings:
   runtime state. It says nothing about whether a previous render is still
   awaiting presentation.
 - `settled` is true when no selected root or nested runtime occurrence has
-  pending continuation. It is not derived from `keep_going`. A host driver cut
-  off at its round bound leaves the step unsettled (docs/page-player.md, Host
+  pending continuation. It is not derived from `keep_going`. A host driver whose
+  writes changed the scene leaves the step unsettled (docs/page-player.md, Host
   driver).
 - `render_required` is persistent occurrence state. A new occurrence starts
   with a nonzero unpresented `render_revision`. Every committed visual/runtime

@@ -6949,9 +6949,10 @@ impl LayoutComponent {
 
     /// What a host's reset does to this layout (the page player's
     /// `SceneWriter::reset`). The layout is an object of the file and is
-    /// returned in place. A fresh instance has no interpolation in flight, so
-    /// one in flight ends where it was going, and both of its frames rest
-    /// there, as a snap leaves them. Whether one was in flight.
+    /// returned in place. Its motion in flight is a state holder: it ends
+    /// where it was going, and both of its frames rest there, as a snap
+    /// leaves them. That is the layout its properties give, so no property
+    /// is written. Whether one was in flight.
     pub fn reset_in_place_occurrence(owner: &CoreHandle) -> bool {
         let ended = owner
             .with_mut(|object| object.as_layout_component_mut().map(Self::reset_in_place))

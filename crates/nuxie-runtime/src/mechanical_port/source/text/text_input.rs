@@ -576,7 +576,10 @@ impl TextInput {
     /// from outside typing, the file's, a bind's or a host's. Its edit state
     /// (the text being edited, the caret, the selection and the undo
     /// history) is rebuilt from that text, made and set up as when the field
-    /// is loaded. Whether the field held typed text or a placed caret.
+    /// is loaded. The text property is the edit state's working copy, which
+    /// typing writes, so returning the edit state to its start puts it back;
+    /// the text last written from outside typing is what it starts from and
+    /// is left alone. Whether the field held typed text or a placed caret.
     ///
     /// Every field is named below with what the reset does to it, so a field
     /// added later fails to compile until that is decided.

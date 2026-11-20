@@ -211,24 +211,22 @@ impl<'a> SceneWriter<'a> {
 
     /// Reset what the engine holds under `object`, the object included.
     ///
-    /// After a reset inside a step, everything the engine holds under that
-    /// object is what a freshly made instance of the same file would hold
-    /// after its first settle, the frame drawn after that same step shows
-    /// it, and from then on the two play the same. Property values a host
-    /// wrote are the only difference, and they stay.
+    /// A reset returns the engine's state holders under the object to their
+    /// start and leaves every property value alone, whoever wrote it. So a
+    /// property that an animation or a state wrote, and that the starting
+    /// state does not key, keeps its value until something writes it.
     ///
-    /// What the engine can make again from the file is rebuilt as an
-    /// instance of the file makes it: the playback of nested simple and
-    /// remap animations, the layers of nested machines, text fields' edit
-    /// state, scroll views' physics, list rows with their machines, and the
-    /// artboard a paint paints with. What other objects link to is returned
-    /// in place: nested machines, scroll views (their offsets back to the
-    /// ones the file gave them), text fields (their text back to the text
-    /// last written to them), hosted artboards, and layouts and layout
-    /// participants, whose interpolations in flight end where they were
-    /// going. The presses and hovers the player's listeners hold there are
-    /// dropped. A rebuilt machine layer draws from the shared random source
-    /// where it stands; the source is not restarted.
+    /// The state holders a reset returns: the playback of nested simple and
+    /// remap animations, which is rebuilt; nested machines, whose layers are
+    /// rebuilt at their entry states; scroll views, whose offsets go back to
+    /// the ones the file gives them; text fields, whose text goes back to the
+    /// text last written to them; list rows, rebuilt with their machines; the
+    /// artboard a paint paints with, rebuilt; and layouts' and layout
+    /// participants' motion in flight, which ends where it was going. The
+    /// reset then plays each host's first frame, so its starting states
+    /// apply what they key. The presses and hovers the player's listeners
+    /// hold there are dropped. A rebuilt machine layer draws from the shared
+    /// random source where it stands; the source is not restarted.
     ///
     /// A reset leaves as they are, on a nested machine, the values of its
     /// inputs, which its listeners and its host set, and its pointer latches;
@@ -238,7 +236,7 @@ impl<'a> SceneWriter<'a> {
     /// converters easing them included; and the inputs of the player's own
     /// machine, which is under no object. A nested host that skips frames
     /// (paused, collapsed, or playing at a fixed rate) skips the reset's
-    /// first frame too, and shows the poses from before the reset until it
+    /// first frame too, so what its playback keys holds its values until it
     /// next advances. The reset module lists every kind. Whether anything
     /// was reset.
     pub fn reset(&mut self, object: &SceneObject) -> Result<bool, SceneWriteError> {

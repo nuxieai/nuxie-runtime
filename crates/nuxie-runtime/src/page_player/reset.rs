@@ -1,51 +1,72 @@
 //! Reset what the engine holds under one object of the player's artboard.
 //!
-//! The contract: after a reset inside a step, everything the engine holds
-//! under that object is what a freshly made instance of the same file would
-//! hold after its first settle, and the frame drawn after that same step
-//! shows it, and from then on the two play the same. Property values a host
-//! wrote are the only difference, and they stay.
+//! The contract: a reset returns the engine's state holders under the
+//! object to their start and leaves every property value alone, whoever
+//! wrote it. So a property that an animation or a state wrote, and that the
+//! starting state does not key, keeps its value until something writes it.
 //!
-//! A reset meets it in three parts, each in the engine's own place:
+//! A state holder is what the engine keeps of its own while it plays, beyond
+//! the properties: an animation's playback, a machine's layers, a scroll, a
+//! text field's edit state, a list's rows, the artboard a paint paints with,
+//! and a layout's motion in flight. The table below lists every kind, the
+//! ones a reset leaves included.
 //!
-//! 1. Rebuild, or return in place. What the engine can make again from the
-//!    file is rebuilt, made as an instance of the file makes it, and
-//!    replaces what was there. What other objects link to is returned in
-//!    place, each kind by its own `reset_in_place`, which names every field
-//!    it holds, so a field added later does not compile until someone decides
-//!    what a reset does to it. The table below lists every kind. The
-//!    player's own listeners drop the presses and hovers they hold on
-//!    objects under the reset object.
+//! A reset works in three parts, each in the engine's own place:
+//!
+//! 1. Rebuild, or return in place. A state holder the engine can make again
+//!    from the file is rebuilt, made as an instance of the file makes it,
+//!    and replaces what was there. One that other objects link to is
+//!    returned in place, each kind by its own `reset_in_place`, which names
+//!    every field it holds, so a field added later does not compile until
+//!    someone decides what a reset does to it. The player's own listeners
+//!    drop the presses and hovers they hold on objects under the reset
+//!    object.
 //! 2. First frame. Every nested artboard host the reset reached, of any host
 //!    type, and every artboard component list, is advanced by zero as a new
-//!    frame through the engine's advancing-component dispatch: the call a
-//!    fresh instance's first frame makes on it. That applies the poses a
-//!    fresh instance shows. A machine takes its transitions out of entry and
-//!    applies its states' animations at time zero, a simple animation
-//!    applies its starting pose, and the call recurses into the hosted
-//!    artboards. The within-frame settle cannot do this: it advances hosts as
-//!    upstream does within a frame, without a new frame, which skips simple
-//!    animations, and that rule stays for every other settle.
+//!    frame through the engine's advancing-component dispatch: the call an
+//!    instance's first frame makes on it. A machine takes its transitions
+//!    out of entry and applies its starting states' animations at time zero,
+//!    a simple animation applies its starting pose, and the call recurses
+//!    into the hosted artboards. This is the playback writing what it keys,
+//!    as it does on any frame; what it does not key keeps its value. The
+//!    within-frame settle cannot do this: it advances hosts as upstream does
+//!    within a frame, without a new frame, which skips simple animations, and
+//!    that rule stays for every other settle.
 //! 3. Settle. The step's within-frame settle after the round updates what
 //!    the first two parts dirtied, as it does after any write: a scroll's
 //!    content transform, reshaped text, layout and paint, for the frame
 //!    drawn after the step.
 //!
+//! Where a state holder keeps its state in a property, returning it writes
+//! that property, and nothing else is written:
+//!
+//! - A scroll's position lives in its constraint's scroll offset
+//!   properties, which scrolling writes. Returning the scroll to its start
+//!   writes them back to the offsets the file gives it.
+//! - A text field's text is its edit state's working copy, which typing
+//!   writes. The edit state starts from the text last written to the field
+//!   (the file's text until a host writes one), so the field's text is put
+//!   back to that.
+//! - A layout's motion in flight ends where it was going. The layout it
+//!   lands on is the one its properties give, so no property is written.
+//! - A list's rows and a paint's artboard are rebuilt whole, so their
+//!   objects hold the file's values.
+//!
 //! What a reset does to each kind of object that holds state of its own
-//! while it plays, beyond the properties the file gives it:
+//! while it plays:
 //!
 //! | Kind | The reset | Why |
 //! | --- | --- | --- |
 //! | Nested simple or remap animation's playback | Rebuilt | Made as a host makes it when it mounts an instance; the parent machine's links to hear its events move to it. |
 //! | Nested state machine | Returned in place, its layers rebuilt | Its parent's machine, its host and hit testing hold it. Its layers start at their entry states. Its inputs' values and its pointer latches are left as they are. A rebuilt layer draws from the shared random source where it stands; the source is not restarted. |
-//! | Scroll constraint | Returned in place, its physics rebuilt | An object of the file. Its offsets go back to the file's; whether a drag holds it is left as it is. |
-//! | Text input | Returned in place, its edit state rebuilt | An object of the file. Its text goes back to the text last written to it; its focus is left as it is. |
+//! | Scroll constraint | Returned in place, its physics rebuilt | An object of the file. Its offsets go back to the file's (above); whether a drag holds it is left as it is. |
+//! | Text input | Returned in place, its edit state rebuilt | An object of the file. Its text goes back to the text last written to it (above); its focus is left as it is. |
 //! | Artboard component list | Its rows rebuilt, each row's artboard and machine | Made as the list makes a row; the rows it kept pooled are dropped. |
-//! | Hosted artboard | Returned in place, its objects reset by kind | Its host and its host's layout, focus and data context hold it. |
-//! | Layout (a layout component, an artboard, a layout host) | Returned in place | An interpolation in flight ends where it was going, as a fresh instance has none in flight. |
+//! | Hosted artboard | Returned in place, its objects reset by kind | Its host and its host's layout, focus and data context hold it. Its objects keep their property values. |
+//! | Layout (a layout component, an artboard, a layout host) | Returned in place | Its motion in flight ends where it was going (above). |
 //! | Layout participant | Returned in place | As a layout. |
 //! | Paint that paints with an artboard | Returned in place, its artboard rebuilt | Made as the paint makes it when it is added, its machine or animation from the start. |
-//! | Nested host whose frames skip (paused, collapsed, or playing at a fixed rate) | Left as it is | A host that skips a frame skips the reset's first frame too, so it shows the poses from before the reset until it next advances. |
+//! | Nested host whose frames skip (paused, collapsed, or playing at a fixed rate) | Its playback returned as above | A host that skips a frame skips the reset's first frame too, so what its playback keys holds its values from before the reset until the host next advances. |
 //! | Script state (scripted drawables, layouts, path effects, transitions and their list rows, converters, interpolators, listener actions and conditions) | Left as it is | It lives in the script's own state, which only the script's init makes. |
 //! | Audio | Left as it is | A sound an audio event started plays on. |
 //! | Video | Left as it is | Its playback position, play state and frame are the host's. |
@@ -88,9 +109,9 @@ use crate::mechanical_port::source::{
 };
 use crate::{ArtboardInstance, CoreHandle, StateMachineInstance};
 
-/// Reset everything under `root` in the player's artboard, `root` included,
-/// to what a fresh instance of the file holds after its first settle
-/// (module docs). `machine` is the player's own machine, whose listeners on
+/// Return the state holders under `root` in the player's artboard, `root`
+/// included, to their start, leaving every property value alone (module
+/// docs). `machine` is the player's own machine, whose listeners on
 /// objects under `root` drop the pointers they hold. Whether anything was
 /// reset.
 pub(super) fn reset_subtree(
@@ -137,8 +158,8 @@ pub(super) fn reset_subtree(
     changed
 }
 
-/// The flags a root artboard's frame hands its advancing components: what a
-/// fresh instance's first frame advances a host with.
+/// The flags a root artboard's frame hands its advancing components: what an
+/// instance's first frame advances a host with.
 const FIRST_FRAME: AdvanceFlags = AdvanceFlags(
     AdvanceFlags::IS_ROOT.0
         | AdvanceFlags::ANIMATE.0

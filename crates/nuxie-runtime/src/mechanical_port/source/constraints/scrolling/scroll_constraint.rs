@@ -1740,7 +1740,9 @@ impl ScrollConstraint {
     /// is returned in place: its offsets go back to `authored`, the offsets
     /// the file gives it. Its physics is rebuilt: `physics` is a copy of the
     /// file's, made as an instance of the file copies it, and replaces the
-    /// physics this one ran. Whether it had scrolled or was moving.
+    /// physics this one ran. A scroll keeps its position in its offset
+    /// properties, which scrolling writes, so returning the scroll to its
+    /// start writes them. Whether it had scrolled or was moving.
     ///
     /// Every field is named below with what the reset does to it, so a field
     /// added later fails to compile until that is decided.
@@ -1770,7 +1772,7 @@ impl ScrollConstraint {
             physics: _,
             // Returned above: the offsets, the authored ones on `base` and
             // the ones the content is placed by, and the offsets the last
-            // frame saw, which a fresh view's first frame sets to them.
+            // frame saw, which a view's first frame sets to them.
             base: _,
             offset_x: _,
             offset_y: _,
@@ -1778,7 +1780,7 @@ impl ScrollConstraint {
             last_frame_offset_y: _,
             // Returned above: a scroll gesture in progress, a scroll to a
             // percent or an index that was asked for, and the CSS snap a
-            // fresh view settles once its layout resolves.
+            // view settles once its layout resolves, which it starts without.
             is_scrolling: _,
             scroll_idle_seconds: _,
             intent_x: _,

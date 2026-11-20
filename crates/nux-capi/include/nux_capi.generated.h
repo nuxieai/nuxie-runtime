@@ -3527,11 +3527,15 @@ NuxStatus nux_renderer_resize(struct NuxRenderer *renderer,
 #endif
 
 /**
- * Reset what the engine holds under `object`, the object included: scroll
+ * Reset what the engine holds under `object`, the object included. A reset
+ * returns the engine's state holders under the object to their start and
+ * leaves every property value alone, whoever wrote it. So a property that
+ * an animation or a state wrote, and that the starting state does not key,
+ * keeps its value until something writes it. The state holders are scroll
  * positions, typed text, nested artboards' state machines and animations,
- * and the presses and hovers the player's listeners hold there. Other
- * property values are left alone. `out_changed`, when not NULL, receives
- * whether anything was reset.
+ * list rows, the artboard a paint paints with, layout motion in flight, and
+ * the presses and hovers the player's listeners hold there. `out_changed`,
+ * when not NULL, receives whether anything was reset.
  */
 NuxStatus nux_scene_writer_reset(struct NuxSceneWriter *writer,
                                  const struct NuxSceneObject *object,

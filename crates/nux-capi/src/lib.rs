@@ -3701,7 +3701,8 @@ fn own_reported_events(
     focus: usize,
     states: usize,
 ) -> Result<Vec<OwnedPlayerEvent>, (NuxStatus, &'static str)> {
-    nuxie::page_player::own_reported_events(reported, pointers, focus, states)
+    nuxie::page_player::StepEventBudget::new(pointers, focus, states)
+        .and_then(|mut budget| nuxie::page_player::own_reported_events(reported, &mut budget))
         .map_err(|(kind, message)| (page_status(kind), message))
 }
 

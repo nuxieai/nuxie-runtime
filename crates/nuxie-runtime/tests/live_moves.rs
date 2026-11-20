@@ -4825,7 +4825,9 @@ fn a_landed_units_model_reference_writes_back_while_its_home_sleeps() {
 
 mod page_player_event_context {
     use super::*;
-    use page_player::{ErrorKind, OwnedPlayerEvent, Playback, Step, own_reported_events};
+    use page_player::{
+        ErrorKind, OwnedPlayerEvent, Playback, Step, StepEventBudget, own_reported_events,
+    };
 
     /// A page player over a fixture's first artboard, bound to its default
     /// view model, after one settling step.
@@ -5130,7 +5132,8 @@ mod page_player_event_context {
             let reports = m.reported_events();
             assert_eq!(reports.len(), 2);
             assert!(reports.iter().all(|r| r.context() == Some(&ctx)));
-            let error = own_reported_events(reports, 0, 0, 0)
+            let mut budget = StepEventBudget::new(0, 0, 0).unwrap();
+            let error = own_reported_events(reports, &mut budget)
                 .expect_err("context storage must count toward the existing event byte budget");
             assert_eq!(error.0, ErrorKind::LimitExceeded);
             let player = page_player::PagePlayer::default();

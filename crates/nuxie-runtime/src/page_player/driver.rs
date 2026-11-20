@@ -220,18 +220,27 @@ impl<'a> SceneWriter<'a> {
     /// What the engine can make again from the file is rebuilt as an
     /// instance of the file makes it: the playback of nested simple and
     /// remap animations, the layers of nested machines, text fields' edit
-    /// state, scroll views' physics, and list rows with their machines.
-    /// What other objects link to is returned in place: nested machines,
-    /// scroll views (their offsets back to the ones the file gave them),
-    /// text fields (their text back to the text last written to them) and
-    /// hosted artboards. The presses and hovers the player's listeners hold
-    /// there are dropped.
+    /// state, scroll views' physics, list rows with their machines, and the
+    /// artboard a paint paints with. What other objects link to is returned
+    /// in place: nested machines, scroll views (their offsets back to the
+    /// ones the file gave them), text fields (their text back to the text
+    /// last written to them), hosted artboards, and layouts and layout
+    /// participants, whose interpolations in flight end where they were
+    /// going. The presses and hovers the player's listeners hold there are
+    /// dropped. A rebuilt machine layer draws from the shared random source
+    /// where it stands; the source is not restarted.
     ///
     /// A reset leaves as they are, on a nested machine, the values of its
     /// inputs, which its listeners and its host set, and its pointer latches;
     /// on a scroll view, whether a drag holds it; on a text field, whether it
-    /// has focus; and the inputs of the player's own machine, which is under
-    /// no object. Whether anything was reset.
+    /// has focus; script state; sounds already playing; video playback; text
+    /// style artboards; values that binds carry from the view model,
+    /// converters easing them included; and the inputs of the player's own
+    /// machine, which is under no object. A nested host that skips frames
+    /// (paused, collapsed, or playing at a fixed rate) skips the reset's
+    /// first frame too, and shows the poses from before the reset until it
+    /// next advances. The reset module lists every kind. Whether anything
+    /// was reset.
     pub fn reset(&mut self, object: &SceneObject) -> Result<bool, SceneWriteError> {
         let handle = self
             .artboard

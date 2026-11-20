@@ -1735,6 +1735,82 @@ impl ScrollConstraint {
         let direction = self.direction();
         self.with_physics_mut(|physics| physics.prepare(direction));
     }
+    /// What a host's reset does to this scroll view (the page player's
+    /// `SceneWriter::reset`). The constraint is an object of the file, so it
+    /// is returned in place: its offsets go back to `authored`, the offsets
+    /// the file gives it. Its physics is rebuilt: `physics` is a copy of the
+    /// file's, made as an instance of the file copies it, and replaces the
+    /// physics this one ran. Whether it had scrolled or was moving.
+    ///
+    /// Every field is named below with what the reset does to it, so a field
+    /// added later fails to compile until that is decided.
+    pub fn reset_in_place(&mut self, authored: Vec2D, physics: Option<CoreHandle>) -> bool {
+        let moved = self.offset_x != authored.x
+            || self.offset_y != authored.y
+            || self.authored_scroll_offset_x() != authored.x
+            || self.authored_scroll_offset_y() != authored.y
+            || self.is_scrolling
+            || self.with_physics(|physics| physics.is_running()) == Some(true);
+        if let Some(previous) = std::mem::replace(&mut self.physics, physics) {
+            previous.remove_occurrence();
+        }
+        self.set_authored_scroll_offset_x(authored.x);
+        self.set_authored_scroll_offset_y(authored.y);
+        self.set_offset_x(authored.x);
+        self.set_offset_y(authored.y);
+        self.last_frame_offset_x = authored.x;
+        self.last_frame_offset_y = authored.y;
+        self.is_scrolling = false;
+        self.scroll_idle_seconds = 0.0;
+        self.intent_x = ScrollAxisIntent::default();
+        self.intent_y = ScrollAxisIntent::default();
+        self.css_initial_snap_settled = false;
+        let Self {
+            // Rebuilt above.
+            physics: _,
+            // Returned above: the offsets, the authored ones on `base` and
+            // the ones the content is placed by, and the offsets the last
+            // frame saw, which a fresh view's first frame sets to them.
+            base: _,
+            offset_x: _,
+            offset_y: _,
+            last_frame_offset_x: _,
+            last_frame_offset_y: _,
+            // Returned above: a scroll gesture in progress, a scroll to a
+            // percent or an index that was asked for, and the CSS snap a
+            // fresh view settles once its layout resolves.
+            is_scrolling: _,
+            scroll_idle_seconds: _,
+            intent_x: _,
+            intent_y: _,
+            css_initial_snap_settled: _,
+            // Left as they are: the pointer latches, which say a drag of the
+            // view or of its scroll bar holds a pointer.
+            is_dragging: _,
+            is_scroll_bar_dragging: _,
+            // Made from the file and the layout, and remade from the offsets
+            // and the layout by the next update: the scroll mode, the
+            // children it moves, the transforms it moves them by, and what
+            // virtualizing holds.
+            scroll_mode: _,
+            layout_children: _,
+            has_list_children: _,
+            components_a: _,
+            components_b: _,
+            scroll_transform: _,
+            child_constraint_applied_count: _,
+            virtualizer: _,
+            virtual_layout: _,
+            virtual_inputs: _,
+            virtual_versions: _,
+            pending_inputs: _,
+            pending_versions: _,
+            column_lines: _,
+            row_lines: _,
+            contributions_stale: _,
+        } = self;
+        moved
+    }
     pub fn stop_physics(&mut self) {
         self.with_physics_mut(|physics| physics.reset());
     }

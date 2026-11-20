@@ -4234,33 +4234,7 @@ impl StateMachineInstance {
             // Upstream seeds once per machine, even when there are no layers.
             let deterministic = DETERMINISTIC_MODE.load(Ordering::Relaxed);
             RandomProvider::seed(RandomProvider::layer_seed(deterministic));
-            let layer_count = instance
-                .machine
-                .with_downcast::<StateMachine, _>(StateMachine::layer_count)
-                .unwrap_or(0);
-            debug_assert!(layer_count <= u16::MAX as usize);
-            let layer_count = layer_count.min(u16::MAX as usize);
-            for index in 0..layer_count {
-                let Some(layer) = instance
-                    .machine
-                    .with_downcast::<StateMachine, _>(|machine| machine.layer(index))
-                    .flatten()
-                else {
-                    continue;
-                };
-                let layer_instance = RuntimeStateMachineLayerInstanceHandle::new(
-                    StateMachineLayerInstance::default(),
-                );
-                layer_instance.with_layer_mut(|layer_instance| {
-                    layer_instance.init(instance, layer);
-                    instance
-                        .settling
-                        .layers
-                        .borrow_mut()
-                        .push(layer_instance.settled.clone());
-                });
-                instance.layers.push(layer_instance);
-            }
+            instance.push_layers();
 
             if instance
                 .machine
@@ -6371,6 +6345,120 @@ impl StateMachineInstance {
         for layer in layers {
             layer.with_layer_mut(|layer| layer.reset_state(self));
         }
+    }
+
+    /// Make an instance of each of the machine's layers, each entering its
+    /// entry state: the layers a machine is made with.
+    fn push_layers(&mut self) {
+        let layer_count = self
+            .machine
+            .with_downcast::<StateMachine, _>(StateMachine::layer_count)
+            .unwrap_or(0);
+        debug_assert!(layer_count <= u16::MAX as usize);
+        let layer_count = layer_count.min(u16::MAX as usize);
+        for index in 0..layer_count {
+            let Some(layer) = self
+                .machine
+                .with_downcast::<StateMachine, _>(|machine| machine.layer(index))
+                .flatten()
+            else {
+                continue;
+            };
+            let layer_instance =
+                RuntimeStateMachineLayerInstanceHandle::new(StateMachineLayerInstance::default());
+            layer_instance.with_layer_mut(|layer_instance| {
+                layer_instance.init(self, layer);
+                self.settling
+                    .layers
+                    .borrow_mut()
+                    .push(layer_instance.settled.clone());
+            });
+            self.layers.push(layer_instance);
+        }
+    }
+
+    /// What a host's reset does to this machine (the page player's
+    /// `SceneWriter::reset`). The machine itself is returned in place: its
+    /// parent's machine, its host and its artboard link to it. Its layers,
+    /// which nothing outside it holds, are rebuilt, made as the machine is
+    /// made with them, so each starts at its entry state with no transition,
+    /// mix or hold.
+    ///
+    /// Every field is named below with what the reset does to it, so a field
+    /// added later fails to compile until that is decided.
+    pub fn reset_in_place(&mut self) {
+        self.wake_row();
+        for group in &self.listener_groups {
+            group.with_group(|group| group.release_all_pointers());
+        }
+        if let Some(extras) = self.input_extras.borrow_mut().get_mut() {
+            extras.queued_focus_events.clear();
+            extras.queued_semantic_events.clear();
+        }
+        self.layers.clear();
+        self.settling.layers.borrow_mut().clear();
+        self.settling.any_settled.set(false);
+        self.push_layers();
+        self.forget_view_model_changes();
+        self.mark_needs_advance();
+        let Self {
+            // Rebuilt above: the layers and their settled flags, which
+            // `settling` lists for the row; the machine then needs an advance.
+            layers: _,
+            settling: _,
+            needs_advance: _,
+            // A count the layers' frozen check compares with. A rebuilt layer
+            // starts unsettled, so any value is the count it starts from.
+            advance_change_serial: _,
+            // Returned above: the listeners drop the pointers they track, the
+            // queued focus and semantic events go, and view model changes
+            // from before the reset are no longer pending.
+            listener_groups: _,
+            input_extras: _,
+            bindables: _,
+            // Left as they are: the values of the machine's inputs, which its
+            // listeners and its host set.
+            input_instances: _,
+            // Left as they are: the pointer latches, which say which pointer
+            // a scroll, drag or hosted artboard holds.
+            scroll_latch: _,
+            css_drag_owners: _,
+            drag_holders: _,
+            disabled_pointer_ids: _,
+            hit_components: _,
+            // What the machine is, where it lives and what links to it: its
+            // definition, its artboard, its parent and its host, and the
+            // links its parent's machine made to hear its events.
+            occurrence: _,
+            machine: _,
+            artboard_instance: _,
+            parent_state_machine_instance: _,
+            parent_nested_artboard: _,
+            nested_event_listener: _,
+            nested_event_notifier: _,
+            // Made from the file with the machine, holding no state a reset
+            // returns: the binds (their values come from the data context),
+            // the CSS boxes it hit tests, and its script instances.
+            data_bind_container: _,
+            css_hover_boxes: _,
+            css_hits: _,
+            scripting: _,
+            // Set by the host: kept.
+            pointer_scroll_clock: _,
+            host_space_pointers: _,
+            capture_run_by_host: _,
+            #[cfg(feature = "tools")]
+                input_changed_callback: _,
+            // Hold a value only while the machine dispatches or reports, and
+            // none between steps.
+            host_dispatching: _,
+            in_pointer_miss: _,
+            performing_listener_target: _,
+            reporting: _,
+            // The artboard's draw order count it last saw, which it compares
+            // with on each advance.
+            draw_order_change_counter: _,
+        } = self;
     }
 
     /// Forget the pointers held by the listeners whose target `is_target`

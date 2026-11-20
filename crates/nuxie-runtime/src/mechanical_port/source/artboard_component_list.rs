@@ -2540,6 +2540,24 @@ impl ArtboardComponentList {
         let source = owner
             .with_downcast_mut::<Self, _>(|owner| owner.artboard_source_for_index(index))
             .expect("live ArtboardComponentList");
+        Self::create_artboard_from_source_occurrence(
+            owner,
+            index,
+            source,
+            force_layout_sync,
+            active_scroll,
+        );
+    }
+
+    /// Make the row at `index` from `source`: the artboard it is an instance
+    /// of and the override that sizes it.
+    fn create_artboard_from_source_occurrence(
+        owner: &CoreHandle,
+        index: i32,
+        source: Option<(CoreHandle, Option<CoreHandle>)>,
+        force_layout_sync: bool,
+        active_scroll: Option<&ScrollConstraint>,
+    ) {
         let artboard = source.and_then(|(source, artboard_override)| {
             Some((
                 Artboard::nested_instance_from_handle(&source)?,
@@ -2565,6 +2583,61 @@ impl ArtboardComponentList {
                 active_scroll,
             );
         }
+    }
+
+    /// What a host's reset does to this list (the page player's
+    /// `SceneWriter::reset`). The list is an object of the file and keeps its
+    /// items. Each row it holds is rebuilt: its artboard and its machine are
+    /// made from the artboard the row is an instance of, as the list makes a
+    /// row it is given, and replace the row's. The rows the list keeps pooled
+    /// for reuse are dropped, as a newly made list holds none. Whether it
+    /// held a row.
+    pub(crate) fn rebuild_rows_occurrence(owner: &CoreHandle) -> bool {
+        let rebuilt = owner.with_downcast_mut::<Self, _>(|list| {
+            list.release_pools();
+            let rows: Vec<(i32, CoreHandle)> = (0..list.list_items.len())
+                .filter_map(|index| {
+                    let index = i32::try_from(index).ok()?;
+                    let source = list
+                        .artboard_instance(index)?
+                        .with_artboard(|artboard| artboard.artboard_source_handle())?;
+                    Some((index, source))
+                })
+                .collect();
+            let previous_row_nodes = list.list_row_focus_nodes.clone();
+            let was_updating_list = list.updating_list;
+            list.updating_list = true;
+            for (index, _) in &rows {
+                list.remove_artboard_at(*index);
+            }
+            (rows, previous_row_nodes, was_updating_list)
+        });
+        let Some((rows, previous_row_nodes, was_updating_list)) = rebuilt else {
+            return false;
+        };
+        for (index, source) in &rows {
+            let artboard_override = owner
+                .with_downcast_mut::<Self, _>(|list| {
+                    let item = list.list_item(*index)?;
+                    list.artboard_override_for_item(item)
+                })
+                .flatten();
+            Self::create_artboard_from_source_occurrence(
+                owner,
+                *index,
+                Some((source.clone(), artboard_override)),
+                false,
+                None,
+            );
+        }
+        // What the list does once it has made the rows of new items.
+        Self::finish_layout_bounds_occurrence(owner);
+        Self::sync_layout_children_occurrence(owner);
+        owner.with_downcast_mut::<Self, _>(|list| {
+            let items = list.list_items.clone();
+            list.finish_list_after_layout_children(&items, &previous_row_nodes, was_updating_list);
+        });
+        !rows.is_empty()
     }
 
     pub fn add_artboard_at_occurrence(

@@ -1386,6 +1386,124 @@ impl Artboard {
         self.factory = Some(factory);
     }
 
+    /// What a host's reset does to a hosted instance of an artboard (the page
+    /// player's `SceneWriter::reset`). The instance is returned in place: its
+    /// host, its host's machine, its layout, focus and semantic trees and its
+    /// data context link to it. The reset reaches each of its objects by
+    /// kind, and the artboard itself holds nothing a reset returns.
+    ///
+    /// Every field is named below with what the reset does to it, so a field
+    /// added later fails to compile until that is decided.
+    pub fn reset_in_place(&mut self) {
+        let Self {
+            // What the artboard is and what it is made of, made from the file when
+            // the instance is made: its objects, the order they update and draw in,
+            // the lists of each kind the engine walks, and its source and file.
+            base: _,
+            core_arena: _,
+            definition_owner: _,
+            objects: _,
+            source_state: _,
+            dependency_order: _,
+            component_graph: _,
+            dependency_order_recipe: _,
+            recipe_state: _,
+            dispose_source_for_replacement: _,
+            drawables: _,
+            clipping_shapes: _,
+            layer_masks: _,
+            draw_targets: _,
+            nested_artboards: _,
+            component_lists: _,
+            artboard_hosts: _,
+            drop_callbacks_prepared: _,
+            host_data_context_consumers: _,
+            joysticks: _,
+            joysticks_apply_before_update: _,
+            scripted_objects: _,
+            advancing_components: _,
+            first_drawable: _,
+            draw_links: _,
+            is_instance: _,
+            original_width: _,
+            original_height: _,
+            artboard_source: _,
+            runtime_self: _,
+            file: _,
+            factory: _,
+            #[cfg(feature = "artboard-replace")]
+                artboard_id: _,
+            #[cfg(feature = "artboard-replace")]
+                instance_count: _,
+            #[cfg(any(test, feature = "testing"))]
+                split_seen: _,
+            // Links to its host, its player and what it shares with them: its
+            // binds and data context, focus and semantic managers, script and audio
+            // engines, and how its host places it and interpolates its layout.
+            page_boundary: _,
+            live_move_scene: _,
+            data_bind_container: _,
+            instance_value_binds_source: _,
+            scripting_vm: _,
+            audio_engine: _,
+            owned_focus_manager: _,
+            active_focus_manager: _,
+            active_semantic_manager: _,
+            semantic_boundary_node: _,
+            #[cfg(feature = "tools")]
+                external_parent_focus_node: _,
+            frame_origin: _,
+            updates_own_layout: _,
+            owned_inherited_interpolator: _,
+            draw_visitor: _,
+            draw_visitor_file: _,
+            // Work pending for the next update, which does it.
+            dirty_state: _,
+            dirty_layout: _,
+            is_cleaning_dirty_layouts: _,
+            focus_tree_deferred: _,
+            host_transform_marked_dirty: _,
+            instance_value_binds_pending: _,
+            // What the last draw made, which the next draw remakes.
+            bitmap_cache: _,
+            group_picture: _,
+            screen_pass: _,
+            lifted: _,
+            lifts: _,
+            drawing_lift: _,
+            #[cfg(feature = "tools")]
+                seen_image_reveal_generation: _,
+            #[cfg(feature = "tools")]
+                has_updated: _,
+            // Left as they are: the state of its scripted interpolators, which
+            // their scripts hold.
+            scripted_interpolators: _,
+            // Set by the host: its volume, and the tools' callbacks.
+            volume: _,
+            #[cfg(feature = "tools")]
+                layout_changed_callback: _,
+            #[cfg(feature = "tools")]
+                layout_dirty_callback: _,
+            #[cfg(feature = "tools")]
+                transform_dirty_callback: _,
+            #[cfg(feature = "tools")]
+                test_bounds_callback: _,
+            #[cfg(feature = "tools")]
+                is_ancestor_callback: _,
+            #[cfg(feature = "tools")]
+                root_transform_callback: _,
+            #[cfg(feature = "tools")]
+                callback_user_data: _,
+            // A live move's flight, which the live move that set it ends.
+            skip_self_transform: _,
+            flight_stretch: _,
+            flight_clip: _,
+            flight_skips_own_opacity: _,
+            flight_clip_path: _,
+            pivot_only_origin: _,
+        } = self;
+    }
+
     pub fn artboard_source_handle(&self) -> Option<CoreHandle> {
         if self.is_instance {
             self.artboard_source.clone()

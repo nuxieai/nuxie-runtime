@@ -1120,10 +1120,11 @@ const HOSTS: [Host; 4] = [
 ];
 
 /// A root "Main" whose "Box" holds `host`, hosting "Child": a machine that
-/// fires "entered" as it enters a half-second animation moving "Dot", a
-/// second half-second animation moving "Bar", a horizontal scroll view
-/// whose 400 point list sits in a 200 point viewport, and a field the file
-/// gives the text "hello world".
+/// fires "entered" as it enters a half-second animation moving the drawn
+/// "Dot", a second half-second animation moving the drawn "Bar", a
+/// horizontal scroll view whose 400 point list, holding a drawn tile, sits
+/// in a 200 point viewport, and a drawn field the file gives the text
+/// "hello world".
 fn hosting(host: Host) -> Scene {
     use crate::source::{
         artboard::Artboard,
@@ -1265,51 +1266,90 @@ fn hosting(host: Host) -> Scene {
     style(&mut riv, 0, false);
     style(&mut riv, 1, false);
     machine(&mut riv, None);
-    // Child: 0 artboard, 1 the event, 2 the dot, 3 the bar, 4 the viewport,
-    // 5 the list, 6 its scroll constraint, 7 the field's box, 8 the field,
-    // 9 its focus data, 10 its text style, 11 to 14 the styles.
+    // A drawn 10 point square of `color` named `name`: the shape, at local
+    // id `shape`, its rectangle, its fill and the fill's color.
+    let square = |riv: &mut Riv, parent: u64, shape: u64, name: &str, color: u32| {
+        riv.object(ShapeBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent)
+            .string(ComponentBase::NAME_PROPERTY_KEY, name)
+            .end();
+        riv.object(RectangleBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, shape)
+            .float(ParametricPathBase::WIDTH_PROPERTY_KEY, 10.0)
+            .float(ParametricPathBase::HEIGHT_PROPERTY_KEY, 10.0)
+            .end();
+        riv.object(FillBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, shape)
+            .end();
+        riv.object(SolidColorBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, shape + 2)
+            .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, color)
+            .end();
+    };
+    // Child: 0 artboard, 1 the event, 2 to 5 the dot, 6 to 9 the bar,
+    // 10 the viewport, 11 the list, 12 its scroll constraint, 13 a filled
+    // tile box in the list and 14 and 15 its fill, 16 the field's box, 17
+    // the field, 18 its focus data, 19 its text style, 20 the drawable that
+    // draws its text and 21 and 22 that drawable's fill, 23 to 27 the
+    // styles.
     riv.object(ArtboardBase::TYPE_KEY)
         .string(ComponentBase::NAME_PROPERTY_KEY, "Child")
         .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0)
         .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0)
-        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 11)
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 23)
         .end();
     riv.object(EventBase::TYPE_KEY)
         .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
         .string(ComponentBase::NAME_PROPERTY_KEY, "entered")
         .end();
-    for name in ["Dot", "Bar"] {
-        riv.object(NodeBase::TYPE_KEY)
-            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
-            .string(ComponentBase::NAME_PROPERTY_KEY, name)
-            .end();
-    }
-    layout(&mut riv, 0, "Viewport", (200.0, 40.0), 12);
-    layout(&mut riv, 4, "List", (400.0, 40.0), 13);
+    square(&mut riv, 0, 2, "Dot", 0xff11_2233);
+    square(&mut riv, 0, 6, "Bar", 0xff44_5566);
+    layout(&mut riv, 0, "Viewport", (200.0, 40.0), 24);
+    layout(&mut riv, 10, "List", (400.0, 40.0), 25);
     riv.object(ScrollConstraintBase::TYPE_KEY)
-        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 5)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 11)
         .uint(DraggableConstraintBase::DIRECTION_VALUE_PROPERTY_KEY, 0)
         .end();
-    layout(&mut riv, 0, "Field box", (180.0, 40.0), 14);
+    // The scroll moves the list's layout children, so the tile is a box.
+    layout(&mut riv, 11, "Tile", (40.0, 40.0), 26);
+    riv.object(FillBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 13)
+        .end();
+    riv.object(SolidColorBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 14)
+        .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, 0xff77_8899)
+        .end();
+    layout(&mut riv, 0, "Field box", (180.0, 40.0), 27);
     riv.object(TextInputBase::TYPE_KEY)
-        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 7)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 16)
         .string(ComponentBase::NAME_PROPERTY_KEY, "Field")
         .string(TextInputBase::TEXT_PROPERTY_KEY, "hello world")
         .end();
     riv.object(FocusDataBase::TYPE_KEY)
-        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 8)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 17)
         .end();
     riv.object(TextStylePaintBase::TYPE_KEY)
-        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 8)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 17)
         .uint(TextStyleBase::FONT_ASSET_ID_PROPERTY_KEY, 0)
         .float(TextStyleBase::FONT_SIZE_PROPERTY_KEY, 16.0)
         .end();
+    riv.object(crate::source::generated::text::text_input_text_base::TextInputTextBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 17)
+        .end();
+    riv.object(FillBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 20)
+        .end();
+    riv.object(SolidColorBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 21)
+        .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, 0xff00_0000)
+        .end();
     style(&mut riv, 0, true);
-    style(&mut riv, 4, true);
-    style(&mut riv, 5, false);
-    style(&mut riv, 7, false);
+    style(&mut riv, 10, true);
+    style(&mut riv, 11, false);
+    style(&mut riv, 13, false);
+    style(&mut riv, 16, false);
     // 0 moves the dot and 1 the bar, from 0 to 100 over half a second.
-    for keyed in [2, 3] {
+    for keyed in [2, 6] {
         riv.object(LinearAnimationBase::TYPE_KEY)
             .uint(LinearAnimationBase::FPS_PROPERTY_KEY, 60)
             .uint(LinearAnimationBase::DURATION_PROPERTY_KEY, 30)
@@ -1390,120 +1430,244 @@ fn hosted_board(played: &Played, host: Host) -> RuntimeArtboardInstanceHandle {
     .expect("the hosted artboard")
 }
 
-/// What the engine holds in the artboard `host` hosts, moved away from the
-/// file: the machine has played its entry animation to the end, a nested
-/// host's simple animation has played to its end, the scroll view is
-/// scrolled and the field holds typed text. A reset of the object named
-/// `target`, or of the root when there is none, puts each back: the machine
-/// to its entry, the animations to their start, the scroll to the file's
-/// offset and the field to the text last written to it, the file's.
-fn reset_returns_hosted_state(host: Host, target: Option<&str>) {
+/// The hosted machine of a `hosting` scene: a nested host's nested state
+/// machine, or the list row's machine.
+fn hosted_machine(played: &Played, host: Host) -> crate::RuntimeStateMachineInstanceHandle {
     use crate::source::{
-        generated::{
-            constraints::scrolling::scroll_constraint_base::ScrollConstraintBase,
-            text::text_input_base::TextInputBase,
-        },
-        text::text_input::TextInput,
+        animation::nested_state_machine::NestedStateMachine,
+        artboard_component_list::ArtboardComponentList,
     };
-    let nested = matches!(host, Host::Nested(_));
-    let mut played = Played::new(hosting(host));
-    played.frames_until_settled();
-    let board = hosted_board(&played, host);
-    let [dot, bar, scroll, field] = [2, 3, 6, 8].map(|local_id| {
+    match host {
+        Host::Nested(_) => played
+            .f
+            .object("Nested")
+            .with(|host| {
+                host.as_nested_artboard()
+                    .map(|nested| nested.nested_animations()[0].clone())
+            })
+            .flatten()
+            .and_then(|machine| {
+                machine
+                    .with_downcast::<NestedStateMachine, _>(
+                        NestedStateMachine::state_machine_instance,
+                    )
+                    .flatten()
+            }),
+        Host::ListRow => played
+            .f
+            .object("Rows")
+            .with_downcast::<ArtboardComponentList, _>(|list| list.state_machine_instance(0))
+            .flatten(),
+    }
+    .expect("the hosted machine")
+}
+
+/// What a `hosting` scene's player holds and shows: the hosted artboard's
+/// animated x of "Dot" and "Bar", its scroll offset, the list's world
+/// bounds and where the tile the list scrolls lands, the field's text, its machine's state and animation, the host's
+/// written width, and the whole draw of the artboard, transforms and paths.
+#[derive(Debug, PartialEq)]
+struct Held {
+    dot_x: f32,
+    bar_x: f32,
+    scroll: (f32, f32),
+    list_bounds: [f32; 4],
+    tile_at: (f32, f32),
+    text: String,
+    state: Option<String>,
+    animation: Option<(String, f32)>,
+    box_width: Option<f32>,
+    drawn: Vec<String>,
+}
+
+fn held(played: &Played, host: Host) -> Held {
+    use crate::source::generated::text::text_input_base::TextInputBase;
+    let board = hosted_board(played, host);
+    let object = |local_id: usize| {
         board
             .with_artboard(|artboard| artboard.objects()[local_id].clone())
             .expect("a hosted object")
-    });
-    let x = |node: &CoreHandle| {
-        CoreRegistry::get_double_handle(node, i32::from(NodeBase::X_PROPERTY_KEY)).expect("an x")
     };
-    let text = |field: &CoreHandle| {
-        CoreRegistry::get_string_handle(field, i32::from(TextInputBase::TEXT_PROPERTY_KEY))
-            .expect("the field's text")
+    let x = |local_id| {
+        CoreRegistry::get_double_handle(&object(local_id), i32::from(NodeBase::X_PROPERTY_KEY))
+            .expect("an x")
     };
-    let offset = |scroll: &CoreHandle| {
-        scroll
-            .with_downcast(ScrollConstraint::offset_x)
-            .expect("a live scroll constraint")
-    };
-    assert_eq!(x(&dot), 100.0, "{host:?}: the entry animation played out");
-    if nested {
-        assert_eq!(x(&bar), 100.0, "{host:?}: the simple animation played out");
+    let list_bounds = object(11)
+        .with_downcast::<LayoutComponent, _>(|list| {
+            let bounds = list.world_bounds();
+            [bounds.left(), bounds.top(), bounds.width(), bounds.height()]
+        })
+        .expect("the list");
+    let machine = hosted_machine(played, host);
+    let state = machine
+        .with_instance_mut(|machine| machine.layer_state(0))
+        .map(|state| format!("{:?}", state.core_type()));
+    let animation = machine
+        .with_instance_mut(|machine| machine.current_animation_by_index(0))
+        .and_then(|state| {
+            state.first_animation(|animation| (animation.name().to_string(), animation.time()))
+        });
+    Held {
+        dot_x: x(2),
+        bar_x: x(6),
+        scroll: object(12)
+            .with_downcast(|scroll: &ScrollConstraint| (scroll.offset_x(), scroll.offset_y()))
+            .expect("a live scroll constraint"),
+        list_bounds,
+        tile_at: object(13)
+            .with(|tile| {
+                tile.as_world_transform_component().map(|tile| {
+                    let world = tile.world_transform();
+                    (world.tx(), world.ty())
+                })
+            })
+            .flatten()
+            .expect("the tile"),
+        text: CoreRegistry::get_string_handle(
+            &object(17),
+            i32::from(TextInputBase::TEXT_PROPERTY_KEY),
+        )
+        .expect("the field's text"),
+        state,
+        animation,
+        box_width: CoreRegistry::get_double_handle(
+            &played.f.object("Box"),
+            i32::from(LayoutComponentBase::WIDTH_PROPERTY_KEY),
+        ),
+        // What the renderer is asked to draw: the factory's own lines, which
+        // make the paths it draws the first time, are left out.
+        drawn: played
+            .f
+            .draw_lines()
+            .iter()
+            .filter(|line| !line.starts_with("make"))
+            .map(|line| without_ids(line))
+            .collect(),
     }
-    // What a focused field does with typed text.
-    assert_eq!(
-        field.with_downcast_mut::<TextInput, _>(|input| input.text_input("!")),
-        Some(true)
-    );
-    assert_ne!(
-        text(&field),
-        "hello world",
-        "{host:?}: typed into the field"
-    );
-    assert!(CoreRegistry::set_double_handle(
-        &scroll,
-        i32::from(ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY),
-        -50.0
-    ));
-    played.settle();
-    assert_eq!(offset(&scroll), -50.0, "{host:?}: scrolled");
+}
 
+/// A draw line without the factory's handle numbers, which count every
+/// path and paint the factory has made, so two copies made at different
+/// times number the same draw differently.
+fn without_ids(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut rest = line;
+    while let Some(at) = rest.find("id=") {
+        out.push_str(&rest[..at + 3]);
+        rest = rest[at + 3..].trim_start_matches(|c: char| c.is_ascii_digit());
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The width a host writes to "Box" before it moves anything.
+const HOST_WIDTH: f32 = 180.0;
+
+/// The reset contract, for one host kind and one reset object: after a
+/// reset inside a step, everything the engine holds under that object is
+/// what a freshly made instance of the same file holds after its first
+/// settle, and the frame drawn after that same step shows it. Property
+/// values a host wrote are the only difference, and they stay.
+///
+/// The played copy takes a host write, then moves everything it holds: its
+/// machine plays its entry animation to the end, a nested host's simple
+/// animation plays to its end, the scroll view scrolls and the field takes
+/// typed text. A driver then resets `target` (the root when None) inside a
+/// step. That same step's result is compared, with no frame between, with a
+/// second copy of the file made fresh, given the same host write, and
+/// stepped once.
+fn reset_is_a_fresh_instance(host: Host, target: Option<&str>) {
+    use crate::source::{
+        generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase,
+        text::text_input::TextInput,
+    };
+    let fresh = {
+        let f = hosting(host);
+        assert!(CoreRegistry::set_double_handle(
+            &f.object("Box"),
+            i32::from(LayoutComponentBase::WIDTH_PROPERTY_KEY),
+            HOST_WIDTH
+        ));
+        Played::new(f)
+    };
+    let expected = held(&fresh, host);
+
+    let mut played = Played::new(hosting(host));
     let target = match target {
         Some(name) => played.object(name),
         None => SceneObject::root(played.local_id(&played.f.artboard.core_handle())),
     };
+    let box_id = played.object("Box");
+    let resetting = Rc::new(RefCell::new(false));
     let result = Rc::new(RefCell::new(None));
-    let log = result.clone();
+    let (armed, log) = (resetting.clone(), result.clone());
     played.drive(move |round, scene| {
-        if round.index == 0 && log.borrow().is_none() {
+        if round.index != 0 {
+            return;
+        }
+        if *armed.borrow() {
+            *armed.borrow_mut() = false;
             *log.borrow_mut() = Some(scene.reset(&target));
+        } else {
+            let _ = scene.set_number(&box_id, LayoutComponentBase::WIDTH_PROPERTY_KEY, HOST_WIDTH);
         }
     });
-    let reset = played.step(FRAME, vec![]);
-    assert_eq!(*result.borrow(), Some(Ok(true)), "{host:?}");
-    if nested {
-        assert_eq!(
-            names(&reset.events),
-            ["entered"],
-            "{host:?}: the machine entered again"
-        );
-    }
-    assert_eq!(offset(&scroll), 0.0, "{host:?}: the file's offset");
-    assert_eq!(text(&field), "hello world", "{host:?}: the written text");
-    played.step(FRAME, vec![]);
-    assert!(
-        x(&dot) < 50.0,
-        "{host:?}: the entry animation starts over: {}",
-        x(&dot)
+    played.frames_until_settled();
+    let moved = held(&played, host);
+    assert_eq!(
+        moved.box_width,
+        Some(HOST_WIDTH),
+        "{host:?}: the host wrote"
     );
-    if nested {
-        assert!(
-            x(&bar) < 50.0,
-            "{host:?}: the simple animation starts over: {}",
-            x(&bar)
+    assert_eq!(
+        moved.dot_x, 100.0,
+        "{host:?}: the entry animation played out"
+    );
+    if matches!(host, Host::Nested(_)) {
+        assert_eq!(
+            moved.bar_x, 100.0,
+            "{host:?}: the simple animation played out"
         );
+    }
+    let board = hosted_board(&played, host);
+    let hosted = |local_id: usize| {
+        board
+            .with_artboard(|artboard| artboard.objects()[local_id].clone())
+            .expect("a hosted object")
+    };
+    // What a focused field does with typed text.
+    assert_eq!(
+        hosted(17).with_downcast_mut::<TextInput, _>(|input| input.text_input("!")),
+        Some(true)
+    );
+    assert!(CoreRegistry::set_double_handle(
+        &hosted(12),
+        i32::from(ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY),
+        -50.0
+    ));
+    played.settle();
+    let moved = held(&played, host);
+    assert_ne!(moved.text, expected.text, "{host:?}: typed into the field");
+    assert_ne!(moved.scroll, expected.scroll, "{host:?}: scrolled");
+    assert_ne!(moved.tile_at, expected.tile_at, "{host:?}: scrolled");
+    assert_ne!(moved.drawn, expected.drawn, "{host:?}: the draw moved");
+
+    *resetting.borrow_mut() = true;
+    played.step(FRAME, vec![]);
+    assert_eq!(*result.borrow(), Some(Ok(true)), "{host:?}");
+    assert_eq!(held(&played, host), expected, "{host:?}");
+}
+
+#[test]
+fn a_reset_of_a_box_holding_each_host_is_a_fresh_instance() {
+    for host in HOSTS {
+        reset_is_a_fresh_instance(host, Some("Box"));
     }
 }
 
 #[test]
-fn reset_of_a_box_returns_what_a_nested_artboard_layout_hosts() {
-    reset_returns_hosted_state(HOSTS[1], Some("Box"));
-}
-
-#[test]
-fn reset_of_a_box_returns_what_a_nested_artboard_leaf_hosts() {
-    reset_returns_hosted_state(HOSTS[2], Some("Box"));
-}
-
-#[test]
-fn reset_of_a_box_returns_what_a_nested_artboard_and_a_list_row_host() {
-    reset_returns_hosted_state(HOSTS[0], Some("Box"));
-    reset_returns_hosted_state(HOSTS[3], Some("Box"));
-}
-
-#[test]
-fn reset_of_the_root_returns_what_every_host_type_hosts() {
+fn a_reset_of_the_root_is_a_fresh_instance_for_each_host() {
     for host in HOSTS {
-        reset_returns_hosted_state(host, None);
+        reset_is_a_fresh_instance(host, None);
     }
 }

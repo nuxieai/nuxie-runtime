@@ -1,15 +1,43 @@
 //! Reset what the engine holds under one object of the player's artboard.
 //!
-//! Engine-held state is what the engine changes on its own while it plays:
-//! a scroll position, typed text, the playheads of nested artboards' machines
-//! and animations, and the presses and hovers listeners track. Other
-//! properties are not engine-held state: whatever the file, a bind or a host
-//! last wrote stays. A scroll position lives in its constraint's scroll
-//! offset properties, which scrolling writes; a reset puts them back to the
-//! values the file gave them.
+//! The contract: after a reset inside a step, everything the engine holds
+//! under that object is what a freshly made instance of the same file would
+//! hold after its first settle, and the frame drawn after that same step
+//! shows it. Property values a host wrote are the only difference, and they
+//! stay.
+//!
+//! A reset meets it in three parts, each in the engine's own place:
+//!
+//! 1. Return. Each engine-held value goes back to the value a fresh instance
+//!    starts from: a scroll position to the offsets the file gave its
+//!    constraint, with its physics stopped; typed text to the text last
+//!    written to the field; a nested or list-row machine to its entry state,
+//!    its listeners holding no pointer; a simple animation's playhead to its
+//!    start. The player's own listeners drop the presses and hovers they
+//!    hold on objects under the reset object.
+//! 2. First frame. Every nested artboard host the reset reached, of any host
+//!    type, and every artboard component list, is advanced by zero as a new
+//!    frame through the engine's advancing-component dispatch: the call a
+//!    fresh instance's first frame makes on it. That applies the poses a
+//!    fresh instance shows. A machine takes its transitions out of entry and
+//!    applies its states' animations at time zero, a simple animation
+//!    applies its starting pose, and the call recurses into the hosted
+//!    artboards. The within-frame settle cannot do this: it advances hosts as
+//!    upstream does within a frame, without a new frame, which skips simple
+//!    animations, and that rule stays for every other settle.
+//! 3. Settle. The step's within-frame settle after the round updates what
+//!    the first two parts dirtied, as it does after any write: a scroll's
+//!    content transform, reshaped text, layout and paint, for the frame
+//!    drawn after the step.
+//!
+//! A remap animation's playhead is not returned. It is its time property,
+//! which the file, a bind or a host wrote, so a fresh instance takes the
+//! same value, and the first frame applies it at the same time.
 use std::collections::HashSet;
 
 use crate::mechanical_port::source::{
+    advance_flags::AdvanceFlags,
+    advancing_component::AdvancingComponentHandle,
     animation::{
         nested_linear_animation::NestedLinearAnimation, nested_state_machine::NestedStateMachine,
         state_machine_instance::RuntimeStateMachineInstanceHandle,
@@ -27,9 +55,11 @@ use crate::mechanical_port::source::{
 };
 use crate::{ArtboardInstance, CoreHandle, StateMachineInstance};
 
-/// Reset everything under `root` in the player's artboard, `root` included.
-/// `machine` is the player's own machine, whose listeners on objects under
-/// `root` drop the pointers they hold. Whether anything was reset.
+/// Reset everything under `root` in the player's artboard, `root` included,
+/// to what a fresh instance of the file holds after its first settle
+/// (module docs). `machine` is the player's own machine, whose listeners on
+/// objects under `root` drop the pointers they hold. Whether anything was
+/// reset.
 pub(super) fn reset_subtree(
     artboard: &ArtboardInstance,
     machine: Option<&StateMachineInstance>,
@@ -50,11 +80,15 @@ pub(super) fn reset_subtree(
         .collect();
     let mut changed = false;
     let mut visited = HashSet::new();
+    let mut hosts = Vec::new();
     for (local_id, object) in objects.iter().enumerate() {
         let Some(object) = object else { continue };
         if u32::try_from(local_id).is_ok_and(|id| under.contains(&id)) {
             let source = sources.get(local_id).cloned().flatten();
             changed |= reset_object(object, source.as_ref(), &mut visited);
+            if hosts_artboards(object) {
+                hosts.push(object.clone());
+            }
         }
     }
     if let Some(machine) = machine {
@@ -62,7 +96,32 @@ pub(super) fn reset_subtree(
             machine.release_listener_pointers(|id| under.contains(&id))
         });
     }
+    // Only the player's artboard's own hosts: the first frame recurses into
+    // the artboards they host, so a host inside one is advanced once, by it.
+    for host in &hosts {
+        AdvancingComponentHandle::classified(host).advance(0.0, FIRST_FRAME);
+    }
     changed
+}
+
+/// The flags a root artboard's frame hands its advancing components: what a
+/// fresh instance's first frame advances a host with.
+const FIRST_FRAME: AdvanceFlags = AdvanceFlags(
+    AdvanceFlags::IS_ROOT.0
+        | AdvanceFlags::ANIMATE.0
+        | AdvanceFlags::ADVANCE_NESTED.0
+        | AdvanceFlags::NEW_FRAME.0,
+);
+
+/// Whether `object` hosts artboards: a nested artboard of any host type, or
+/// an artboard component list.
+fn hosts_artboards(object: &CoreHandle) -> bool {
+    object
+        .with_mut(|object| {
+            object.as_nested_artboard().is_some()
+                || object.as_artboard_component_list_mut().is_some()
+        })
+        .unwrap_or(false)
 }
 
 fn descends_from(object: &CoreHandle, root: &CoreHandle) -> bool {
@@ -181,11 +240,10 @@ fn reset_object(
     false
 }
 
-/// Reset one of a host's nested animations: a state machine back to its
-/// entry, and a simple animation's playhead to its start. A simple
-/// animation's playhead is engine-held, since it advances with time; a remap
-/// animation's playhead follows its time property, which the file, a bind or
-/// a host wrote, so a reset leaves it.
+/// Return one of a host's nested animations to where a fresh instance
+/// starts it: a state machine at its entry, and a simple animation's
+/// playhead at its start. The first frame (module docs) applies them. A
+/// remap animation's playhead is its time property, which is not returned.
 fn reset_nested_animation(animation: &CoreHandle) -> bool {
     if animation.is_type_of(NestedStateMachineBase::TYPE_KEY) {
         // The registry has no subtype of NestedStateMachine and no shared

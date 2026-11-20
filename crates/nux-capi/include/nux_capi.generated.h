@@ -70,6 +70,13 @@
 
 #define NUX_HOST_VALUE_NODES_HARD_MAX 65536
 
+/**
+ * The most rounds a driver is asked in one step. A driver still writing in
+ * the last round is cut off; the step returns unsettled and the next step
+ * carries on.
+ */
+#define NUX_PLAYER_DRIVER_MAX_ROUNDS 8
+
 
 
 
@@ -616,6 +623,11 @@ typedef struct NuxPlayerStepResult NuxPlayerStepResult;
  */
 typedef struct NuxRenderer NuxRenderer;
 #endif
+
+/**
+ * Writes into the player's artboard, valid for one `drive` call.
+ */
+typedef struct NuxSceneWriter NuxSceneWriter;
 
 /**
  * Immutable capture. Text views remain valid until this handle is freed.
@@ -1167,6 +1179,112 @@ typedef const struct NuxFont *(*NuxFontFallbackProc)(void *user_data,
                                                      uint16_t weight);
 
 /**
+ * One nested artboard on the way from the player's artboard to where an
+ * event was reported. This record's layout is fixed.
+ */
+typedef struct NuxScenePathSegment {
+  uint32_t artboard_global_id;
+  size_t local_id;
+} NuxScenePathSegment;
+
+/**
+ * One list row on the way from the player's artboard to where an event was
+ * reported. This record's layout is fixed.
+ */
+typedef struct NuxSceneListItem {
+  uint32_t artboard_global_id;
+  size_t host_local_id;
+  size_t item_index;
+  uint64_t occurrence_identity;
+} NuxSceneListItem;
+
+/**
+ * Fixed projection of one typed custom Event property. Only the value field
+ * selected by `kind` is meaningful.
+ */
+typedef struct NuxPlayerEventPropertyView {
+  uint32_t struct_size;
+  /**
+   * One of the `NUX_PLAYER_EVENT_PROPERTY_KIND_*` constants.
+   */
+  uint32_t kind;
+  struct NuxStringView name;
+  float number_value;
+  bool bool_value;
+  /**
+   * Exact authored/script bytes for a String property; not necessarily UTF-8.
+   */
+  struct NuxByteView string_value;
+  uint32_t color_value;
+  uint64_t integer_value;
+} NuxPlayerEventPropertyView;
+
+/**
+ * One reported event, as a driver sees it. Every view borrows the round and
+ * is valid only during the `drive` call that received it.
+ */
+typedef struct NuxPlayerDriverReport {
+  uint32_t struct_size;
+  size_t event_local_index;
+  uint32_t event_core_type;
+  struct NuxStringView name;
+  struct NuxStringView url;
+  struct NuxStringView target;
+  float seconds_delay;
+  bool has_source_artboard_global_id;
+  uint32_t source_artboard_global_id;
+  /**
+   * Whether a listener's action reported the event. Events reported by a
+   * state, a transition or a timeline have no listener target.
+   */
+  bool has_listener_target;
+  /**
+   * Local id of the listener's target object, in the artboard the path
+   * leads to (the player's artboard when the path is empty).
+   */
+  size_t listener_target_local_id;
+  const struct NuxScenePathSegment *path;
+  size_t path_len;
+  const struct NuxSceneListItem *list_items;
+  size_t list_item_count;
+  /**
+   * `property_count` views, `property_stride` bytes apart.
+   */
+  const struct NuxPlayerEventPropertyView *properties;
+  size_t property_count;
+  size_t property_stride;
+} NuxPlayerDriverReport;
+
+/**
+ * One round of a step. `reports` holds `report_count` reports,
+ * `report_stride` bytes apart: in round 0 the step's own reports and any the
+ * previous step's last round left, later the reports of the previous
+ * round's settle.
+ */
+typedef struct NuxPlayerDriverRound {
+  uint32_t struct_size;
+  size_t index;
+  const struct NuxPlayerDriverReport *reports;
+  size_t report_count;
+  size_t report_stride;
+} NuxPlayerDriverRound;
+
+/**
+ * A host driver: `drive` is required; `release`, when set, is called once
+ * with `context` when the driver is cleared or replaced, or its player is
+ * freed. A status other than OK from `drive` fails the step and poisons the
+ * player, since the step's advance and earlier writes cannot be undone.
+ */
+typedef struct NuxPlayerDriver {
+  uint32_t struct_size;
+  void *context;
+  NuxStatus (*drive)(void *context,
+                     const struct NuxPlayerDriverRound *round,
+                     struct NuxSceneWriter *writer);
+  void (*release)(void *context);
+} NuxPlayerDriver;
+
+/**
  * Read-only caller-sized focus state for a state-machine player.
  */
 typedef struct NuxPlayerFocusState {
@@ -1297,27 +1415,6 @@ typedef struct NuxPlayerEventView {
   float seconds_delay;
   size_t property_count;
 } NuxPlayerEventView;
-
-/**
- * Fixed projection of one typed custom Event property. Only the value field
- * selected by `kind` is meaningful.
- */
-typedef struct NuxPlayerEventPropertyView {
-  uint32_t struct_size;
-  /**
-   * One of the `NUX_PLAYER_EVENT_PROPERTY_KIND_*` constants.
-   */
-  uint32_t kind;
-  struct NuxStringView name;
-  float number_value;
-  bool bool_value;
-  /**
-   * Exact authored/script bytes for a String property; not necessarily UTF-8.
-   */
-  struct NuxByteView string_value;
-  uint32_t color_value;
-  uint64_t integer_value;
-} NuxPlayerEventPropertyView;
 
 /**
  * One command in transaction FIFO order. `root_value_index` addresses the
@@ -1840,6 +1937,16 @@ typedef struct NuxMetalRenderOperation {
   float layout_scale_factor;
 } NuxMetalRenderOperation;
 #endif
+
+/**
+ * One object of the player's artboard, by its local id in the root
+ * artboard. Fields may be appended; initialize `struct_size` to
+ * `sizeof(NuxSceneObject)`.
+ */
+typedef struct NuxSceneObject {
+  uint32_t struct_size;
+  size_t local_id;
+} NuxSceneObject;
 
 typedef struct NuxSemanticSnapshotInfo {
   uint32_t struct_size;
@@ -2677,6 +2784,20 @@ NuxStatus nux_player_acknowledge_presented(struct NuxPlayer *player, uint64_t re
 NuxStatus nux_player_content_height(const struct NuxPlayer *player, float *out_height);
 
 /**
+ * Clear the player's driver, releasing it. Clearing a player with no driver
+ * succeeds. Fails with REENTRANT_CALL from inside a step.
+ */
+NuxStatus nux_player_driver_clear(struct NuxPlayer *player);
+
+/**
+ * Set the player's driver, replacing and releasing any earlier one. `drive`
+ * must be set. The driver table is copied; `context` must stay valid until
+ * `release` is called (or, without `release`, until the driver is cleared or
+ * the player freed). Fails with REENTRANT_CALL from inside a step.
+ */
+NuxStatus nux_player_driver_set(struct NuxPlayer *player, const struct NuxPlayerDriver *driver);
+
+/**
  * Enable semantic tracking for the player's shared artboard occurrence.
  * Call before advancing/presenting. Static, animation, and state-machine
  * players sharing this occurrence observe the same tree.
@@ -3404,6 +3525,67 @@ NuxStatus nux_renderer_resize(struct NuxRenderer *renderer,
                               struct NuxRendererOutcome *out_outcome,
                               struct NuxCapiResult **out_result);
 #endif
+
+/**
+ * Reset what the engine holds under `object`, the object included: scroll
+ * positions, typed text, nested artboards' state machines and animations,
+ * and the presses and hovers the player's listeners hold there. Other
+ * property values are left alone. `out_changed`, when not NULL, receives
+ * whether anything was reset.
+ */
+NuxStatus nux_scene_writer_reset(struct NuxSceneWriter *writer,
+                                 const struct NuxSceneObject *object,
+                                 bool *out_changed);
+
+/**
+ * Set a boolean property of `object` by property key.
+ */
+NuxStatus nux_scene_writer_set_bool(struct NuxSceneWriter *writer,
+                                    const struct NuxSceneObject *object,
+                                    uint16_t property_key,
+                                    bool value,
+                                    bool *out_changed);
+
+/**
+ * Set a color property of `object` by property key, as 0xAARRGGBB.
+ */
+NuxStatus nux_scene_writer_set_color(struct NuxSceneWriter *writer,
+                                     const struct NuxSceneObject *object,
+                                     uint16_t property_key,
+                                     uint32_t value,
+                                     bool *out_changed);
+
+/**
+ * Set a number property of `object` by property key. `out_changed`, when
+ * not NULL, receives whether the value changed. NOT_FOUND for an unknown
+ * object; INVALID_ARGUMENT for a key the object has no number property of,
+ * or a value that is not finite.
+ */
+NuxStatus nux_scene_writer_set_number(struct NuxSceneWriter *writer,
+                                      const struct NuxSceneObject *object,
+                                      uint16_t property_key,
+                                      float value,
+                                      bool *out_changed);
+
+/**
+ * Set a text property of `object` by property key, such as a text run's
+ * text. `value` must be UTF-8; it is copied.
+ */
+NuxStatus nux_scene_writer_set_text(struct NuxSceneWriter *writer,
+                                    const struct NuxSceneObject *object,
+                                    uint16_t property_key,
+                                    struct NuxStringView value,
+                                    bool *out_changed);
+
+/**
+ * Set an unsigned property (a count, an id, an enum such as a layout
+ * record's display) of `object` by property key.
+ */
+NuxStatus nux_scene_writer_set_unsigned(struct NuxSceneWriter *writer,
+                                        const struct NuxSceneObject *object,
+                                        uint16_t property_key,
+                                        uint32_t value,
+                                        bool *out_changed);
 
 NuxStatus nux_semantic_snapshot_free(struct NuxSemanticSnapshot *snapshot);
 

@@ -20,6 +20,7 @@ pub use video::*;
 pub use video_resources::*;
 pub use video_sync::*;
 mod layout_size;
+mod player_driver;
 mod player_globals;
 mod rule_groups;
 mod value_policy;
@@ -29,6 +30,7 @@ pub use value_policy::{NuxValueMarker, nux_file_set_value_markers};
 pub use value_rules::*;
 mod player_view_models;
 pub use layout_size::*;
+pub use player_driver::*;
 pub use player_globals::*;
 mod render_callbacks;
 
@@ -910,6 +912,7 @@ enum HandleKind {
     ViewModelSnapshot,
     SemanticSnapshot,
     ViewModelMutationResult,
+    SceneWriter,
 }
 
 struct HandleRecord {
@@ -4628,6 +4631,43 @@ pub unsafe extern "C" fn nux_player_step_result_event_view_model_instance(
     })
 }
 
+/// One owned event property as its C view, borrowing `property`.
+fn event_property_view(property: &OwnedPlayerEventProperty) -> NuxPlayerEventPropertyView {
+    let mut value = NuxPlayerEventPropertyView {
+        struct_size: u32::try_from(std::mem::size_of::<NuxPlayerEventPropertyView>())
+            .unwrap_or(u32::MAX),
+        name: optional_byte_view(property.name.as_deref()),
+        ..NuxPlayerEventPropertyView::default()
+    };
+    match &property.value {
+        OwnedPlayerEventPropertyValue::Number(number) => {
+            value.kind = NUX_PLAYER_EVENT_PROPERTY_KIND_NUMBER;
+            value.number_value = *number;
+        }
+        OwnedPlayerEventPropertyValue::Bool(boolean) => {
+            value.kind = NUX_PLAYER_EVENT_PROPERTY_KIND_BOOL;
+            value.bool_value = *boolean;
+        }
+        OwnedPlayerEventPropertyValue::String(string) => {
+            value.kind = NUX_PLAYER_EVENT_PROPERTY_KIND_STRING;
+            value.string_value = byte_slice_view(string);
+        }
+        OwnedPlayerEventPropertyValue::Color(color) => {
+            value.kind = NUX_PLAYER_EVENT_PROPERTY_KIND_COLOR;
+            value.color_value = *color;
+        }
+        OwnedPlayerEventPropertyValue::Enum(integer) => {
+            value.kind = NUX_PLAYER_EVENT_PROPERTY_KIND_ENUM;
+            value.integer_value = *integer;
+        }
+        OwnedPlayerEventPropertyValue::Trigger(integer) => {
+            value.kind = NUX_PLAYER_EVENT_PROPERTY_KIND_TRIGGER;
+            value.integer_value = *integer;
+        }
+    }
+    value
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_player_step_result_event_property(
     result: *const NuxPlayerStepResult,
@@ -4647,38 +4687,7 @@ pub unsafe extern "C" fn nux_player_step_result_event_property(
         else {
             return NuxStatus::NotFound;
         };
-        let mut value = NuxPlayerEventPropertyView {
-            struct_size: u32::try_from(std::mem::size_of::<NuxPlayerEventPropertyView>())
-                .unwrap_or(u32::MAX),
-            name: optional_byte_view(property.name.as_deref()),
-            ..NuxPlayerEventPropertyView::default()
-        };
-        match &property.value {
-            OwnedPlayerEventPropertyValue::Number(number) => {
-                value.kind = NUX_PLAYER_EVENT_PROPERTY_KIND_NUMBER;
-                value.number_value = *number;
-            }
-            OwnedPlayerEventPropertyValue::Bool(boolean) => {
-                value.kind = NUX_PLAYER_EVENT_PROPERTY_KIND_BOOL;
-                value.bool_value = *boolean;
-            }
-            OwnedPlayerEventPropertyValue::String(string) => {
-                value.kind = NUX_PLAYER_EVENT_PROPERTY_KIND_STRING;
-                value.string_value = byte_slice_view(string);
-            }
-            OwnedPlayerEventPropertyValue::Color(color) => {
-                value.kind = NUX_PLAYER_EVENT_PROPERTY_KIND_COLOR;
-                value.color_value = *color;
-            }
-            OwnedPlayerEventPropertyValue::Enum(integer) => {
-                value.kind = NUX_PLAYER_EVENT_PROPERTY_KIND_ENUM;
-                value.integer_value = *integer;
-            }
-            OwnedPlayerEventPropertyValue::Trigger(integer) => {
-                value.kind = NUX_PLAYER_EVENT_PROPERTY_KIND_TRIGGER;
-                value.integer_value = *integer;
-            }
-        }
+        let value = event_property_view(property);
         unsafe {
             write_caller_struct(
                 out_property,

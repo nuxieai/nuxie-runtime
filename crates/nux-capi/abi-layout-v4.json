@@ -596,6 +596,135 @@
       ]
     },
     {
+      "name": "NuxPlayerDriver",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "context",
+          "offset": 8
+        },
+        {
+          "name": "drive",
+          "offset": 16
+        },
+        {
+          "name": "release",
+          "offset": 24
+        }
+      ]
+    },
+    {
+      "name": "NuxPlayerDriverReport",
+      "size": 152,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "event_local_index",
+          "offset": 8
+        },
+        {
+          "name": "event_core_type",
+          "offset": 16
+        },
+        {
+          "name": "name",
+          "offset": 24
+        },
+        {
+          "name": "url",
+          "offset": 40
+        },
+        {
+          "name": "target",
+          "offset": 56
+        },
+        {
+          "name": "seconds_delay",
+          "offset": 72
+        },
+        {
+          "name": "has_source_artboard_global_id",
+          "offset": 76
+        },
+        {
+          "name": "source_artboard_global_id",
+          "offset": 80
+        },
+        {
+          "name": "has_listener_target",
+          "offset": 84
+        },
+        {
+          "name": "listener_target_local_id",
+          "offset": 88
+        },
+        {
+          "name": "path",
+          "offset": 96
+        },
+        {
+          "name": "path_len",
+          "offset": 104
+        },
+        {
+          "name": "list_items",
+          "offset": 112
+        },
+        {
+          "name": "list_item_count",
+          "offset": 120
+        },
+        {
+          "name": "properties",
+          "offset": 128
+        },
+        {
+          "name": "property_count",
+          "offset": 136
+        },
+        {
+          "name": "property_stride",
+          "offset": 144
+        }
+      ]
+    },
+    {
+      "name": "NuxPlayerDriverRound",
+      "size": 40,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "index",
+          "offset": 8
+        },
+        {
+          "name": "reports",
+          "offset": 16
+        },
+        {
+          "name": "report_count",
+          "offset": 24
+        },
+        {
+          "name": "report_stride",
+          "offset": 32
+        }
+      ]
+    },
+    {
       "name": "NuxPlayerEventPropertyView",
       "size": 64,
       "alignment": 8,
@@ -1336,6 +1465,59 @@
         {
           "name": "source_revision",
           "offset": 24
+        }
+      ]
+    },
+    {
+      "name": "NuxSceneListItem",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "artboard_global_id",
+          "offset": 0
+        },
+        {
+          "name": "host_local_id",
+          "offset": 8
+        },
+        {
+          "name": "item_index",
+          "offset": 16
+        },
+        {
+          "name": "occurrence_identity",
+          "offset": 24
+        }
+      ]
+    },
+    {
+      "name": "NuxSceneObject",
+      "size": 16,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "local_id",
+          "offset": 8
+        }
+      ]
+    },
+    {
+      "name": "NuxScenePathSegment",
+      "size": 16,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "artboard_global_id",
+          "offset": 0
+        },
+        {
+          "name": "local_id",
+          "offset": 8
         }
       ]
     },

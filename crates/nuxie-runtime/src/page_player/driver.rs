@@ -213,22 +213,25 @@ impl<'a> SceneWriter<'a> {
     ///
     /// After a reset inside a step, everything the engine holds under that
     /// object is what a freshly made instance of the same file would hold
-    /// after its first settle, and the frame drawn after that same step
-    /// shows it. Property values a host wrote are the only difference, and
-    /// they stay.
+    /// after its first settle, the frame drawn after that same step shows
+    /// it, and from then on the two play the same. Property values a host
+    /// wrote are the only difference, and they stay.
     ///
-    /// So scroll positions go back to the offsets the file gave them, typed
-    /// text to the text last written to its field, the machines of hosted
-    /// artboards (of any host type, and of list rows) to their entry states
-    /// with their states' animations applied at the start, simple animations
-    /// to their starting pose, and the presses and hovers the player's
-    /// listeners hold there are dropped.
+    /// What the engine can make again from the file is rebuilt as an
+    /// instance of the file makes it: the playback of nested simple and
+    /// remap animations, the layers of nested machines, text fields' edit
+    /// state, scroll views' physics, and list rows with their machines.
+    /// What other objects link to is returned in place: nested machines,
+    /// scroll views (their offsets back to the ones the file gave them),
+    /// text fields (their text back to the text last written to them) and
+    /// hosted artboards. The presses and hovers the player's listeners hold
+    /// there are dropped.
     ///
-    /// A reset does not return, on a hosted state machine, the input values
-    /// its listeners set or its pointer latches (its scroll latch, drag
-    /// holders, drag owners and disabled pointer ids), nor the inputs of the
-    /// player's own machine, which is under no object. Whether anything was
-    /// reset.
+    /// A reset leaves as they are, on a nested machine, the values of its
+    /// inputs, which its listeners and its host set, and its pointer latches;
+    /// on a scroll view, whether a drag holds it; on a text field, whether it
+    /// has focus; and the inputs of the player's own machine, which is under
+    /// no object. Whether anything was reset.
     pub fn reset(&mut self, object: &SceneObject) -> Result<bool, SceneWriteError> {
         let handle = self
             .artboard

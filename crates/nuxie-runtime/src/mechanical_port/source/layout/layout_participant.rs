@@ -1190,6 +1190,64 @@ impl LayoutParticipant {
         needs_advance
     }
 
+    /// What a host's reset does to this participant (the page player's
+    /// `SceneWriter::reset`), as to a layout
+    /// (`LayoutComponent::reset_in_place_occurrence`): the participant is
+    /// returned in place, and an interpolation in flight ends where it was
+    /// going. Whether one was in flight.
+    pub(crate) fn reset_in_place_occurrence(owner: &CoreHandle) -> bool {
+        let ended = owner
+            .with_downcast_mut::<Self, _>(Self::reset_in_place)
+            .unwrap_or(false);
+        if ended {
+            Self::apply_resolved_layout_size_occurrence(owner);
+            Self::dirty_host_transform_occurrence(owner);
+        }
+        ended
+    }
+
+    /// `reset_in_place_occurrence` on this participant alone. Every field is
+    /// named below with what the reset does to it, so a field added later
+    /// fails to compile until that is decided.
+    fn reset_in_place(&mut self) -> bool {
+        let ended = self.animation.as_deref_mut().is_some_and(|animation| {
+            let target = if animation.is_smoothing {
+                animation.b.to
+            } else {
+                animation.a.to
+            };
+            let in_flight = animation.is_smoothing || animation.animated_layout != target;
+            if in_flight {
+                let rest = LayoutAnimationData {
+                    elapsed_seconds: 0.0,
+                    from: target,
+                    to: target,
+                };
+                animation.animated_layout = target;
+                animation.a = rest;
+                animation.b = rest;
+                animation.is_smoothing = false;
+            }
+            in_flight
+        });
+        let Self {
+            // Ended above. Its interpolation settings stay: its layout's
+            // style cascades them.
+            animation: _,
+            // What the file gives it and what its layout's solve derives.
+            base: _,
+            provider: _,
+            layout_data: _,
+            has_solved_layout: _,
+            // Set by its host.
+            host_bounds: _,
+            host_bounds_valid: _,
+            host_scale_x: _,
+            host_scale_y: _,
+        } = self;
+        ended
+    }
+
     pub fn cascade_layout_style(
         &mut self,
         inherited: LayoutStyleInterpolation,

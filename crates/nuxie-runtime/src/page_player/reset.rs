@@ -10,16 +10,12 @@
 //!
 //! 1. Rebuild, or return in place. What the engine can make again from the
 //!    file is rebuilt, made as an instance of the file makes it, and
-//!    replaces what was there: a nested animation's playback (of a simple or
-//!    a remap animation), the layers of a nested machine, the edit state of a
-//!    text field, the physics of a scroll view, and a list's rows, each
-//!    row's artboard and machine. What other objects link to is returned in
+//!    replaces what was there. What other objects link to is returned in
 //!    place, each kind by its own `reset_in_place`, which names every field
-//!    it holds: a nested machine, which its parent's machine and its host
-//!    link to; a scroll view and a text field, which are objects of the
-//!    file; and a nested host's artboard, which its host, its layout and its
-//!    data context link to. The player's own listeners drop the presses and
-//!    hovers they hold on objects under the reset object.
+//!    it holds, so a field added later does not compile until someone decides
+//!    what a reset does to it. The table below lists every kind. The
+//!    player's own listeners drop the presses and hovers they hold on
+//!    objects under the reset object.
 //! 2. First frame. Every nested artboard host the reset reached, of any host
 //!    type, and every artboard component list, is advanced by zero as a new
 //!    frame through the engine's advancing-component dispatch: the call a
@@ -35,14 +31,36 @@
 //!    content transform, reshaped text, layout and paint, for the frame
 //!    drawn after the step.
 //!
-//! What a reset leaves as it is: on a nested machine, the values of its
-//! inputs, which its listeners and its host set, and its pointer latches
-//! (its scroll latch, drag holders, drag owners, disabled pointer ids and
-//! the pointers its hosted artboards hold); on a scroll view, whether a drag
-//! holds it; on a text field, whether it has focus; and the inputs of the
-//! player's own machine, which is under no object. A rebuild runs only when
-//! a driver calls a reset: a player with no driver, or a driver that never
-//! resets, runs none of it.
+//! What a reset does to each kind of object that holds state of its own
+//! while it plays, beyond the properties the file gives it:
+//!
+//! | Kind | The reset | Why |
+//! | --- | --- | --- |
+//! | Nested simple or remap animation's playback | Rebuilt | Made as a host makes it when it mounts an instance; the parent machine's links to hear its events move to it. |
+//! | Nested state machine | Returned in place, its layers rebuilt | Its parent's machine, its host and hit testing hold it. Its layers start at their entry states. Its inputs' values and its pointer latches are left as they are. A rebuilt layer draws from the shared random source where it stands; the source is not restarted. |
+//! | Scroll constraint | Returned in place, its physics rebuilt | An object of the file. Its offsets go back to the file's; whether a drag holds it is left as it is. |
+//! | Text input | Returned in place, its edit state rebuilt | An object of the file. Its text goes back to the text last written to it; its focus is left as it is. |
+//! | Artboard component list | Its rows rebuilt, each row's artboard and machine | Made as the list makes a row; the rows it kept pooled are dropped. |
+//! | Hosted artboard | Returned in place, its objects reset by kind | Its host and its host's layout, focus and data context hold it. |
+//! | Layout (a layout component, an artboard, a layout host) | Returned in place | An interpolation in flight ends where it was going, as a fresh instance has none in flight. |
+//! | Layout participant | Returned in place | As a layout. |
+//! | Paint that paints with an artboard | Returned in place, its artboard rebuilt | Made as the paint makes it when it is added, its machine or animation from the start. |
+//! | Nested host whose frames skip (paused, collapsed, or playing at a fixed rate) | Left as it is | A host that skips a frame skips the reset's first frame too, so it shows the poses from before the reset until it next advances. |
+//! | Script state (scripted drawables, layouts, path effects, transitions and their list rows, converters, interpolators, listener actions and conditions) | Left as it is | It lives in the script's own state, which only the script's init makes. |
+//! | Audio | Left as it is | A sound an audio event started plays on. |
+//! | Video | Left as it is | Its playback position, play state and frame are the host's. |
+//! | Text style artboards | Left as they are | Texts can share one through the file's shared styles, so one object's reset cannot rebuild it alone. |
+//! | Bound values (a converter that eases a value, a formula's drawn random numbers, a bind's last seen values) | Left as they are | A bind carries the view model's value, which the reset leaves as it is. |
+//! | Inverse kinematics | Left as it is | It holds only the solve it wrote last frame, which the next update replaces when anything moves the bone. |
+//! | Focus, a text field's click count, a hosted mesh's last pointer, a scripted drawable's scroll latch | Left as they are | Pointer and focus state, like the latches above. |
+//! | A custom trigger's change stamp | Left as it is | The machine's reset moves its baselines past it, so a trigger written before the reset does not fire after it. |
+//! | Live move flight | Left as it is | The live move that set it ends it. |
+//! | Semantic retries, layer masks, cached rasters | Left as they are | They hold nothing drawn or reported differently. |
+//! | Joystick | Nothing to reset | Its time comes from its position each frame. |
+//!
+//! The inputs of the player's own machine, which is under no object, are
+//! left as they are. A rebuild runs only when a driver calls a reset: a
+//! player with no driver, or a driver that never resets, runs none of it.
 use std::collections::HashSet;
 
 use crate::mechanical_port::source::{
@@ -59,9 +77,13 @@ use crate::mechanical_port::source::{
         animation::nested_state_machine_base::NestedStateMachineBase,
         artboard_component_list_base::ArtboardComponentListBase,
         constraints::scrolling::scroll_constraint_base::ScrollConstraintBase,
-        core_registry::CoreRegistry,
+        core_registry::CoreRegistry, layout::layout_participant_base::LayoutParticipantBase,
+        shapes::paint::paint_image_base::PaintImageBase,
     },
+    layout::layout_participant::LayoutParticipant,
+    layout_component::LayoutComponent,
     math::vec2d::Vec2D,
+    shapes::paint::paint_image::PaintImage,
     text::text_input::TextInput,
 };
 use crate::{ArtboardInstance, CoreHandle, StateMachineInstance};
@@ -165,14 +187,36 @@ fn source_objects(artboard: &RuntimeArtboardInstanceHandle) -> Vec<Option<CoreHa
 /// id, when there is one.
 ///
 /// Each kind is reached through the engine's shared capability, so every
-/// type of that kind is: a scroll constraint, a text input, a nested
-/// artboard of any host type (`NestedArtboard`, `NestedArtboardLayout`,
-/// `NestedArtboardLeaf`) and an artboard component list.
+/// type of that kind is: a layout of any type (an artboard, a layout
+/// component, a layout host), a layout participant, a scroll constraint, a
+/// text input, a nested artboard of any host type (`NestedArtboard`,
+/// `NestedArtboardLayout`, `NestedArtboardLeaf`), an artboard component
+/// list and a paint that paints with an artboard. A layout's interpolation
+/// ends whatever else the object is.
 fn reset_object(
     object: &CoreHandle,
     source: Option<&CoreHandle>,
     visited: &mut HashSet<(usize, usize, u64)>,
 ) -> bool {
+    let is_layout = object
+        .with(|object| object.as_layout_component().is_some())
+        .unwrap_or(false);
+    let laid = is_layout && LayoutComponent::reset_in_place_occurrence(object);
+    laid | reset_kind(object, source, visited)
+}
+
+/// `reset_object` for what an object is besides a layout.
+fn reset_kind(
+    object: &CoreHandle,
+    source: Option<&CoreHandle>,
+    visited: &mut HashSet<(usize, usize, u64)>,
+) -> bool {
+    if object.is_type_of(LayoutParticipantBase::TYPE_KEY) {
+        return LayoutParticipant::reset_in_place_occurrence(object);
+    }
+    if object.is_type_of(PaintImageBase::TYPE_KEY) {
+        return PaintImage::reset_in_place_occurrence(object);
+    }
     if object.is_type_of(ScrollConstraintBase::TYPE_KEY) {
         let source = source.filter(|source| source.is_type_of(ScrollConstraintBase::TYPE_KEY));
         let authored = |key: u16| {

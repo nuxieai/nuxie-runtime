@@ -273,6 +273,19 @@ impl PaintImage {
         if code != StatusCode::Ok {
             return code;
         }
+        Self::make_source_occurrence(this, source, owner);
+        StatusCode::Ok
+    }
+
+    /// Make the artboard the paint paints with from `source`, the artboard it
+    /// references, when `owner`, the artboard the paint is in, is an
+    /// instance: playing its default machine, or else its first animation,
+    /// from the start, with the owner's data context.
+    fn make_source_occurrence(
+        this: &CoreHandle,
+        source: Option<CoreHandle>,
+        owner: Option<CoreHandle>,
+    ) {
         if let (Some(source), Some(owner)) = (source, owner) {
             let (is_instance, factory) = owner
                 .with_downcast::<Artboard, _>(|a| (a.is_instance(), a.factory()))
@@ -296,7 +309,51 @@ impl PaintImage {
                 }
             }
         }
-        StatusCode::Ok
+    }
+
+    /// What a host's reset does to this paint (the page player's
+    /// `SceneWriter::reset`). The paint is an object of the file and is
+    /// returned in place. The artboard it paints with, which only the paint
+    /// holds, is rebuilt, made as the paint makes it when it is added, so its
+    /// machine or animation plays from the start. Whether it had one.
+    pub(crate) fn reset_in_place_occurrence(this: &CoreHandle) -> bool {
+        // Taken out before it is dropped, so its artboard's teardown does not
+        // run inside a borrow of the paint.
+        let Some(Some(old)) = this.with_downcast_mut::<Self, _>(|paint| paint.source.take()) else {
+            return false;
+        };
+        drop(old);
+        let (source, owner) = this
+            .with_downcast_mut::<Self, _>(Self::reset_in_place)
+            .unwrap_or((None, None));
+        Self::make_source_occurrence(this, source, owner);
+        true
+    }
+
+    /// The artboard the paint references and the one it is in, for
+    /// `reset_in_place_occurrence`. Every field is named below with what the
+    /// reset does to it, so a field added later fails to compile until that
+    /// is decided.
+    fn reset_in_place(&mut self) -> (Option<CoreHandle>, Option<CoreHandle>) {
+        let references = (self.source_artboard(), self.base.base.artboard_handle());
+        let Self {
+            // Rebuilt by the caller.
+            source: _,
+            // Set only while an operation holds the source outside the paint,
+            // and none runs during a reset.
+            detached_artboard: _,
+            // What the file gives the paint: its properties, its image or
+            // artboard, its file and its bind path.
+            base: _,
+            asset_referencer: _,
+            artboard_referencer: _,
+            file: _,
+            bind_path: _,
+            // The change it last saw while inactive, which its next advance
+            // compares with.
+            inactive_sequence: _,
+        } = self;
+        references
     }
     pub fn build_dependencies(&mut self) {
         self.base.base.build_dependencies();

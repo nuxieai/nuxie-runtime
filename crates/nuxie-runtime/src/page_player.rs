@@ -32,6 +32,12 @@ fn failure<T>(kind: ErrorKind, message: impl Into<String>) -> Result<T, Error> {
         message: message.into(),
     })
 }
+fn budget_error((kind, message): BudgetFailure) -> Error {
+    Error {
+        kind,
+        message: message.into(),
+    }
+}
 fn policy_error(error: RuntimeValuePolicyError) -> ErrorKind {
     match error {
         RuntimeValuePolicyError::NotFound => ErrorKind::NotFound,
@@ -616,16 +622,13 @@ impl PagePlayer {
                 "live frame checkpoint exceeds its bound",
             );
         }
-        let mut events = own_reported_events(
-            reported_events,
+        let mut budget = StepEventBudget::new(
             pointer_results.len(),
             focus_input_results.len(),
             state_changes.len(),
         )
-        .map_err(|(kind, message)| Error {
-            kind,
-            message: message.into(),
-        })?;
+        .map_err(budget_error)?;
+        let mut events = own_reported_events(reported_events, &mut budget).map_err(budget_error)?;
         let mut driver_rounds = 0;
         if advances {
             let Ok(mut driver) = self.driver.try_borrow_mut() else {
@@ -633,7 +636,13 @@ impl PagePlayer {
                 return failure(ErrorKind::ReentrantCall, "player driver is active");
             };
             if let Some(driver) = driver.as_mut() {
-                let drive = self.drive(driver.as_mut(), artboard, playback, &mut events);
+                let drive = self.drive(
+                    driver.as_mut(),
+                    artboard,
+                    playback,
+                    &mut events,
+                    &mut budget,
+                );
                 match drive {
                     Ok(drive) => {
                         driver_rounds = drive.rounds;
@@ -1106,13 +1115,17 @@ impl PagePlayer {
     }
 
     /// The driver's rounds of one step, after its advance. `events` holds the
-    /// step's reports; each settle's reports are appended to it.
+    /// step's reports; each settle's reports are appended to it. `budget` is
+    /// the step's, with the advance's reports already charged: the reports
+    /// carried from the last step and each settle's are charged to it before
+    /// the driver sees them.
     fn drive(
         &self,
         driver: &mut dyn HostDriver,
         artboard: &mut ArtboardInstance,
         playback: &mut Playback,
         events: &mut Vec<OwnedPlayerEvent>,
+        budget: &mut StepEventBudget,
     ) -> Result<Drive, Error> {
         let mut first_reports = std::mem::take(
             &mut *self
@@ -1123,6 +1136,7 @@ impl PagePlayer {
                     message: "player driver is active".into(),
                 })?,
         );
+        budget.admit_owned(&first_reports).map_err(budget_error)?;
         first_reports.extend(events.iter().cloned());
         let mut drive = Drive {
             rounds: 0,
@@ -1177,18 +1191,7 @@ impl PagePlayer {
             })?;
             drive.changed |= changed;
             round_start = events.len();
-            let owned =
-                own_reported_events(reported, 0, 0, 0).map_err(|(kind, message)| Error {
-                    kind,
-                    message: message.into(),
-                })?;
-            if events.len() + owned.len() > MAX_PLAYER_STEP_EVENTS {
-                return failure(
-                    ErrorKind::LimitExceeded,
-                    "runtime event count exceeds step bound",
-                );
-            }
-            events.extend(owned);
+            events.extend(own_reported_events(reported, budget).map_err(budget_error)?);
             if drive.rounds == MAX_DRIVER_ROUNDS {
                 drive.cut_off = true;
                 if let Ok(mut undelivered) = self.undelivered_reports.try_borrow_mut() {
@@ -1401,107 +1404,199 @@ pub struct OwnedPlayerEvent {
     pub listener_target_local_id: Option<usize>,
 }
 
-fn push_owned_bytes(total: &mut usize, value: &[u8]) -> Result<Box<[u8]>, ErrorKind> {
-    *total = total
-        .checked_add(value.len())
-        .filter(|total| *total <= MAX_PLAYER_STEP_RESULT_BYTES)
-        .ok_or(ErrorKind::LimitExceeded)?;
-    Ok(value.to_vec().into_boxed_slice())
+type BudgetFailure = (ErrorKind, &'static str);
+
+/// What one step's reports may hold: their count, their properties and their
+/// owned bytes, beside the structural bytes of the step's pointer, focus and
+/// state results. One budget covers a whole step: the advance's reports,
+/// every driver round's reports, and the reports a driver cut off at the
+/// bound carries into the next step's first round. A batch is charged before
+/// it is copied, kept or handed to a driver, so no batch starts a count of
+/// its own.
+pub struct StepEventBudget {
+    events: usize,
+    properties: usize,
+    bytes: usize,
 }
 
-fn push_optional_owned_bytes(
-    total: &mut usize,
-    value: Option<&str>,
-) -> Result<Option<Box<[u8]>>, ErrorKind> {
-    value
-        .map(|value| push_owned_bytes(total, value.as_bytes()))
-        .transpose()
-}
-
-pub fn own_reported_events(
-    reported: Vec<StateMachineReportedEvent>,
-    pointer_result_count: usize,
-    focus_input_result_count: usize,
-    state_change_count: usize,
-) -> Result<Vec<OwnedPlayerEvent>, (ErrorKind, &'static str)> {
-    if reported.len() > MAX_PLAYER_STEP_EVENTS {
-        return Err((
-            ErrorKind::LimitExceeded,
-            "runtime event count exceeds step bound",
-        ));
-    }
-    let total_properties = reported.iter().try_fold(0usize, |total, event| {
-        if event.properties().len() > MAX_PLAYER_EVENT_PROPERTIES {
-            return Err((
-                ErrorKind::LimitExceeded,
-                "runtime event property count exceeds per-event step bound",
-            ));
-        }
-        total
-            .checked_add(event.properties().len())
-            .filter(|total| *total <= MAX_PLAYER_STEP_EVENT_PROPERTIES_TOTAL)
+impl StepEventBudget {
+    /// A step's budget, with its pointer, focus and state results charged.
+    pub fn new(
+        pointer_result_count: usize,
+        focus_input_result_count: usize,
+        state_change_count: usize,
+    ) -> Result<Self, BudgetFailure> {
+        let bytes = pointer_result_count
+            .checked_mul(std::mem::size_of::<u32>())
+            .and_then(|bytes| {
+                focus_input_result_count
+                    .checked_mul(std::mem::size_of::<u32>())
+                    .and_then(|focus_bytes| bytes.checked_add(focus_bytes))
+            })
+            .and_then(|bytes| {
+                state_change_count
+                    .checked_mul(std::mem::size_of::<StateChange>())
+                    .and_then(|state_bytes| bytes.checked_add(state_bytes))
+            })
+            .filter(|bytes| *bytes <= MAX_PLAYER_STEP_RESULT_BYTES)
             .ok_or((
                 ErrorKind::LimitExceeded,
-                "runtime event properties exceed aggregate step bound",
-            ))
-    })?;
-    let result_prefix_bytes = pointer_result_count
-        .checked_mul(std::mem::size_of::<u32>())
-        .and_then(|bytes| {
-            focus_input_result_count
-                .checked_mul(std::mem::size_of::<u32>())
-                .and_then(|focus_bytes| bytes.checked_add(focus_bytes))
+                "runtime event projection exceeds structural byte bound",
+            ))?;
+        Ok(Self {
+            events: 0,
+            properties: 0,
+            bytes,
         })
-        .and_then(|bytes| {
-            state_change_count
-                .checked_mul(std::mem::size_of::<StateChange>())
-                .and_then(|state_bytes| bytes.checked_add(state_bytes))
-        });
-    let mut owned_bytes_total = reported
-        .len()
-        .checked_mul(std::mem::size_of::<OwnedPlayerEvent>())
-        .and_then(|bytes| {
-            total_properties
-                .checked_mul(std::mem::size_of::<OwnedPlayerEventProperty>())
-                .and_then(|property_bytes| bytes.checked_add(property_bytes))
-        })
-        .and_then(|bytes| result_prefix_bytes.and_then(|prefix| bytes.checked_add(prefix)))
-        .filter(|bytes| *bytes <= MAX_PLAYER_STEP_RESULT_BYTES)
-        .ok_or((
-            ErrorKind::LimitExceeded,
+    }
+
+    /// Charge a batch of `count` reports holding `properties` each: the
+    /// count, the properties and the structural size of their owned copies.
+    fn admit_batch(
+        &mut self,
+        count: usize,
+        properties: impl Iterator<Item = usize>,
+    ) -> Result<(), BudgetFailure> {
+        let events = self
+            .events
+            .checked_add(count)
+            .filter(|events| *events <= MAX_PLAYER_STEP_EVENTS)
+            .ok_or((
+                ErrorKind::LimitExceeded,
+                "runtime event count exceeds step bound",
+            ))?;
+        let mut added = 0usize;
+        for count in properties {
+            if count > MAX_PLAYER_EVENT_PROPERTIES {
+                return Err((
+                    ErrorKind::LimitExceeded,
+                    "runtime event property count exceeds per-event step bound",
+                ));
+            }
+            added = added
+                .checked_add(count)
+                .filter(|added| {
+                    self.properties
+                        .checked_add(*added)
+                        .is_some_and(|total| total <= MAX_PLAYER_STEP_EVENT_PROPERTIES_TOTAL)
+                })
+                .ok_or((
+                    ErrorKind::LimitExceeded,
+                    "runtime event properties exceed aggregate step bound",
+                ))?;
+        }
+        let structural = count
+            .checked_mul(std::mem::size_of::<OwnedPlayerEvent>())
+            .and_then(|bytes| {
+                added
+                    .checked_mul(std::mem::size_of::<OwnedPlayerEventProperty>())
+                    .and_then(|property_bytes| bytes.checked_add(property_bytes))
+            });
+        self.charge(
+            structural,
             "runtime event projection exceeds structural byte bound",
-        ))?;
+        )?;
+        self.events = events;
+        self.properties += added;
+        Ok(())
+    }
+
+    /// Charge one report's deep copy: its context, then its strings. The
+    /// Vec headers and source address are in the structural size already.
+    fn admit_event(
+        &mut self,
+        context: Option<&StateMachineEventContext>,
+        strings: impl IntoIterator<Item = usize>,
+    ) -> Result<(), BudgetFailure> {
+        if let Some(context) = context {
+            self.charge(
+                context.owned_bytes(),
+                "runtime event context exceeds step bound",
+            )?;
+        }
+        let strings = strings
+            .into_iter()
+            .try_fold(0usize, |total, bytes| total.checked_add(bytes));
+        self.charge(strings, "runtime event bytes exceed step bound")
+    }
+
+    fn charge(&mut self, bytes: Option<usize>, message: &'static str) -> Result<(), BudgetFailure> {
+        self.bytes = bytes
+            .and_then(|bytes| self.bytes.checked_add(bytes))
+            .filter(|bytes| *bytes <= MAX_PLAYER_STEP_RESULT_BYTES)
+            .ok_or((ErrorKind::LimitExceeded, message))?;
+        Ok(())
+    }
+
+    /// Charge reports already owned, as the ones a driver cut off at the
+    /// bound carries into the next step.
+    fn admit_owned(&mut self, events: &[OwnedPlayerEvent]) -> Result<(), BudgetFailure> {
+        self.admit_batch(
+            events.len(),
+            events.iter().map(|event| event.properties.len()),
+        )?;
+        for event in events {
+            let bytes = |value: &Option<Box<[u8]>>| value.as_deref().map_or(0, <[u8]>::len);
+            self.admit_event(
+                event.context.as_ref(),
+                [bytes(&event.name), bytes(&event.url), bytes(&event.target)]
+                    .into_iter()
+                    .chain(event.properties.iter().flat_map(|property| {
+                        let value = match &property.value {
+                            OwnedPlayerEventPropertyValue::String(value) => value.len(),
+                            _ => 0,
+                        };
+                        [bytes(&property.name), value]
+                    })),
+            )?;
+        }
+        Ok(())
+    }
+}
+
+fn owned_bytes(value: &[u8]) -> Box<[u8]> {
+    value.to_vec().into_boxed_slice()
+}
+
+fn optional_owned_bytes(value: Option<&str>) -> Option<Box<[u8]>> {
+    value.map(|value| owned_bytes(value.as_bytes()))
+}
+
+/// Own a batch of reports, charged to the step's `budget` first.
+pub fn own_reported_events(
+    reported: Vec<StateMachineReportedEvent>,
+    budget: &mut StepEventBudget,
+) -> Result<Vec<OwnedPlayerEvent>, BudgetFailure> {
+    budget.admit_batch(
+        reported.len(),
+        reported.iter().map(|event| event.properties().len()),
+    )?;
     let mut events = Vec::with_capacity(reported.len());
     for event in reported {
         if !event.seconds_delay().is_finite() || event.seconds_delay() < 0.0 {
             return Err((ErrorKind::RuntimeError, "runtime event delay is invalid"));
         }
-        // Charge the deep copy before allocating it. The Vec headers and source
-        // address are already included in the structural OwnedPlayerEvent size.
-        let context = event
-            .context()
-            .map(|context| {
-                owned_bytes_total = context
-                    .owned_bytes()
-                    .and_then(|bytes| owned_bytes_total.checked_add(bytes))
-                    .filter(|bytes| *bytes <= MAX_PLAYER_STEP_RESULT_BYTES)
-                    .ok_or((
-                        ErrorKind::LimitExceeded,
-                        "runtime event context exceeds step bound",
-                    ))?;
-                Ok::<_, (ErrorKind, &'static str)>(context.clone())
-            })
-            .transpose()?;
-        let name = push_optional_owned_bytes(&mut owned_bytes_total, event.name())
-            .map_err(|status| (status, "runtime event bytes exceed step bound"))?;
-        let url = push_optional_owned_bytes(&mut owned_bytes_total, event.url())
-            .map_err(|status| (status, "runtime event bytes exceed step bound"))?;
-        let target = push_optional_owned_bytes(&mut owned_bytes_total, event.target())
-            .map_err(|status| (status, "runtime event bytes exceed step bound"))?;
+        // Charge the deep copy before allocating it.
+        let text = |value: Option<&str>| value.map_or(0, str::len);
+        budget.admit_event(
+            event.context(),
+            [text(event.name()), text(event.url()), text(event.target())]
+                .into_iter()
+                .chain(event.properties().iter().flat_map(|property| {
+                    let value = match &property.value {
+                        RuntimeEventPropertyValue::String(value) => value.len(),
+                        _ => 0,
+                    };
+                    [text(property.name.as_deref()), value]
+                })),
+        )?;
+        let context = event.context().cloned();
+        let name = optional_owned_bytes(event.name());
+        let url = optional_owned_bytes(event.url());
+        let target = optional_owned_bytes(event.target());
         let mut properties = Vec::with_capacity(event.properties().len());
         for property in event.properties() {
-            let name = push_optional_owned_bytes(&mut owned_bytes_total, property.name.as_deref())
-                .map_err(|status| (status, "runtime event bytes exceed step bound"))?;
+            let name = optional_owned_bytes(property.name.as_deref());
             let value = match &property.value {
                 RuntimeEventPropertyValue::Number(value) => {
                     OwnedPlayerEventPropertyValue::Number(*value)
@@ -1509,10 +1604,9 @@ pub fn own_reported_events(
                 RuntimeEventPropertyValue::Bool(value) => {
                     OwnedPlayerEventPropertyValue::Bool(*value)
                 }
-                RuntimeEventPropertyValue::String(value) => OwnedPlayerEventPropertyValue::String(
-                    push_owned_bytes(&mut owned_bytes_total, value)
-                        .map_err(|status| (status, "runtime event bytes exceed step bound"))?,
-                ),
+                RuntimeEventPropertyValue::String(value) => {
+                    OwnedPlayerEventPropertyValue::String(owned_bytes(value))
+                }
                 RuntimeEventPropertyValue::Color(value) => {
                     OwnedPlayerEventPropertyValue::Color(*value)
                 }

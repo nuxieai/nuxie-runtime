@@ -11,8 +11,8 @@ use std::rc::Rc;
 
 use super::*;
 use crate::page_player::{
-    DriverFault, DriverRound, HostDriver, MAX_DRIVER_ROUNDS, OwnedPlayerEvent, PagePlayer,
-    Playback, Pointer, PointerKind, SceneObject, SceneWriteError, SceneWriter, Step,
+    self, DriverFault, DriverRound, ErrorKind, HostDriver, MAX_DRIVER_ROUNDS, OwnedPlayerEvent,
+    PagePlayer, Playback, Pointer, PointerKind, SceneObject, SceneWriteError, SceneWriter, Step,
 };
 use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
 use crate::source::generated::text::text_value_run_base::TextValueRunBase;
@@ -65,19 +65,25 @@ impl Played {
     }
 
     fn step(&mut self, elapsed_seconds: f32, pointers: Vec<Pointer>) -> Output {
-        self.player
-            .step(
-                &mut self.board,
-                &mut self.playback,
-                Step {
-                    pointers,
-                    elapsed_seconds,
-                    ..Step::default()
-                },
-                &[],
-                None,
-            )
-            .expect("the step")
+        self.try_step(elapsed_seconds, pointers).expect("the step")
+    }
+
+    fn try_step(
+        &mut self,
+        elapsed_seconds: f32,
+        pointers: Vec<Pointer>,
+    ) -> Result<Output, page_player::Error> {
+        self.player.step(
+            &mut self.board,
+            &mut self.playback,
+            Step {
+                pointers,
+                elapsed_seconds,
+                ..Step::default()
+            },
+            &[],
+            None,
+        )
     }
 
     /// A press and release at a point, in one frame.
@@ -598,4 +604,175 @@ fn reset_returns_typed_text_to_the_written_text() {
     assert_ne!(text(), "hi there", "typed into the field");
     played.tap(50.0, 60.0);
     assert_eq!(text(), "hi there");
+}
+
+/// What one step's result may hold in owned bytes (`page_player`'s bound).
+const STEP_RESULT_BYTES: usize = 8 * 1024 * 1024;
+
+/// A root artboard hosting "Nested", whose machine fires an event named
+/// `name` as it enters its one state. Resetting "Nested" returns that
+/// machine to its entry, so the settle after a reset fires the event again.
+fn reporting_nested(name: &str) -> Scene {
+    use crate::source::generated::{
+        animation::{
+            animation_state_base::AnimationStateBase, any_state_base::AnyStateBase,
+            entry_state_base::EntryStateBase, exit_state_base::ExitStateBase,
+            linear_animation_base::LinearAnimationBase,
+            nested_state_machine_base::NestedStateMachineBase,
+            state_machine_base::StateMachineBase,
+            state_machine_fire_event_base::StateMachineFireEventBase,
+            state_machine_layer_base::StateMachineLayerBase,
+            state_transition_base::StateTransitionBase,
+        },
+        event_base::EventBase,
+        nested_animation_base::NestedAnimationBase,
+        nested_artboard_base::NestedArtboardBase,
+    };
+    // Layer states: 0 entry, 1 any, 2 exit, then the one that fires.
+    let machine = |riv: &mut Riv, fires: Option<u64>| {
+        riv.object(StateMachineBase::TYPE_KEY).end();
+        riv.object(StateMachineLayerBase::TYPE_KEY).end();
+        riv.object(EntryStateBase::TYPE_KEY).end();
+        if fires.is_some() {
+            riv.object(StateTransitionBase::TYPE_KEY)
+                .uint(StateTransitionBase::STATE_TO_ID_PROPERTY_KEY, 3)
+                .end();
+        }
+        riv.object(AnyStateBase::TYPE_KEY).end();
+        riv.object(ExitStateBase::TYPE_KEY).end();
+        if let Some(event) = fires {
+            riv.object(AnimationStateBase::TYPE_KEY)
+                .uint(AnimationStateBase::ANIMATION_ID_PROPERTY_KEY, 0)
+                .end();
+            riv.object(StateMachineFireEventBase::TYPE_KEY)
+                .uint(StateMachineFireEventBase::EVENT_ID_PROPERTY_KEY, event)
+                .end();
+        }
+    };
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    // 0 artboard, 1 host, 2 its machine.
+    riv.object(ArtboardBase::TYPE_KEY)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Main")
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0)
+        .end();
+    riv.object(NestedArtboardBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Nested")
+        .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1)
+        .end();
+    riv.object(NestedStateMachineBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1)
+        .uint(NestedAnimationBase::ANIMATION_ID_PROPERTY_KEY, 0)
+        .end();
+    machine(&mut riv, None);
+    // 0 artboard, 1 the event.
+    riv.object(ArtboardBase::TYPE_KEY)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Child")
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0)
+        .end();
+    riv.object(EventBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .string(ComponentBase::NAME_PROPERTY_KEY, name)
+        .end();
+    riv.object(LinearAnimationBase::TYPE_KEY)
+        .uint(LinearAnimationBase::FPS_PROPERTY_KEY, 60)
+        .uint(LinearAnimationBase::DURATION_PROPERTY_KEY, 60)
+        .end();
+    machine(&mut riv, Some(1));
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &riv.bytes(),
+        RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
+        None,
+        None,
+        None,
+    )
+    .expect("the reporting scene imports");
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("the outer artboard");
+    Scene {
+        _file: file,
+        artboard,
+        factory,
+    }
+}
+
+/// A driver that resets "Nested" in every round, so every settle reports
+/// the nested event again. The name bytes of each report it was handed.
+fn resetting(played: &Played) -> Rc<RefCell<Vec<usize>>> {
+    let nested = played.object("Nested");
+    let seen = Rc::new(RefCell::new(Vec::new()));
+    let log = seen.clone();
+    played.drive(move |round, scene| {
+        log.borrow_mut().extend(
+            round
+                .reports
+                .iter()
+                .map(|report| report.name.as_deref().map_or(0, <[u8]>::len)),
+        );
+        assert_eq!(scene.reset(&nested), Ok(true));
+    });
+    seen
+}
+
+/// One budget covers the whole step. Driver rounds whose reports are each
+/// well under the step's byte bound, and together over it, fail the step
+/// with a limit error, and the driver is never handed the report that
+/// crosses the bound.
+#[test]
+fn rounds_each_under_the_byte_bound_and_together_over_it_fail_the_step() {
+    let size = STEP_RESULT_BYTES / 6 + 1;
+    let mut played = Played::new(reporting_nested(&"r".repeat(size)));
+    let first = played.step(FRAME, vec![]);
+    assert_eq!(
+        names(&first.events).iter().map(String::len).sum::<usize>(),
+        0,
+        "the nested machine entered its state when the scene began"
+    );
+    let seen = resetting(&played);
+    let error = played
+        .try_step(FRAME, vec![])
+        .err()
+        .expect("six reports of a sixth of the bound each exceed it");
+    assert_eq!(error.kind, ErrorKind::LimitExceeded);
+    let seen = seen.borrow();
+    assert_eq!(
+        *seen,
+        vec![size; 5],
+        "the sixth report never reaches the driver"
+    );
+    assert!(seen.iter().sum::<usize>() <= STEP_RESULT_BYTES);
+}
+
+/// The reports a driver cut off at the bound carries into the next step
+/// are charged to that step's budget before its first round, beside the
+/// reports that step's own rounds make.
+#[test]
+fn reports_carried_past_a_cut_off_count_toward_the_next_step() {
+    // Eight fit in one step, nine do not.
+    let size = STEP_RESULT_BYTES * 2 / 17;
+    let mut played = Played::new(reporting_nested(&"c".repeat(size)));
+    played.step(FRAME, vec![]);
+    let seen = resetting(&played);
+    let cut = played.step(FRAME, vec![]);
+    assert_eq!(cut.driver_rounds, MAX_DRIVER_ROUNDS);
+    assert!(!cut.settled, "the driver was cut off at the bound");
+    assert_eq!(cut.events.len(), MAX_DRIVER_ROUNDS);
+    assert_eq!(seen.borrow().len(), MAX_DRIVER_ROUNDS - 1);
+    seen.borrow_mut().clear();
+    let error = played
+        .try_step(FRAME, vec![])
+        .err()
+        .expect("the carried report and eight more exceed the bound");
+    assert_eq!(error.kind, ErrorKind::LimitExceeded);
+    let seen = seen.borrow();
+    assert_eq!(
+        *seen,
+        vec![size; MAX_DRIVER_ROUNDS],
+        "the carried report, then seven rounds' reports; the ninth never reaches the driver"
+    );
 }

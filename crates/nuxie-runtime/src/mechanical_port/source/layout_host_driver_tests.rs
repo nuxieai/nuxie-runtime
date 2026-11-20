@@ -1813,12 +1813,14 @@ const RESETS_AFTER: [usize; 2] = [25, 65];
 /// again.
 const FRAMES_AFTER: usize = 50;
 
-/// The reset contract, for one host kind, one reset object and one moment:
-/// after a reset inside a step, everything the engine holds under that
-/// object is what a freshly made instance of the same file holds after its
-/// first settle, and the frame drawn after that same step shows it. Property
-/// values a host wrote are the only difference, and they stay. From then on
-/// the two play the same.
+/// A reset, for one host kind, one reset object and one moment: it returns
+/// the engine's state holders under the object to their start and leaves
+/// every property value alone, whoever wrote it. Every property this scene
+/// animates is keyed by the state it starts in, so after a reset inside a
+/// step the state holders and what their first frame writes match the first
+/// step of a copy of the file made fresh and given the host's last write,
+/// and the frame drawn after that same step shows it. From then on the two
+/// play the same.
 ///
 /// The played copy takes a host write and plays `before` frames, moving
 /// everything it holds: its machine and animations play, the paint's
@@ -1831,7 +1833,7 @@ const FRAMES_AFTER: usize = 50;
 /// the two copies then
 /// play the same frames, compared on every one: positions, scroll, layout,
 /// text, machine state, the draw and the events each reports.
-fn reset_is_a_fresh_instance(host: Host, target: Option<&str>, before: usize) {
+fn reset_state_holders_play_as_a_fresh_copy(host: Host, target: Option<&str>, before: usize) {
     use crate::source::{
         generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase,
         text::text_input::TextInput,
@@ -1994,19 +1996,256 @@ fn reset_is_a_fresh_instance(host: Host, target: Option<&str>, before: usize) {
 }
 
 #[test]
-fn a_reset_of_a_box_holding_each_host_is_a_fresh_instance() {
+fn a_reset_of_a_box_returns_each_hosts_state_holders_to_their_start() {
     for host in HOSTS {
         for before in RESETS_AFTER {
-            reset_is_a_fresh_instance(host, Some("Box"), before);
+            reset_state_holders_play_as_a_fresh_copy(host, Some("Box"), before);
         }
     }
 }
 
 #[test]
-fn a_reset_of_the_root_is_a_fresh_instance_for_each_host() {
+fn a_reset_of_the_root_returns_each_hosts_state_holders_to_their_start() {
     for host in HOSTS {
         for before in RESETS_AFTER {
-            reset_is_a_fresh_instance(host, None, before);
+            reset_state_holders_play_as_a_fresh_copy(host, None, before);
         }
+    }
+}
+
+/// A root "Main" whose "Nested" plays the state machine of "Child", whose
+/// drawn "Dot" two states animate, each keying a property the other does
+/// not: the machine enters "ax", which moves the dot right over half a
+/// second, and as it ends goes straight to "by", which fades the dot to a
+/// quarter of its opacity over half a second.
+fn two_state_hosting() -> Scene {
+    use crate::source::{
+        animation::state_transition_flags::StateTransitionFlags,
+        generated::{
+            animation::{
+                animation_base::AnimationBase, animation_state_base::AnimationStateBase,
+                any_state_base::AnyStateBase, entry_state_base::EntryStateBase,
+                exit_state_base::ExitStateBase,
+                interpolating_keyframe_base::InterpolatingKeyFrameBase,
+                keyed_object_base::KeyedObjectBase, keyed_property_base::KeyedPropertyBase,
+                keyframe_base::KeyFrameBase, keyframe_double_base::KeyFrameDoubleBase,
+                linear_animation_base::LinearAnimationBase,
+                nested_state_machine_base::NestedStateMachineBase,
+                state_machine_base::StateMachineBase,
+                state_machine_layer_base::StateMachineLayerBase,
+                state_transition_base::StateTransitionBase,
+            },
+            nested_animation_base::NestedAnimationBase,
+            nested_artboard_base::NestedArtboardBase,
+            world_transform_component_base::WorldTransformComponentBase,
+        },
+    };
+    // A layer's states: 0 entry, 1 any, 2 exit, then the ones that play.
+    let layer = |riv: &mut Riv, enters: bool| {
+        riv.object(StateMachineBase::TYPE_KEY).end();
+        riv.object(StateMachineLayerBase::TYPE_KEY).end();
+        riv.object(EntryStateBase::TYPE_KEY).end();
+        if enters {
+            riv.object(StateTransitionBase::TYPE_KEY)
+                .uint(StateTransitionBase::STATE_TO_ID_PROPERTY_KEY, 3)
+                .end();
+        }
+        riv.object(AnyStateBase::TYPE_KEY).end();
+        riv.object(ExitStateBase::TYPE_KEY).end();
+    };
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    // Main: 0 artboard, 1 the host, 2 its machine.
+    riv.object(ArtboardBase::TYPE_KEY)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Main")
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 400.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 300.0)
+        .end();
+    riv.object(NestedArtboardBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Nested")
+        .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1)
+        .end();
+    riv.object(NestedStateMachineBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1)
+        .uint(NestedAnimationBase::ANIMATION_ID_PROPERTY_KEY, 0)
+        .end();
+    layer(&mut riv, false);
+    // Child: 0 artboard, 1 to 4 the dot.
+    riv.object(ArtboardBase::TYPE_KEY)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Child")
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0)
+        .end();
+    riv.object(ShapeBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Dot")
+        .end();
+    riv.object(RectangleBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1)
+        .float(ParametricPathBase::WIDTH_PROPERTY_KEY, 10.0)
+        .float(ParametricPathBase::HEIGHT_PROPERTY_KEY, 10.0)
+        .end();
+    riv.object(FillBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1)
+        .end();
+    riv.object(SolidColorBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 3)
+        .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, 0xff11_2233)
+        .end();
+    // Each animation, 30 frames at 60 a second, keys one property of the dot.
+    for (name, property, (from, to)) in [
+        ("ax", NodeBase::X_PROPERTY_KEY, (0.0, 100.0)),
+        (
+            "by",
+            WorldTransformComponentBase::OPACITY_PROPERTY_KEY,
+            (1.0, 0.25),
+        ),
+    ] {
+        riv.object(LinearAnimationBase::TYPE_KEY)
+            .string(AnimationBase::NAME_PROPERTY_KEY, name)
+            .uint(LinearAnimationBase::FPS_PROPERTY_KEY, 60)
+            .uint(LinearAnimationBase::DURATION_PROPERTY_KEY, 30)
+            .end();
+        riv.object(KeyedObjectBase::TYPE_KEY)
+            .uint(KeyedObjectBase::OBJECT_ID_PROPERTY_KEY, 1)
+            .end();
+        riv.object(KeyedPropertyBase::TYPE_KEY)
+            .uint(
+                KeyedPropertyBase::PROPERTY_KEY_PROPERTY_KEY,
+                u64::from(property),
+            )
+            .end();
+        for (frame, value) in [(0, from), (30, to)] {
+            riv.object(KeyFrameDoubleBase::TYPE_KEY)
+                .uint(KeyFrameBase::FRAME_PROPERTY_KEY, frame)
+                .float(KeyFrameDoubleBase::VALUE_PROPERTY_KEY, value)
+                .uint(
+                    InterpolatingKeyFrameBase::INTERPOLATION_TYPE_PROPERTY_KEY,
+                    1,
+                )
+                .end();
+        }
+    }
+    // 3 plays "ax"; as it ends, the layer goes straight to 4, which plays
+    // "by".
+    layer(&mut riv, true);
+    riv.object(AnimationStateBase::TYPE_KEY)
+        .uint(AnimationStateBase::ANIMATION_ID_PROPERTY_KEY, 0)
+        .end();
+    riv.object(StateTransitionBase::TYPE_KEY)
+        .uint(StateTransitionBase::STATE_TO_ID_PROPERTY_KEY, 4)
+        .uint(
+            StateTransitionBase::FLAGS_PROPERTY_KEY,
+            u64::from(StateTransitionFlags::ENABLE_EXIT_TIME.0),
+        )
+        .uint(StateTransitionBase::EXIT_TIME_PROPERTY_KEY, 500)
+        .end();
+    riv.object(AnimationStateBase::TYPE_KEY)
+        .uint(AnimationStateBase::ANIMATION_ID_PROPERTY_KEY, 1)
+        .end();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &riv.bytes(),
+        RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
+        None,
+        None,
+        None,
+    )
+    .expect("the two state scene imports");
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("the outer artboard");
+    Scene {
+        _file: file,
+        artboard,
+        factory,
+    }
+}
+
+/// A nested machine played into a later state that keys a property its
+/// starting state does not, then reset, starts again from its entry and
+/// plays its starting state forward as a fresh copy's does, while the
+/// property only the later state keyed keeps the value that state wrote.
+#[test]
+fn a_reset_restarts_a_nested_machine_and_leaves_what_only_its_later_state_keyed() {
+    use crate::source::generated::world_transform_component_base::WorldTransformComponentBase;
+    let host =
+        Host::Nested(crate::source::generated::nested_artboard_base::NestedArtboardBase::TYPE_KEY);
+    // The dot's x and opacity, and the machine's animation and its time.
+    let read = |played: &Played| {
+        let dot = hosted_board(played, host)
+            .with_artboard(|artboard| artboard.objects()[1].clone())
+            .expect("the dot");
+        let get =
+            |key: u16| CoreRegistry::get_double_handle(&dot, i32::from(key)).expect("a value");
+        let animation = hosted_machine(played, host)
+            .with_instance_mut(|machine| machine.current_animation_by_index(0))
+            .and_then(|state| {
+                state.first_animation(|animation| (animation.name().to_string(), animation.time()))
+            });
+        (
+            get(NodeBase::X_PROPERTY_KEY),
+            get(WorldTransformComponentBase::OPACITY_PROPERTY_KEY),
+            animation,
+        )
+    };
+    let mut fresh = Played::new(two_state_hosting());
+    let mut played = Played::new(two_state_hosting());
+    let target = played.object("Nested");
+    let resetting = Rc::new(RefCell::new(false));
+    let result = Rc::new(RefCell::new(None));
+    let (armed, log) = (resetting.clone(), result.clone());
+    played.drive(move |round, scene| {
+        if round.index == 0 && *armed.borrow() {
+            *armed.borrow_mut() = false;
+            *log.borrow_mut() = Some(scene.reset(&target));
+        }
+    });
+    for _ in 0..70 {
+        played.step(FRAME, vec![]);
+    }
+    let (x, opacity, animation) = read(&played);
+    assert_eq!(
+        animation.map(|(name, _)| name).as_deref(),
+        Some("by"),
+        "the machine reached its later state"
+    );
+    assert!(near(x, 100.0), "\"ax\" moved the dot: {x}");
+    assert!(near(opacity, 0.25), "\"by\" faded the dot: {opacity}");
+
+    *resetting.borrow_mut() = true;
+    played.step(FRAME, vec![]);
+    assert_eq!(*result.borrow(), Some(Ok(true)));
+    let (x, opacity, animation) = read(&played);
+    let (fresh_x, fresh_opacity, fresh_animation) = read(&fresh);
+    assert_eq!(
+        animation,
+        Some(("ax".to_string(), 0.0)),
+        "the machine starts again from its entry"
+    );
+    assert_eq!(animation, fresh_animation, "as a fresh copy's first step");
+    assert_eq!(x, fresh_x, "the starting state wrote what it keys");
+    assert_eq!(fresh_opacity, 1.0, "a fresh copy holds the file's opacity");
+    assert!(
+        near(opacity, 0.25),
+        "the opacity only \"by\" keyed keeps its value: {opacity}"
+    );
+    for frame in 1..=20 {
+        played.step(FRAME, vec![]);
+        fresh.step(FRAME, vec![]);
+        let (x, opacity, animation) = read(&played);
+        let (fresh_x, fresh_opacity, fresh_animation) = read(&fresh);
+        assert_eq!(animation, fresh_animation, "frame {frame} after the reset");
+        assert_eq!(x, fresh_x, "frame {frame} after the reset");
+        assert!(
+            x > 0.0 && x < 100.0,
+            "frame {frame}: \"ax\" is moving the dot: {x}"
+        );
+        assert_eq!(fresh_opacity, 1.0, "frame {frame}");
+        assert!(
+            near(opacity, 0.25),
+            "frame {frame}: nothing writes the opacity: {opacity}"
+        );
     }
 }

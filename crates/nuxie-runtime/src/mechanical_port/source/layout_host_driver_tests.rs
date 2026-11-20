@@ -45,9 +45,31 @@ struct Played {
 
 impl Played {
     fn new(f: Scene) -> Self {
+        Self::start(f, false)
+    }
+
+    /// As `new`, with a new instance of the file's view model bound to the
+    /// artboard and its machine before the first frame.
+    fn bound(f: Scene) -> Self {
+        Self::start(f, true)
+    }
+
+    fn start(f: Scene, bound: bool) -> Self {
         let mut board =
             ArtboardInstance::from_native_handle(f._file.clone(), 0, f.artboard.clone());
         let machine = board.state_machine_instance(0).expect("the state machine");
+        if bound {
+            let instance = f
+                ._file
+                .with_file(|file| {
+                    file.create_view_model_instance_for_artboard(f.artboard.core_handle())
+                })
+                .expect("a view model instance");
+            f.artboard.bind_view_model_instance(Some(instance.clone()));
+            machine
+                .native_handle()
+                .with_instance_mut(|machine| machine.bind_view_model_instance(instance));
+        }
         let mut played = Self {
             f,
             board,
@@ -99,6 +121,16 @@ impl Played {
             FRAME,
             vec![pointer(PointerKind::Down), pointer(PointerKind::Up)],
         )
+    }
+
+    /// The frames it takes the player to say it is settled.
+    fn frames_until_settled(&mut self) -> usize {
+        for frame in 1..=240 {
+            if self.step(FRAME, vec![]).settled {
+                return frame;
+            }
+        }
+        panic!("the player never settled");
     }
 
     /// Frames until the player says it is settled; the last frame's output.
@@ -610,13 +642,18 @@ fn reset_returns_typed_text_to_the_written_text() {
 const STEP_RESULT_BYTES: usize = 8 * 1024 * 1024;
 
 /// A root artboard hosting "Nested", whose machine fires an event named
-/// `name` as it enters its one state. Resetting "Nested" returns that
-/// machine to its entry, so the settle after a reset fires the event again.
+/// `name` as it enters its one state, which plays a half-second animation
+/// moving the nested "Dot". Resetting "Nested" returns that machine to its
+/// entry, so the settle after a reset fires the event again and the
+/// animation starts over.
 fn reporting_nested(name: &str) -> Scene {
     use crate::source::generated::{
         animation::{
             animation_state_base::AnimationStateBase, any_state_base::AnyStateBase,
             entry_state_base::EntryStateBase, exit_state_base::ExitStateBase,
+            interpolating_keyframe_base::InterpolatingKeyFrameBase,
+            keyed_object_base::KeyedObjectBase, keyed_property_base::KeyedPropertyBase,
+            keyframe_base::KeyFrameBase, keyframe_double_base::KeyFrameDoubleBase,
             linear_animation_base::LinearAnimationBase,
             nested_state_machine_base::NestedStateMachineBase,
             state_machine_base::StateMachineBase,
@@ -667,7 +704,7 @@ fn reporting_nested(name: &str) -> Scene {
         .uint(NestedAnimationBase::ANIMATION_ID_PROPERTY_KEY, 0)
         .end();
     machine(&mut riv, None);
-    // 0 artboard, 1 the event.
+    // 0 artboard, 1 the event, 2 the dot.
     riv.object(ArtboardBase::TYPE_KEY)
         .string(ComponentBase::NAME_PROPERTY_KEY, "Child")
         .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0)
@@ -677,10 +714,33 @@ fn reporting_nested(name: &str) -> Scene {
         .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
         .string(ComponentBase::NAME_PROPERTY_KEY, name)
         .end();
+    riv.object(crate::source::generated::node_base::NodeBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Dot")
+        .end();
     riv.object(LinearAnimationBase::TYPE_KEY)
         .uint(LinearAnimationBase::FPS_PROPERTY_KEY, 60)
-        .uint(LinearAnimationBase::DURATION_PROPERTY_KEY, 60)
+        .uint(LinearAnimationBase::DURATION_PROPERTY_KEY, 30)
         .end();
+    riv.object(KeyedObjectBase::TYPE_KEY)
+        .uint(KeyedObjectBase::OBJECT_ID_PROPERTY_KEY, 2)
+        .end();
+    riv.object(KeyedPropertyBase::TYPE_KEY)
+        .uint(
+            KeyedPropertyBase::PROPERTY_KEY_PROPERTY_KEY,
+            u64::from(crate::source::generated::node_base::NodeBase::X_PROPERTY_KEY),
+        )
+        .end();
+    for (frame, value) in [(0, 0.0), (30, 100.0)] {
+        riv.object(KeyFrameDoubleBase::TYPE_KEY)
+            .uint(KeyFrameBase::FRAME_PROPERTY_KEY, frame)
+            .float(KeyFrameDoubleBase::VALUE_PROPERTY_KEY, value)
+            .uint(
+                InterpolatingKeyFrameBase::INTERPOLATION_TYPE_PROPERTY_KEY,
+                1,
+            )
+            .end();
+    }
     machine(&mut riv, Some(1));
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let file = File::import(
@@ -775,4 +835,264 @@ fn reports_carried_past_a_cut_off_count_toward_the_next_step() {
         vec![size; MAX_DRIVER_ROUNDS],
         "the carried report, then seven rounds' reports; the ninth never reaches the driver"
     );
+}
+
+/// A still player whose driver resets a nested machine, restarting its
+/// half-second entry animation, says the step is not settled; the frames
+/// after it advance the animation to its end and then settle.
+#[test]
+fn a_reset_that_restarts_a_timed_animation_leaves_the_step_unsettled() {
+    let mut played = Played::new(reporting_nested("entered"));
+    assert!(
+        played.frames_until_settled() > 20,
+        "the entry animation plays out before the player is still"
+    );
+    let nested = played.object("Nested");
+    let resets = Rc::new(RefCell::new(0));
+    let count = resets.clone();
+    played.drive(move |_, scene| {
+        if *count.borrow() == 0 {
+            *count.borrow_mut() += 1;
+            assert_eq!(scene.reset(&nested), Ok(true));
+        }
+    });
+    let reset = played.step(FRAME, vec![]);
+    assert_eq!(
+        names(&reset.events),
+        ["entered"],
+        "the machine entered again"
+    );
+    assert!(!reset.settled, "the restarted animation is pending");
+    assert!(reset.dirty);
+    let frames = played.frames_until_settled();
+    assert!(
+        frames > 20,
+        "the frames after the reset play the animation out: {frames}"
+    );
+    let quiet = played.step(FRAME, vec![]);
+    assert!(quiet.settled && !quiet.dirty);
+}
+
+/// A view model's number, two-way bound to the root's "Mover" x, and a root
+/// machine that moves from its animation state to a blend state when that
+/// number is 100.
+fn bound_transition() -> Scene {
+    use crate::source::data_bind::data_bind::TWO_WAY;
+    use crate::source::generated::{
+        animation::{
+            animation_state_base::AnimationStateBase, any_state_base::AnyStateBase,
+            blend_state_direct_base::BlendStateDirectBase, entry_state_base::EntryStateBase,
+            exit_state_base::ExitStateBase, linear_animation_base::LinearAnimationBase,
+            state_machine_base::StateMachineBase, state_machine_layer_base::StateMachineLayerBase,
+            state_transition_base::StateTransitionBase,
+            transition_property_viewmodel_comparator_base::TransitionPropertyViewModelComparatorBase,
+            transition_value_number_comparator_base::TransitionValueNumberComparatorBase,
+            transition_viewmodel_condition_base::TransitionViewModelConditionBase,
+        },
+        data_bind::{
+            bindable_property_number_base::BindablePropertyNumberBase,
+            data_bind_base::DataBindBase, data_bind_context_base::DataBindContextBase,
+        },
+        viewmodel::{
+            viewmodel_base::ViewModelBase, viewmodel_component_base::ViewModelComponentBase,
+            viewmodel_property_number_base::ViewModelPropertyNumberBase,
+        },
+    };
+    let bind = |riv: &mut Riv, key: u16, flags: u32| {
+        riv.object(DataBindContextBase::TYPE_KEY)
+            .uint(DataBindBase::PROPERTY_KEY_PROPERTY_KEY, u64::from(key))
+            .uint(DataBindBase::FLAGS_PROPERTY_KEY, u64::from(flags))
+            .byte_field(DataBindContextBase::SOURCE_PATH_IDS_PROPERTY_KEY, &[0, 0])
+            .end();
+    };
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    riv.object(ViewModelBase::TYPE_KEY)
+        .string(ViewModelComponentBase::NAME_PROPERTY_KEY, "Model")
+        .end();
+    riv.object(ViewModelPropertyNumberBase::TYPE_KEY)
+        .string(ViewModelComponentBase::NAME_PROPERTY_KEY, "n")
+        .end();
+    // 0 artboard, 1 the mover.
+    riv.object(ArtboardBase::TYPE_KEY)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Main")
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 100.0)
+        .uint(ArtboardBase::VIEW_MODEL_ID_PROPERTY_KEY, 0)
+        .end();
+    riv.object(NodeBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Mover")
+        .end();
+    bind(&mut riv, NodeBase::X_PROPERTY_KEY, TWO_WAY);
+    riv.object(LinearAnimationBase::TYPE_KEY)
+        .uint(LinearAnimationBase::FPS_PROPERTY_KEY, 60)
+        .uint(LinearAnimationBase::DURATION_PROPERTY_KEY, 60)
+        .end();
+    // Layer states: 0 entry, 1 any, 2 exit, 3 the animation, 4 the blend.
+    riv.object(StateMachineBase::TYPE_KEY).end();
+    riv.object(StateMachineLayerBase::TYPE_KEY).end();
+    riv.object(EntryStateBase::TYPE_KEY).end();
+    riv.object(StateTransitionBase::TYPE_KEY)
+        .uint(StateTransitionBase::STATE_TO_ID_PROPERTY_KEY, 3)
+        .end();
+    riv.object(AnyStateBase::TYPE_KEY).end();
+    riv.object(ExitStateBase::TYPE_KEY).end();
+    riv.object(AnimationStateBase::TYPE_KEY)
+        .uint(AnimationStateBase::ANIMATION_ID_PROPERTY_KEY, 0)
+        .end();
+    riv.object(StateTransitionBase::TYPE_KEY)
+        .uint(StateTransitionBase::STATE_TO_ID_PROPERTY_KEY, 4)
+        .end();
+    riv.object(BindablePropertyNumberBase::TYPE_KEY).end();
+    bind(
+        &mut riv,
+        BindablePropertyNumberBase::PROPERTY_VALUE_PROPERTY_KEY,
+        0,
+    );
+    riv.object(TransitionViewModelConditionBase::TYPE_KEY)
+        .uint(TransitionViewModelConditionBase::OP_VALUE_PROPERTY_KEY, 0)
+        .end();
+    riv.object(TransitionPropertyViewModelComparatorBase::TYPE_KEY)
+        .end();
+    riv.object(TransitionValueNumberComparatorBase::TYPE_KEY)
+        .float(
+            TransitionValueNumberComparatorBase::VALUE_PROPERTY_KEY,
+            100.0,
+        )
+        .end();
+    riv.object(BlendStateDirectBase::TYPE_KEY).end();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &riv.bytes(),
+        RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
+        None,
+        None,
+        None,
+    )
+    .expect("the bound scene imports");
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("the artboard");
+    Scene {
+        _file: file,
+        artboard,
+        factory,
+    }
+}
+
+/// The core types of a step's changed states.
+fn state_types(output: &Output) -> Vec<u32> {
+    output
+        .states
+        .iter()
+        .map(|state| state.state_core_type)
+        .collect()
+}
+
+/// A driver's write through a two-way bind moves the bound number a root
+/// transition reads; the settle takes the transition, and that state change
+/// is in the same step's output, as it is when the same write is made
+/// between frames and the next frame takes it.
+#[test]
+fn a_transition_a_driver_write_causes_is_in_the_step_states() {
+    use crate::source::generated::animation::blend_state_direct_base::BlendStateDirectBase;
+    let blend = vec![u32::from(BlendStateDirectBase::TYPE_KEY)];
+    // The oracle: the write made between frames.
+    let mut oracle = Played::bound(bound_transition());
+    oracle.step(FRAME, vec![]);
+    assert!(CoreRegistry::set_double_handle(
+        &oracle.f.object("Mover"),
+        i32::from(NodeBase::X_PROPERTY_KEY),
+        100.0
+    ));
+    assert_eq!(state_types(&oracle.step(FRAME, vec![])), blend);
+    assert!(oracle.step(FRAME, vec![]).states.is_empty());
+
+    let mut played = Played::bound(bound_transition());
+    played.step(FRAME, vec![]);
+    let mover = played.object("Mover");
+    let writes = Rc::new(RefCell::new(0));
+    let count = writes.clone();
+    played.drive(move |_, scene| {
+        if *count.borrow() == 0 {
+            *count.borrow_mut() += 1;
+            assert_eq!(
+                scene.set_number(&mover, NodeBase::X_PROPERTY_KEY, 100.0),
+                Ok(true)
+            );
+        }
+    });
+    let written = played.step(FRAME, vec![]);
+    assert_eq!(
+        state_types(&written),
+        blend,
+        "the transition the write caused"
+    );
+    assert!(!written.settled);
+    assert!(played.step(FRAME, vec![]).states.is_empty(), "taken once");
+}
+
+/// A column: a box that resizes over a second when its layout changes, and
+/// a box below it.
+fn interpolating_column() -> Scene {
+    use crate::source::generated::layout::layout_component_style_base::LayoutComponentStyleBase as Style;
+    const CUSTOM: u64 = 2;
+    const LINEAR: u64 = 1;
+    scene(
+        (400.0, 300.0),
+        css(
+            "Frame",
+            [width(400.0), height(300.0)].concat(),
+            vec![
+                B {
+                    style: vec![
+                        U(Style::ANIMATION_STYLE_TYPE_PROPERTY_KEY, CUSTOM),
+                        U(Style::INTERPOLATION_TYPE_PROPERTY_KEY, LINEAR),
+                        F(Style::INTERPOLATION_TIME_PROPERTY_KEY, 1.0),
+                    ],
+                    listener: Some("tap"),
+                    ..css("Card", [width(100.0), height(40.0)].concat(), vec![])
+                },
+                css("Below", [width(100.0), height(40.0)].concat(), vec![]),
+            ],
+        ),
+    )
+}
+
+/// A driver's write that begins a timed layout transition leaves its step
+/// unsettled; the frames after it resize the box over the transition's
+/// second and then settle at the written width.
+#[test]
+fn a_write_that_begins_a_layout_transition_leaves_the_step_unsettled() {
+    let mut played = Played::new(interpolating_column());
+    played.frames_until_settled();
+    let record = played.f.record("Card");
+    let card = SceneObject::root(played.local_id(&record));
+    let writes = Rc::new(RefCell::new(0));
+    let count = writes.clone();
+    played.drive(move |_, scene| {
+        if *count.borrow() == 0 {
+            *count.borrow_mut() += 1;
+            assert_eq!(scene.set_number(&card, WIDTH, 200.0), Ok(true));
+        }
+    });
+    let written = played.step(FRAME, vec![]);
+    assert!(
+        !written.settled,
+        "the transition the write began is pending"
+    );
+    let widths = (0..30)
+        .map(|_| {
+            let output = played.step(FRAME, vec![]);
+            (played.f.bounds("Card")[2], output.settled)
+        })
+        .collect::<Vec<_>>();
+    let (midway, settled) = widths[29];
+    assert!(
+        midway > 110.0 && midway < 190.0 && !settled,
+        "half a second into the resize: {widths:?}"
+    );
+    played.frames_until_settled();
+    assert!(near(played.f.bounds("Card")[2], 200.0));
 }

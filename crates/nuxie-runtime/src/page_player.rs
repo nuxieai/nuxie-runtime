@@ -519,32 +519,13 @@ impl PagePlayer {
                                 );
                             }
                         };
-                        let state_change_count = machine.changed_state_count();
-                        if state_change_count > MAX_PLAYER_STEP_STATE_CHANGES {
-                            boundary.poisoned.set(true);
-                            return failure(
-                                ErrorKind::LimitExceeded,
-                                "runtime state-change count exceeds step bound",
-                            );
-                        }
-                        for index in 0..state_change_count {
-                            let Some(state) = machine.changed_state(index) else {
+                        state_changes = match project_state_changes(machine) {
+                            Ok(states) => states,
+                            Err(error) => {
                                 boundary.poisoned.set(true);
-                                return failure(
-                                    ErrorKind::RuntimeError,
-                                    "runtime state-change projection is inconsistent",
-                                );
-                            };
-                            state_changes.push(StateChange {
-                                // The exact source projection orders changed states by
-                                // authored layer. Until the C ABI grows an optional-id
-                                // representation, the compressed index and sentinel are
-                                // the only lossless C representation available.
-                                layer_index: index,
-                                state_core_type: u32::from(state.core_type),
-                                state_global_id: u32::MAX,
-                            });
-                        }
+                                return Err(budget_error(error));
+                            }
+                        };
                         reported_events.extend(machine.take_reported_events());
                         // A changed advance keeps going (host_state_machine.rs).
                         let keep_going = advance.keep_going || flushed;
@@ -629,6 +610,25 @@ impl PagePlayer {
         )
         .map_err(budget_error)?;
         let mut events = own_reported_events(reported_events, &mut budget).map_err(budget_error)?;
+        // The driver's rounds run here, after the advance and before the
+        // step's result is assembled. What each output does with them:
+        // - events: each round's reports are appended (`drive`).
+        // - dirty: a round's write or settle change marks the step dirty, and
+        //   the C render revision and `render_required` follow `dirty`.
+        // - settled: a write or a settle that changed the scene leaves
+        //   continuation pending, as a changed advance does; whether what it
+        //   started (a restarted animation, a layout transition) keeps going is
+        //   the next timed advance's answer.
+        // - keep_going: the advance's own answer, by contract
+        //   (docs/player-scheduling-contract.md).
+        // - states: projected again after the rounds, since a settle can
+        //   transition a layer within this frame.
+        // - pointers and focus: the results of the host's input calls, made
+        //   before the advance; a driver has no input path.
+        // - commands, view-model changes, changed owners and rule reports:
+        //   projected below, after the rounds, from the step's script
+        //   transaction, change capture and rule operation, which stay open
+        //   across them.
         let mut driver_rounds = 0;
         if advances {
             let Ok(mut driver) = self.driver.try_borrow_mut() else {
@@ -647,10 +647,21 @@ impl PagePlayer {
                     Ok(drive) => {
                         driver_rounds = drive.rounds;
                         runtime_dirty |= drive.changed;
-                        // `keep_going` stays the advance's own answer; a
-                        // driver cut off at the bound leaves work pending.
-                        if drive.cut_off {
+                        // A driver cut off at the bound changed the scene too.
+                        if drive.changed {
                             runtime_settled = false;
+                            if let Playback::StateMachine(machine) = playback {
+                                let projected = project_state_changes(machine).and_then(|states| {
+                                    budget.admit_states(states.len()).map(|()| states)
+                                });
+                                match projected {
+                                    Ok(states) => state_changes = states,
+                                    Err(error) => {
+                                        boundary.poisoned.set(true);
+                                        return Err(budget_error(error));
+                                    }
+                                }
+                            }
                         }
                     }
                     Err(error) => {
@@ -1416,7 +1427,38 @@ type BudgetFailure = (ErrorKind, &'static str);
 pub struct StepEventBudget {
     events: usize,
     properties: usize,
+    states: usize,
     bytes: usize,
+}
+
+/// The machine's changed states this frame, in authored layer order.
+fn project_state_changes(
+    machine: &StateMachineInstance,
+) -> Result<Vec<StateChange>, BudgetFailure> {
+    let count = machine.changed_state_count();
+    if count > MAX_PLAYER_STEP_STATE_CHANGES {
+        return Err((
+            ErrorKind::LimitExceeded,
+            "runtime state-change count exceeds step bound",
+        ));
+    }
+    (0..count)
+        .map(|index| {
+            let state = machine.changed_state(index).ok_or((
+                ErrorKind::RuntimeError,
+                "runtime state-change projection is inconsistent",
+            ))?;
+            Ok(StateChange {
+                // The exact source projection orders changed states by
+                // authored layer. Until the C ABI grows an optional-id
+                // representation, the compressed index and sentinel are
+                // the only lossless C representation available.
+                layer_index: index,
+                state_core_type: u32::from(state.core_type),
+                state_global_id: u32::MAX,
+            })
+        })
+        .collect()
 }
 
 impl StepEventBudget {
@@ -1446,8 +1488,27 @@ impl StepEventBudget {
         Ok(Self {
             events: 0,
             properties: 0,
+            states: state_change_count,
             bytes,
         })
+    }
+
+    /// Charge the step's state changes when a later projection holds
+    /// `count` of them: the ones beyond those already charged.
+    fn admit_states(&mut self, count: usize) -> Result<(), BudgetFailure> {
+        if count > MAX_PLAYER_STEP_STATE_CHANGES {
+            return Err((
+                ErrorKind::LimitExceeded,
+                "runtime state-change count exceeds step bound",
+            ));
+        }
+        let added = count.saturating_sub(self.states);
+        self.charge(
+            added.checked_mul(std::mem::size_of::<StateChange>()),
+            "runtime event projection exceeds structural byte bound",
+        )?;
+        self.states = self.states.max(count);
+        Ok(())
     }
 
     /// Charge a batch of `count` reports holding `properties` each: the

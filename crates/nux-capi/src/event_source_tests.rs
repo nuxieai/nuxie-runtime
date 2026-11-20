@@ -87,6 +87,7 @@ fn unscoped_events_do_not_invent_a_source_or_overwrite_output() {
         seconds_delay: 0.0,
         properties: Vec::new(),
         view_model_instance_id: None,
+        listener_target_local_id: None,
     });
     let mut result = std::ptr::null_mut();
     publish_player_step_result(&mut result, owned);
@@ -259,6 +260,7 @@ fn event_context_storage_counts_toward_owned_result_budget() {
         seconds_delay: 0.0,
         properties: Vec::new(),
         view_model_instance_id: None,
+        listener_target_local_id: None,
     }];
     let before = player_step_owned_result_bytes(&[], &[], &[], &events, &[], &[], &[]).unwrap();
     events[0].context = Some(StateMachineEventContext::new(

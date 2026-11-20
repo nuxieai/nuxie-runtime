@@ -1,4 +1,8 @@
 //! One transactional page operation for every embedding host.
+mod driver;
+mod reset;
+pub use driver::*;
+
 use crate::source::input::focusable::{Key, KeyModifiers};
 use crate::*;
 use std::{
@@ -77,6 +81,10 @@ impl Drop for Guard {
 #[derive(Default)]
 pub struct PagePlayer {
     pending_commands: Rc<RefCell<Vec<HostCommand>>>,
+    driver: RefCell<Option<Box<dyn HostDriver>>>,
+    /// Reports the last settle of a cut-off step made after its driver's
+    /// last round, for the next step's first round.
+    undelivered_reports: RefCell<Vec<OwnedPlayerEvent>>,
 }
 #[derive(Debug)]
 pub struct StateChange {
@@ -96,6 +104,8 @@ pub struct Output {
     pub changes: Vec<RuntimeViewModelChange>,
     pub changed_owners: Vec<RuntimeOwnedViewModelHandle>,
     pub rule_reports: Vec<RuntimeValueRuleReport>,
+    /// How many times the step asked its driver; 0 without a driver.
+    pub driver_rounds: usize,
 }
 /// Publication is part of the transaction. Dropping this value before commit
 /// rolls VM values back and poisons the occurrence after runtime mutation.
@@ -606,7 +616,7 @@ impl PagePlayer {
                 "live frame checkpoint exceeds its bound",
             );
         }
-        let events = own_reported_events(
+        let mut events = own_reported_events(
             reported_events,
             pointer_results.len(),
             focus_input_results.len(),
@@ -616,6 +626,31 @@ impl PagePlayer {
             kind,
             message: message.into(),
         })?;
+        let mut driver_rounds = 0;
+        if advances {
+            let Ok(mut driver) = self.driver.try_borrow_mut() else {
+                boundary.poisoned.set(true);
+                return failure(ErrorKind::ReentrantCall, "player driver is active");
+            };
+            if let Some(driver) = driver.as_mut() {
+                let drive = self.drive(driver.as_mut(), artboard, playback, &mut events);
+                match drive {
+                    Ok(drive) => {
+                        driver_rounds = drive.rounds;
+                        runtime_dirty |= drive.changed;
+                        // `keep_going` stays the advance's own answer; a
+                        // driver cut off at the bound leaves work pending.
+                        if drive.cut_off {
+                            runtime_settled = false;
+                        }
+                    }
+                    Err(error) => {
+                        boundary.poisoned.set(true);
+                        return Err(error);
+                    }
+                }
+            }
+        }
         let commands = match script_transaction {
             Some(transaction) => transaction.finish().map_err(|error| Error {
                 kind: ErrorKind::RuntimeError,
@@ -857,6 +892,7 @@ impl PagePlayer {
                 changes,
                 changed_owners,
                 rule_reports,
+                driver_rounds,
             }),
             transaction: view_model_transaction,
             _scope: live_frame_scope,
@@ -1040,7 +1076,130 @@ fn validate_step(
     }
     Ok(())
 }
+struct Drive {
+    rounds: usize,
+    changed: bool,
+    cut_off: bool,
+}
+
 impl PagePlayer {
+    /// Set the host driver every ordinary step asks after its advance, or
+    /// clear it with `None`. Returns the driver it replaces. A player with no
+    /// driver steps exactly as it did before drivers existed.
+    pub fn set_driver(
+        &self,
+        driver: Option<Box<dyn HostDriver>>,
+    ) -> Result<Option<Box<dyn HostDriver>>, Error> {
+        let Ok(mut slot) = self.driver.try_borrow_mut() else {
+            return failure(ErrorKind::ReentrantCall, "player driver is active");
+        };
+        if let Ok(mut undelivered) = self.undelivered_reports.try_borrow_mut() {
+            undelivered.clear();
+        }
+        Ok(std::mem::replace(&mut *slot, driver))
+    }
+
+    pub fn has_driver(&self) -> bool {
+        self.driver
+            .try_borrow()
+            .map_or(true, |driver| driver.is_some())
+    }
+
+    /// The driver's rounds of one step, after its advance. `events` holds the
+    /// step's reports; each settle's reports are appended to it.
+    fn drive(
+        &self,
+        driver: &mut dyn HostDriver,
+        artboard: &mut ArtboardInstance,
+        playback: &mut Playback,
+        events: &mut Vec<OwnedPlayerEvent>,
+    ) -> Result<Drive, Error> {
+        let mut first_reports = std::mem::take(
+            &mut *self
+                .undelivered_reports
+                .try_borrow_mut()
+                .map_err(|_| Error {
+                    kind: ErrorKind::ReentrantCall,
+                    message: "player driver is active".into(),
+                })?,
+        );
+        first_reports.extend(events.iter().cloned());
+        let mut drive = Drive {
+            rounds: 0,
+            changed: false,
+            cut_off: false,
+        };
+        let mut round_start = events.len();
+        loop {
+            let machine = match playback {
+                Playback::StateMachine(machine) => Some(&**machine),
+                _ => None,
+            };
+            let mut scene = SceneWriter::new(artboard, machine);
+            let reports = if drive.rounds == 0 {
+                first_reports.as_slice()
+            } else {
+                &events[round_start..]
+            };
+            driver
+                .drive(
+                    DriverRound {
+                        index: drive.rounds,
+                        reports,
+                    },
+                    &mut scene,
+                )
+                .map_err(|fault| Error {
+                    kind: ErrorKind::RuntimeError,
+                    message: format!("player driver failed: {}", fault.0),
+                })?;
+            drive.rounds += 1;
+            if scene.changes() == 0 {
+                break;
+            }
+            drive.changed = true;
+            let machine = match playback {
+                Playback::StateMachine(machine) => Some(&mut **machine),
+                _ => None,
+            };
+            let settled = match machine {
+                Some(machine) => {
+                    let changed =
+                        StateMachineInstance::settle_within_frame(artboard, Some(&mut *machine));
+                    changed.map(|changed| (changed, machine.take_reported_events()))
+                }
+                None => StateMachineInstance::settle_within_frame(artboard, None)
+                    .map(|changed| (changed, Vec::new())),
+            };
+            let (changed, reported) = settled.map_err(|error| Error {
+                kind: ErrorKind::RuntimeError,
+                message: format!("player driver settle failed: {error:#}"),
+            })?;
+            drive.changed |= changed;
+            round_start = events.len();
+            let owned =
+                own_reported_events(reported, 0, 0, 0).map_err(|(kind, message)| Error {
+                    kind,
+                    message: message.into(),
+                })?;
+            if events.len() + owned.len() > MAX_PLAYER_STEP_EVENTS {
+                return failure(
+                    ErrorKind::LimitExceeded,
+                    "runtime event count exceeds step bound",
+                );
+            }
+            events.extend(owned);
+            if drive.rounds == MAX_DRIVER_ROUNDS {
+                drive.cut_off = true;
+                if let Ok(mut undelivered) = self.undelivered_reports.try_borrow_mut() {
+                    undelivered.extend(events[round_start..].iter().cloned());
+                }
+                break;
+            }
+        }
+        Ok(drive)
+    }
+
     /// Apply one ordinary frame and commit its owned result.
     pub fn step(
         &self,
@@ -1207,7 +1366,7 @@ impl Drop for IntrinsicProbe {
 const MAX_PLAYER_STEP_EVENTS: usize = 4096;
 const MAX_PLAYER_EVENT_PROPERTIES: usize = 256;
 const MAX_PLAYER_STEP_EVENT_PROPERTIES_TOTAL: usize = 4096;
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum OwnedPlayerEventPropertyValue {
     Number(f32),
     Bool(bool),
@@ -1217,13 +1376,13 @@ pub enum OwnedPlayerEventPropertyValue {
     Trigger(u64),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct OwnedPlayerEventProperty {
     pub name: Option<Box<[u8]>>,
     pub value: OwnedPlayerEventPropertyValue,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct OwnedPlayerEvent {
     /// Same owned context exposed by ordinary StateMachineReportedEvent reports.
     pub context: Option<StateMachineEventContext>,
@@ -1237,6 +1396,9 @@ pub struct OwnedPlayerEvent {
     pub seconds_delay: f32,
     pub properties: Vec<OwnedPlayerEventProperty>,
     pub view_model_instance_id: Option<u64>,
+    /// Local id of the object whose listener reported the event, in the
+    /// artboard `context`'s path leads to (the root when it has no path).
+    pub listener_target_local_id: Option<usize>,
 }
 
 fn push_owned_bytes(total: &mut usize, value: &[u8]) -> Result<Box<[u8]>, ErrorKind> {
@@ -1376,6 +1538,7 @@ pub fn own_reported_events(
             target,
             seconds_delay: event.seconds_delay(),
             properties,
+            listener_target_local_id: event.listener_target_local_id(),
         });
     }
     Ok(events)

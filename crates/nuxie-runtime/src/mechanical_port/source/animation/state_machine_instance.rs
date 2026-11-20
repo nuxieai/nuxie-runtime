@@ -191,6 +191,10 @@ pub struct EventReport {
     pub host_sequence: u64,
     /// Native model identity at emission time; later rebinding cannot rewrite it.
     pub host_view_model_instance_id: Option<u64>,
+    /// The local id of the target of the listener whose action reported this
+    /// event, in the machine's artboard. `None` for events reported by a
+    /// state, a transition or a keyframe.
+    pub listener_target: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -4066,6 +4070,9 @@ pub struct StateMachineInstance {
     host_dispatching: Rc<Cell<bool>>,
     capture_run_by_host: bool,
     in_pointer_miss: bool,
+    /// The target of the listener whose actions are running, so an event
+    /// they report says which object heard the input.
+    performing_listener_target: Option<u32>,
     disabled_pointer_ids: Vec<i32>,
     parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
     parent_nested_artboard: Option<CoreHandle>,
@@ -4177,6 +4184,7 @@ impl StateMachineInstance {
             host_dispatching: Rc::new(Cell::new(false)),
             capture_run_by_host: false,
             in_pointer_miss: false,
+            performing_listener_target: None,
             disabled_pointer_ids: Vec::new(),
             parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle::default(),
             parent_nested_artboard: None,
@@ -4382,6 +4390,14 @@ impl StateMachineInstance {
             .with(|listener| listener.state_machine_listener_actions())
             .flatten()
             .expect("a listener retains its authored action list");
+        let target = listener
+            .with(|listener| {
+                listener
+                    .as_state_machine_listener()
+                    .map(|listener| listener.target_id())
+            })
+            .flatten();
+        let outer_target = std::mem::replace(&mut self.performing_listener_target, target);
         for action in actions {
             if action.is_alive() {
                 assert!(
@@ -4390,6 +4406,7 @@ impl StateMachineInstance {
                 );
             }
         }
+        self.performing_listener_target = outer_target;
     }
 
     /// Performs one authored listener action. A scripted action's script
@@ -6356,6 +6373,37 @@ impl StateMachineInstance {
         }
     }
 
+    /// Forget the pointers held by the listeners whose target `is_target`
+    /// accepts, as `reset_state` forgets every listener's: a press or a hover
+    /// they were tracking is dropped without dispatching anything. Whether
+    /// any listener held a pointer.
+    pub fn release_listener_pointers(&mut self, mut is_target: impl FnMut(u32) -> bool) -> bool {
+        let mut released = false;
+        for group in &self.listener_groups {
+            let target = group
+                .with_group(|group| group.listener_handle())
+                .and_then(|listener| {
+                    listener
+                        .with(|listener| {
+                            listener
+                                .as_state_machine_listener()
+                                .map(|listener| listener.target_id())
+                        })
+                        .flatten()
+                });
+            if target.is_some_and(&mut is_target) {
+                group.with_group(|group| {
+                    released |= !group.tracked_pointer_ids().is_empty();
+                    group.release_all_pointers();
+                });
+            }
+        }
+        if released {
+            self.mark_needs_advance();
+        }
+        released
+    }
+
     pub fn name(&self) -> String {
         self.machine
             .with_downcast::<StateMachine, _>(|machine| machine.base.name().to_owned())
@@ -6929,6 +6977,7 @@ impl StateMachineInstance {
                 })
                 .as_ref()
                 .map(crate::host_viewmodel::view_model_identity),
+            listener_target: self.performing_listener_target,
         };
         self.ensure_reporting().reported_events.push(report);
     }

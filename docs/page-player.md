@@ -27,7 +27,24 @@ The host controls stack order through the view-model list. Move the incoming row
 
 `source_artboard_global_id` identifies the source artboard containing `event_local_index`. The containing-host path alone cannot supply that address for a nested unit. Both the native Rust report and the shared owned result expose this address. Context vectors count toward the existing 8 MiB event/result budgets, with checked arithmetic before cloning. The C result's aggregate accounting includes their retained storage too.
 
-The C event view and its accessors currently expose VM identity but no path, occurrence or source-artboard address, for either ordinary or page players. This change adds no C ABI surface; Preview can read the Rust fields. Publication and rollback retain the existing transaction boundary: rejected steps return no output, and dropping an uncommitted result discards its context snapshot with the rest of the output.
+`listener_target_local_id` names the object whose listener reported the event, by local id in the artboard the context's path leads to (the player's artboard when there is no path). Events reported by a state, a transition or a timeline have none.
+
+The step result's C event view and its accessors expose VM identity but no path, occurrence, source-artboard address or listener target. A host driver's reports (below) carry all four; Preview can read the Rust fields. Publication and rollback retain the existing transaction boundary: rejected steps return no output, and dropping an uncommitted result discards its context snapshot with the rest of the output.
+
+## Host driver
+
+A host can drive the player's artboard from outside the file, with no view model and no binds. `PagePlayer::set_driver` installs a `HostDriver`; C hosts register a `NuxPlayerDriver` table with `nux_player_driver_set` and remove it with `nux_player_driver_clear`. A player with no driver steps exactly as before.
+
+In every ordinary step, after the advance, the player asks the driver once with the step's reports. The driver answers through a `SceneWriter` (C: `NuxSceneWriter`), valid only for that round:
+
+- `set_number`, `set_unsigned`, `set_bool`, `set_color` and `set_text` write one property of one object, named by its local id in the root artboard (`SceneObject`, C `NuxSceneObject`) and the property key. The write goes through the property's generated setter, so it marks layout and paint exactly as an animation or a bind writing that property does: a text run's text remeasures its Text, a `LayoutCssStyle` record's `display` set to none hides its box in place (no draw, no hit), a solid color repaints. Writing the value a property already holds changes nothing. An address of one nested occurrence or list row is a later addition to `SceneObject`.
+- `reset` returns what the engine holds under an object, the object included: scroll positions to the offsets the file gave them (a scroll position lives in its constraint's scroll offset properties, which scrolling writes), typed text to the text last written to its field, nested artboards' state machines to their entry states and their animations to their start, and the presses and hovers the player's listeners hold there. Other property values, whether a host, a bind or the file wrote them, are left alone.
+
+When a round changed the scene, the player lays out and settles within the same frame (a zero-second advance that starts no new frame, so no report is handed out twice) and asks again with whatever that settle reported. It stops after a round that changes nothing, or after `MAX_DRIVER_ROUNDS` (C `NUX_PLAYER_DRIVER_MAX_ROUNDS`, 8) rounds. A driver cut off at the bound leaves the step unsettled; the last settle's reports reach the driver at the start of the next step. The frame drawn after the step already shows every write.
+
+The settle rounds do not change `keep_going`, which stays the advance's own answer, so a still artboard whose machine only reports goes quiet: once a write is laid out, the following frames are settled and draw nothing new until the next write or pointer. Every report a settle makes is also appended to the step's own events.
+
+A driver's failure (a `DriverFault`, or a status other than OK from the C `drive` callback) fails the step and poisons the occurrence, since the advance and earlier writes cannot be undone. Inside the driver's turn the player refuses another step and a driver change with a reentrant-call error. The C table's `release` callback is called once when the driver is cleared, replaced or its player freed.
 
 ## Content measurement
 

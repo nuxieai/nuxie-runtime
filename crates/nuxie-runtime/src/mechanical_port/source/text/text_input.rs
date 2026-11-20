@@ -78,6 +78,9 @@ pub struct TextInput {
     source_text: String,
     // Distinguish user edits from authored/data-bound text for live moves.
     user_edited_text: bool,
+    /// The text last written to the field from outside typing: the file's,
+    /// a bind's or a host's. A reset puts typed text back to it.
+    written_text: String,
     text_style: Option<CoreHandle>,
     scroll_constraint: Option<CoreHandle>,
     is_dragging: bool,
@@ -107,6 +110,7 @@ impl Default for TextInput {
             world_bounds: Aabb::default(),
             source_text: String::new(),
             user_edited_text: false,
+            written_text: String::new(),
             text_style: None,
             scroll_constraint: None,
             is_dragging: false,
@@ -345,6 +349,7 @@ impl TextInput {
     pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         self.base.on_added_clean(context);
         self.source_text = self.base.text().to_owned();
+        self.written_text = self.source_text.clone();
         self.text_style = self
             .base
             .children()
@@ -558,8 +563,26 @@ impl TextInput {
     pub fn text_changed(&mut self) {
         self.user_edited_text = false;
         self.source_text = self.base.text().to_owned();
+        self.written_text = self.source_text.clone();
         self.sync_displayed_text_from_source(false);
         self.mark_shape_dirty();
+    }
+    /// Put typed text back to the text last written from outside typing,
+    /// with the caret reset as any outside write resets it. Whether the field
+    /// held typed text.
+    pub fn reset_typed_text(&mut self) -> bool {
+        if !self.user_edited_text {
+            return false;
+        }
+        let written = self.written_text.clone();
+        if self.base.set_text_value(written) {
+            self.text_changed();
+            crate::mechanical_port::source::core::CoreObject::core_mut(self)
+                .notify_property_changed(TextInputBase::TEXT_PROPERTY_KEY);
+        } else {
+            self.user_edited_text = false;
+        }
+        true
     }
     pub fn selection_radius_changed(&mut self) {
         self.raw_text_input
@@ -634,7 +657,9 @@ impl TextInput {
             }
             self.source_text = displayed;
             if self.base.set_text_value(self.source_text.clone()) {
+                let written = std::mem::take(&mut self.written_text);
                 self.text_changed();
+                self.written_text = written;
                 self.user_edited_text = true;
                 crate::mechanical_port::source::core::CoreObject::core_mut(self)
                     .notify_property_changed(TextInputBase::TEXT_PROPERTY_KEY);

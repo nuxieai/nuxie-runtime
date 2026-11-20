@@ -199,6 +199,7 @@ impl LinearAnimationInstance {
                         seconds_delay: elapsed_seconds,
                         host_sequence: 0,
                         host_view_model_instance_id: None,
+                        listener_target: None,
                     },
                     &self.artboard,
                     None,

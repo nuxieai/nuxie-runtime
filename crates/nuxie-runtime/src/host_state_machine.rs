@@ -218,6 +218,7 @@ pub struct StateMachineReportedEvent {
     properties: Vec<RuntimeEventProperty>,
     string_properties: Vec<StateMachineEventStringProperty>,
     context: Option<StateMachineEventContext>,
+    listener_target_local_id: Option<usize>,
     host_sequence: u64,
 }
 
@@ -229,6 +230,9 @@ impl StateMachineReportedEvent {
     ) -> Option<Self> {
         let event = report.event?;
         let core_type = event.core_type()?;
+        let listener_target_local_id = report
+            .listener_target
+            .and_then(|target| usize::try_from(target).ok());
         let local_index =
             artboard.with_artboard(|a| usize::try_from(a.base.object_index(&event)).ok());
         let name =
@@ -270,6 +274,7 @@ impl StateMachineReportedEvent {
             properties,
             string_properties,
             context,
+            listener_target_local_id,
             host_sequence: report.host_sequence,
         })
     }
@@ -307,6 +312,13 @@ impl StateMachineReportedEvent {
 
     pub fn context(&self) -> Option<&StateMachineEventContext> {
         self.context.as_ref()
+    }
+
+    /// Local id of the object the reporting listener listens on, in the
+    /// artboard the event's `context` path leads to (the root when it has no
+    /// path). `None` when no listener reported the event.
+    pub fn listener_target_local_id(&self) -> Option<usize> {
+        self.listener_target_local_id
     }
 }
 
@@ -418,9 +430,6 @@ fn advance_native_state_machines(
             | AdvanceFlags::ADVANCE_NESTED.0
             | AdvanceFlags::NEW_FRAME.0,
     );
-    let settle_flags = AdvanceFlags(
-        AdvanceFlags::IS_ROOT.0 | AdvanceFlags::ANIMATE.0 | AdvanceFlags::ADVANCE_NESTED.0,
-    );
     let mut changed = false;
     for machine in machines {
         changed |= machine.with_instance_mut(|machine| machine.advance(seconds, true));
@@ -429,6 +438,30 @@ fn advance_native_state_machines(
         }
     }
     changed |= artboard.advance_internal(seconds, frame_flags);
+    changed |= settle_native_state_machines(artboard, machines);
+    let mut keep_going = changed || seconds == 0.0;
+    keep_going |= machines.iter().any(|machine| {
+        machine.with_instance(|machine| {
+            machine.has_pending_event_reports() || machine.has_pending_listener_view_model_reports()
+        })
+    });
+    RuntimeStateMachineAdvanceResult {
+        changed,
+        keep_going,
+    }
+}
+
+/// The settle half of `advance_native_state_machines`: update, try each
+/// machine's transitions and advance by zero without starting a frame, up to
+/// five passes, until no component is dirty. Whether anything changed.
+fn settle_native_state_machines(
+    artboard: &RuntimeArtboardInstanceHandle,
+    machines: &[RuntimeStateMachineInstanceHandle],
+) -> bool {
+    let settle_flags = AdvanceFlags(
+        AdvanceFlags::IS_ROOT.0 | AdvanceFlags::ANIMATE.0 | AdvanceFlags::ADVANCE_NESTED.0,
+    );
+    let mut changed = false;
     for _ in 0..5 {
         changed |= artboard.update_pass(true);
         for machine in machines {
@@ -443,16 +476,7 @@ fn advance_native_state_machines(
             break;
         }
     }
-    let mut keep_going = changed || seconds == 0.0;
-    keep_going |= machines.iter().any(|machine| {
-        machine.with_instance(|machine| {
-            machine.has_pending_event_reports() || machine.has_pending_listener_view_model_reports()
-        })
-    });
-    RuntimeStateMachineAdvanceResult {
-        changed,
-        keep_going,
-    }
+    changed
 }
 
 pub struct StateMachineInstance {
@@ -711,6 +735,29 @@ impl StateMachineInstance {
             machine.synchronize_host_reported_events();
         }
         Ok(result)
+    }
+    /// Lay out and advance by zero within the current frame, after a host
+    /// changed the scene between the frame's advance and its draw. No time
+    /// passes and no frame starts, so reports the frame already made stay
+    /// drained and only new ones are returned by `take_reported_events`.
+    /// `machine` is the artboard's player machine, when it has one. Whether
+    /// anything changed.
+    pub fn settle_within_frame(
+        artboard: &mut crate::host_artboard::ArtboardInstance,
+        machine: Option<&mut Self>,
+    ) -> anyhow::Result<bool> {
+        let root = artboard.native_handle();
+        let native = match machine {
+            Some(machine) => {
+                anyhow::ensure!(
+                    machine.artboard.core_handle() == root.core_handle(),
+                    "state machine belongs to another Artboard"
+                );
+                vec![machine.native.clone()]
+            }
+            None => Vec::new(),
+        };
+        Ok(settle_native_state_machines(&root, &native))
     }
     pub fn needs_advance(&self) -> bool {
         self.native.with_instance(|machine| machine.needs_advance())

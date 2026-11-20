@@ -26005,3 +26005,6 @@ fn css_flex_taffy_fork_column_items_are_fit_content_wide() {
 
 #[path = "layout_flight_hold_tests.rs"]
 mod flight_hold_tests;
+
+#[path = "layout_host_driver_tests.rs"]
+mod host_driver_tests;

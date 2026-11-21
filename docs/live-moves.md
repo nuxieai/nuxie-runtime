@@ -190,12 +190,12 @@ A step unit that sets `transfers` flies one instance in place, as it does throug
 
 Where the two paths differ:
 - On Back with the leaving Screen removed half way, the instance stays in the arriving placement, where it flies. Through slots it flies in a flight slot on the leaving Screen, so it goes with that Screen and the arriving slot gets a fresh copy.
-- In six paint cases of the equivalence test, the flying instance draws on the other side of one later neighbor at a step's first frame ([UNIV-6476](https://universe.basis.dev/issue/UNIV-6476)). Neither case shows on Duo, because the compiler puts a component's transform and opacity on its box.
+- Beside a departing sibling that keys its own layout, the flying instance's cover reads as unknown, so it is covered by whatever it meets, where the slot path reads it ([UNIV-6499](https://universe.basis.dev/issue/UNIV-6499)).
 - Only the in-place path takes written values. A transfer between slots keeps the leaving slot's written values.
 
 Tests:
 - `tests/live_moves.rs`, `mod in_place_carry`: each runtime row of the slot suites' inventory, named after the slot test with `in_place_` in front.
-- `paint_order::in_place_a_transfer_matches_the_slot_path`: every paint case that transfers, 60 of them, every frame of a go, a Back and their cancels.
+- `paint_order::in_place_a_transfer_matches_the_slot_path`: every paint case that transfers, 60 of them, every frame of a go, a Back and their cancels, with no expected differences. A turned, scaled or faded component root sorts and is covered as the placement it carries, read at rest from take-off ([UNIV-6476](https://universe.basis.dev/issue/UNIV-6476)).
 - The C calls on an in-place page: `nux-capi/src/live_move_tests.rs` and `nux-capi/tests/live_moves_frame_membership.rs`, also prefixed `in_place_`.
 - `tests/page_player_membership.rs`: `in_place_a_screen_removed_between_frames_leaves_the_other_screen_its_own_copy`.
 - The large-Screen bench (`bench_in_place_against_slots_on_a_large_screen`) times a step with one transfer as line (9), one instance in place against one through slots.

@@ -507,6 +507,11 @@ fn box_run(proxy: &RuntimeDrawableOccurrence, owner: &CoreHandle) -> Option<BoxR
                 lone: content.is_lone_picture(),
             });
         }
+        // A flight in the run draws out of the box's clip, which its picture
+        // would hold: the box draws entry by entry instead.
+        if is_flight(&drawable) {
+            return None;
+        }
         current = drawable.with(Drawable::prev_drawable).flatten();
         if drawable.is_clip_start() || drawable.is_clip_end() || !drawable.will_draw() {
             continue;
@@ -1212,6 +1217,56 @@ pub(crate) fn save_box_clip(proxy: &RuntimeDrawableOccurrence, renderer: &mut Re
             layout.draw_proxy_scoped(renderer, None, held);
         }
     });
+}
+
+/// A flight's draw inside clipping boxes' brackets (paint_order.rs,
+/// `Escape`): restores the clip each of `boxes`, innermost first, has open
+/// on `renderer`, and answers those it restored. Their held fades go with
+/// their clips, so the flight draws at its own strength as it does outside.
+pub(crate) fn leave_box_clips(boxes: &[CoreHandle], renderer: &mut Renderer) -> Vec<CoreHandle> {
+    boxes
+        .iter()
+        .filter(|owner| {
+            owner
+                .with_mut(|object| {
+                    object
+                        .as_layout_component_mut()
+                        .is_some_and(|layout| layout.restore_saved_clip(renderer))
+                })
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect()
+}
+
+/// Opens again the clips `leave_box_clips` restored, outermost first, each
+/// with its box's held fade on, as its proxy opened it. Each box's `draw`
+/// restores its own later.
+pub(crate) fn enter_box_clips(left: &[CoreHandle], renderer: &mut Renderer) {
+    for owner in left.iter().rev() {
+        owner.with_mut(|object| {
+            if let Some(layout) = object.as_layout_component_mut() {
+                let held = held_box_fade(layout);
+                layout.draw_proxy_scoped(renderer, None, held);
+            }
+        });
+    }
+}
+
+/// Whether `entry` is a flight: a flight slot that carries a placement, or a
+/// lift entry. In a clipping box's run one is always one that escapes its
+/// clip (paint_order.rs, `place`).
+fn is_flight(entry: &RuntimeDrawableOccurrence) -> bool {
+    lift_of(entry).is_some()
+        || entry.authored_handle().is_some_and(|handle| {
+            handle
+                .with(|object| {
+                    object
+                        .as_nested_artboard()
+                        .is_some_and(|slot| slot.live_move_paint().is_some())
+                })
+                .unwrap_or(false)
+        })
 }
 
 /// A box's own paint in a Screen's pass two, one entry under a scope at the

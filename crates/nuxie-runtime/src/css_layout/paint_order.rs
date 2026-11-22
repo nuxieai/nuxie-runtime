@@ -325,12 +325,21 @@ pub(crate) fn same(a: &RuntimeDrawableOccurrence, b: &RuntimeDrawableOccurrence)
     }
 }
 
-/// The runs of a draw list (top first) that a flight never goes inside, as
-/// (top, bottom) indices: a clipping layout's bracket, from its own
-/// drawable (the restore) to its proxy (the save and clip), CSS or not; and
-/// a mask's member run and source run. Each is contiguous, since the order
-/// keeps clips and masked groups atomic. Nothing here borrows the root.
-fn spans(root: &CoreHandle, list: &[RuntimeDrawableOccurrence]) -> Vec<(usize, usize)> {
+/// A run of a draw list (top first) that keeps what it holds together, as
+/// (top, bottom) indices: a clipping layout's bracket, from its own drawable
+/// (the restore) to its proxy (the save and clip), or a mask's run.
+struct Span {
+    first: usize,
+    last: usize,
+    /// The clipping layout whose bracket this is; None for a mask's run.
+    clip: Option<CoreHandle>,
+}
+
+/// The runs of a draw list (top first) a flight may sit in only as their
+/// clip allows: a clipping layout's bracket, CSS or not, and a mask's member
+/// run and source run. Each is contiguous, since the order keeps clips and
+/// masked groups atomic. Nothing here borrows the root.
+fn spans(root: &CoreHandle, list: &[RuntimeDrawableOccurrence]) -> Vec<Span> {
     let mut spans = Vec::new();
     for (own, item) in list.iter().enumerate() {
         let RuntimeDrawableOccurrence::Authored(layout) = item else {
@@ -348,7 +357,11 @@ fn spans(root: &CoreHandle, list: &[RuntimeDrawableOccurrence]) -> Vec<(usize, u
                 if &proxy.borrow().owner_handle() == layout)
         });
         if let Some(proxy) = proxy {
-            spans.push((own.min(proxy), own.max(proxy)));
+            spans.push(Span {
+                first: own.min(proxy),
+                last: own.max(proxy),
+                clip: Some(layout.clone()),
+            });
         }
     }
     let mut runs: HashMap<(CoreHandle, bool), (usize, usize)> = HashMap::new();
@@ -367,7 +380,11 @@ fn spans(root: &CoreHandle, list: &[RuntimeDrawableOccurrence]) -> Vec<(usize, u
             }
         }
     }
-    spans.extend(runs.into_values());
+    spans.extend(runs.into_values().map(|(first, last)| Span {
+        first,
+        last,
+        clip: None,
+    }));
     spans
 }
 
@@ -485,20 +502,26 @@ pub(crate) struct Lifted {
 /// paints (docs/CSS_LAYOUT.md, 4.4), on the root's draw list after `order`:
 /// directly under its coverer, at the top when it has none, and directly
 /// above its anchor when the coverer no longer paints after the anchor.
-/// Flights keep their anchors' order among themselves, flights at one gap
-/// stack in placing order, and none goes inside a clip or mask span. A list
-/// with no placed flight is left untouched.
+/// Flights keep their anchors' order among themselves, and flights at one
+/// gap stack in placing order. A flight never goes inside a mask's run, nor
+/// a clipping box's bracket that doesn't hold its anchor. It stays inside a
+/// bracket that does, under what covers its anchor there, and draws out of
+/// that box's clip (`Escape`). A list with no placed flight is left
+/// untouched.
 ///
 /// A lift entry of a copy flying in place (css_layout/lift.rs) is placed by
 /// the same rule, `lifts` in placing order. Its anchor is the upper Screen's
 /// own copy, an element of any kind, read where it paints
 /// (`anchor_positions`), as a slot paints at its element's own place.
+///
+/// Answers each placed flight that sits inside clipping boxes' brackets,
+/// with those boxes.
 pub(crate) fn place(
     root: &CoreHandle,
     root_kind: Container,
     drawables: &mut Vec<RuntimeDrawableOccurrence>,
     lifts: Vec<Lifted>,
-) {
+) -> Vec<Escape> {
     let placement = |item: &RuntimeDrawableOccurrence| match item {
         RuntimeDrawableOccurrence::Authored(slot) if slot != root => slot
             .with(|object| {
@@ -519,7 +542,7 @@ pub(crate) fn place(
         .map(|item| placement(item).filter(|(anchor, _)| has_anchor(anchor)))
         .collect();
     if placements.iter().all(Option::is_none) && lifts.is_empty() {
-        return;
+        return Vec::new();
     }
     // Take the placed flights out, keeping their relative order.
     let mut rest = Vec::with_capacity(drawables.len());
@@ -573,22 +596,41 @@ pub(crate) fn place(
         };
         // A flight never goes higher than the flight placed before it.
         gap = gap.max(floor);
-        // Out of every span: above one that holds the anchor, else under it.
+        let holds_anchor = |span: &Span| (span.first..=span.last).contains(&anchor);
+        // Out of every span the flight can't sit in: above a mask's run that
+        // holds the anchor, under any other. A clipping box that holds the
+        // anchor keeps the flight in its place.
         for _ in 0..=spans.len() {
-            let Some(&(first, last)) = spans
-                .iter()
-                .find(|&&(first, last)| first < gap && gap <= last)
-            else {
+            let Some(span) = spans.iter().find(|span| {
+                span.first < gap && gap <= span.last && !(span.clip.is_some() && holds_anchor(span))
+            }) else {
                 break;
             };
-            gap = if (first..=last).contains(&anchor) {
-                first
+            gap = if holds_anchor(span) {
+                span.first
             } else {
-                last + 1
+                span.last + 1
             };
         }
         floor = gap;
         gaps.push(gap);
+    }
+    let mut escapes = Vec::new();
+    for ((item, _, _), gap) in flights.iter().zip(&gaps) {
+        let mut boxes: Vec<_> = spans
+            .iter()
+            .filter(|span| span.first < *gap && *gap <= span.last)
+            .filter_map(|span| span.clip.clone().map(|clip| (span.first, clip)))
+            .collect();
+        if boxes.is_empty() {
+            continue;
+        }
+        // Innermost first: a box's restore draws before its holder's.
+        boxes.sort_by_key(|(first, _)| std::cmp::Reverse(*first));
+        escapes.push(Escape {
+            flight: item.clone(),
+            boxes: boxes.into_iter().map(|(_, clip)| clip).collect(),
+        });
     }
     let mut placed = flights
         .into_iter()
@@ -604,4 +646,15 @@ pub(crate) fn place(
     }
     list.extend(placed.map(|(flight, _)| flight));
     *drawables = list;
+    escapes
+}
+
+/// A flight placed inside clipping boxes' brackets: it draws where it sits
+/// in the order, out of those boxes' clips. Its draw restores each box's
+/// open clip, innermost first, and saves them again after it, outermost
+/// first (`Artboard::draw_range_entry`).
+pub(crate) struct Escape {
+    pub(crate) flight: RuntimeDrawableOccurrence,
+    /// The boxes, innermost first.
+    pub(crate) boxes: Vec<CoreHandle>,
 }

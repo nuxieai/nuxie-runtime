@@ -365,17 +365,23 @@ struct DrawRangeState {
     // which its own draw leaves out and their lifts draw
     // (css_layout/lift.rs). None outside a step, and in a lift's own draw.
     skip: Option<Rc<HashSet<RuntimeDrawableOccurrence>>>,
+    // Our layer: this Screen's flights that draw out of clipping boxes they
+    // sit in (css_layout/paint_order.rs, `Escape`). None when it has none.
+    escapes: Option<Rc<Vec<crate::css_layout::paint_order::Escape>>>,
 }
 
 impl DrawRangeState {
     fn new(root: &CoreHandle) -> Self {
         let runtime_receiver = root.runtime_artboard_instance();
-        let skip = Artboard::with_root(root, runtime_receiver.as_ref(), |artboard| {
-            (artboard.drawing_lift == 0)
-                .then(|| Rc::clone(&artboard.lifts.borrow().skip))
-                .filter(|skip| !skip.is_empty())
+        let (skip, escapes) = Artboard::with_root(root, runtime_receiver.as_ref(), |artboard| {
+            (
+                (artboard.drawing_lift == 0)
+                    .then(|| Rc::clone(&artboard.lifts.borrow().skip))
+                    .filter(|skip| !skip.is_empty()),
+                (!artboard.flight_escapes.is_empty()).then(|| Rc::clone(&artboard.flight_escapes)),
+            )
         })
-        .flatten();
+        .unwrap_or_default();
         Self {
             runtime_receiver,
             empty_clips: 0,
@@ -383,7 +389,29 @@ impl DrawRangeState {
             has_visitor: None,
             screen: None,
             skip,
+            escapes,
         }
+    }
+
+    /// When `entry` is a flight that sits inside clipping boxes, restores
+    /// their open clips for its draw and answers the boxes it left, for
+    /// `enter_box_clips` after the draw.
+    #[inline]
+    fn leave_clips(
+        &self,
+        entry: &RuntimeDrawableOccurrence,
+        renderer: &mut Renderer,
+    ) -> Vec<CoreHandle> {
+        let Some(escapes) = self.escapes.as_ref() else {
+            return Vec::new();
+        };
+        escapes
+            .iter()
+            .find(|escape| crate::css_layout::paint_order::same(&escape.flight, entry))
+            .map(|escape| {
+                crate::css_layout::group_opacity::leave_box_clips(&escape.boxes, renderer)
+            })
+            .unwrap_or_default()
     }
 
     /// The cached answer inline in each listed step; the fresh read out of
@@ -471,6 +499,10 @@ pub struct Artboard {
     // Our layer: the lifts this Screen draws and those of its own copies
     // while a step flies in place (css_layout/lift.rs). Empty otherwise.
     pub(crate) lifts: RefCell<crate::css_layout::lift::ScreenLifts>,
+    // Our layer: the flights the last sort placed inside clipping boxes'
+    // brackets, which draw out of those clips (css_layout/paint_order.rs,
+    // `Escape`). Empty outside a step.
+    pub(crate) flight_escapes: Rc<Vec<crate::css_layout::paint_order::Escape>>,
     // Our layer: how many lift draws of this Screen are running; while one
     // is, its ranges keep what its own draw leaves out.
     pub(crate) drawing_lift: u32,
@@ -603,6 +635,7 @@ impl Default for Artboard {
             screen_pass: Default::default(),
             lifted: Default::default(),
             lifts: RefCell::default(),
+            flight_escapes: Rc::default(),
             drawing_lift: 0,
             #[cfg(any(test, feature = "testing"))]
             split_seen: Cell::default(),
@@ -1470,6 +1503,7 @@ impl Artboard {
             screen_pass: _,
             lifted: _,
             lifts: _,
+            flight_escapes: _,
             drawing_lift: _,
             #[cfg(feature = "tools")]
                 seen_image_reveal_generation: _,
@@ -2312,8 +2346,15 @@ impl Artboard {
                 crate::mechanical_port::source::core::CoreObject::core(self).handle()
         {
             let kind = self.css_paint_kind();
-            crate::css_layout::paint_order::place(&root, kind, &mut self.drawables, lifts);
+            let escapes =
+                crate::css_layout::paint_order::place(&root, kind, &mut self.drawables, lifts);
+            if !(escapes.is_empty() && self.flight_escapes.is_empty()) {
+                self.flight_escapes = Rc::new(escapes);
+            }
         } else {
+            if !self.flight_escapes.is_empty() {
+                self.flight_escapes = Rc::default();
+            }
             // Not a CSS list: a lift paints on top.
             for lift in lifts.into_iter().rev() {
                 self.drawables.insert(0, lift.entry);
@@ -5252,7 +5293,9 @@ impl Artboard {
             };
             if matches!(step, ScreenStep::Draw) {
                 let visitor = Self::range_visitor(root, state);
+                let left = state.leave_clips(current, renderer);
                 Self::draw_lift(renderer, &lift, visitor);
+                crate::css_layout::group_opacity::enter_box_clips(&left, renderer);
             }
             return false;
         }
@@ -5293,7 +5336,12 @@ impl Artboard {
             ScreenStep::Scope(fade) => {
                 Self::draw_range_scoped(root, renderer, current, state, fade)
             }
-            _ => Self::draw_range_drawable(root, renderer, current, state),
+            _ => {
+                let left = state.leave_clips(current, renderer);
+                let moved = Self::draw_range_drawable(root, renderer, current, state);
+                crate::css_layout::group_opacity::enter_box_clips(&left, renderer);
+                moved
+            }
         }
     }
 

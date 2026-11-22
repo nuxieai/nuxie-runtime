@@ -1407,6 +1407,8 @@ pub struct OwnedPlayerEvent {
     pub name: Option<Box<[u8]>>,
     pub url: Option<Box<[u8]>>,
     pub target: Option<Box<[u8]>>,
+    /// Seconds before the end of the step that the event happened; finite
+    /// and never negative ([`seconds_since_event`]).
     pub seconds_delay: f32,
     pub properties: Vec<OwnedPlayerEventProperty>,
     pub view_model_instance_id: Option<u64>,
@@ -1634,9 +1636,6 @@ pub fn own_reported_events(
     )?;
     let mut events = Vec::with_capacity(reported.len());
     for event in reported {
-        if !event.seconds_delay().is_finite() || event.seconds_delay() < 0.0 {
-            return Err((ErrorKind::RuntimeError, "runtime event delay is invalid"));
-        }
         // Charge the deep copy before allocating it.
         let text = |value: Option<&str>| value.map_or(0, str::len);
         budget.admit_event(
@@ -1691,12 +1690,30 @@ pub fn own_reported_events(
             name,
             url,
             target,
-            seconds_delay: event.seconds_delay(),
+            seconds_delay: seconds_since_event(event.seconds_delay()),
             properties,
             listener_target_local_id: event.listener_target_local_id(),
         });
     }
     Ok(events)
+}
+
+/// The delay a step publishes: how long before the end of the step the event
+/// happened, in animation seconds, never negative.
+///
+/// Rive reports a timeline event's delay as `to - frame`, signed by the
+/// direction the timeline played (KeyedProperty::reportKeyedCallbacks). A
+/// timeline played backwards, such as a Screen's Entrance standing in for its
+/// Exit, crosses its events with `to` below the frame, so the same distance
+/// comes out negative. The magnitude is the time since the playhead crossed
+/// the event either way. Rive's own reports inside the runtime keep upstream's
+/// sign; only the host's copy is made direction-free.
+///
+/// A delay that isn't a number at all (a malformed timeline's timing) still
+/// reports its event, as happening at the end of the step: the event itself
+/// is valid and the delay is only timing.
+pub fn seconds_since_event(delay: f32) -> f32 {
+    if delay.is_finite() { delay.abs() } else { 0.0 }
 }
 
 impl std::fmt::Display for Error {

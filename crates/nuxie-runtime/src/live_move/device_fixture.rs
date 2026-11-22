@@ -991,3 +991,228 @@ pub fn emit_device_fixtures() {
     }
     println!("device fixtures: {}", out.display());
 }
+
+/// Frames of the timed events in [`reversed_entrance_fixture`]'s Entrances,
+/// at 60 fps: 0.85 s, 0.6 s and 0.35 s.
+pub const REVERSED_ENTRANCE_EVENT_FRAMES: [u64; 3] = [51, 36, 21];
+
+/// A page shaped as published (`$nuxie.page`): a `screens` list of three rows,
+/// Screens `A`, `B` and `C`, each with a `screen` lifecycle (`phase`,
+/// `transition`). Each Screen's Entrance (1 s, one-shot) moves `box` and
+/// plays forward while its phase is `entering`. A Screen with no Exit leaves
+/// by playing its Entrance at speed -1 while its phase is `exiting`, as the
+/// Journey compiler publishes it. Only `B`'s Entrance carries timed events,
+/// `beat0`..`beat2` at [`REVERSED_ENTRANCE_EVENT_FRAMES`]: it crosses them
+/// forwards as it arrives on the first Screen change (A to B) and backwards
+/// as it leaves on the second (B to C).
+pub fn reversed_entrance_fixture() -> Vec<u8> {
+    use V::*;
+    const SCREENS: [&str; 3] = ["A", "B", "C"];
+    let lifecycle_model = SCREENS.len() as u64;
+    let page_model = lifecycle_model + 1;
+    let mut b = b"RIVE".to_vec();
+    for n in [7, 0, 0, 0] {
+        var(&mut b, n);
+    }
+    obj(&mut b, "Backboard", &[]);
+    for (i, name) in SCREENS.iter().enumerate() {
+        obj(
+            &mut b,
+            "ViewModel",
+            &[("name", S(&format!("Screen{name}")))],
+        );
+        obj(&mut b, "ViewModelPropertyNumber", &[("name", S("offset"))]);
+        obj(
+            &mut b,
+            "ViewModelPropertyViewModel",
+            &[
+                ("name", S("screen")),
+                ("viewModelReferenceId", U(lifecycle_model)),
+            ],
+        );
+        obj(&mut b, "ViewModelInstance", &[("viewModelId", U(i as u64))]);
+        obj(
+            &mut b,
+            "ViewModelInstanceNumber",
+            &[("viewModelPropertyId", U(0)), ("propertyValue", F(0.0))],
+        );
+        obj(
+            &mut b,
+            "ViewModelInstanceViewModel",
+            &[
+                ("viewModelPropertyId", U(1)),
+                ("propertyValue", U(i as u64)),
+            ],
+        );
+    }
+    obj(&mut b, "ViewModel", &[("name", S("ScreenLifecycle"))]);
+    obj(&mut b, "ViewModelPropertyString", &[("name", S("phase"))]);
+    obj(
+        &mut b,
+        "ViewModelPropertyString",
+        &[("name", S("transition"))],
+    );
+    for _ in SCREENS {
+        obj(
+            &mut b,
+            "ViewModelInstance",
+            &[("viewModelId", U(lifecycle_model))],
+        );
+        obj(
+            &mut b,
+            "ViewModelInstanceString",
+            &[
+                ("viewModelPropertyId", U(0)),
+                ("propertyValue", S("hidden")),
+            ],
+        );
+        obj(
+            &mut b,
+            "ViewModelInstanceString",
+            &[("viewModelPropertyId", U(1)), ("propertyValue", S(""))],
+        );
+    }
+    obj(&mut b, "ViewModel", &[("name", S("Page"))]);
+    obj(&mut b, "ViewModelPropertyList", &[("name", S("screens"))]);
+    obj(
+        &mut b,
+        "ViewModelInstance",
+        &[("viewModelId", U(page_model))],
+    );
+    obj(
+        &mut b,
+        "ViewModelInstanceList",
+        &[("viewModelPropertyId", U(0))],
+    );
+    for i in 0..SCREENS.len() {
+        obj(
+            &mut b,
+            "ViewModelInstanceListItem",
+            &[("viewModelId", U(i as u64)), ("viewModelInstanceId", U(0))],
+        );
+    }
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("$nuxie.page")),
+            ("width", F(400.0)),
+            ("height", F(800.0)),
+            ("viewModelId", U(page_model)),
+            ("clip", B(false)),
+            ("defaultStateMachineId", U(0)),
+        ],
+    );
+    obj(
+        &mut b,
+        "Node",
+        &[("name", S("overlap")), ("parentId", U(0))],
+    ); // 1
+    obj(
+        &mut b,
+        "ArtboardComponentList",
+        &[("name", S("screens")), ("parentId", U(1))],
+    ); // 2
+    bind(&mut b, 800, &[page_model as u8, 0]);
+    machine(&mut b, false);
+    for (i, name) in SCREENS.iter().enumerate() {
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S(name)),
+                ("width", F(400.0)),
+                ("height", F(800.0)),
+                ("viewModelId", U(i as u64)),
+                ("clip", B(false)),
+                ("defaultStateMachineId", U(0)),
+            ],
+        );
+        obj(
+            &mut b,
+            "Node",
+            &[("name", S("box")), ("parentId", U(0)), ("x", F(0.0))],
+        ); // 1
+        let timed = i == 1;
+        if timed {
+            for beat in 0..REVERSED_ENTRANCE_EVENT_FRAMES.len() {
+                obj(
+                    &mut b,
+                    "Event",
+                    &[("name", S(&format!("beat{beat}"))), ("parentId", U(0))],
+                ); // 2..
+            }
+        }
+        obj(
+            &mut b,
+            "LinearAnimation",
+            &[
+                ("name", S("entrance")),
+                ("fps", U(60)),
+                ("duration", U(60)),
+                ("loopValue", U(0)),
+            ],
+        );
+        obj(&mut b, "KeyedObject", &[("objectId", U(1))]);
+        obj(
+            &mut b,
+            "KeyedProperty",
+            &[("propertyKey", U(key("Node", "x").into()))],
+        );
+        for (frame, value) in [(0, 100.0), (60, 0.0)] {
+            obj(
+                &mut b,
+                "KeyFrameDouble",
+                &[
+                    ("frame", U(frame)),
+                    ("value", F(value)),
+                    ("interpolationType", U(1)),
+                ],
+            );
+        }
+        if timed {
+            for (beat, frame) in REVERSED_ENTRANCE_EVENT_FRAMES.iter().enumerate() {
+                obj(&mut b, "KeyedObject", &[("objectId", U(2 + beat as u64))]);
+                obj(
+                    &mut b,
+                    "KeyedProperty",
+                    &[("propertyKey", U(key("Event", "trigger").into()))],
+                );
+                obj(&mut b, "KeyFrameCallback", &[("frame", U(*frame))]);
+            }
+        }
+        machine(&mut b, false);
+        for (layer, phase, speed) in [("incoming", "entering", 1.0), ("outgoing", "exiting", -1.0)]
+        {
+            obj(&mut b, "StateMachineLayer", &[("name", S(layer))]);
+            obj(&mut b, "EntryState", &[]); // 0
+            obj(&mut b, "StateTransition", &[("stateToId", U(1))]);
+            obj(&mut b, "BlendStateDirect", &[]); // 1, contributes no pose
+            obj(&mut b, "StateTransition", &[("stateToId", U(2))]);
+            phase_condition(&mut b, i as u8, 0, phase);
+            obj(
+                &mut b,
+                "AnimationState",
+                &[("animationId", U(0)), ("speed", F(speed))],
+            ); // 2
+            obj(&mut b, "StateTransition", &[("stateToId", U(1))]);
+            phase_condition(&mut b, i as u8, 1, phase);
+        }
+    }
+    b
+}
+
+/// The Screen's lifecycle phase compared (`op` 0 equal, 1 not equal) with
+/// `phase`.
+fn phase_condition(b: &mut Vec<u8>, model: u8, op: u64, phase: &str) {
+    use V::*;
+    obj(b, "BindablePropertyString", &[]);
+    bind(
+        b,
+        key("BindablePropertyString", "propertyValue").into(),
+        &[model, 1, 0],
+    );
+    obj(b, "TransitionViewModelCondition", &[("opValue", U(op))]);
+    obj(b, "TransitionPropertyViewModelComparator", &[]);
+    obj(b, "TransitionValueStringComparator", &[("value", S(phase))]);
+}

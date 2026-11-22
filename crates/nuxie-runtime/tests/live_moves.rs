@@ -8502,13 +8502,14 @@ mod paint_order {
         });
     }
 
-    /// Test 6, clipping holder: E (20, 20, 100 by 60) inside H (0, 0, 300
-    /// by 150, `overflow: hidden`), a badge after E in H covering it (60,
-    /// 40, 40 by 40), and a box C after H covering E (0, 50, 200 by 100).
-    /// The flight is drawn outside any open clipPath of H, after the badge
-    /// and before C.
+    /// Test 6, clipping holder (UNIV-5860): E (20, 20, 100 by 60) inside H
+    /// (0, 0, 300 by 150, `overflow: hidden`), a badge after E in H covering
+    /// it (60, 40, 40 by 40), and a box C after H covering E (0, 50, 200 by
+    /// 100). The flight is drawn where E paints in H, so after H's own paint,
+    /// before the badge and before C, and outside H's clip; the badge stays
+    /// in it.
     #[test]
-    fn paint_order_06_clipping_holder_flight_paints_outside_the_clip() {
+    fn paint_order_06_clipping_holder_flight_flies_under_the_badge_outside_the_clip() {
         let mut s = PaintScene::new(PaintCase::ClippingHolder);
         let rest = s.painted("B", "at rest");
         let holder = rest.get("H").rect;
@@ -8525,6 +8526,7 @@ mod paint_order {
         assert!(inside(rest.get("E")), "at rest E is drawn in H's clip");
         s.both_ways(|s, way, p| {
             let f = s.frame(way, p);
+            f.meets("E", "H");
             f.meets("E", "badge");
             f.meets("E", "C");
             assert!(
@@ -8532,8 +8534,12 @@ mod paint_order {
                 "{}: the flight is drawn inside H's clip",
                 f.label
             );
-            f.under("badge", "E");
-            f.under("E", "C");
+            assert!(
+                inside(f.get("badge")),
+                "{}: the badge is drawn outside H's clip",
+                f.label
+            );
+            f.order(&["H", "E", "badge", "C"]);
         });
     }
 
@@ -10967,7 +10973,7 @@ mod paint_order {
         paint_order_05b_escaping_image_child_flies_under_the_dim,
         paint_order_05b_escaping_component_child_flies_under_the_dim,
         paint_order_05b_viewport_child_stays_under_the_dim,
-        paint_order_06_clipping_holder_flight_paints_outside_the_clip,
+        paint_order_06_clipping_holder_flight_flies_under_the_badge_outside_the_clip,
         paint_order_07_badge_in_a_plain_card_covers_the_flight,
         paint_order_08_overlay_in_an_auto_z_wrapper_covers_the_flight,
         paint_order_09_a_display_write_lifts_the_child_over_the_flight,

@@ -3187,6 +3187,13 @@ impl LayoutComponent {
         renderer.restore();
         true
     }
+    /// Restores the clip this box's proxy saved, when it is open, as `draw`
+    /// does. Answers whether it was open.
+    pub(crate) fn restore_saved_clip(&mut self, renderer: &mut Renderer) -> bool {
+        let open = self.has_layout_flag(LayoutComponentFlags::ClipSaved);
+        self.draw(renderer);
+        open
+    }
     pub fn draw(&mut self, renderer: &mut Renderer) {
         if self.has_layout_flag(LayoutComponentFlags::ClipSaved) {
             self.set_layout_flag(LayoutComponentFlags::ClipSaved, false);

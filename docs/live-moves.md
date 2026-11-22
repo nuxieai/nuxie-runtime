@@ -309,7 +309,7 @@ The paint order tests (UNIV-5635, `docs/CSS_LAYOUT.md` 4.4) are the `paint_order
 | `paint_order_03_calmly_lake_flies_under_the_scrim` | The lake's flight is drawn before the scrim's fill and the chevron after it; the title's, orb's and card's flights are drawn last, in that order. |
 | `paint_order_04_list_to_grid_pictures_fly_on_top` | Both toggles: every picture's flight is drawn after every row, cell, title and detail, whose step tracks are taken at rest and whose boxes only touch the pictures. |
 | `paint_order_05_catzy_flights_keep_the_dims_place` | The cards', title's and Continue's flights come before the dim's flight, then the dim's flight, Yearly's flight, the ribbon, and the deal's flight last. |
-| `paint_order_06_clipping_holder_flight_paints_outside_the_clip` | The flight is drawn outside every clip of its holder, after the badge inside it and before the box after it. |
+| `paint_order_06_clipping_holder_flight_flies_under_the_badge_outside_the_clip` | The flight is drawn where its element paints in its clipping holder: after the holder's own paint, before the badge inside it and before the box after it. It is drawn outside the holder's clip, and the badge inside it. |
 | `paint_order_07_badge_in_a_plain_card_covers_the_flight` | The flight is drawn before the badge in its non-clipping card. |
 | `paint_order_08_overlay_in_an_auto_z_wrapper_covers_the_flight` | A z-index 2 overlay in an earlier auto wrapper paints over the flight. |
 | `paint_order_09_a_display_write_lifts_the_child_over_the_flight` | A display write mid-flight lifts a z-index 2 child over the flight from the next frame. |

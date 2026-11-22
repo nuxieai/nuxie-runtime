@@ -4194,3 +4194,125 @@ fn in_place_live_moves_blended_midpoint_step_publishes_to_the_shared_owner_obser
         nux_view_model_instance_free(shared);
     }
 }
+
+/// UNIV-6769: a Screen with no Exit leaves by playing its Entrance at speed
+/// -1, and an Entrance with timed events crosses them backwards. Rive reports
+/// those delays signed by direction; the step publishes how long ago each
+/// event happened and keeps playing. Driven as the SDK drives two Screen
+/// changes: lifecycle writes, step begin, frames, step end.
+#[test]
+fn second_screen_change_reports_a_reversed_entrance_events_and_keeps_playing() {
+    use crate::data_binding::*;
+    use nuxie::live_move::device_fixture::reversed_entrance_fixture;
+    unsafe {
+        let scene = LiveScene::from_bytes(&reversed_entrance_fixture());
+        let mut rows = [ptr::null_mut(); 3];
+        for (index, row) in rows.iter_mut().enumerate() {
+            assert_eq!(
+                nux_view_model_instance_list_item_acquire(scene.vm, view("screens"), index, row),
+                NuxStatus::Ok
+            );
+        }
+        let [a, b, c] = rows;
+        let write = |row, path: &str, value: &str| {
+            let path = std::ffi::CString::new(path).unwrap();
+            let value = std::ffi::CString::new(value).unwrap();
+            assert_eq!(
+                nux_view_model_instance_set_string(row, path.as_ptr(), value.as_ptr()),
+                NuxStatus::Ok
+            );
+        };
+        write(a, "screen/phase", "active");
+        step_ok(scene.player);
+        // Frames of 1/8 s from the start of each change: exact in binary, and
+        // never landing on an event (0.85, 0.6 and 0.35 s), so each event is
+        // crossed inside one frame, 0.025 s (forward from 0) or 0.1 s
+        // (backward from 1) before that frame ends.
+        const FRAME: f32 = 0.125;
+        let mut changes = Vec::new();
+        for (incoming, incoming_vm, outgoing_vm) in [("B", b, a), ("C", c, b)] {
+            write(incoming_vm, "screen/phase", "entering");
+            write(outgoing_vm, "screen/phase", "exiting");
+            assert_eq!(
+                nux_player_step_begin(scene.player, view(incoming), ptr::null()),
+                NuxStatus::Ok
+            );
+            let mut events = Vec::new();
+            for frame in 0..=10 {
+                let mut result = ptr::null_mut();
+                assert_eq!(
+                    step_status(
+                        scene.player,
+                        &NuxPlayerStep {
+                            elapsed_seconds: if frame == 0 { 0.0 } else { FRAME },
+                            ..Default::default()
+                        },
+                        &mut result,
+                    ),
+                    NuxStatus::Ok,
+                    "Screen change to {incoming}, frame {frame}"
+                );
+                for event in (&(*result).events).iter() {
+                    let name = String::from_utf8_lossy(event.name.as_deref().unwrap_or_default());
+                    events.push((frame, name.into_owned(), event.seconds_delay));
+                }
+                nux_player_step_result_free(result);
+            }
+            assert_eq!(
+                nux_player_step_end(scene.player, view(incoming), ptr::null()),
+                NuxStatus::Ok
+            );
+            write(incoming_vm, "screen/phase", "active");
+            write(outgoing_vm, "screen/phase", "hidden");
+            changes.push(events);
+        }
+        let expect = |events: &[(i32, String, f32)], want: [(i32, &str, f32); 3], label: &str| {
+            assert_eq!(events.len(), want.len(), "{label}: {events:?}");
+            for ((frame, name, delay), (want_frame, want_name, want_delay)) in
+                events.iter().zip(want)
+            {
+                assert_eq!(
+                    (*frame, name.as_str()),
+                    (want_frame, want_name),
+                    "{label}: {events:?}"
+                );
+                assert!(
+                    (delay - want_delay).abs() < 1e-4,
+                    "{label}: {name} delay {delay}, expected {want_delay}"
+                );
+            }
+        };
+        // A to B: B's Entrance plays forward from 0 s.
+        expect(
+            &changes[0],
+            [
+                (3, "beat2", 0.025),
+                (5, "beat1", 0.025),
+                (7, "beat0", 0.025),
+            ],
+            "B arriving",
+        );
+        // B to C: B's Entrance plays backward from 1 s.
+        expect(
+            &changes[1],
+            [(2, "beat0", 0.1), (4, "beat1", 0.1), (6, "beat2", 0.1)],
+            "B leaving",
+        );
+        for row in rows {
+            nux_view_model_instance_free(row);
+        }
+    }
+}
+
+/// UNIV-6769: a delay that isn't a number is published as the end of the
+/// step instead of failing it; a negative one as its distance.
+#[test]
+fn published_event_delays_are_finite_and_never_negative() {
+    use nuxie::page_player::seconds_since_event;
+    assert_eq!(seconds_since_event(-0.25), 0.25);
+    assert_eq!(seconds_since_event(0.25), 0.25);
+    assert_eq!(seconds_since_event(-0.0).to_bits(), 0.0f32.to_bits());
+    for delay in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        assert_eq!(seconds_since_event(delay), 0.0);
+    }
+}

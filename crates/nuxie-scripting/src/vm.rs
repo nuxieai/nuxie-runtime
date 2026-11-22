@@ -71,6 +71,7 @@ mod lua_renderer_library;
 mod lua_transition;
 pub(crate) mod lua_video;
 mod luau_audio_processor_engine;
+mod non_finite;
 pub use luau_audio_processor_engine::{
     ProcessorFormat as AudioProcessorFormat, ProcessorHandle as AudioProcessorHandle,
 };

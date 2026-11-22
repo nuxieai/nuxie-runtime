@@ -116,6 +116,16 @@ impl ScriptedPath {
         result
     }
 
+    /// The first point that is not finite, written out.
+    pub(super) fn non_finite_point(&self) -> Option<String> {
+        super::non_finite::first_non_finite_point(
+            self.raw_path
+                .points()
+                .iter()
+                .map(|point| (point.x, point.y)),
+        )
+    }
+
     pub(super) fn render_path(&mut self, factory: &mut dyn RenderFactory) -> &dyn RenderPath {
         if self.dirty {
             self.dirty = false;

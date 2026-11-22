@@ -6,6 +6,7 @@ use crate::luau::{Lua, Result, Table, UserData, Value, Vector as LuaVector};
 use nuxie_render_api::{ColorInt, RenderShader};
 
 use super::host_memory_budget::{HostMemoryCharge, bytes_of, grown_capacity};
+use super::non_finite::report_non_finite;
 
 pub(super) use super::lua_path::call_path_effect_update;
 pub(crate) use super::lua_renderer_library::RendererBindings;
@@ -20,16 +21,39 @@ impl RendererBindings {
             lua.create_function_lent(
                 move |lua, loan, (from, to, stops): (LuaVector, LuaVector, Table)| {
                     let (colors, positions, charge) = gradient_stops(lua, loan, stops)?;
+                    let non_finite = non_finite_gradient(
+                        &[
+                            ("from", from.x()),
+                            ("from", from.y()),
+                            ("to", to.x()),
+                            ("to", to.y()),
+                        ],
+                        &positions,
+                    );
                     let shader = bindings.with_factory(|factory| {
-                        Ok(factory.make_linear_gradient(
-                            from.x(),
-                            from.y(),
-                            to.x(),
-                            to.y(),
-                            &colors,
-                            &positions,
-                        ))
+                        Ok(if non_finite.is_some() {
+                            factory.make_linear_gradient(
+                                0.0,
+                                0.0,
+                                1.0,
+                                0.0,
+                                &TRANSPARENT_COLORS,
+                                &TRANSPARENT_POSITIONS,
+                            )
+                        } else {
+                            factory.make_linear_gradient(
+                                from.x(),
+                                from.y(),
+                                to.x(),
+                                to.y(),
+                                &colors,
+                                &positions,
+                            )
+                        })
                     })?;
+                    if let Some(what) = non_finite {
+                        report_non_finite(lua, "Gradient.linear", "draws nothing", &what);
+                    }
                     lua.create_userdata(ScriptedGradient {
                         shader: Rc::from(shader),
                         _charge: Rc::new(charge),
@@ -44,15 +68,36 @@ impl RendererBindings {
             lua.create_function_lent(
                 move |lua, loan, (center, radius, stops): (LuaVector, f32, Table)| {
                     let (colors, positions, charge) = gradient_stops(lua, loan, stops)?;
+                    let non_finite = non_finite_gradient(
+                        &[
+                            ("center", center.x()),
+                            ("center", center.y()),
+                            ("radius", radius),
+                        ],
+                        &positions,
+                    );
                     let shader = bindings.with_factory(|factory| {
-                        Ok(factory.make_radial_gradient(
-                            center.x(),
-                            center.y(),
-                            radius,
-                            &colors,
-                            &positions,
-                        ))
+                        Ok(if non_finite.is_some() {
+                            factory.make_radial_gradient(
+                                0.0,
+                                0.0,
+                                1.0,
+                                &TRANSPARENT_COLORS,
+                                &TRANSPARENT_POSITIONS,
+                            )
+                        } else {
+                            factory.make_radial_gradient(
+                                center.x(),
+                                center.y(),
+                                radius,
+                                &colors,
+                                &positions,
+                            )
+                        })
                     })?;
+                    if let Some(what) = non_finite {
+                        report_non_finite(lua, "Gradient.radial", "draws nothing", &what);
+                    }
                     lua.create_userdata(ScriptedGradient {
                         shader: Rc::from(shader),
                         _charge: Rc::new(charge),
@@ -74,6 +119,24 @@ pub(super) struct ScriptedGradient {
     pub(super) shader: Rc<dyn RenderShader>,
     /// Kept for its refund on drop.
     _charge: Rc<HostMemoryCharge>,
+}
+
+/// The stops of the gradient that stands in for one made with a number
+/// that is not finite: a definition every factory accepts, which shows
+/// nothing wherever it is drawn.
+const TRANSPARENT_COLORS: [ColorInt; 2] = [0, 0];
+const TRANSPARENT_POSITIONS: [f32; 2] = [0.0, 1.0];
+
+/// Names the first number a gradient was made from that is not finite:
+/// one of `values`, or a stop's position.
+fn non_finite_gradient(values: &[(&str, f32)], positions: &[f32]) -> Option<String> {
+    if let Some((name, value)) = values.iter().find(|(_, value)| !value.is_finite()) {
+        return Some(format!("its {name} ({value})"));
+    }
+    positions
+        .iter()
+        .position(|position| !position.is_finite())
+        .map(|index| format!("its stop {} position ({})", index + 1, positions[index]))
 }
 
 impl UserData for ScriptedGradient {}

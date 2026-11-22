@@ -11,6 +11,7 @@ use nuxie_runtime::ScriptPaint as RuntimeScriptPaint;
 
 use super::lua_mat2d::ScriptedMat2D;
 use super::lua_renderer_library::RendererBindings;
+use super::non_finite::{non_finite_matrix, report_non_finite};
 use super::renderer::ScriptedGradient;
 
 impl RendererBindings {
@@ -121,23 +122,24 @@ impl ScriptedPaint {
     }
 
     fn apply_definition(&mut self, definition: Table) -> Result<()> {
+        let lua = definition.lua();
         for pair in definition.pairs::<String, Value>() {
             let (key, value) = pair?;
-            self.apply_value(&key, value)?;
+            self.apply_value(&lua, &key, value)?;
         }
         Ok(())
     }
 
-    fn apply_value(&mut self, key: &str, value: Value) -> Result<()> {
+    fn apply_value(&mut self, lua: &Lua, key: &str, value: Value) -> Result<()> {
         match key {
             "style" => self.set_style(parse_style(value)?),
             "join" => self.set_join(parse_join(value)?),
             "cap" => self.set_cap(parse_cap(value)?),
-            "thickness" => self.set_thickness(number_value(value, "thickness")?),
+            "thickness" => self.set_finite_thickness(lua, number_value(value, "thickness")?),
             "blendMode" => self.set_blend_mode(parse_blend_mode(value)?),
-            "feather" => self.set_feather(number_value(value, "feather")?),
+            "feather" => self.set_finite_feather(lua, number_value(value, "feather")?),
             "gradient" => self.set_gradient_value(value)?,
-            "gradientTransform" => self.set_gradient_transform_value(value)?,
+            "gradientTransform" => self.set_gradient_transform_value(lua, value)?,
             "color" => self.set_color(color_value(value)?),
             _ => {}
         }
@@ -157,6 +159,30 @@ impl ScriptedPaint {
     fn set_thickness(&mut self, thickness: f32) {
         self.thickness = thickness;
         self.render_paint.borrow_mut().thickness(thickness);
+    }
+
+    /// Sets a thickness from a script. A number that is not finite is
+    /// reported and left out, so the paint keeps drawing with its last one.
+    fn set_finite_thickness(&mut self, lua: &Lua, thickness: f32) {
+        if thickness.is_finite() {
+            self.set_thickness(thickness);
+        } else {
+            report_non_finite(
+                lua,
+                "paint.thickness",
+                "was ignored",
+                &format!("{thickness}"),
+            );
+        }
+    }
+
+    /// Sets a feather from a script, as `set_finite_thickness` does.
+    fn set_finite_feather(&mut self, lua: &Lua, feather: f32) {
+        if feather.is_finite() {
+            self.set_feather(feather);
+        } else {
+            report_non_finite(lua, "paint.feather", "was ignored", &format!("{feather}"));
+        }
     }
 
     fn set_join(&mut self, join: StrokeJoin) {
@@ -217,13 +243,22 @@ impl ScriptedPaint {
         self.render_paint.borrow_mut().shader_transform(transform);
     }
 
-    fn set_gradient_transform_value(&mut self, value: Value) -> Result<()> {
+    fn set_gradient_transform_value(&mut self, lua: &Lua, value: Value) -> Result<()> {
         let transform = match value {
             Value::UserData(value) if value.is::<ScriptedMat2D>() => {
                 value.borrow::<ScriptedMat2D>()?.0
             }
             _ => Mat2D::IDENTITY,
         };
+        if let Some(values) = non_finite_matrix(&transform) {
+            report_non_finite(
+                lua,
+                "paint.gradientTransform",
+                "was ignored",
+                &format!("the matrix {values}"),
+            );
+            return Ok(());
+        }
         self.set_gradient_transform(transform);
         Ok(())
     }
@@ -247,8 +282,8 @@ impl UserData for ScriptedPaint {
             Ok(())
         });
         fields.add_field_method_get("thickness", |_, this| Ok(this.thickness));
-        fields.add_field_method_set("thickness", |_, this, value: f32| {
-            this.set_thickness(value);
+        fields.add_field_method_set("thickness", |lua, this, value: f32| {
+            this.set_finite_thickness(lua, value);
             Ok(())
         });
         fields.add_field_method_get("blendMode", |_, this| Ok(blend_mode_name(this.blend_mode)));
@@ -257,8 +292,8 @@ impl UserData for ScriptedPaint {
             Ok(())
         });
         fields.add_field_method_get("feather", |_, this| Ok(this.feather));
-        fields.add_field_method_set("feather", |_, this, value: f32| {
-            this.set_feather(value);
+        fields.add_field_method_set("feather", |lua, this, value: f32| {
+            this.set_finite_feather(lua, value);
             Ok(())
         });
         fields.add_field_method_get("color", |_, this| Ok(this.color));
@@ -278,8 +313,8 @@ impl UserData for ScriptedPaint {
         fields.add_field_method_get("gradientTransform", |lua, this| {
             lua.create_userdata(ScriptedMat2D(this.gradient_transform))
         });
-        fields.add_field_method_set("gradientTransform", |_, this, value: Value| {
-            this.set_gradient_transform_value(value)
+        fields.add_field_method_set("gradientTransform", |lua, this, value: Value| {
+            this.set_gradient_transform_value(lua, value)
         });
     }
 

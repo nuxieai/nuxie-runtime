@@ -46,6 +46,13 @@ pub(super) struct ScriptedVertexBuffer {
 }
 
 impl ScriptedVertexBuffer {
+    /// The first vertex that is not finite, written out.
+    pub(super) fn non_finite_vertex(&self) -> Option<String> {
+        super::non_finite::first_non_finite_point(
+            self.values.iter().map(|value| (value.x, value.y)),
+        )
+    }
+
     fn new() -> Self {
         Self {
             values: Vec::new(),
@@ -307,6 +314,33 @@ pub(super) struct ScriptedImageMeshInstances {
 }
 
 impl ScriptedImageMeshInstances {
+    /// The first staged instance with a value that is not finite: its
+    /// number, from 1, and the value's name.
+    pub(super) fn non_finite_instance(&self) -> Option<String> {
+        self.staged
+            .iter()
+            .enumerate()
+            .find_map(|(index, instance)| {
+                let name = if instance.transform.0.iter().any(|value| !value.is_finite()) {
+                    "transform"
+                } else if instance
+                    .uv_translate
+                    .iter()
+                    .chain(&instance.uv_scale)
+                    .any(|value| !value.is_finite())
+                {
+                    "uv"
+                } else if !instance.opacity.is_finite() {
+                    "opacity"
+                } else if !instance.additiveness.is_finite() {
+                    "additiveness"
+                } else {
+                    return None;
+                };
+                Some(format!("instance {}'s {name}", index + 1))
+            })
+    }
+
     fn new(
         factory: &mut dyn RenderFactory,
         mut charge: MeshInstanceCharge,

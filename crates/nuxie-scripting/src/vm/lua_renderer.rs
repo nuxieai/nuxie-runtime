@@ -8,7 +8,7 @@ use crate::luau::{
     AnyUserData, Error, Loan, Result, ScriptLoan, Table, UserData, UserDataMethods, Value,
     reborrow_loan,
 };
-use nuxie_render_api::{Factory as RenderFactory, RenderCanvasFrame, Renderer};
+use nuxie_render_api::{Factory as RenderFactory, FillRule, RawPath, RenderCanvasFrame, Renderer};
 
 use super::lua_image::{ScriptedImage, ScriptedImageSampler};
 use super::lua_mat2d::ScriptedMat2D;
@@ -16,6 +16,7 @@ use super::lua_mesh::{ScriptedImageMeshInstances, ScriptedTriangleBuffer, Script
 use super::lua_paint::{ScriptedPaint, parse_blend_mode_name};
 use super::lua_path::ScriptedPath;
 use super::lua_renderer_library::RendererBindings;
+use super::non_finite::{non_finite_matrix, report_skipped_call};
 use crate::gpu_canvas::{GpuCanvasImage, with_gpu_canvas_image};
 
 fn with_scripted_image<R>(
@@ -296,6 +297,33 @@ impl ScriptedRenderer {
         self.save_count.set(self.save_count.get().saturating_sub(1));
         Ok(())
     }
+
+    /// Reports `call` as skipped for `what`, and hides the rest of the
+    /// current save scope with a clip of no area: the renderer then draws
+    /// nothing there, whichever call draws, and its own restore ends it.
+    fn hide_rest_of_scope(
+        &self,
+        lua: &crate::luau::Lua,
+        loan: Loan<'_>,
+        call: &'static str,
+        what: &str,
+    ) -> Result<()> {
+        self.bindings.with_factory(|factory| {
+            // A path with no area, not one with no points: the SVG renderer
+            // skips a clip with no points.
+            let mut no_area = RawPath::new();
+            no_area.move_to(0.0, 0.0);
+            no_area.line_to(0.0, 0.0);
+            no_area.close();
+            let no_area = factory.make_render_path(no_area, FillRule::NonZero);
+            self.with_renderer_mut(loan, |renderer| {
+                renderer.clip_path(no_area.as_ref());
+                Ok(())
+            })
+        })?;
+        report_skipped_call(lua, call, what);
+        Ok(())
+    }
 }
 
 /// Puts back the target and in-use mark a reborrowed scope replaced, on
@@ -319,7 +347,7 @@ impl UserData for ScriptedRenderer {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method_lent(
             "drawImageMeshInstanced",
-            |_,
+            |lua,
              this,
              loan,
              (image, sampler, vertices, uvs, indices, instances): (
@@ -343,6 +371,20 @@ impl UserData for ScriptedRenderer {
                     .map_err(|_| Error::runtime("vertex count exceeds u32"))?;
                 let index_count = u32::try_from(index_count)
                     .map_err(|_| Error::runtime("index count exceeds u32"))?;
+                let non_finite = vertices
+                    .borrow::<ScriptedVertexBuffer>()?
+                    .non_finite_vertex()
+                    .map(|vertex| format!("the vertex {vertex}"))
+                    .or(uvs
+                        .borrow::<ScriptedVertexBuffer>()?
+                        .non_finite_vertex()
+                        .map(|uv| format!("the uv {uv}")))
+                    .or_else(|| instances.non_finite_instance());
+                if let Some(what) = non_finite {
+                    this.with_renderer_mut(loan, |_| Ok(()))?;
+                    report_skipped_call(lua, "renderer:drawImageMeshInstanced", &what);
+                    return Ok(());
+                }
                 this.bindings.with_factory(|factory| {
                     vertices
                         .borrow_mut::<ScriptedVertexBuffer>()?
@@ -381,7 +423,15 @@ impl UserData for ScriptedRenderer {
             },
         );
         methods.add_method_lent("save", |_, this, loan, ()| this.save(loan));
-        methods.add_method_lent("modulateOpacity", |_, this, loan, opacity: f32| {
+        methods.add_method_lent("modulateOpacity", |lua, this, loan, opacity: f32| {
+            if !opacity.is_finite() {
+                return this.hide_rest_of_scope(
+                    lua,
+                    loan,
+                    "renderer:modulateOpacity",
+                    &format!("the opacity ({opacity})"),
+                );
+            }
             this.with_renderer_mut(loan, |renderer| {
                 renderer.modulate_opacity(opacity);
                 Ok(())
@@ -400,15 +450,31 @@ impl UserData for ScriptedRenderer {
             })
         });
         methods.add_method_lent("restore", |_, this, loan, ()| this.restore(loan));
-        methods.add_method_lent("transform", |_, this, loan, matrix: AnyUserData| {
+        methods.add_method_lent("transform", |lua, this, loan, matrix: AnyUserData| {
             let matrix = matrix.borrow::<ScriptedMat2D>()?;
+            if let Some(values) = non_finite_matrix(&matrix.0) {
+                return this.hide_rest_of_scope(
+                    lua,
+                    loan,
+                    "renderer:transform",
+                    &format!("the matrix {values}"),
+                );
+            }
             this.with_renderer_mut(loan, |renderer| {
                 renderer.transform(matrix.0);
                 Ok(())
             })
         });
-        methods.add_method_lent("clipPath", |_, this, loan, path: AnyUserData| {
+        methods.add_method_lent("clipPath", |lua, this, loan, path: AnyUserData| {
             let mut path = path.borrow_mut::<ScriptedPath>()?;
+            if let Some(point) = path.non_finite_point() {
+                return this.hide_rest_of_scope(
+                    lua,
+                    loan,
+                    "renderer:clipPath",
+                    &format!("the path's point {point}"),
+                );
+            }
             this.bindings.with_factory(|factory| {
                 let render_path = path.render_path(factory);
                 this.with_renderer_mut(loan, |renderer| {
@@ -419,9 +485,17 @@ impl UserData for ScriptedRenderer {
         });
         methods.add_method_lent(
             "drawPath",
-            |_, this, loan, (path, paint): (AnyUserData, AnyUserData)| {
+            |lua, this, loan, (path, paint): (AnyUserData, AnyUserData)| {
                 let mut path = path.borrow_mut::<ScriptedPath>()?;
                 let paint = paint.borrow::<ScriptedPaint>()?;
+                let non_finite = path
+                    .non_finite_point()
+                    .map(|point| format!("the path's point {point}"));
+                if let Some(what) = non_finite {
+                    this.with_renderer_mut(loan, |_| Ok(()))?;
+                    report_skipped_call(lua, "renderer:drawPath", &what);
+                    return Ok(());
+                }
                 this.bindings.with_factory(|factory| {
                     let render_path = path.render_path(factory);
                     this.with_renderer_mut(loan, |renderer| {
@@ -433,7 +507,7 @@ impl UserData for ScriptedRenderer {
         );
         methods.add_method_lent(
             "drawImage",
-            |_,
+            |lua,
              this,
              loan,
              (image, sampler, blend_mode, opacity): (
@@ -444,6 +518,11 @@ impl UserData for ScriptedRenderer {
             )| {
                 let sampler = sampler.borrow::<ScriptedImageSampler>()?;
                 let blend_mode = parse_blend_mode_name(&blend_mode)?;
+                if !opacity.is_finite() {
+                    this.with_renderer_mut(loan, |_| Ok(()))?;
+                    report_skipped_call(lua, "renderer:drawImage", &format!("the opacity ({opacity})"));
+                    return Ok(());
+                }
                 with_scripted_image(&image, |image| {
                     this.with_renderer_mut(loan, |renderer| {
                         renderer.draw_image(
@@ -459,7 +538,7 @@ impl UserData for ScriptedRenderer {
         );
         methods.add_method_lent(
             "drawImageMesh",
-            |_,
+            |lua,
              this,
              loan,
              (image, sampler, vertices, uvs, indices, blend_mode, opacity): (
@@ -485,6 +564,20 @@ impl UserData for ScriptedRenderer {
                 let index_count = u32::try_from(index_count)
                     .map_err(|_| Error::runtime("index count exceeds u32"))?;
 
+                let non_finite = vertices
+                    .borrow::<ScriptedVertexBuffer>()?
+                    .non_finite_vertex()
+                    .map(|vertex| format!("the vertex {vertex}"))
+                    .or(uvs
+                        .borrow::<ScriptedVertexBuffer>()?
+                        .non_finite_vertex()
+                        .map(|uv| format!("the uv {uv}")))
+                    .or_else(|| (!opacity.is_finite()).then(|| format!("the opacity ({opacity})")));
+                if let Some(what) = non_finite {
+                    this.with_renderer_mut(loan, |_| Ok(()))?;
+                    report_skipped_call(lua, "renderer:drawImageMesh", &what);
+                    return Ok(());
+                }
                 this.bindings.with_factory(|factory| {
                     vertices
                         .borrow_mut::<ScriptedVertexBuffer>()?
@@ -1147,6 +1240,172 @@ end\n";
             renderer_actions,
             ["save", "drawPath", "save", "restore", "restore"]
         );
+    }
+
+    #[test]
+    fn a_call_with_a_non_finite_number_draws_nothing_passes_nothing_on_and_names_its_line() {
+        // Lines 1 to 14 of the chunk; the report names the line of each call.
+        const SOURCE: &str = "function render(renderer:Renderer):()\n\
+  local nan = 0 / 0 kept = renderer\n\
+  local square = Path.new()\n\
+  square:moveTo(Vector.xy(0, 0)) square:lineTo(Vector.xy(10, 0)) square:lineTo(Vector.xy(10, 10)) square:close()\n\
+  local broken = Path.new()\n\
+  broken:moveTo(Vector.xy(nan, 0)) broken:lineTo(Vector.xy(10, 1 / 0)) broken:close()\n\
+  local paint = Paint.new()\n\
+  renderer:drawPath(broken, paint)\n\
+  renderer:save() renderer:transform(Mat2D.withTranslation(nan, 0)) renderer:drawPath(square, paint) renderer:restore()\n\
+  local faded = Paint.with({ gradient = Gradient.linear(Vector.xy(0, 0), Vector.xy(nan, 1), { { position = 0, color = 0xff000000 }, { position = 0.5, color = 0xff000000 }, { position = nan, color = 0xff000000 } }) })\n\
+  renderer:drawPath(square, faded)\n\
+  renderer:save() renderer:modulateOpacity(nan) renderer:save() renderer:drawPath(square, paint) renderer:restore() renderer:restore()\n\
+  renderer:drawPath(square, paint)\n\
+end\n";
+
+        let vm = ScriptVm::new();
+        let warnings = Rc::new(RefCell::new(Vec::<String>::new()));
+        let sink = Rc::clone(&warnings);
+        vm.set_log_sink(move |_, message| {
+            sink.borrow_mut()
+                .push(String::from_utf8_lossy(message).into_owned())
+        });
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        vm.install_render_factory(&mut factory).unwrap();
+        vm.install_rive_globals().unwrap();
+        vm.lua()
+            .load(SOURCE)
+            .set_name("spread.luau")
+            .exec()
+            .unwrap();
+        let table: Table = vm
+            .eval("return { draw = function(self, renderer) return render(renderer) end }")
+            .unwrap();
+        for _ in 0..2 {
+            let mut renderer = factory.borrow().make_renderer();
+            let balanced = vm
+                .renderer_bindings
+                .call_draw_with_balance(&table, &mut factory, &mut renderer, None)
+                .unwrap();
+            assert!(balanced);
+        }
+
+        let stream = factory.borrow().stream();
+        let lower = stream.to_lowercase();
+        assert!(!lower.contains("nan") && !lower.contains("inf"), "{stream}");
+        // This script's only clips are the ones of no area a non-finite number
+        // leaves: a draw under one shows nothing.
+        let mut hidden = vec![false];
+        let mut shown = 0;
+        for line in stream.lines() {
+            match line.split(' ').next().unwrap_or_default() {
+                "save" => hidden.push(*hidden.last().unwrap()),
+                "restore" => {
+                    hidden.pop();
+                }
+                "clipPath" => *hidden.last_mut().unwrap() = true,
+                "drawPath" if !hidden.last().unwrap() => shown += 1,
+                _ => {}
+            }
+        }
+        // Per frame: the square with the transparent gradient, and the last.
+        assert_eq!(shown, 4, "{stream}");
+        let gradients: Vec<&str> = stream
+            .lines()
+            .filter(|line| line.to_lowercase().contains("lineargradient"))
+            .collect();
+        assert!(
+            !gradients.is_empty()
+                && gradients.iter().all(|line| line.ends_with(
+                    "start=(0,0) end=(1,0) stops=[{color=0x00000000,stop=0},{color=0x00000000,stop=1}]"
+                )),
+            "a gradient with a number that is not finite is a valid transparent one: {gradients:#?}"
+        );
+        assert!(
+            !stream
+                .lines()
+                .any(|line| line.starts_with("transform ") || line.starts_with("modulateOpacity ")),
+            "{stream}"
+        );
+        assert_eq!(
+            stream.lines().filter(|line| *line == "save").count(),
+            stream.lines().filter(|line| *line == "restore").count(),
+        );
+
+        let warnings = warnings.borrow();
+        let expected = [
+            (
+                "spread.luau:8: renderer:drawPath drew nothing: the path's point (NaN, 0)",
+                "drawPath",
+            ),
+            (
+                "spread.luau:9: renderer:transform drew nothing: the matrix [1, 0, 0, 1, NaN, 0]",
+                "transform",
+            ),
+            (
+                "spread.luau:10: Gradient.linear draws nothing: its to (NaN)",
+                "gradient",
+            ),
+            (
+                "spread.luau:12: renderer:modulateOpacity drew nothing: the opacity (NaN)",
+                "opacity",
+            ),
+        ];
+        assert_eq!(
+            warnings.len(),
+            expected.len(),
+            "one line per call site, not per frame: {warnings:#?}"
+        );
+        for ((prefix, name), warning) in expected.iter().zip(warnings.iter()) {
+            assert!(warning.starts_with(prefix), "{name}: {warning}");
+            assert!(warning.contains("is not a finite number"), "{warning}");
+        }
+
+        // A renderer kept past its draw is refused, as for a finite number.
+        let refused: bool = vm
+            .eval("return not (pcall(function() kept:modulateOpacity(0 / 0) end))")
+            .unwrap();
+        assert!(refused);
+    }
+
+    #[test]
+    fn a_paint_keeps_its_last_finite_number_and_the_log_names_the_line() {
+        let vm = ScriptVm::new();
+        let warnings = Rc::new(RefCell::new(Vec::<String>::new()));
+        let sink = Rc::clone(&warnings);
+        vm.set_log_sink(move |_, message| {
+            sink.borrow_mut()
+                .push(String::from_utf8_lossy(message).into_owned())
+        });
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        vm.install_render_factory(&mut factory).unwrap();
+        vm.install_rive_globals().unwrap();
+        vm.lua()
+            .load(
+                "paint = Paint.with({ color = 0xff3366cc, thickness = 2, feather = 3 })\n\
+                 paint.thickness = 0 / 0\n\
+                 paint.feather = 1 / 0\n\
+                 paint.gradientTransform = Mat2D.withTranslation(0 / 0, 0)\n\
+                 made = Paint.with({ thickness = 0 / 0 })\n",
+            )
+            .set_name("paint.luau")
+            .exec()
+            .unwrap();
+        let (thickness, feather, color): (f32, f32, u32) = vm
+            .eval("return paint.thickness, paint.feather, paint.color")
+            .unwrap();
+        assert_eq!((thickness, feather, color), (2.0, 3.0, 0xff3366cc));
+        let default_thickness: f32 = vm.eval("return made.thickness").unwrap();
+        assert_eq!(default_thickness, 1.0);
+        let warnings = warnings.borrow();
+        for (index, prefix) in [
+            "paint.luau:2: paint.thickness was ignored: NaN",
+            "paint.luau:3: paint.feather was ignored: inf",
+            "paint.luau:4: paint.gradientTransform was ignored: the matrix [1, 0, 0, 1, NaN, 0]",
+            "paint.luau:5: paint.thickness was ignored: NaN",
+        ]
+        .iter()
+        .enumerate()
+        {
+            assert!(warnings[index].starts_with(prefix), "{:#?}", *warnings);
+        }
     }
 
     #[test]

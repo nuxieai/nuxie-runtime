@@ -889,3 +889,129 @@ fn a_reset_inside_a_row_drops_the_press_the_rows_machine_holds_there() {
     );
 }
 
+/// A reset that names a keyed list's host rebuilds each row the list lays
+/// out from the row artboard, with its machine at entry and the file's
+/// values, under the same key and in the same place. Nothing is kept for
+/// reuse: the old instances are gone. In the round of a remove, a mount and
+/// a move, the round's order still holds after it. The rebuilt rows report
+/// their taps with their keys.
+#[test]
+fn a_reset_of_a_keyed_list_rebuilds_its_rows_under_their_keys() {
+    let mut played = played_with(&["a", "b", "c"]);
+    let run = in_row(&played, "a", card::RUN);
+    write_once(&played, move |scene| {
+        assert_eq!(
+            scene.set_text(&run, TextValueRunBase::TEXT_PROPERTY_KEY, "Chosen"),
+            Ok(true)
+        );
+    });
+    played.step(FRAME, vec![]);
+    played.frames_until_settled();
+    assert_eq!(run_text(&played, "a"), "Chosen");
+    let old_a = row_of(&played, "a").downgrade();
+    let old_b = row_of(&played, "b").downgrade();
+    let old_c = row_of(&played, "c").downgrade();
+
+    let answers = Rc::new(RefCell::new(Vec::new()));
+    let log = answers.clone();
+    write_once(&played, move |scene| {
+        log.borrow_mut().extend([
+            scene.remove_row(&cards(), b"b"),
+            scene.mount_row(&cards(), b"d"),
+            scene.move_row(&cards(), b"c", 0),
+            scene.reset(&cards()),
+        ]);
+    });
+    played.step(FRAME, vec![]);
+    assert_eq!(*answers.borrow(), [Ok(true); 4]);
+    assert_eq!(keys(&played), ["c", "a", "d"]);
+    assert_eq!(laid_out_keys(&played), ["c", "a", "d"]);
+    for old in [&old_a, &old_b, &old_c] {
+        assert!(old.upgrade().is_none(), "an old row is not kept");
+    }
+    assert_eq!(run_text(&played, "a"), fixture::RUN_TEXT);
+    assert!(
+        dot_x(&played, "a") < fixture::DOT_TRAVEL / 2.0,
+        "the machine starts over: {}",
+        dot_x(&played, "a")
+    );
+
+    let (heard, _) = drive_logged(&played);
+    let at = button_center(&played, "a");
+    played.tap(at.0, at.1);
+    let heard = heard.borrow();
+    assert_eq!(names(&heard), ["chosen"]);
+    assert_eq!(
+        heard[0].context.as_ref().expect("a context").rows(),
+        [row_key(&played, "a")]
+    );
+}
+
+/// Whether a list is keyed, and the artboard its rows are made from, are
+/// what the file declared when the instance was made. A driver's write to
+/// `rowArtboardId` is refused as an unknown property and changes nothing,
+/// on a keyed list with rows mounted and on a list that is not keyed; a
+/// write through the registry, the way an animation or a bind writes, leaves
+/// it as it is. A keyed list also takes no list from a bind.
+#[test]
+fn a_lists_row_artboard_is_fixed_once_the_instance_is_made() {
+    const ROW_ARTBOARD: u16 = ArtboardComponentList::ROW_ARTBOARD_ID_PROPERTY_KEY;
+    let row_artboard = |list: &CoreHandle| {
+        list.with_downcast::<ArtboardComponentList, _>(|list| {
+            (list.is_keyed(), list.row_artboard_id())
+        })
+        .expect("the list")
+    };
+
+    let mut rows = played_with(&["a", "b"]);
+    let keyed = list(&rows);
+    let declared = row_artboard(&keyed);
+    assert!(declared.0);
+    let answers = Rc::new(RefCell::new(Vec::new()));
+    let log = answers.clone();
+    write_once(&rows, move |scene| {
+        log.borrow_mut().extend([
+            scene.set_unsigned(&cards(), ROW_ARTBOARD, 0),
+            scene.set_unsigned(&cards(), ROW_ARTBOARD, u32::MAX),
+        ]);
+        assert_eq!(scene.changes(), 0);
+    });
+    rows.step(FRAME, vec![]);
+    assert_eq!(
+        *answers.borrow(),
+        [Err(SceneWriteError::UnknownProperty); 2]
+    );
+    CoreRegistry::set_uint_handle(&keyed, i32::from(ROW_ARTBOARD), u32::MAX);
+    CoreRegistry::set_uint_handle(&keyed, i32::from(ROW_ARTBOARD), 0);
+    assert_eq!(row_artboard(&keyed), declared);
+    let arena = keyed.retain_arena().expect("list arena");
+    let bound: Vec<_> = (0..3)
+        .map(|_| arena.insert(ViewModelInstanceListItem::default()))
+        .collect();
+    ArtboardComponentList::update_list_occurrence(&keyed, &bound);
+    rows.frames_until_settled();
+    assert_eq!(keys(&rows), ["a", "b"]);
+    assert_eq!(laid_out_keys(&rows), ["a", "b"]);
+
+    let mut unkeyed = played(Cards::Unkeyed);
+    let list = list(&unkeyed);
+    let answers = Rc::new(RefCell::new(Vec::new()));
+    let log = answers.clone();
+    write_once(&unkeyed, move |scene| {
+        log.borrow_mut().extend([
+            scene.set_unsigned(&cards(), ROW_ARTBOARD, 1),
+            scene.mount_row(&cards(), b"a"),
+        ]);
+        assert_eq!(scene.changes(), 0);
+    });
+    unkeyed.step(FRAME, vec![]);
+    assert_eq!(
+        *answers.borrow(),
+        [
+            Err(SceneWriteError::UnknownProperty),
+            Err(SceneWriteError::NotKeyedList)
+        ]
+    );
+    CoreRegistry::set_uint_handle(&list, i32::from(ROW_ARTBOARD), 1);
+    assert_eq!(row_artboard(&list), (false, u32::MAX));
+}

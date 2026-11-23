@@ -242,6 +242,9 @@ struct AlgoConstants {
     /// Whether the node has a known main size which is definite (as of the start of layout,
     /// before the main size is determined from the node's contents)
     has_definite_main_size: bool,
+    /// nuxie-css: whether a column's height comes from its own ratio and a definite width.
+    /// Its items' flexed heights are then definite, as under a set height.
+    ratio_main_size_is_definite: bool,
     /// Whether the node has a known cross size which is definite
     has_definite_cross_size: bool,
     /// nuxie-css: whether the container has an `aspect-ratio` of its own.
@@ -980,6 +983,7 @@ fn compute_constants(
         || (is_row && known_dimensions_are_definite.width && ratio_height.is_some());
     let cross_axis_available_space_is_definite =
         has_definite_cross_size || matches!(available_space.cross(dir), AvailableSpace::Definite(_));
+    let ratio_main_size_is_definite = !is_row && known_dimensions_are_definite.width && ratio_height.is_some();
     let has_own_ratio = style.aspect_ratio().is_some();
     let has_own_height = !style.size().height.is_auto();
     let gap = style.gap().resolve_or_zero(node_inner_size.or(Size::zero()), |val, basis| tree.calc(val, basis));
@@ -1017,6 +1021,7 @@ fn compute_constants(
         height_is_percentage_basis,
         ratio_percentage_height,
         has_definite_main_size,
+        ratio_main_size_is_definite,
         has_definite_cross_size,
         has_own_ratio,
         has_own_height,
@@ -2124,6 +2129,7 @@ fn item_known_dimension_definiteness(constants: &AlgoConstants, item: &FlexItem)
     // nuxie-css: a column's used height that is not a percentage basis does not make its
     // items' flexed heights definite either.
     let main_is_definite = (constants.has_definite_main_size && (dir.is_row() || constants.height_is_percentage_basis))
+        || constants.ratio_main_size_is_definite
         || item.flex_basis_is_definite;
 
     // An item's cross size is definite if it is stretched (it stretches to the flex line, whose

@@ -57,8 +57,9 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // Upstream 542aa31c adds StateMachineListener.phaseValue (535).
     // Upstream 515eb61d adds LayoutComponentStyle.aspectRatioAxisValue (546),
     // stored but not read by CSS-mode layout.
-    // StateTransition's isHold (60023) is a Nuxie augmentation.
-    assert_eq!(runtime_property_count, 853);
+    // StateTransition's isHold (60023) and ArtboardComponentList's
+    // rowArtboardId (60024) are Nuxie augmentations.
+    assert_eq!(runtime_property_count, 854);
 
     let animatable_property_count = DEFINITIONS
         .iter()
@@ -99,11 +100,11 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // Video's paused, position, duration, ended, state and drawnByScript and
     // TextStyleDecoration's line are described, and so is each of CSS
     // layout's 107 and CSS text's 2.
-    // StateTransition's isHold (60023), a Nuxie augmentation, is described,
-    // and so are LiveStep's flightAnimationId (62030) and LiveStepUnit's
+    // StateTransition's isHold (60023) and ArtboardComponentList's
+    // rowArtboardId (60024), Nuxie augmentations, are described, and so are LiveStep's flightAnimationId (62030) and LiveStepUnit's
     // transfers (62029), LiveFlight's key and sizeMode (62031, 62032), and
     // upstream 515eb61d's aspectRatioAxisValue (546).
-    assert_eq!(described_property_count, 590);
+    assert_eq!(described_property_count, 591);
 }
 
 #[test]

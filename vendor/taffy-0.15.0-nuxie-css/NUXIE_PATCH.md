@@ -2165,3 +2165,21 @@ Of the 32,600 compared layouts, 311 differ from Chrome, as before: none fixed, n
 regressed. Of the 1,485 probes of the section above, 27 differ (45 before). The flex
 base size keeps its own measurement: 360 probes of growing and shrinking items of this
 kind all match. Guard rows: 42.
+
+## A picture with a percentage width and its own ratio can shrink in a row
+
+A row item's automatic minimum width is the smaller of its specified width and its
+content width (CSS Flexbox 1 §4.5). For a picture with `width: 100%` and an
+`aspect-ratio`, the fork measured the content width at the height the ratio gives that
+same width, so the content width came back as the width itself and the picture could
+not shrink below it. Its siblings were pushed out of the row or squeezed to nothing.
+
+The minimum is now measured (`determine_flex_base_size`) at the height the row
+stretches the picture to when that height is definite, and at the picture's natural
+size otherwise. Only pictures whose height here comes from their own ratio are affected.
+
+Example: a 400 by 100 row around a 120 by 60 picture with `width: 100%; aspect-ratio:
+3; padding: 10px; box-sizing: border-box` and a 150 wide box. Chrome: the picture is 300
+wide and the box 100. Before: the picture was 400 wide and the box 0.
+
+Four recorded Chrome layouts now match; none that matched stops matching. Guard rows: 4.

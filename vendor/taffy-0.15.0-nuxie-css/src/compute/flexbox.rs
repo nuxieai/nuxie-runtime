@@ -1603,6 +1603,25 @@ fn determine_flex_base_size(
         // the keyword width.
         let minimum_probe_known_dimensions =
             if has_keyword_width { child_known_dimensions } else { probe_known_dimensions };
+        // nuxie-css: a picture in a row whose height here is only what its own
+        // `aspect-ratio` gives its width has no height of its own for its automatic minimum.
+        // Measured at that height, its content width came back as its width, so a
+        // `width: 100%` picture could never shrink. Its minimum is found at the height the
+        // row stretches it to when that is definite, and at its natural size otherwise
+        // (CSS Flexbox 1 §4.5, the content size suggestion).
+        let minimum_probe_known_dimensions = if is_replaced && child.row_height_from_ratio {
+            let stretched_height = (child.align_self == AlignSelf::STRETCH
+                && !constants.is_wrap
+                && constants.has_definite_cross_size
+                && cross_axis_parent_size.is_some()
+                && !child.margin_is_auto.cross_start(dir)
+                && !child.margin_is_auto.cross_end(dir))
+            .then(|| cross_axis_available_space.into_option())
+            .flatten();
+            minimum_probe_known_dimensions.with_cross(dir, stretched_height)
+        } else {
+            minimum_probe_known_dimensions
+        };
 
         // nuxie-css: a stand-in height that is not the item's stretched height (a wrapping
         // row's line is not sized yet) is a known size but not a definite one: a

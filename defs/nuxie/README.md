@@ -82,9 +82,10 @@ ArtboardComponentList's `rowArtboardId` (60024), from
 `artboard_component_list_rows.json`, makes the list keyed: its rows are
 instances of that artboard, named by the index in the file's artboards as
 `ArtboardListMapRule.artboardId` names one, and a host driver mounts, removes
-and moves them by key (docs/page-player.md, Keyed list rows). An id that names
+and moves them by key (docs/page-player.md, Host driver). An id that names
 no artboard leaves the list keyed and empty: every mount is refused. It is a
-uint, and readers without it skip it and see an empty list.
+uint, unset at -1 (the largest uint), not an upstream `Id`. Readers without it
+skip it and see an empty list.
 
 The CSS layout, box paint and text records (LayoutCssStyle, BoxBorder,
 BoxGradient, BoxShadow, BoxPaint, TextStyleCssText)

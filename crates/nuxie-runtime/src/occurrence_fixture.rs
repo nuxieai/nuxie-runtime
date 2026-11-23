@@ -9,6 +9,9 @@
 //! hears a click and reports "chosen", and a "Field box" holding a text
 //! field. Its machine enters a one-shot animation, "intro", that moves the
 //! "Dot" node right.
+//!
+//! [`scripted_two_uses_fixture`] adds a scripted drawable to the card, so
+//! each use runs its own instance of one script.
 #![allow(dead_code)]
 use crate::live_move_fixture::{V, obj};
 use crate::source::drawable_flag::DrawableFlag;
@@ -43,6 +46,8 @@ pub mod card {
     /// In [`badged_fixture`] only: the card's two badge hosts.
     pub const FIRST_BADGE: usize = 27;
     pub const SECOND_BADGE: usize = 30;
+    /// In [`scripted_two_uses_fixture`] only: the card's scripted drawable.
+    pub const SCRIPT: usize = 27;
 }
 
 /// The badge's local ids, the same in each use, in [`badged_fixture`].
@@ -132,7 +137,15 @@ fn record(b: &mut Vec<u8>, parent: usize, width: Option<f32>, height: Option<f32
 
 /// The page and card file, with the page's state machine as `machine`.
 pub fn two_uses_fixture(machine: PageMachine) -> Vec<u8> {
-    build(machine, false)
+    build(machine, false, None)
+}
+
+/// As [`two_uses_fixture`], with the card holding a scripted drawable,
+/// "Script", after its event: a script asset whose contents are `payload`
+/// (a signed content header and Luau bytecode), named "Ticker", that
+/// implements `init` and `advance`. Each use's card runs its own instance.
+pub fn scripted_two_uses_fixture(machine: PageMachine, payload: &[u8]) -> Vec<u8> {
+    build(machine, false, Some(payload))
 }
 
 /// As [`two_uses_fixture`], with the card hosting a third artboard,
@@ -142,10 +155,14 @@ pub fn two_uses_fixture(machine: PageMachine) -> Vec<u8> {
 /// The badge is a CSS artboard holding a 60 by 20 "Tag" box painted
 /// [`TAG_COLOR`], whose click its machine reports as "badge tapped".
 pub fn badged_fixture(machine: PageMachine) -> Vec<u8> {
-    build(machine, true)
+    build(machine, true, None)
 }
 
-fn build(machine: PageMachine, badges: bool) -> Vec<u8> {
+fn build(machine: PageMachine, badges: bool, script: Option<&[u8]>) -> Vec<u8> {
+    assert!(
+        !(badges && script.is_some()),
+        "the script takes the badges' ids"
+    );
     use V::*;
     let opaque = u64::from(DrawableFlag::OPAQUE.0);
     let mut b = b"RIVE".to_vec();
@@ -166,6 +183,9 @@ fn build(machine: PageMachine, badges: bool) -> Vec<u8> {
             Bytes(include_bytes!("../../../fixtures/fonts/roboto-input.ttf")),
         )],
     );
+    if let Some(payload) = script {
+        crate::keyed_rows_fixture::script_asset(&mut b, payload);
+    }
 
     // Page.
     obj(
@@ -393,6 +413,9 @@ fn build(machine: PageMachine, badges: bool) -> Vec<u8> {
                 &[("parentId", U(host as u64)), ("animationId", U(0))],
             ); // 29, 32
         }
+    }
+    if script.is_some() {
+        crate::keyed_rows_fixture::scripted_drawable(&mut b);
     }
     obj(&mut b, "StateMachine", &[("name", S("card"))]);
     click(&mut b, card::BUTTON, card::CHOSEN);

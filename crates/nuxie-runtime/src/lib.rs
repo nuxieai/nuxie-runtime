@@ -24,6 +24,8 @@ pub mod hosted_scene;
 pub mod live_move;
 #[cfg(feature = "test-support")]
 pub mod live_move_fixture;
+#[cfg(feature = "test-support")]
+pub mod occurrence_fixture;
 /// The layout holds of elements flying in place begun on this thread
 /// (css_layout/flight_hold.rs).
 #[cfg(feature = "test-support")]

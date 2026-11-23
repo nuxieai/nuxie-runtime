@@ -10,6 +10,8 @@
 
 #[cfg(feature = "test-support")]
 pub use nuxie_runtime::live_move_fixture;
+#[cfg(feature = "test-support")]
+pub use nuxie_runtime::occurrence_fixture;
 pub use nuxie_runtime::source as runtime;
 pub use nuxie_runtime::{hosted_scene, live_move, page_player, video};
 // Renderer DTOs have their own namespace; the primary math names below are

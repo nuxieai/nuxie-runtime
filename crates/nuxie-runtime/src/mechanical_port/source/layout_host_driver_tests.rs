@@ -2249,3 +2249,6 @@ fn a_reset_restarts_a_nested_machine_and_leaves_what_only_its_later_state_keyed(
         );
     }
 }
+
+#[path = "layout_occurrence_driver_tests.rs"]
+mod occurrence_tests;

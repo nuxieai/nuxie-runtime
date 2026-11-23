@@ -256,6 +256,15 @@ impl NestedArtboard {
         self.has_host_flag(NestedArtboardHostFlags::ARTBOARD_DATA_BOUND)
     }
 
+    /// Nuxie: whether a view model instance is bound to this host's
+    /// instance, made global for it, or authored on the host.
+    pub(crate) fn has_view_model_instance(&self) -> bool {
+        self.view_model_instance.is_some()
+            || self.active_view_model_instance.is_some()
+            || !self.global_view_model_instances.is_empty()
+            || self.find_stateful_child_vmi().is_some()
+    }
+
     pub fn sync_nested_focus_tree(
         &mut self,
         fallback_parent: Option<FocusNodeRef>,
@@ -693,8 +702,9 @@ impl NestedArtboard {
             })
     }
 
-    /// Nuxie live-move hook: mounts a fresh instance of `artboard` in this
-    /// emptied host and binds it now, as load leaves a mounted host. The
+    /// Nuxie live-move and driver hook: mounts a fresh instance of `artboard`
+    /// in this emptied host and binds it now, as load leaves a mounted host
+    /// (a live move's refill, and a driver's `replace_instance`). The
     /// instance is nested as a runtime swap nests one
     /// (`nest_instance_occurrence`), the host's nested animations are made
     /// for it as `on_added_clean_occurrence` makes them, and its model

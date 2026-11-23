@@ -117,6 +117,11 @@ pub enum SceneWriteError {
     KeyNotFound,
     /// The place is past the list's last row.
     PlaceOutOfRange,
+    /// An instance replacement named an object whose instance the driver
+    /// may not replace: it hosts no nested artboard, or hosts nothing now,
+    /// or a live move, a bound artboard property or a view model owns what
+    /// it holds.
+    NotReplaceable,
 }
 
 impl From<KeyedRowRefusal> for SceneWriteError {
@@ -401,6 +406,54 @@ impl<'a> SceneWriter<'a> {
             self.changes += 1;
         }
         Ok(changed)
+    }
+
+    /// Replace the instance the nested artboard host `host` holds with a
+    /// fresh instance of the same artboard, made from the file as a list
+    /// makes a row: its objects hold the file's values, its scripts run
+    /// their setup, and nothing the old instance played, scrolled, typed or
+    /// was written reaches it. The old instance is discarded at once, and
+    /// its scripts are disposed with it.
+    ///
+    /// The host keeps its own records and its nested animations; each
+    /// animation and machine starts again on the new instance at its entry
+    /// with its authored inputs, heard by the machines that heard it before.
+    /// The host's focus scope, accessibility place and layout take the new
+    /// instance, which plays its first frame, as a reset's hosts do, so an
+    /// object inside it can be written in the same round. A use's display,
+    /// which lives on the hosted artboard's own record, is the file's again.
+    ///
+    /// A host a live move carries through, whose artboard a bound property
+    /// chooses, or that carries a view model instance is refused
+    /// ([`SceneWriteError::NotReplaceable`]). Always a change otherwise.
+    pub fn replace_instance(&mut self, host: &SceneObject) -> Result<bool, SceneWriteError> {
+        let (artboard, machines, handle) = match self.occurrence(host)? {
+            None => (
+                self.artboard.native_handle(),
+                self.machine
+                    .map(|m| m.native_handle())
+                    .into_iter()
+                    .collect::<Vec<_>>(),
+                self.artboard
+                    .object_handle(host.local_id)
+                    .ok_or(SceneWriteError::NotFound)?,
+            ),
+            Some(occurrence) => {
+                let handle = occurrence
+                    .object_handle(host.local_id)
+                    .ok_or(SceneWriteError::NotFound)?;
+                let (Some(artboard), Some(owner)) = (occurrence.artboard(), occurrence.host())
+                else {
+                    return Err(SceneWriteError::PathNotFound);
+                };
+                let machines = hosted_machines(&owner, occurrence.host_list_item().as_ref());
+                (artboard, machines, handle)
+            }
+        };
+        super::renew::renew_hosted_instance(&artboard, &machines, &handle)
+            .map_err(|_| SceneWriteError::NotReplaceable)?;
+        self.changes += 1;
+        Ok(true)
     }
 
     /// The keyed list `list` names.

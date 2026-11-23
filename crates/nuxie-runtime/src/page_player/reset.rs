@@ -131,16 +131,7 @@ pub(super) fn reset_subtree(
     let native = artboard;
     let objects = native.with_artboard(|artboard| artboard.base.objects().to_vec());
     let sources = source_objects(native);
-    let under: HashSet<u32> = objects
-        .iter()
-        .enumerate()
-        .filter_map(|(local_id, object)| {
-            let object = object.as_ref()?;
-            descends_from(object, root)
-                .then(|| u32::try_from(local_id).ok())
-                .flatten()
-        })
-        .collect();
+    let under = ids_under(native, root);
     let mut changed = false;
     let mut visited = HashSet::new();
     let mut hosts = Vec::new();
@@ -154,11 +145,7 @@ pub(super) fn reset_subtree(
             }
         }
     }
-    for machine in machines {
-        changed |= machine.with_instance_mut(|machine| {
-            machine.release_listener_pointers(|id| under.contains(&id))
-        });
-    }
+    changed |= release_pointers(machines, &under);
     // Only this artboard's own hosts: the first frame recurses into the
     // artboards they host, so a host inside one is advanced once, by it.
     for host in &hosts {
@@ -169,7 +156,7 @@ pub(super) fn reset_subtree(
 
 /// The flags a root artboard's frame hands its advancing components: what an
 /// instance's first frame advances a host with.
-const FIRST_FRAME: AdvanceFlags = AdvanceFlags(
+pub(super) const FIRST_FRAME: AdvanceFlags = AdvanceFlags(
     AdvanceFlags::IS_ROOT.0
         | AdvanceFlags::ANIMATE.0
         | AdvanceFlags::ADVANCE_NESTED.0
@@ -185,6 +172,43 @@ fn hosts_artboards(object: &CoreHandle) -> bool {
                 || object.as_artboard_component_list_mut().is_some()
         })
         .unwrap_or(false)
+}
+
+/// The local ids, in `artboard`, of `root` and everything under it.
+fn ids_under(artboard: &RuntimeArtboardInstanceHandle, root: &CoreHandle) -> HashSet<u32> {
+    let objects = artboard.with_artboard(|artboard| artboard.base.objects().to_vec());
+    objects
+        .iter()
+        .enumerate()
+        .filter_map(|(local_id, object)| {
+            let object = object.as_ref()?;
+            descends_from(object, root)
+                .then(|| u32::try_from(local_id).ok())
+                .flatten()
+        })
+        .collect()
+}
+
+/// `machines` drop the presses and hovers their listeners hold on the
+/// objects whose local ids are `under`. Whether any held one.
+fn release_pointers(machines: &[RuntimeStateMachineInstanceHandle], under: &HashSet<u32>) -> bool {
+    let mut released = false;
+    for machine in machines {
+        released |= machine.with_instance_mut(|machine| {
+            machine.release_listener_pointers(|id| under.contains(&id))
+        });
+    }
+    released
+}
+
+/// `machines`, which play on `artboard`, drop the presses and hovers their
+/// listeners hold on `root` and on everything under it. Whether any held one.
+pub(super) fn release_pointers_under(
+    artboard: &RuntimeArtboardInstanceHandle,
+    machines: &[RuntimeStateMachineInstanceHandle],
+    root: &CoreHandle,
+) -> bool {
+    release_pointers(machines, &ids_under(artboard, root))
 }
 
 fn descends_from(object: &CoreHandle, root: &CoreHandle) -> bool {

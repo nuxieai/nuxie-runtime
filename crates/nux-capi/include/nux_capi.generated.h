@@ -1939,13 +1939,23 @@ typedef struct NuxMetalRenderOperation {
 #endif
 
 /**
- * One object of the player's artboard, by its local id in the root
- * artboard. Fields may be appended; initialize `struct_size` to
+ * One object of the player's artboard, or of one nested artboard
+ * occurrence under it. Fields may be appended; initialize `struct_size` to
  * `sizeof(NuxSceneObject)`.
+ *
+ * `path` leads from the player's artboard to the occurrence that holds the
+ * object: the host of each nested artboard on the way, each by its local id
+ * in the artboard the path has reached, with that artboard's file-global
+ * id, as a report's `path` carries it. NULL with `path_len` 0 names the
+ * player's own artboard; a caller whose `struct_size` ends before `path`
+ * names it too. `local_id` is the object's local id in the artboard the
+ * path leads to.
  */
 typedef struct NuxSceneObject {
   uint32_t struct_size;
   size_t local_id;
+  const struct NuxScenePathSegment *path;
+  size_t path_len;
 } NuxSceneObject;
 
 typedef struct NuxSemanticSnapshotInfo {
@@ -3562,7 +3572,8 @@ NuxStatus nux_scene_writer_set_color(struct NuxSceneWriter *writer,
 /**
  * Set a number property of `object` by property key. `out_changed`, when
  * not NULL, receives whether the value changed. NOT_FOUND for an unknown
- * object; INVALID_ARGUMENT for a key the object has no number property of,
+ * object or a path that leads to no mounted nested artboard occurrence;
+ * INVALID_ARGUMENT for a key the object has no number property of,
  * or a value that is not finite.
  */
 NuxStatus nux_scene_writer_set_number(struct NuxSceneWriter *writer,

@@ -10,8 +10,8 @@ use std::ffi::c_void;
 use std::thread;
 
 use nuxie::page_player::{
-    DriverFault, DriverRound, HostDriver, MAX_DRIVER_ROUNDS, OwnedPlayerEvent, SceneObject,
-    SceneWriteError, SceneWriter,
+    DriverFault, DriverRound, HostDriver, MAX_DRIVER_ROUNDS, OwnedPlayerEvent,
+    RuntimeGeometryHitPathSegment, SceneObject, SceneWriteError, SceneWriter,
 };
 
 use super::{
@@ -27,18 +27,32 @@ pub const NUX_PLAYER_DRIVER_MAX_ROUNDS: usize = 8;
 
 const _: () = assert!(NUX_PLAYER_DRIVER_MAX_ROUNDS == MAX_DRIVER_ROUNDS);
 
-/// One object of the player's artboard, by its local id in the root
-/// artboard. Fields may be appended; initialize `struct_size` to
+/// One object of the player's artboard, or of one nested artboard
+/// occurrence under it. Fields may be appended; initialize `struct_size` to
 /// `sizeof(NuxSceneObject)`.
+///
+/// `path` leads from the player's artboard to the occurrence that holds the
+/// object: the host of each nested artboard on the way, each by its local id
+/// in the artboard the path has reached, with that artboard's file-global
+/// id, as a report's `path` carries it. NULL with `path_len` 0 names the
+/// player's own artboard; a caller whose `struct_size` ends before `path`
+/// names it too. `local_id` is the object's local id in the artboard the
+/// path leads to.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct NuxSceneObject {
     pub struct_size: u32,
     pub local_id: usize,
+    pub path: *const NuxScenePathSegment,
+    pub path_len: usize,
 }
 
 pub const NUX_SCENE_OBJECT_MIN_SIZE: usize =
     std::mem::offset_of!(NuxSceneObject, local_id) + std::mem::size_of::<usize>();
+
+/// The size of a `NuxSceneObject` that carries a path.
+pub const NUX_SCENE_OBJECT_PATH_SIZE: usize =
+    std::mem::offset_of!(NuxSceneObject, path_len) + std::mem::size_of::<usize>();
 
 /// One nested artboard on the way from the player's artboard to where an
 /// event was reported. This record's layout is fixed.
@@ -344,7 +358,7 @@ pub unsafe extern "C" fn nux_player_driver_clear(player: *mut NuxPlayer) -> NuxS
 
 fn write_status(error: SceneWriteError) -> NuxStatus {
     match error {
-        SceneWriteError::NotFound => NuxStatus::NotFound,
+        SceneWriteError::NotFound | SceneWriteError::PathNotFound => NuxStatus::NotFound,
         SceneWriteError::UnknownProperty | SceneWriteError::InvalidValue => {
             NuxStatus::InvalidArgument
         }
@@ -359,8 +373,38 @@ unsafe fn read_scene_object(object: *const NuxSceneObject) -> Result<SceneObject
     if !struct_size_supports(caller_size, NUX_SCENE_OBJECT_MIN_SIZE) {
         return Err(NuxStatus::InvalidStructSize);
     }
-    let local_id = unsafe { object.read() }.local_id;
-    Ok(SceneObject::root(local_id))
+    let caller_size = caller_size as usize;
+    // A caller built before the path was appended passes the shorter
+    // struct and names an object of the player's own artboard. Only the
+    // prefix the caller wrote is read.
+    if caller_size < NUX_SCENE_OBJECT_PATH_SIZE {
+        if caller_size > NUX_SCENE_OBJECT_MIN_SIZE {
+            return Err(NuxStatus::InvalidStructSize);
+        }
+        let local_id = unsafe {
+            object
+                .cast::<u8>()
+                .add(std::mem::offset_of!(NuxSceneObject, local_id))
+                .cast::<usize>()
+                .read_unaligned()
+        };
+        return Ok(SceneObject::root(local_id));
+    }
+    let value = unsafe { object.read() };
+    if value.path_len == 0 {
+        return Ok(SceneObject::root(value.local_id));
+    }
+    if value.path.is_null() {
+        return Err(NuxStatus::NullArgument);
+    }
+    let path = unsafe { std::slice::from_raw_parts(value.path, value.path_len) }
+        .iter()
+        .map(|segment| RuntimeGeometryHitPathSegment {
+            artboard_global_id: segment.artboard_global_id,
+            local_id: segment.local_id,
+        })
+        .collect();
+    Ok(SceneObject::nested(path, value.local_id))
 }
 
 /// Run one writer call: check the writer is this turn's, read the object,
@@ -399,7 +443,8 @@ fn with_writer(
 
 /// Set a number property of `object` by property key. `out_changed`, when
 /// not NULL, receives whether the value changed. NOT_FOUND for an unknown
-/// object; INVALID_ARGUMENT for a key the object has no number property of,
+/// object or a path that leads to no mounted nested artboard occurrence;
+/// INVALID_ARGUMENT for a key the object has no number property of,
 /// or a value that is not finite.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_scene_writer_set_number(
@@ -597,5 +642,260 @@ mod tests {
             ),
             (0, 0, 0)
         );
+    }
+
+    /// A `NuxSceneObject` as a caller built before the path was appended
+    /// lays it out.
+    #[repr(C)]
+    struct OldSceneObject {
+        struct_size: u32,
+        local_id: usize,
+    }
+
+    /// What the driver below was told, call by call.
+    #[derive(Default)]
+    struct Answers {
+        answers: Vec<(&'static str, NuxStatus, bool)>,
+    }
+
+    const WIDTH: u16 = 61022;
+    const TEXT: u16 = 268;
+
+    unsafe fn answer(
+        answers: &mut Answers,
+        what: &'static str,
+        call: impl FnOnce(*mut bool) -> NuxStatus,
+    ) {
+        let mut changed = false;
+        let status = call(&mut changed);
+        answers.answers.push((what, status, changed));
+    }
+
+    /// On the "chosen" report, writes through the report's path and through
+    /// an old-size object, and tries every way a path can be refused.
+    unsafe extern "C" fn drive_chosen(
+        context: *mut c_void,
+        round: *const NuxPlayerDriverRound,
+        writer: *mut NuxSceneWriter,
+    ) -> NuxStatus {
+        use nuxie::occurrence_fixture::{card, page};
+        let answers = unsafe { &mut *context.cast::<Answers>() };
+        let round = unsafe { &*round };
+        let reports = unsafe { std::slice::from_raw_parts(round.reports, round.report_count) };
+        for report in reports {
+            let name = unsafe {
+                std::slice::from_raw_parts(report.name.data.cast::<u8>(), report.name.len)
+            };
+            if name != b"chosen" {
+                continue;
+            }
+            let object = |local_id, path, path_len| NuxSceneObject {
+                struct_size: u32::try_from(std::mem::size_of::<NuxSceneObject>()).unwrap(),
+                local_id,
+                path,
+                path_len,
+            };
+            unsafe {
+                let old = OldSceneObject {
+                    struct_size: u32::try_from(std::mem::size_of::<OldSceneObject>()).unwrap(),
+                    local_id: page::BELOW_RECORD,
+                };
+                answer(answers, "old size names the page", |changed| {
+                    nux_scene_writer_set_number(
+                        writer,
+                        (&raw const old).cast(),
+                        WIDTH,
+                        120.0,
+                        changed,
+                    )
+                });
+                let run = object(card::RUN, report.path, report.path_len);
+                let text = "Chosen";
+                answer(answers, "the report's path", |changed| {
+                    nux_scene_writer_set_text(
+                        writer,
+                        &run,
+                        TEXT,
+                        NuxStringView {
+                            data: text.as_ptr().cast(),
+                            len: text.len(),
+                        },
+                        changed,
+                    )
+                });
+                let null = object(card::RUN, std::ptr::null(), 1);
+                answer(answers, "a null path with a length", |changed| {
+                    nux_scene_writer_set_number(writer, &null, WIDTH, 1.0, changed)
+                });
+                let mut short = run;
+                short.struct_size =
+                    u32::try_from(std::mem::offset_of!(NuxSceneObject, path_len)).unwrap();
+                answer(answers, "a size that ends inside the path", |changed| {
+                    nux_scene_writer_set_number(writer, &short, WIDTH, 1.0, changed)
+                });
+                let nowhere = [NuxScenePathSegment {
+                    artboard_global_id: (*report.path).artboard_global_id,
+                    local_id: 999,
+                }];
+                let lost = object(card::RUN, nowhere.as_ptr(), 1);
+                answer(answers, "a path that leads nowhere", |changed| {
+                    nux_scene_writer_set_number(writer, &lost, WIDTH, 1.0, changed)
+                });
+                let reset = object(card::FIELD_BOX, nowhere.as_ptr(), 1);
+                answer(answers, "a reset on a path that leads nowhere", |changed| {
+                    nux_scene_writer_reset(writer, &reset, changed)
+                });
+            }
+        }
+        NuxStatus::Ok
+    }
+
+    unsafe fn step(player: *mut NuxPlayer, pointers: &[crate::NuxPlayerPointerEvent]) {
+        let step = crate::NuxPlayerStep {
+            pointers: pointers.as_ptr(),
+            pointer_count: pointers.len(),
+            elapsed_seconds: 1.0 / 60.0,
+            ..crate::NuxPlayerStep::default()
+        };
+        let mut result = std::ptr::null_mut();
+        unsafe {
+            assert_eq!(
+                crate::nux_player_step(player, &step, &mut result),
+                NuxStatus::Ok
+            );
+            crate::nux_player_step_result_free(result);
+        }
+    }
+
+    /// Through the C edge, an old-size `NuxSceneObject` names an object of
+    /// the player's own artboard, and one with a report's path names that
+    /// object in the use the report came from, not in the other use. A null
+    /// path with a length, a size that ends inside the path and a path that
+    /// leads nowhere are refused and change nothing.
+    #[test]
+    fn a_scene_object_path_writes_one_use_and_an_old_size_writes_the_page() {
+        use nuxie::occurrence_fixture::{PageMachine, RUN_TEXT, card, page, two_uses_fixture};
+        use nuxie::runtime::{
+            generated::core_registry::CoreRegistry, layout_component::LayoutComponent,
+            nested_artboard_layout::NestedArtboardLayout,
+        };
+        let bytes = two_uses_fixture(PageMachine::OneLayer);
+        let mut file = std::ptr::null_mut();
+        let mut instance = std::ptr::null_mut();
+        let mut player = std::ptr::null_mut();
+        unsafe {
+            assert_eq!(
+                crate::nux_file_import(
+                    bytes.as_ptr(),
+                    bytes.len(),
+                    &crate::NuxRenderCallbacks::default(),
+                    &mut file
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                crate::nux_artboard_instance_new(file, 0, &mut instance),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                crate::nux_player_new_default(instance, &mut player),
+                NuxStatus::Ok
+            );
+            for _ in 0..60 {
+                step(player, &[]);
+            }
+        }
+        let page_board = unsafe { &*player }
+            .artboard
+            .instance
+            .borrow()
+            .native_handle();
+        let object = |board: &nuxie::RuntimeArtboardInstanceHandle, local_id: usize| {
+            board
+                .with_artboard(|board| board.objects()[local_id].clone())
+                .expect("an object")
+        };
+        let card_of = |host| {
+            object(&page_board, host)
+                .with_downcast::<NestedArtboardLayout, _>(|host| {
+                    (
+                        host.layout_bounds(),
+                        host.base.base.artboard_instance_handle(0),
+                    )
+                })
+                .and_then(|(bounds, card)| Some((bounds, card?)))
+                .expect("a hosted card")
+        };
+        let run_text = |host| {
+            CoreRegistry::get_string_handle(&object(&card_of(host).1, card::RUN), i32::from(TEXT))
+                .expect("the run's text")
+        };
+        let (host, first) = card_of(page::FIRST);
+        let button = object(&first, card::BUTTON)
+            .with_downcast::<LayoutComponent, _>(|button| button.layout_bounds())
+            .expect("the button");
+        let (x, y) = (
+            host.left() + button.left() + button.width() / 2.0,
+            host.top() + button.top() + button.height() / 2.0,
+        );
+
+        let mut answers = Answers::default();
+        let driver = NuxPlayerDriver {
+            struct_size: u32::try_from(std::mem::size_of::<NuxPlayerDriver>()).unwrap(),
+            context: (&raw mut answers).cast(),
+            drive: Some(drive_chosen),
+            release: None,
+        };
+        let pointer = |kind| crate::NuxPlayerPointerEvent {
+            kind,
+            x,
+            y,
+            pointer_id: 0,
+            timestamp_seconds: 0.0,
+        };
+        unsafe {
+            assert_eq!(nux_player_driver_set(player, &driver), NuxStatus::Ok);
+            step(
+                player,
+                &[
+                    pointer(crate::NUX_PLAYER_POINTER_KIND_DOWN),
+                    pointer(crate::NUX_PLAYER_POINTER_KIND_UP),
+                ],
+            );
+            assert_eq!(nux_player_driver_clear(player), NuxStatus::Ok);
+        }
+        assert_eq!(
+            answers.answers,
+            [
+                ("old size names the page", NuxStatus::Ok, true),
+                ("the report's path", NuxStatus::Ok, true),
+                ("a null path with a length", NuxStatus::NullArgument, false),
+                (
+                    "a size that ends inside the path",
+                    NuxStatus::InvalidStructSize,
+                    false
+                ),
+                ("a path that leads nowhere", NuxStatus::NotFound, false),
+                (
+                    "a reset on a path that leads nowhere",
+                    NuxStatus::NotFound,
+                    false
+                ),
+            ]
+        );
+        assert_eq!(run_text(page::FIRST), "Chosen");
+        assert_eq!(run_text(page::SECOND), RUN_TEXT);
+        assert_eq!(
+            CoreRegistry::get_double_handle(
+                &object(&page_board, page::BELOW_RECORD),
+                i32::from(WIDTH)
+            ),
+            Some(120.0)
+        );
+        unsafe {
+            assert_eq!(crate::nux_player_free(player), NuxStatus::Ok);
+            assert_eq!(crate::nux_artboard_instance_free(instance), NuxStatus::Ok);
+            assert_eq!(crate::nux_file_free(file), NuxStatus::Ok);
+        }
     }
 }

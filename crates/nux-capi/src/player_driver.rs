@@ -418,7 +418,8 @@ fn write_status(error: SceneWriteError) -> NuxStatus {
         | SceneWriteError::InvalidValue
         | SceneWriteError::NotKeyedList
         | SceneWriteError::KeyExists
-        | SceneWriteError::PlaceOutOfRange => NuxStatus::InvalidArgument,
+        | SceneWriteError::PlaceOutOfRange
+        | SceneWriteError::NotReplaceable => NuxStatus::InvalidArgument,
     }
 }
 

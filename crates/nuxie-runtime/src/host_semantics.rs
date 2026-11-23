@@ -184,6 +184,13 @@ impl RuntimeNestedArtboardOccurrence {
         self.mounts.last().map(|mount| mount.host.clone())
     }
 
+    /// The list item of the row this occurrence is, when its host is a list,
+    /// while it is mounted.
+    pub(crate) fn host_list_item(&self) -> Option<CoreHandle> {
+        self.current_native()?;
+        self.mounts.last()?.list_item.clone()
+    }
+
     /// Opaque identity of this exact retained occurrence.
     pub fn instance_identity(&self) -> u64 {
         self.instance_identity

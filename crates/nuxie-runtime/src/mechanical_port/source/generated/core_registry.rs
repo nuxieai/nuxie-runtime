@@ -10923,6 +10923,14 @@ impl CoreRegistry {
         if property_key == i32::from(crate::text_decoration::LINE_PROPERTY_KEY) {
             return 0;
         }
+        // Nuxie ArtboardComponentList.rowArtboardId is a uint.
+        if property_key
+            == i32::from(
+                crate::mechanical_port::source::artboard_component_list::ArtboardComponentList::ROW_ARTBOARD_ID_PROPERTY_KEY,
+            )
+        {
+            return crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::ID;
+        }
         // Nuxie StateTransition.isHold is a bool.
         if property_key
             == i32::from(
@@ -22370,6 +22378,11 @@ impl crate::mechanical_port::source::core::CoreObject
         property_key: u16,
         reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>,
     ) -> bool {
+        // Nuxie ArtboardComponentList.rowArtboardId (60024), a uint.
+        if property_key == crate::mechanical_port::source::artboard_component_list::ArtboardComponentList::ROW_ARTBOARD_ID_PROPERTY_KEY {
+            self.set_row_artboard_id(crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader));
+            return true;
+        }
         let mut base = std::mem::take(&mut self.base);
         let result = base.deserialize(property_key, reader, self);
         self.base = base;

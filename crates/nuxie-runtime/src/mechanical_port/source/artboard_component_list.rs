@@ -200,6 +200,37 @@ pub struct ArtboardComponentList {
     draw_index_dependents: CoreHandleMap<Rc<RefCell<dyn ViewModelValueDependent>>>,
     provider_state: LayoutNodeProviderState,
     constrainable_list_state: ConstrainableListState,
+    /// Nuxie `rowArtboardId` (60024): the index in the file's artboards of
+    /// the artboard a keyed list's rows are made from. `u32::MAX` when the
+    /// record does not set it, and then the list is not keyed.
+    row_artboard_id: u32,
+    /// A keyed list's rows in the order the host's operations left them. A
+    /// row mounted this round is here and in the instance maps before the
+    /// round commits the order into `list_items`.
+    keyed_rows: Vec<CoreHandle>,
+    /// The key each keyed row was mounted by, by its list item.
+    keyed_row_keys: CoreHandleMap<Box<[u8]>>,
+    /// Whether `keyed_rows` has changed since the list last took it.
+    keyed_rows_pending: bool,
+    /// List items of keyed rows the last list change discarded, released
+    /// from the arena once no borrow of this list is open.
+    keyed_discarded: Vec<CoreHandle>,
+}
+
+/// Why a keyed row operation was refused. A refused operation changes
+/// nothing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum KeyedRowRefusal {
+    /// The list's record sets no `rowArtboardId`.
+    NotKeyed,
+    /// The list's `rowArtboardId` names no artboard of the file.
+    NoRowArtboard,
+    /// A row with this key is already mounted.
+    KeyExists,
+    /// No row with this key is mounted.
+    KeyNotFound,
+    /// The place is past the last row.
+    PlaceOutOfRange,
 }
 
 impl Default for ArtboardComponentList {
@@ -248,6 +279,11 @@ impl Default for ArtboardComponentList {
             draw_index_dependents: CoreHandleMap::default(),
             provider_state: LayoutNodeProviderState::default(),
             constrainable_list_state: ConstrainableListState::default(),
+            row_artboard_id: u32::MAX,
+            keyed_rows: Vec::new(),
+            keyed_row_keys: CoreHandleMap::default(),
+            keyed_rows_pending: false,
+            keyed_discarded: Vec::new(),
         }
     }
 }
@@ -417,6 +453,16 @@ impl ArtboardComponentList {
         self.artboards_map.clear();
         self.state_machines_pool.clear();
         self.resource_pool.clear();
+        self.clear_keyed_rows();
+    }
+
+    /// Forget every keyed row, as clearing the list's items does. The items'
+    /// arena drops them with the artboard that holds this list.
+    fn clear_keyed_rows(&mut self) {
+        self.keyed_rows.clear();
+        self.keyed_row_keys.clear();
+        self.keyed_rows_pending = false;
+        self.keyed_discarded.clear();
     }
 
     pub(crate) fn unbind_occurrence(owner: &CoreHandle) {
@@ -471,6 +517,7 @@ impl ArtboardComponentList {
             list.list_items.clear();
             list.list_has_duplicate_items = false;
             list.artboards_map.clear();
+            list.clear_keyed_rows();
         });
         drop(
             owner
@@ -665,6 +712,10 @@ impl ArtboardComponentList {
     }
 
     pub fn find_artboard(&mut self, list_item: &CoreHandle) -> Option<CoreHandle> {
+        // Nuxie: every row of a keyed list is made from the record's artboard.
+        if self.is_keyed() {
+            return self.keyed_row_artboard();
+        }
         let view_model_id = list_item
             .with_downcast::<ViewModelInstanceListItem, _>(|item| item.view_model_instance())
             .flatten()?
@@ -1200,7 +1251,20 @@ impl ArtboardComponentList {
         true
     }
 
+    /// Take a new list of items, as a bound list hands it over. A keyed list
+    /// takes its rows from its host's operations only, so it ignores a
+    /// bound list.
     pub fn update_list_occurrence(owner: &CoreHandle, list: &[CoreHandle]) {
+        if owner
+            .with_downcast::<Self, _>(Self::is_keyed)
+            .unwrap_or(false)
+        {
+            return;
+        }
+        Self::apply_list_occurrence(owner, list);
+    }
+
+    fn apply_list_occurrence(owner: &CoreHandle, list: &[CoreHandle]) {
         // Nuxie: an instance in the air on a row being removed goes back to
         // the slot it took off from before the row goes.
         if crate::live_move::settle_leaving_rows(owner, list).is_err() {
@@ -1213,6 +1277,16 @@ impl ArtboardComponentList {
         else {
             return;
         };
+        #[cfg(feature = "test-support")]
+        crate::hosted_scene::record_walk(crate::hosted_scene::Walk::ListRows);
+        // Nuxie: a keyed row a change removed is discarded, its list item
+        // with it, once no borrow of the list is open.
+        let discarded = owner
+            .with_downcast_mut::<Self, _>(|list| std::mem::take(&mut list.keyed_discarded))
+            .unwrap_or_default();
+        for item in discarded {
+            item.remove_occurrence();
+        }
         let virtualized = owner
             .with_downcast::<Self, _>(Self::virtualization_enabled)
             .unwrap();
@@ -1304,9 +1378,14 @@ impl ArtboardComponentList {
         self.quiet_unrealized_rows();
         self.layout_parent_mut(LayoutComponent::clear_layout_children);
         let virtualized = self.virtualization_enabled();
+        let keyed = self.is_keyed();
         for item in &previous_list_items {
             if sorted.binary_search(&item.slot_address()).is_err() {
-                if virtualized {
+                if keyed {
+                    // Nuxie: a keyed row that goes is discarded, never pooled.
+                    self.dispose_list_item(item);
+                    self.keyed_discarded.push(item.clone());
+                } else if virtualized {
                     self.dispose_list_item(item);
                 } else {
                     self.pool_list_item(item);
@@ -2512,6 +2591,7 @@ impl ArtboardComponentList {
     pub fn clone_core(&self) -> Self {
         let mut cloned = self.base.clone_into(&mut ArtboardComponentList::default());
         cloned.set_file(self.file());
+        cloned.set_row_artboard_id(self.row_artboard_id());
         cloned
     }
 
@@ -2669,7 +2749,22 @@ impl ArtboardComponentList {
         let Some((item, virtualized)) = item else {
             return;
         };
-        Self::bind_artboard_occurrence(owner, &artboard, &item);
+        Self::host_row_occurrence(owner, &artboard, &item);
+        Self::finish_add_artboard_at_occurrence(owner, artboard, index, item, virtualized);
+        if force_layout_sync {
+            Self::sync_layout_children_occurrence(owner);
+        }
+    }
+
+    /// Host a row's artboard under this list: bind it to its item's data,
+    /// make this list its host, and give it the list's flow and layout style
+    /// before its machine first advances and its layout first solves.
+    fn host_row_occurrence(
+        owner: &CoreHandle,
+        artboard: &RuntimeArtboardInstanceHandle,
+        item: &CoreHandle,
+    ) {
+        Self::bind_artboard_occurrence(owner, artboard, item);
         let parent = owner
             .with_downcast::<Self, _>(Self::parent_artboard)
             .expect("live ArtboardComponentList");
@@ -2722,10 +2817,6 @@ impl ArtboardComponentList {
             time,
             direction,
         );
-        Self::finish_add_artboard_at_occurrence(owner, artboard, index, item, virtualized);
-        if force_layout_sync {
-            Self::sync_layout_children_occurrence(owner);
-        }
     }
 
     fn begin_add_artboard_at(
@@ -3088,6 +3179,10 @@ impl ArtboardComponentList {
         &self,
         borrowed_scroll: Option<&ScrollConstraint>,
     ) -> bool {
+        // Nuxie: a keyed list holds every row its host mounted.
+        if self.is_keyed() {
+            return false;
+        }
         self.scroll_constraint_handle().is_some_and(|constraint| {
             if let Some(scroll) =
                 borrowed_scroll.filter(|scroll| scroll.handle().as_ref() == Some(&constraint))
@@ -3725,5 +3820,233 @@ impl std::ops::Deref for ArtboardComponentList {
 impl std::ops::DerefMut for ArtboardComponentList {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.base
+    }
+}
+
+/// Nuxie keyed rows. A list whose record sets `rowArtboardId` takes its rows
+/// from a host, which mounts, removes and moves each row by a key of bytes.
+/// Each row is a fresh instance of the record's artboard with its machine,
+/// kept under one bare list item (a list item with no view model instance)
+/// that the list makes for the key and never hands out. A removed row is
+/// discarded, never pooled. A row's instance and machine live until it is
+/// removed, so a moved row keeps all its state.
+///
+/// The operations apply in the order given. A mounted row is made and hosted
+/// at once, so a write into it in the same round lands. The list takes the
+/// new order of its rows once per round, in [`Self::commit_keyed_rows_occurrence`],
+/// which brings its layout children, membership and focus rows up to date.
+impl ArtboardComponentList {
+    pub const ROW_ARTBOARD_ID_PROPERTY_KEY: u16 = 60024;
+
+    pub fn row_artboard_id(&self) -> u32 {
+        self.row_artboard_id
+    }
+
+    pub fn set_row_artboard_id(&mut self, value: u32) {
+        self.row_artboard_id = value;
+    }
+
+    /// Whether the list's record names an artboard for keyed rows.
+    pub fn is_keyed(&self) -> bool {
+        self.row_artboard_id != u32::MAX
+    }
+
+    /// The artboard a keyed list's rows are made from, as an index into the
+    /// file's artboards, as `ArtboardListMapRule.artboardId` names one.
+    fn keyed_row_artboard(&self) -> Option<CoreHandle> {
+        let artboards = self.file.as_ref()?.with_file(File::artboards)?;
+        artboards.get(self.row_artboard_id as usize).cloned()
+    }
+
+    /// The keys of a keyed list's rows, in their current order.
+    pub fn row_keys(&self) -> Vec<&[u8]> {
+        self.keyed_rows
+            .iter()
+            .filter_map(|item| self.keyed_row_keys.get(item).map(|key| &**key))
+            .collect()
+    }
+
+    /// The list item of the keyed row mounted by `key`.
+    fn keyed_row_item(&self, key: &[u8]) -> Option<CoreHandle> {
+        self.keyed_rows
+            .iter()
+            .find(|item| {
+                self.keyed_row_keys
+                    .get(item)
+                    .is_some_and(|row| **row == *key)
+            })
+            .cloned()
+    }
+
+    /// The list item and the artboard of the keyed row mounted by `key`.
+    pub(crate) fn keyed_row(
+        &self,
+        key: &[u8],
+    ) -> Option<(CoreHandle, RuntimeArtboardInstanceHandle)> {
+        let item = self.keyed_row_item(key)?;
+        let artboard = self.artboard_instances_map.get(&item).cloned()?;
+        Some((item, artboard))
+    }
+
+    /// The key the row of `item` was mounted by, when the list is keyed.
+    pub(crate) fn key_of_row(&self, item: &CoreHandle) -> Option<&[u8]> {
+        self.keyed_row_keys.get(item).map(|key| &**key)
+    }
+
+    /// The artboard the list currently holds for `item`: for a keyed list,
+    /// the row's instance while its key is mounted, a row mounted this round
+    /// included; otherwise the instance at the item's place in the list.
+    pub(crate) fn row_instance_for_item(
+        &self,
+        item: &CoreHandle,
+    ) -> Option<RuntimeArtboardInstanceHandle> {
+        if self.is_keyed() {
+            return self
+                .keyed_row_keys
+                .contains_key(item)
+                .then(|| self.artboard_instances_map.get(item).cloned())
+                .flatten();
+        }
+        (0..self.artboard_count()).find_map(|index| {
+            (self.list_item(index as i32).as_ref() == Some(item))
+                .then(|| self.artboard_instance(index as i32))
+                .flatten()
+        })
+    }
+
+    /// Mount a row by `key` at the end of a keyed list: a fresh instance of
+    /// the row artboard with its machine, hosted at once. The list takes the
+    /// new row into its order when the round commits.
+    pub(crate) fn mount_keyed_row_occurrence(
+        owner: &CoreHandle,
+        key: &[u8],
+    ) -> Result<(), KeyedRowRefusal> {
+        let source = owner
+            .with_downcast::<Self, _>(|list| {
+                if !list.is_keyed() {
+                    return Err(KeyedRowRefusal::NotKeyed);
+                }
+                if list.keyed_row_item(key).is_some() {
+                    return Err(KeyedRowRefusal::KeyExists);
+                }
+                list.keyed_row_artboard()
+                    .ok_or(KeyedRowRefusal::NoRowArtboard)
+            })
+            .unwrap_or(Err(KeyedRowRefusal::NotKeyed))?;
+        let artboard =
+            Artboard::nested_instance_from_handle(&source).ok_or(KeyedRowRefusal::NoRowArtboard)?;
+        let item = owner
+            .insert_sibling(ViewModelInstanceListItem::default())
+            .ok_or(KeyedRowRefusal::NotKeyed)?;
+        owner.with_downcast_mut::<Self, _>(|list| {
+            crate::hosted_scene::membership_changed(list);
+            list.artboard_instances_map
+                .insert(item.clone(), artboard.clone());
+            list.keyed_row_keys.insert(item.clone(), key.into());
+            list.keyed_rows.push(item.clone());
+            list.keyed_rows_pending = true;
+        });
+        Self::host_row_occurrence(owner, &artboard, &item);
+        let machine = Self::create_state_machine_instance_occurrence(owner, &artboard);
+        let advances = owner
+            .with_downcast_mut::<Self, _>(|list| {
+                if let Some(machine) = &machine {
+                    list.state_machines_map
+                        .insert(item.clone(), machine.clone());
+                }
+                list.advances_nested
+            })
+            .unwrap_or(false);
+        if let Some(machine) = machine.filter(|_| advances) {
+            machine.with_instance_mut(|machine| {
+                if machine.try_change_state() {
+                    machine.advance(0.0, false);
+                }
+            });
+        }
+        Ok(())
+    }
+
+    /// Remove the row mounted by `key`. Its instance and machine are
+    /// discarded: at once for a row mounted this round, otherwise when the
+    /// round commits, since the list still lays the row out until then.
+    pub(crate) fn remove_keyed_row_occurrence(
+        owner: &CoreHandle,
+        key: &[u8],
+    ) -> Result<(), KeyedRowRefusal> {
+        let discard_now = owner
+            .with_downcast_mut::<Self, _>(|list| {
+                if !list.is_keyed() {
+                    return Err(KeyedRowRefusal::NotKeyed);
+                }
+                let item = list
+                    .keyed_row_item(key)
+                    .ok_or(KeyedRowRefusal::KeyNotFound)?;
+                list.keyed_rows.retain(|row| row != &item);
+                list.keyed_row_keys.remove(&item);
+                list.keyed_rows_pending = true;
+                crate::hosted_scene::membership_changed(list);
+                if list.list_items.contains(&item) {
+                    return Ok(None);
+                }
+                list.remove_artboard(item.clone());
+                Ok(Some(item))
+            })
+            .unwrap_or(Err(KeyedRowRefusal::NotKeyed))?;
+        if let Some(item) = discard_now {
+            item.remove_occurrence();
+        }
+        Ok(())
+    }
+
+    /// Move the row mounted by `key` to `place` among the list's rows, the
+    /// others keeping their order. Whether the row's place changed.
+    pub(crate) fn move_keyed_row_occurrence(
+        owner: &CoreHandle,
+        key: &[u8],
+        place: usize,
+    ) -> Result<bool, KeyedRowRefusal> {
+        owner
+            .with_downcast_mut::<Self, _>(|list| {
+                if !list.is_keyed() {
+                    return Err(KeyedRowRefusal::NotKeyed);
+                }
+                let item = list
+                    .keyed_row_item(key)
+                    .ok_or(KeyedRowRefusal::KeyNotFound)?;
+                if place >= list.keyed_rows.len() {
+                    return Err(KeyedRowRefusal::PlaceOutOfRange);
+                }
+                let from = list
+                    .keyed_rows
+                    .iter()
+                    .position(|row| row == &item)
+                    .expect("a keyed row is in the order");
+                if from == place {
+                    return Ok(false);
+                }
+                let row = list.keyed_rows.remove(from);
+                list.keyed_rows.insert(place, row);
+                list.keyed_rows_pending = true;
+                Ok(true)
+            })
+            .unwrap_or(Err(KeyedRowRefusal::NotKeyed))
+    }
+
+    /// Take the order a round's keyed row operations left, once: the rows
+    /// mounted are kept as made, the rows removed are discarded, and the
+    /// list's layout children, membership and focus rows are brought up to
+    /// date. Whether the list took a new order.
+    pub(crate) fn commit_keyed_rows_occurrence(owner: &CoreHandle) -> bool {
+        let order = owner
+            .with_downcast_mut::<Self, _>(|list| {
+                std::mem::take(&mut list.keyed_rows_pending).then(|| list.keyed_rows.clone())
+            })
+            .flatten();
+        let Some(order) = order else {
+            return false;
+        };
+        Self::apply_list_occurrence(owner, &order);
+        true
     }
 }

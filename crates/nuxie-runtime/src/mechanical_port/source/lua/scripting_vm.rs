@@ -40,6 +40,19 @@ impl RuntimeScriptingVmHandle {
             .unregister_scripted_object(object);
     }
 
+    /// Nuxie: how many scripted objects this VM's backend has registered.
+    pub fn scripted_object_count(&self) -> usize {
+        self.inner.script_backend().scripted_object_count()
+    }
+
+    /// Nuxie: whether this VM's backend has `object` registered.
+    pub fn knows_scripted_object(
+        &self,
+        object: &crate::mechanical_port::source::core::CoreHandle,
+    ) -> bool {
+        self.inner.script_backend().knows_scripted_object(object)
+    }
+
     pub fn call_layout_resize(
         &self,
         instance: &mut dyn crate::scripting::ScriptInstance,

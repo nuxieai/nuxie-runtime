@@ -60,4 +60,15 @@ impl ScriptBackend {
     pub fn unregister_scripted_object(&self, object: &CoreHandle) {
         self.scripted_objects.borrow_mut().remove(object);
     }
+
+    /// Nuxie: how many scripted objects are registered with this backend,
+    /// each one a live script table of an instance that has not dropped.
+    pub fn scripted_object_count(&self) -> usize {
+        self.scripted_objects.borrow().len()
+    }
+
+    /// Nuxie: whether `object` is registered with this backend.
+    pub fn knows_scripted_object(&self, object: &CoreHandle) -> bool {
+        self.scripted_objects.borrow().contains(object)
+    }
 }

@@ -10,6 +10,9 @@
 //! "Scroller" viewport 60 points tall scrolling a 200 point "Line". Its
 //! machine enters a one-shot animation, "intro", that moves the "Dot" node
 //! right.
+//!
+//! [`scripted_keyed_plans_fixture`] adds a scripted drawable to the card, so
+//! each row runs its own instance of one script.
 #![allow(dead_code)]
 use crate::live_move_fixture::{V, obj};
 use crate::source::drawable_flag::DrawableFlag;
@@ -37,6 +40,9 @@ pub mod card {
     pub const CHOSEN: usize = 21;
     /// In [`Cards::Badged`] only: the card's badge host.
     pub const BADGE: usize = 28;
+    /// In [`scripted_keyed_plans_fixture`] only: the card's scripted
+    /// drawable.
+    pub const SCRIPT: usize = 28;
 }
 
 /// The badge's local ids, in [`Cards::Badged`].
@@ -183,8 +189,56 @@ fn text(b: &mut Vec<u8>, name: &str, parent: usize, at: usize, words: &str, size
     ); // at + 4
 }
 
+/// The methods a fixture's script implements: `init` and `advance`.
+pub const SCRIPT_METHODS: u32 = crate::source::scripted::scripted_object::INITS_BIT
+    | crate::source::scripted::scripted_object::ADVANCES_BIT;
+
+/// A script asset "Ticker" at the next asset index, implementing
+/// [`SCRIPT_METHODS`], whose contents are `payload`.
+pub(crate) fn script_asset(b: &mut Vec<u8>, payload: &[u8]) {
+    use V::*;
+    obj(
+        b,
+        "ScriptAsset",
+        &[
+            ("assetId", U(1)),
+            ("name", S("Ticker")),
+            ("serializedImplementedMethods", U(u64::from(SCRIPT_METHODS))),
+        ],
+    );
+    obj(b, "FileAssetContents", &[("bytes", Bytes(payload))]);
+}
+
+/// A scripted drawable "Script" on the artboard's root running asset 1, the
+/// script [`script_asset`] writes after the font.
+pub(crate) fn scripted_drawable(b: &mut Vec<u8>) {
+    use V::*;
+    obj(
+        b,
+        "ScriptedDrawable",
+        &[
+            ("name", S("Script")),
+            ("parentId", U(0)),
+            ("scriptAssetId", U(1)),
+        ],
+    );
+}
+
 /// The plans screen with its "Cards" list as `cards`.
 pub fn keyed_plans_fixture(cards: Cards) -> Vec<u8> {
+    build(cards, None)
+}
+
+/// As [`keyed_plans_fixture`] with [`Cards::Keyed`], with the card holding a
+/// scripted drawable, "Script", after its styles: a script asset whose
+/// contents are `payload` (a signed content header and Luau bytecode), named
+/// "Ticker", that implements `init` and `advance`. Each row runs its own
+/// instance.
+pub fn scripted_keyed_plans_fixture(payload: &[u8]) -> Vec<u8> {
+    build(Cards::Keyed, Some(payload))
+}
+
+fn build(cards: Cards, script: Option<&[u8]>) -> Vec<u8> {
     use V::*;
     let opaque = u64::from(DrawableFlag::OPAQUE.0);
     let badges = cards == Cards::Badged;
@@ -206,6 +260,9 @@ pub fn keyed_plans_fixture(cards: Cards) -> Vec<u8> {
             Bytes(include_bytes!("../../../fixtures/fonts/roboto-input.ttf")),
         )],
     );
+    if let Some(payload) = script {
+        script_asset(&mut b, payload);
+    }
 
     // Plans.
     obj(
@@ -386,6 +443,9 @@ pub fn keyed_plans_fixture(cards: Cards) -> Vec<u8> {
             "NestedStateMachine",
             &[("parentId", U(card::BADGE as u64)), ("animationId", U(0))],
         ); // 30
+    }
+    if script.is_some() {
+        scripted_drawable(&mut b); // 28
     }
     // "intro": half a second at 60 frames a second, once, moving the dot.
     obj(

@@ -20,6 +20,7 @@ pub mod page {
     pub const HEADING: usize = 2;
     pub const CARDS: usize = 9;
     pub const FOOTER: usize = 10;
+    pub const FOOTER_RECORD: usize = 11;
 }
 
 /// The card's local ids, the same in each row.

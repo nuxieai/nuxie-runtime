@@ -1220,6 +1220,19 @@ typedef struct NuxPlayerEventPropertyView {
 } NuxPlayerEventPropertyView;
 
 /**
+ * One keyed list row on the way from the player's artboard to an
+ * occurrence: the list's host, by its local id in the artboard with
+ * `artboard_global_id`, and the bytes of the key the row was mounted by.
+ * The engine compares a key only for equality. In a report, `key` borrows
+ * the round. This record's layout is fixed.
+ */
+typedef struct NuxSceneRowKey {
+  uint32_t artboard_global_id;
+  size_t host_local_id;
+  struct NuxByteView key;
+} NuxSceneRowKey;
+
+/**
  * One reported event, as a driver sees it. Every view borrows the round and
  * is valid only during the `drive` call that received it.
  */
@@ -1253,6 +1266,13 @@ typedef struct NuxPlayerDriverReport {
   const struct NuxPlayerEventPropertyView *properties;
   size_t property_count;
   size_t property_stride;
+  /**
+   * The row of each keyed list step of `path`, in path order. A report
+   * from a row of a list that is not keyed has none; its rows are in
+   * `list_items`.
+   */
+  const struct NuxSceneRowKey *row_keys;
+  size_t row_key_count;
 } NuxPlayerDriverReport;
 
 /**
@@ -1939,23 +1959,27 @@ typedef struct NuxMetalRenderOperation {
 #endif
 
 /**
- * One object of the player's artboard, or of one nested artboard
- * occurrence under it. Fields may be appended; initialize `struct_size` to
- * `sizeof(NuxSceneObject)`.
+ * One object of the player's artboard, or of one nested artboard or keyed
+ * list row occurrence under it. Fields may be appended; initialize
+ * `struct_size` to `sizeof(NuxSceneObject)`.
  *
  * `path` leads from the player's artboard to the occurrence that holds the
- * object: the host of each nested artboard on the way, each by its local id
- * in the artboard the path has reached, with that artboard's file-global
- * id, as a report's `path` carries it. NULL with `path_len` 0 names the
- * player's own artboard; a caller whose `struct_size` ends before `path`
- * names it too. `local_id` is the object's local id in the artboard the
- * path leads to.
+ * object: the host of each nested artboard or keyed list on the way, each by
+ * its local id in the artboard the path has reached, with that artboard's
+ * file-global id, as a report's `path` carries it. `row_keys` names the row
+ * of each keyed list step, in path order, as a report's `row_keys` carries
+ * them. NULL with `path_len` 0 names the player's own artboard; a caller
+ * whose `struct_size` ends before `path` names it too, and one whose
+ * `struct_size` ends before `row_keys` names no row. `local_id` is the
+ * object's local id in the artboard the path leads to.
  */
 typedef struct NuxSceneObject {
   uint32_t struct_size;
   size_t local_id;
   const struct NuxScenePathSegment *path;
   size_t path_len;
+  const struct NuxSceneRowKey *row_keys;
+  size_t row_key_count;
 } NuxSceneObject;
 
 typedef struct NuxSemanticSnapshotInfo {
@@ -3535,6 +3559,47 @@ NuxStatus nux_renderer_resize(struct NuxRenderer *renderer,
                               struct NuxRendererOutcome *out_outcome,
                               struct NuxCapiResult **out_result);
 #endif
+
+/**
+ * Mount a row by `key` at the end of the keyed list `list`: a fresh
+ * instance of the list's row artboard with its machine at entry and the
+ * file's values. An object inside the row can be written in the same
+ * round. The key's bytes are copied and compared only for equality.
+ * `out_changed`, when not NULL, receives true. NOT_FOUND for a list that
+ * is not found, or whose row artboard the file does not have;
+ * INVALID_ARGUMENT for an object that is not a keyed list, or a key already
+ * mounted there.
+ */
+NuxStatus nux_scene_writer_mount_row(struct NuxSceneWriter *writer,
+                                     const struct NuxSceneObject *list,
+                                     struct NuxByteView key,
+                                     bool *out_changed);
+
+/**
+ * Move the row mounted by `key` to `place` among the keyed list's rows, 0
+ * being the first; the other rows keep their order, and the row keeps its
+ * instance and all its state. `out_changed`, when not NULL, receives
+ * whether its place changed. NOT_FOUND for a list that is not found or a
+ * key not mounted there; INVALID_ARGUMENT for an object that is not a
+ * keyed list or a place past the last row.
+ */
+NuxStatus nux_scene_writer_move_row(struct NuxSceneWriter *writer,
+                                    const struct NuxSceneObject *list,
+                                    struct NuxByteView key,
+                                    size_t place,
+                                    bool *out_changed);
+
+/**
+ * Remove the row mounted by `key` from the keyed list `list`. Its
+ * instance, machine and every state they hold are discarded; a later mount
+ * of the same key makes a new row. `out_changed`, when not NULL, receives
+ * true. NOT_FOUND for a list that is not found or a key not mounted there;
+ * INVALID_ARGUMENT for an object that is not a keyed list.
+ */
+NuxStatus nux_scene_writer_remove_row(struct NuxSceneWriter *writer,
+                                      const struct NuxSceneObject *list,
+                                      struct NuxByteView key,
+                                      bool *out_changed);
 
 /**
  * Reset what the engine holds under `object`, the object included. A reset

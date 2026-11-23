@@ -3602,6 +3602,24 @@ NuxStatus nux_scene_writer_remove_row(struct NuxSceneWriter *writer,
                                       bool *out_changed);
 
 /**
+ * Replace the instance the nested artboard host `host` holds with a fresh
+ * instance of the same artboard, made from the file: its objects hold the
+ * file's values, its scripts run their setup, and nothing the old instance
+ * played or was written reaches it. The old instance and its scripts are
+ * discarded at once. The host keeps its nested animations, which start
+ * again on the new instance at their entries; its focus, accessibility
+ * place and layout take the new instance, which plays its first frame, so
+ * an object inside it can be written in the same round. `out_changed`, when
+ * not NULL, receives true. NOT_FOUND for an object that is not found or a
+ * path that leads nowhere; INVALID_ARGUMENT for an object that hosts no
+ * nested artboard or nothing now, or one a live move, a bound artboard
+ * property or a view model owns.
+ */
+NuxStatus nux_scene_writer_replace_instance(struct NuxSceneWriter *writer,
+                                            const struct NuxSceneObject *host,
+                                            bool *out_changed);
+
+/**
  * Reset what the engine holds under `object`, the object included. A reset
  * returns the engine's state holders under the object to their start and
  * leaves every property value alone, whoever wrote it. So a property that

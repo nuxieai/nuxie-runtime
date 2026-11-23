@@ -649,6 +649,31 @@ pub unsafe extern "C" fn nux_scene_writer_reset(
     })
 }
 
+/// Replace the instance the nested artboard host `host` holds with a fresh
+/// instance of the same artboard, made from the file: its objects hold the
+/// file's values, its scripts run their setup, and nothing the old instance
+/// played or was written reaches it. The old instance and its scripts are
+/// discarded at once. The host keeps its nested animations, which start
+/// again on the new instance at their entries; its focus, accessibility
+/// place and layout take the new instance, which plays its first frame, so
+/// an object inside it can be written in the same round. `out_changed`, when
+/// not NULL, receives true. NOT_FOUND for an object that is not found or a
+/// path that leads nowhere; INVALID_ARGUMENT for an object that hosts no
+/// nested artboard or nothing now, or one a live move, a bound artboard
+/// property or a view model owns.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_scene_writer_replace_instance(
+    writer: *mut NuxSceneWriter,
+    host: *const NuxSceneObject,
+    out_changed: *mut bool,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        with_writer(writer, host, out_changed, |scene, host| {
+            scene.replace_instance(host)
+        })
+    })
+}
+
 /// Run one row call on the keyed list `list` with `key`: check the writer is
 /// this turn's, read the list and the key, write `changed` when the caller
 /// asked for it.
@@ -1481,6 +1506,151 @@ mod tests {
             ),
             Some(120.0)
         );
+        unsafe {
+            assert_eq!(crate::nux_player_free(player), NuxStatus::Ok);
+            assert_eq!(crate::nux_artboard_instance_free(instance), NuxStatus::Ok);
+            assert_eq!(crate::nux_file_free(file), NuxStatus::Ok);
+        }
+    }
+
+    /// What the replacing driver does in its next round 0, and what it was
+    /// told.
+    #[derive(Default)]
+    struct Replace {
+        armed: bool,
+        answers: Vec<(&'static str, NuxStatus, bool)>,
+    }
+
+    /// When armed, replaces the first use's instance, then tries the ways a
+    /// replacement is refused.
+    unsafe extern "C" fn drive_replace(
+        context: *mut c_void,
+        round: *const NuxPlayerDriverRound,
+        writer: *mut NuxSceneWriter,
+    ) -> NuxStatus {
+        use nuxie::occurrence_fixture::page;
+        let replace = unsafe { &mut *context.cast::<Replace>() };
+        if unsafe { (*round).index } != 0 || !std::mem::take(&mut replace.armed) {
+            return NuxStatus::Ok;
+        }
+        let object = |local_id| NuxSceneObject {
+            struct_size: sized::<NuxSceneObject>(),
+            local_id,
+            path: std::ptr::null(),
+            path_len: 0,
+            row_keys: std::ptr::null(),
+            row_key_count: 0,
+        };
+        let calls: [(&'static str, Option<NuxSceneObject>); 4] = [
+            ("the first use", Some(object(page::FIRST))),
+            ("an object that hosts nothing", Some(object(page::BELOW))),
+            ("an object that is not there", Some(object(999))),
+            ("a null host", None),
+        ];
+        for (what, host) in calls {
+            let host = host.as_ref().map_or(std::ptr::null(), std::ptr::from_ref);
+            let mut changed = false;
+            let status = unsafe { nux_scene_writer_replace_instance(writer, host, &mut changed) };
+            replace.answers.push((what, status, changed));
+        }
+        NuxStatus::Ok
+    }
+
+    /// Through the C edge, a host is given a fresh instance of its artboard:
+    /// the first use's card is a new instance whose machine starts its intro
+    /// again, the other use keeps its instance. What is not a host, what is
+    /// not there and a null host are refused.
+    #[test]
+    fn a_host_is_given_a_fresh_instance_through_the_c_edge() {
+        use nuxie::occurrence_fixture::{DOT_TRAVEL, PageMachine, card, page, two_uses_fixture};
+        use nuxie::runtime::generated::core_registry::CoreRegistry;
+        const X: u16 = 13;
+        let bytes = two_uses_fixture(PageMachine::OneLayer);
+        let mut file = std::ptr::null_mut();
+        let mut instance = std::ptr::null_mut();
+        let mut player = std::ptr::null_mut();
+        unsafe {
+            assert_eq!(
+                crate::nux_file_import(
+                    bytes.as_ptr(),
+                    bytes.len(),
+                    &crate::NuxRenderCallbacks::default(),
+                    &mut file
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                crate::nux_artboard_instance_new(file, 0, &mut instance),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                crate::nux_player_new_default(instance, &mut player),
+                NuxStatus::Ok
+            );
+            for _ in 0..60 {
+                step(player, &[]);
+            }
+        }
+        let page_board = unsafe { &*player }
+            .artboard
+            .instance
+            .borrow()
+            .native_handle();
+        let card_of = |host: usize| {
+            page_board
+                .with_artboard(|board| board.objects()[host].clone())
+                .and_then(|host| {
+                    host.with(|host| host.as_nested_artboard()?.artboard_instance_default())
+                        .flatten()
+                })
+                .expect("a hosted card")
+        };
+        let dot_x = |host: usize| {
+            let dot = card_of(host)
+                .with_artboard(|card| card.objects()[card::DOT].clone())
+                .expect("the dot");
+            CoreRegistry::get_double_handle(&dot, i32::from(X)).expect("the dot's x")
+        };
+        let (first, second) = (
+            card_of(page::FIRST).core_handle(),
+            card_of(page::SECOND).core_handle(),
+        );
+        assert_eq!(
+            (dot_x(page::FIRST), dot_x(page::SECOND)),
+            (DOT_TRAVEL, DOT_TRAVEL)
+        );
+
+        let mut replace = Replace {
+            armed: true,
+            ..Replace::default()
+        };
+        let driver = NuxPlayerDriver {
+            struct_size: sized::<NuxPlayerDriver>(),
+            context: (&raw mut replace).cast(),
+            drive: Some(drive_replace),
+            release: None,
+        };
+        unsafe {
+            assert_eq!(nux_player_driver_set(player, &driver), NuxStatus::Ok);
+            step(player, &[]);
+            assert_eq!(nux_player_driver_clear(player), NuxStatus::Ok);
+        }
+        assert_eq!(
+            replace.answers,
+            [
+                ("the first use", NuxStatus::Ok, true),
+                (
+                    "an object that hosts nothing",
+                    NuxStatus::InvalidArgument,
+                    false
+                ),
+                ("an object that is not there", NuxStatus::NotFound, false),
+                ("a null host", NuxStatus::NullArgument, false),
+            ]
+        );
+        assert_ne!(card_of(page::FIRST).core_handle(), first);
+        assert_eq!(card_of(page::SECOND).core_handle(), second);
+        assert_eq!((dot_x(page::FIRST), dot_x(page::SECOND)), (0.0, DOT_TRAVEL));
         unsafe {
             assert_eq!(crate::nux_player_free(player), NuxStatus::Ok);
             assert_eq!(crate::nux_artboard_instance_free(instance), NuxStatus::Ok);

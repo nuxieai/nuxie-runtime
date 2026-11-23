@@ -21,3 +21,19 @@ pub struct RuntimeGeometryHitOccurrence {
     /// time. `item_index` alone is not durable across list topology changes.
     pub occurrence_identity: u64,
 }
+
+/// One keyed list row on the descent to an occurrence: the list's host
+/// object, by its local id in the artboard with `artboard_global_id`, and the
+/// key the row was mounted by.
+///
+/// A key is bytes the engine compares only for equality. A path through a
+/// keyed list carries one of these for each keyed list step, in path order,
+/// beside the path's segments: a report from a keyed row carries them that
+/// way (`StateMachineEventContext::rows`), and a driver hands them back in a
+/// `SceneObject`.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RuntimeListRowKey {
+    pub artboard_global_id: u32,
+    pub host_local_id: usize,
+    pub key: Box<[u8]>,
+}

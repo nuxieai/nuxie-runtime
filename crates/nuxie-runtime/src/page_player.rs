@@ -1166,18 +1166,20 @@ impl PagePlayer {
             } else {
                 &events[round_start..]
             };
-            driver
-                .drive(
-                    DriverRound {
-                        index: drive.rounds,
-                        reports,
-                    },
-                    &mut scene,
-                )
-                .map_err(|fault| Error {
-                    kind: ErrorKind::RuntimeError,
-                    message: format!("player driver failed: {}", fault.0),
-                })?;
+            let driven = driver.drive(
+                DriverRound {
+                    index: drive.rounds,
+                    reports,
+                },
+                &mut scene,
+            );
+            // The keyed lists the round changed take their rows once, even
+            // when the driver failed after changing them.
+            scene.finish_round();
+            driven.map_err(|fault| Error {
+                kind: ErrorKind::RuntimeError,
+                message: format!("player driver failed: {}", fault.0),
+            })?;
             drive.rounds += 1;
             if scene.changes() == 0 {
                 break;

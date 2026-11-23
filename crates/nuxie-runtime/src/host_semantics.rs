@@ -10,7 +10,7 @@ use nuxie_render_api::{Aabb, Mat2D, Vec2D};
 
 use crate::{
     ArtboardInstance, RuntimeGeometryHitOccurrence, RuntimeGeometryHitPathSegment,
-    StateMachineEventContext, StateMachineInputKind,
+    RuntimeListRowKey, StateMachineEventContext, StateMachineInputKind,
     mechanical_port::source::{
         animation::{
             nested_state_machine::NestedStateMachine,
@@ -118,11 +118,7 @@ impl RuntimeNestedArtboardMount {
         let current = if let Some(expected_item) = self.list_item.as_ref() {
             self.host
                 .with_downcast::<ArtboardComponentList, _>(|list| {
-                    (0..list.artboard_count()).find_map(|index| {
-                        (list.list_item(index as i32).as_ref() == Some(expected_item))
-                            .then(|| list.artboard_instance(index as i32))
-                            .flatten()
-                    })
+                    list.row_instance_for_item(expected_item)
                 })
                 .flatten()
         } else {
@@ -645,20 +641,80 @@ impl ArtboardInstance {
         &self,
         path: &[RuntimeGeometryHitPathSegment],
     ) -> Option<RuntimeNestedArtboardOccurrence> {
-        let segments: Vec<_> = path
-            .iter()
-            .map(|segment| RuntimeArtboardOccurrenceSegment::NestedArtboard {
-                host_local_id: segment.local_id,
-            })
-            .collect();
-        let occurrence = self.nested_artboard_occurrence(&segments)?;
-        let reached = occurrence.mounts.len() == path.len()
-            && occurrence.mounts.iter().zip(path).all(|(mount, segment)| {
-                mount.parent.upgrade().is_some_and(|parent| {
-                    source_artboard_global_id(&parent) == Some(segment.artboard_global_id)
-                })
+        self.nested_artboard_occurrence_on_keyed_path(path, &[])
+    }
+
+    /// Resolve a path that may pass through keyed list rows, as a report
+    /// from a keyed row carries it, into a weak, mount-fenced occurrence.
+    /// Each segment names a host by its local id in the artboard the path
+    /// has reached, with that artboard's file-global id: a nested artboard,
+    /// or a keyed list, whose row is named by the next of `rows`, which must
+    /// name the same host. None when the path is empty; when a segment names
+    /// no object, an object that hosts nothing, or an artboard other than the
+    /// one the path has reached; when a keyed list step has no row key, or a
+    /// row key names a nested artboard step, a list that is not keyed or a
+    /// key not mounted there; when row keys are left over; or when the
+    /// occurrence reached is not mounted.
+    pub fn nested_artboard_occurrence_on_keyed_path(
+        &self,
+        path: &[RuntimeGeometryHitPathSegment],
+        rows: &[RuntimeListRowKey],
+    ) -> Option<RuntimeNestedArtboardOccurrence> {
+        if path.is_empty() {
+            return None;
+        }
+        let mut rows = rows.iter().peekable();
+        let mut parent = self.native_handle();
+        let mut mounts = Vec::with_capacity(path.len());
+        for segment in path {
+            if source_artboard_global_id(&parent) != Some(segment.artboard_global_id) {
+                return None;
+            }
+            let host = parent.with_artboard(|artboard| {
+                artboard
+                    .base
+                    .resolve_handle(u32::try_from(segment.local_id).ok()?)
+            })?;
+            let names_row = rows.peek().is_some_and(|row| {
+                row.artboard_global_id == segment.artboard_global_id
+                    && row.host_local_id == segment.local_id
             });
-        reached.then_some(occurrence)
+            let nested = host
+                .with(|object| {
+                    object
+                        .as_nested_artboard()
+                        .map(|nested| nested.artboard_instance_default())
+                })
+                .flatten();
+            let (child, list_item) = match nested {
+                Some(child) => {
+                    if names_row {
+                        return None;
+                    }
+                    (child?, None)
+                }
+                None => {
+                    let row = rows.next().filter(|_| names_row)?;
+                    let (item, child) = host
+                        .with_downcast::<ArtboardComponentList, _>(|list| {
+                            list.is_keyed().then(|| list.keyed_row(&row.key)).flatten()
+                        })
+                        .flatten()?;
+                    (child, Some(item))
+                }
+            };
+            mounts.push(RuntimeNestedArtboardMount {
+                parent: parent.downgrade(),
+                host,
+                list_item,
+                child: child.downgrade(),
+            });
+            parent = child;
+        }
+        if rows.next().is_some() {
+            return None;
+        }
+        Some(RuntimeNestedArtboardOccurrence::from_native(parent, mounts))
     }
 
     pub fn scroll_constraint_occurrences(&self) -> Vec<RuntimeScrollConstraintSnapshot> {

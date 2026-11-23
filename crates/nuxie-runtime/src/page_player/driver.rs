@@ -9,9 +9,15 @@ use super::OwnedPlayerEvent;
 /// One step of a [`SceneObject`]'s path, the type a reported event's path
 /// is made of.
 pub use crate::RuntimeGeometryHitPathSegment;
+/// One keyed list row of a [`SceneObject`]'s path, the type a reported
+/// event's row keys are made of.
+pub use crate::RuntimeListRowKey;
 use crate::mechanical_port::source::animation::{
     nested_state_machine::NestedStateMachine,
     state_machine_instance::RuntimeStateMachineInstanceHandle,
+};
+use crate::mechanical_port::source::artboard_component_list::{
+    ArtboardComponentList, KeyedRowRefusal,
 };
 use crate::mechanical_port::source::{
     core::field_types::{
@@ -33,21 +39,23 @@ pub const MAX_DRIVER_ROUNDS: usize = 8;
 /// occurrence under it.
 ///
 /// `path` leads from the player's artboard down to the occurrence that holds
-/// the object: the host object of each nested artboard on the way, each by
-/// its local id in the artboard the path has reached so far, with that
-/// artboard's file-global id. It is the path a reported event carries
-/// (`StateMachineEventContext::path`), so a driver can hand back the path it
-/// heard. An empty path names the player's own artboard. `local_id` is the
-/// object's local id in the artboard the path leads to.
+/// the object: the host object of each nested artboard or keyed list on the
+/// way, each by its local id in the artboard the path has reached so far,
+/// with that artboard's file-global id. `rows` names the row of each keyed
+/// list step, in path order: the list's host, as its step names it, and the
+/// key the row was mounted by. These are the path and the row keys a
+/// reported event carries (`StateMachineEventContext::path` and `rows`), so
+/// a driver can hand back what it heard. An empty path names the player's
+/// own artboard. `local_id` is the object's local id in the artboard the
+/// path leads to.
 ///
-/// A list row cannot be named yet: a path through a list host leads nowhere.
-/// The type is non-exhaustive so a row can be added beside `path` without
-/// changing these callers.
+/// A path through a list that is not keyed leads nowhere.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub struct SceneObject {
     pub local_id: usize,
     pub path: Vec<RuntimeGeometryHitPathSegment>,
+    pub rows: Vec<RuntimeListRowKey>,
 }
 
 impl SceneObject {
@@ -56,12 +64,31 @@ impl SceneObject {
         Self {
             local_id,
             path: Vec::new(),
+            rows: Vec::new(),
         }
     }
 
     /// An object of the nested artboard occurrence `path` leads to.
     pub fn nested(path: Vec<RuntimeGeometryHitPathSegment>, local_id: usize) -> Self {
-        Self { local_id, path }
+        Self {
+            local_id,
+            path,
+            rows: Vec::new(),
+        }
+    }
+
+    /// An object of the occurrence `path` leads to through the keyed list
+    /// rows `rows` names.
+    pub fn in_rows(
+        path: Vec<RuntimeGeometryHitPathSegment>,
+        rows: Vec<RuntimeListRowKey>,
+        local_id: usize,
+    ) -> Self {
+        Self {
+            local_id,
+            path,
+            rows,
+        }
     }
 }
 
@@ -78,6 +105,30 @@ pub enum SceneWriteError {
     UnknownProperty,
     /// The value cannot be written: a number that is not finite.
     InvalidValue,
+    /// A row operation named an object that is not a keyed list: not a list,
+    /// or a list whose record names no artboard for keyed rows.
+    NotKeyedList,
+    /// The keyed list's record names an artboard the file does not have, so
+    /// no row can be mounted.
+    NoRowArtboard,
+    /// A row with this key is already mounted in the list.
+    KeyExists,
+    /// No row with this key is mounted in the list.
+    KeyNotFound,
+    /// The place is past the list's last row.
+    PlaceOutOfRange,
+}
+
+impl From<KeyedRowRefusal> for SceneWriteError {
+    fn from(refusal: KeyedRowRefusal) -> Self {
+        match refusal {
+            KeyedRowRefusal::NotKeyed => Self::NotKeyedList,
+            KeyedRowRefusal::NoRowArtboard => Self::NoRowArtboard,
+            KeyedRowRefusal::KeyExists => Self::KeyExists,
+            KeyedRowRefusal::KeyNotFound => Self::KeyNotFound,
+            KeyedRowRefusal::PlaceOutOfRange => Self::PlaceOutOfRange,
+        }
+    }
 }
 
 /// Writes into the player's artboard and the nested artboard occurrences
@@ -90,10 +141,16 @@ pub enum SceneWriteError {
 /// the same property would.
 /// Writing the value a property already holds changes nothing and does not
 /// count as a change.
+///
+/// Row operations on a keyed list apply in the order given. A mounted row is
+/// made at once, so a write into it in the same round lands. Each list a
+/// round changed takes its new order of rows once, when the round ends.
 pub struct SceneWriter<'a> {
     artboard: &'a ArtboardInstance,
     machine: Option<&'a StateMachineInstance>,
     changes: usize,
+    /// The keyed lists this round's row operations changed.
+    row_lists: Vec<CoreHandle>,
 }
 
 impl<'a> SceneWriter<'a> {
@@ -105,6 +162,15 @@ impl<'a> SceneWriter<'a> {
             artboard,
             machine,
             changes: 0,
+            row_lists: Vec::new(),
+        }
+    }
+
+    /// End the round: each keyed list a row operation changed takes its new
+    /// order of rows, once.
+    pub(crate) fn finish_round(&mut self) {
+        for list in std::mem::take(&mut self.row_lists) {
+            ArtboardComponentList::commit_keyed_rows_occurrence(&list);
         }
     }
 
@@ -120,10 +186,14 @@ impl<'a> SceneWriter<'a> {
         object: &SceneObject,
     ) -> Result<Option<RuntimeNestedArtboardOccurrence>, SceneWriteError> {
         if object.path.is_empty() {
-            return Ok(None);
+            return if object.rows.is_empty() {
+                Ok(None)
+            } else {
+                Err(SceneWriteError::PathNotFound)
+            };
         }
         self.artboard
-            .nested_artboard_occurrence_on_path(&object.path)
+            .nested_artboard_occurrence_on_keyed_path(&object.path, &object.rows)
             .map(Some)
             .ok_or(SceneWriteError::PathNotFound)
     }
@@ -328,6 +398,63 @@ impl<'a> SceneWriter<'a> {
             self.changes += 1;
         }
         Ok(changed)
+    }
+
+    /// The keyed list `list` names.
+    fn keyed_list(&self, list: &SceneObject) -> Result<CoreHandle, SceneWriteError> {
+        let handle = self.object_handle(list)?;
+        let keyed = handle
+            .with_downcast::<ArtboardComponentList, _>(ArtboardComponentList::is_keyed)
+            .unwrap_or(false);
+        if !keyed {
+            return Err(SceneWriteError::NotKeyedList);
+        }
+        Ok(handle)
+    }
+
+    fn row_changed(&mut self, list: CoreHandle) {
+        self.changes += 1;
+        if !self.row_lists.contains(&list) {
+            self.row_lists.push(list);
+        }
+    }
+
+    /// Mount a row by `key` at the end of the keyed list `list`: a fresh
+    /// instance of the list's row artboard with its machine at entry and the
+    /// file's values. An object inside the row can be written in the same
+    /// round. Always a change.
+    pub fn mount_row(&mut self, list: &SceneObject, key: &[u8]) -> Result<bool, SceneWriteError> {
+        let handle = self.keyed_list(list)?;
+        ArtboardComponentList::mount_keyed_row_occurrence(&handle, key)?;
+        self.row_changed(handle);
+        Ok(true)
+    }
+
+    /// Remove the row mounted by `key` from the keyed list `list`. Its
+    /// instance, machine and every state they hold are discarded; a later
+    /// mount of the same key makes a new row. Always a change.
+    pub fn remove_row(&mut self, list: &SceneObject, key: &[u8]) -> Result<bool, SceneWriteError> {
+        let handle = self.keyed_list(list)?;
+        ArtboardComponentList::remove_keyed_row_occurrence(&handle, key)?;
+        self.row_changed(handle);
+        Ok(true)
+    }
+
+    /// Move the row mounted by `key` to `place` among the keyed list's rows,
+    /// 0 being the first; the other rows keep their order. The row keeps its
+    /// instance and all its state. Whether its place changed.
+    pub fn move_row(
+        &mut self,
+        list: &SceneObject,
+        key: &[u8],
+        place: usize,
+    ) -> Result<bool, SceneWriteError> {
+        let handle = self.keyed_list(list)?;
+        let moved = ArtboardComponentList::move_keyed_row_occurrence(&handle, key, place)?;
+        if moved {
+            self.row_changed(handle);
+        }
+        Ok(moved)
     }
 }
 

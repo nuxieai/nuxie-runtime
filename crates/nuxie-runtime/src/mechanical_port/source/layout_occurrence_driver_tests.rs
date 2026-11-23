@@ -806,6 +806,80 @@ fn tag_colors(played: &Played) -> Vec<u32> {
         .collect()
 }
 
+/// A host inside a use, named by the use's path, is given a fresh instance
+/// in that use only: the badge that was written holds the file's tag color
+/// again, as a new instance, and the other three badges keep their
+/// instances and their colors.
+#[test]
+fn a_host_inside_a_use_is_replaced_in_that_use_only() {
+    let mut played = Played::new(badged(PageMachine::OneLayer));
+    played.frames_until_settled();
+    let every = || {
+        [page::FIRST, page::SECOND]
+            .into_iter()
+            .flat_map(|host| [(host, card::FIRST_BADGE), (host, card::SECOND_BADGE)])
+    };
+    let color = SceneObject::nested(
+        badge_path(&played, page::FIRST, card::SECOND_BADGE),
+        badge::TAG_COLOR,
+    );
+    let other = SceneObject::nested(
+        badge_path(&played, page::SECOND, card::SECOND_BADGE),
+        badge::TAG_COLOR,
+    );
+    write_once(&played, move |scene| {
+        for object in [&color, &other] {
+            assert_eq!(
+                scene.set_color(
+                    object,
+                    SolidColorBase::COLOR_VALUE_PROPERTY_KEY,
+                    0xff00_ff00
+                ),
+                Ok(true)
+            );
+        }
+    });
+    played.step(FRAME, vec![]);
+    let written = vec![
+        fixture::TAG_COLOR,
+        0xff00_ff00,
+        fixture::TAG_COLOR,
+        0xff00_ff00,
+    ];
+    assert_eq!(tag_colors(&played), written);
+    let before: Vec<_> = every()
+        .map(|(host, badge_host)| badge_of(&played, host, badge_host).core_handle())
+        .collect();
+
+    let host = SceneObject::nested(path_to(&played, page::FIRST), card::SECOND_BADGE);
+    write_once(&played, move |scene| {
+        assert_eq!(scene.replace_instance(&host), Ok(true));
+    });
+    let output = played.step(FRAME, vec![]);
+    assert_eq!(output.driver_rounds, 2);
+    let after: Vec<_> = every()
+        .map(|(host, badge_host)| badge_of(&played, host, badge_host).core_handle())
+        .collect();
+    assert_eq!(
+        before
+            .iter()
+            .zip(&after)
+            .map(|(before, after)| before == after)
+            .collect::<Vec<_>>(),
+        [true, false, true, true],
+        "only the first card's second badge is a new instance"
+    );
+    assert_eq!(
+        tag_colors(&played),
+        vec![
+            fixture::TAG_COLOR,
+            fixture::TAG_COLOR,
+            fixture::TAG_COLOR,
+            0xff00_ff00
+        ]
+    );
+}
+
 /// A path two steps deep, through a card and one of its badges, writes that
 /// badge of that card only. A path whose second step names an object that
 /// hosts nothing, the wrong artboard, or no object, or that steps past the

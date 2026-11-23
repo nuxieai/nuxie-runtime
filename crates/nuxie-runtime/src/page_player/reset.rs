@@ -1,4 +1,5 @@
-//! Reset what the engine holds under one object of the player's artboard.
+//! Reset what the engine holds under one object of the player's artboard,
+//! or of one nested artboard occurrence under it.
 //!
 //! The contract: a reset returns the engine's state holders under the
 //! object to their start and leaves every property value alone, whoever
@@ -18,9 +19,11 @@
 //!    and replaces what was there. One that other objects link to is
 //!    returned in place, each kind by its own `reset_in_place`, which names
 //!    every field it holds, so a field added later does not compile until
-//!    someone decides what a reset does to it. The player's own listeners
-//!    drop the presses and hovers they hold on objects under the reset
-//!    object.
+//!    someone decides what a reset does to it. The machines that play on
+//!    the artboard holding the reset object drop the presses and hovers
+//!    they hold on objects under it: the player's own machine in the
+//!    player's artboard, and in a nested occurrence the machines its host
+//!    plays there.
 //! 2. First frame. Every nested artboard host the reset reached, of any host
 //!    type, and every artboard component list, is advanced by zero as a new
 //!    frame through the engine's advancing-component dispatch: the call an
@@ -80,16 +83,22 @@
 //! | Joystick | Nothing to reset | Its time comes from its position each frame. |
 //!
 //! The inputs of the player's own machine, which is under no object, are
-//! left as they are. A rebuild runs only when a driver calls a reset: a
-//! player with no driver, or a driver that never resets, runs none of it.
+//! left as they are. A reset of an object inside a nested occurrence reaches
+//! that occurrence only. The machines its host plays on it belong to the
+//! host, one artboard up: a reset that names the host returns them, and a
+//! reset inside the occurrence leaves their layers as they are. A rebuild
+//! runs only when a driver calls a reset: a player with no driver, or a
+//! driver that never resets, runs none of it.
 use std::collections::HashSet;
 
+use crate::CoreHandle;
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     advancing_component::AdvancingComponentHandle,
     animation::{
         nested_animation, nested_linear_animation::NestedLinearAnimation,
         nested_state_machine::NestedStateMachine,
+        state_machine_instance::RuntimeStateMachineInstanceHandle,
     },
     artboard::{Artboard, RuntimeArtboardInstanceHandle},
     artboard_component_list::ArtboardComponentList,
@@ -107,21 +116,21 @@ use crate::mechanical_port::source::{
     shapes::paint::paint_image::PaintImage,
     text::text_input::TextInput,
 };
-use crate::{ArtboardInstance, CoreHandle, StateMachineInstance};
 
-/// Return the state holders under `root` in the player's artboard, `root`
-/// included, to their start, leaving every property value alone (module
-/// docs). `machine` is the player's own machine, whose listeners on
-/// objects under `root` drop the pointers they hold. Whether anything was
-/// reset.
+/// Return the state holders under `root` in `artboard`, `root` included, to
+/// their start, leaving every property value alone (module docs).
+/// `artboard` is the player's artboard or one nested occurrence under it.
+/// `machines` are the machines that play on it: the player's own machine,
+/// or the machines the occurrence's host plays. Their listeners on objects
+/// under `root` drop the pointers they hold. Whether anything was reset.
 pub(super) fn reset_subtree(
-    artboard: &ArtboardInstance,
-    machine: Option<&StateMachineInstance>,
+    artboard: &RuntimeArtboardInstanceHandle,
+    machines: &[RuntimeStateMachineInstanceHandle],
     root: &CoreHandle,
 ) -> bool {
-    let native = artboard.native_handle();
+    let native = artboard;
     let objects = native.with_artboard(|artboard| artboard.base.objects().to_vec());
-    let sources = source_objects(&native);
+    let sources = source_objects(native);
     let under: HashSet<u32> = objects
         .iter()
         .enumerate()
@@ -145,13 +154,13 @@ pub(super) fn reset_subtree(
             }
         }
     }
-    if let Some(machine) = machine {
-        changed |= machine.native_handle().with_instance_mut(|machine| {
+    for machine in machines {
+        changed |= machine.with_instance_mut(|machine| {
             machine.release_listener_pointers(|id| under.contains(&id))
         });
     }
-    // Only the player's artboard's own hosts: the first frame recurses into
-    // the artboards they host, so a host inside one is advanced once, by it.
+    // Only this artboard's own hosts: the first frame recurses into the
+    // artboards they host, so a host inside one is advanced once, by it.
     for host in &hosts {
         AdvancingComponentHandle::classified(host).advance(0.0, FIRST_FRAME);
     }

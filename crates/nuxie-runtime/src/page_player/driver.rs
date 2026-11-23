@@ -6,6 +6,13 @@
 //! whatever the settle reported, up to [`MAX_DRIVER_ROUNDS`]. The frame drawn
 //! after the step already shows every write.
 use super::OwnedPlayerEvent;
+/// One step of a [`SceneObject`]'s path, the type a reported event's path
+/// is made of.
+pub use crate::RuntimeGeometryHitPathSegment;
+use crate::mechanical_port::source::animation::{
+    nested_state_machine::NestedStateMachine,
+    state_machine_instance::RuntimeStateMachineInstanceHandle,
+};
 use crate::mechanical_port::source::{
     core::field_types::{
         core_bool_type::CoreBoolType, core_color_type::CoreColorType,
@@ -14,7 +21,7 @@ use crate::mechanical_port::source::{
     },
     generated::core_registry::CoreRegistry,
 };
-use crate::{ArtboardInstance, CoreHandle, StateMachineInstance};
+use crate::{ArtboardInstance, CoreHandle, RuntimeNestedArtboardOccurrence, StateMachineInstance};
 
 /// The most driver rounds one step runs. A driver still writing in the last
 /// round is cut off: its writes are laid out, the step returns unsettled, and
@@ -22,39 +29,65 @@ use crate::{ArtboardInstance, CoreHandle, StateMachineInstance};
 /// the next step.
 pub const MAX_DRIVER_ROUNDS: usize = 8;
 
-/// One object of the player's artboard, by its local id in that artboard.
+/// One object of the player's artboard, or of one nested artboard
+/// occurrence under it.
 ///
-/// Today an address names an object of the root artboard only. The type is
-/// non-exhaustive so an address of one nested occurrence or one list row can
-/// be added as a path beside `local_id` without changing these callers.
+/// `path` leads from the player's artboard down to the occurrence that holds
+/// the object: the host object of each nested artboard on the way, each by
+/// its local id in the artboard the path has reached so far, with that
+/// artboard's file-global id. It is the path a reported event carries
+/// (`StateMachineEventContext::path`), so a driver can hand back the path it
+/// heard. An empty path names the player's own artboard. `local_id` is the
+/// object's local id in the artboard the path leads to.
+///
+/// A list row cannot be named yet: a path through a list host leads nowhere.
+/// The type is non-exhaustive so a row can be added beside `path` without
+/// changing these callers.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub struct SceneObject {
     pub local_id: usize,
+    pub path: Vec<RuntimeGeometryHitPathSegment>,
 }
 
 impl SceneObject {
-    /// An object of the root artboard.
+    /// An object of the player's own artboard.
     pub fn root(local_id: usize) -> Self {
-        Self { local_id }
+        Self {
+            local_id,
+            path: Vec::new(),
+        }
+    }
+
+    /// An object of the nested artboard occurrence `path` leads to.
+    pub fn nested(path: Vec<RuntimeGeometryHitPathSegment>, local_id: usize) -> Self {
+        Self { local_id, path }
     }
 }
 
 /// Why a write or reset was refused. A refused call changes nothing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SceneWriteError {
-    /// The artboard has no object with this local id.
+    /// The artboard the path leads to has no object with this local id.
     NotFound,
+    /// The path leads to no mounted occurrence: a step names no object, an
+    /// object that hosts no nested artboard, or an artboard other than the
+    /// one the path has reached, or the occurrence it names is gone.
+    PathNotFound,
     /// The object has no property of this key and kind.
     UnknownProperty,
     /// The value cannot be written: a number that is not finite.
     InvalidValue,
 }
 
-/// Writes into the player's artboard, valid for one driver round.
+/// Writes into the player's artboard and the nested artboard occurrences
+/// under it, valid for one driver round.
 ///
-/// A write goes through the property's own setter, so it marks layout and
-/// paint exactly as an animation or a bind writing the same property would.
+/// An object inside an occurrence is reached through the occurrence its
+/// path resolves to, and written through the same setter as an object of
+/// the player's artboard. A write goes through the property's own setter,
+/// so it marks layout and paint exactly as an animation or a bind writing
+/// the same property would.
 /// Writing the value a property already holds changes nothing and does not
 /// count as a change.
 pub struct SceneWriter<'a> {
@@ -80,16 +113,36 @@ impl<'a> SceneWriter<'a> {
         self.changes
     }
 
+    /// The occurrence `object`'s path leads to, or None for an object of
+    /// the player's own artboard.
+    fn occurrence(
+        &self,
+        object: &SceneObject,
+    ) -> Result<Option<RuntimeNestedArtboardOccurrence>, SceneWriteError> {
+        if object.path.is_empty() {
+            return Ok(None);
+        }
+        self.artboard
+            .nested_artboard_occurrence_on_path(&object.path)
+            .map(Some)
+            .ok_or(SceneWriteError::PathNotFound)
+    }
+
+    fn object_handle(&self, object: &SceneObject) -> Result<CoreHandle, SceneWriteError> {
+        match self.occurrence(object)? {
+            None => self.artboard.object_handle(object.local_id),
+            Some(occurrence) => occurrence.object_handle(object.local_id),
+        }
+        .ok_or(SceneWriteError::NotFound)
+    }
+
     fn property(
         &self,
         object: &SceneObject,
         key: u16,
         field: i32,
     ) -> Result<CoreHandle, SceneWriteError> {
-        let handle = self
-            .artboard
-            .object_handle(object.local_id)
-            .ok_or(SceneWriteError::NotFound)?;
+        let handle = self.object_handle(object)?;
         let supported = CoreRegistry::property_field_id(i32::from(key)) == field
             && handle
                 .with(|object| CoreRegistry::object_supports_property(object, u32::from(key)))
@@ -237,19 +290,62 @@ impl<'a> SceneWriter<'a> {
     /// machine, which is under no object. A nested host that skips frames
     /// (paused, collapsed, or playing at a fixed rate) skips the reset's
     /// first frame too, so what its playback keys holds its values until it
-    /// next advances. The reset module lists every kind. Whether anything
-    /// was reset.
+    /// next advances. The reset module lists every kind.
+    ///
+    /// A reset of an object inside a nested occurrence reaches only that
+    /// occurrence, and there the machines its host plays on it drop the
+    /// presses and hovers they hold under the object, as the player's own
+    /// machine does in the player's artboard. Those machines belong to the
+    /// host, one artboard up, so a reset that names the host returns them to
+    /// their entry states and a reset inside the occurrence does not. Whether
+    /// anything was reset.
     pub fn reset(&mut self, object: &SceneObject) -> Result<bool, SceneWriteError> {
-        let handle = self
-            .artboard
-            .object_handle(object.local_id)
-            .ok_or(SceneWriteError::NotFound)?;
-        let changed = super::reset::reset_subtree(self.artboard, self.machine, &handle);
+        let changed = match self.occurrence(object)? {
+            None => {
+                let handle = self
+                    .artboard
+                    .object_handle(object.local_id)
+                    .ok_or(SceneWriteError::NotFound)?;
+                let machines: Vec<_> = self
+                    .machine
+                    .map(|m| m.native_handle())
+                    .into_iter()
+                    .collect();
+                super::reset::reset_subtree(&self.artboard.native_handle(), &machines, &handle)
+            }
+            Some(occurrence) => {
+                let handle = occurrence
+                    .object_handle(object.local_id)
+                    .ok_or(SceneWriteError::NotFound)?;
+                let (Some(artboard), Some(host)) = (occurrence.artboard(), occurrence.host())
+                else {
+                    return Err(SceneWriteError::PathNotFound);
+                };
+                super::reset::reset_subtree(&artboard, &hosted_machines(&host), &handle)
+            }
+        };
         if changed {
             self.changes += 1;
         }
         Ok(changed)
     }
+}
+
+/// The machines a nested artboard host plays on the artboard it hosts.
+fn hosted_machines(host: &CoreHandle) -> Vec<RuntimeStateMachineInstanceHandle> {
+    host.with(|host| {
+        host.as_nested_artboard()
+            .map(|nested| nested.nested_animations().to_vec())
+    })
+    .flatten()
+    .unwrap_or_default()
+    .iter()
+    .filter_map(|animation| {
+        animation
+            .with_downcast::<NestedStateMachine, _>(NestedStateMachine::state_machine_instance)
+            .flatten()
+    })
+    .collect()
 }
 
 /// One round of a step, as the driver sees it.

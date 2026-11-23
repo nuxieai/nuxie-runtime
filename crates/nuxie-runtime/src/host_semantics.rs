@@ -169,10 +169,23 @@ impl RuntimeNestedArtboardOccurrence {
         self.is_current().then(|| self.native.upgrade()).flatten()
     }
 
-    fn object_handle(&self, local_id: usize) -> Option<CoreHandle> {
+    /// The object at `local_id` in this occurrence, while it is mounted.
+    pub(crate) fn object_handle(&self, local_id: usize) -> Option<CoreHandle> {
         let native = self.current_native()?;
         let local_id = u32::try_from(local_id).ok()?;
         native.with_artboard(|artboard| artboard.base.resolve_handle(local_id))
+    }
+
+    /// This occurrence's artboard, while it is mounted.
+    pub(crate) fn artboard(&self) -> Option<RuntimeArtboardInstanceHandle> {
+        self.current_native()
+    }
+
+    /// The object that hosts this occurrence in the artboard above it, while
+    /// it is mounted.
+    pub(crate) fn host(&self) -> Option<CoreHandle> {
+        self.current_native()?;
+        self.mounts.last().map(|mount| mount.host.clone())
     }
 
     /// Opaque identity of this exact retained occurrence.
@@ -619,6 +632,33 @@ impl ArtboardInstance {
             parent = child;
         }
         Some(RuntimeNestedArtboardOccurrence::from_native(parent, mounts))
+    }
+
+    /// Resolve a path of nested artboard hosts, as a reported event's path
+    /// carries it, into a weak, mount-fenced occurrence. Each segment names a
+    /// host by its local id in the artboard the path has reached, together
+    /// with that artboard's file-global id. None when the path is empty, or
+    /// a segment names no object, an object that hosts no nested artboard,
+    /// or an artboard other than the one the path has reached, or the hosted
+    /// occurrence is not mounted.
+    pub fn nested_artboard_occurrence_on_path(
+        &self,
+        path: &[RuntimeGeometryHitPathSegment],
+    ) -> Option<RuntimeNestedArtboardOccurrence> {
+        let segments: Vec<_> = path
+            .iter()
+            .map(|segment| RuntimeArtboardOccurrenceSegment::NestedArtboard {
+                host_local_id: segment.local_id,
+            })
+            .collect();
+        let occurrence = self.nested_artboard_occurrence(&segments)?;
+        let reached = occurrence.mounts.len() == path.len()
+            && occurrence.mounts.iter().zip(path).all(|(mount, segment)| {
+                mount.parent.upgrade().is_some_and(|parent| {
+                    source_artboard_global_id(&parent) == Some(segment.artboard_global_id)
+                })
+            });
+        reached.then_some(occurrence)
     }
 
     pub fn scroll_constraint_occurrences(&self) -> Vec<RuntimeScrollConstraintSnapshot> {

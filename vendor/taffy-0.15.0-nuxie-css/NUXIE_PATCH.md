@@ -2183,3 +2183,22 @@ Example: a 400 by 100 row around a 120 by 60 picture with `width: 100%; aspect-r
 wide and the box 100. Before: the picture was 400 wide and the box 0.
 
 Four recorded Chrome layouts now match; none that matched stops matching. Guard rows: 4.
+
+## Items of a column sized by its ratio have definite flexed heights
+
+When a column has a definite height, the heights flexing gives its items are definite:
+a percentage height inside an item resolves against the item's flexed height (CSS
+Flexbox 1 §9.8). The fork applied that to a column with a set height but not to one
+whose height comes from its own `aspect-ratio` and a definite width, although that
+height is just as known before the items are laid out. A `height: 100%` inside such an
+item stayed automatic.
+
+A column's ratio height from a definite width now counts as a definite main size for
+its items' flexed heights (`item_known_dimension_definiteness`). Nothing else that reads
+the column's main size changes.
+
+Example: a 300 wide column with `aspect-ratio: 2` around a row holding a 40 by 40
+picture with `height: 100%` and a 120 by 60 box. Chrome: the picture is 60 by 60. Before:
+40 by 40. With `height: 150px` on the column in place of the ratio, both already agreed.
+
+Twenty recorded Chrome layouts now match; none that matched stops matching. Guard rows: 20.

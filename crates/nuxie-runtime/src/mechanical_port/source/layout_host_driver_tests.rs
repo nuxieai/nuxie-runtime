@@ -2167,6 +2167,8 @@ fn two_state_hosting() -> Scene {
 /// starting state does not, then reset, starts again from its entry and
 /// plays its starting state forward as a fresh copy's does, while the
 /// property only the later state keyed keeps the value that state wrote.
+/// The same host given a fresh instance instead (`replace_instance`) holds
+/// what a fresh copy holds, that opacity included, and plays as it does.
 #[test]
 fn a_reset_restarts_a_nested_machine_and_leaves_what_only_its_later_state_keyed() {
     use crate::source::generated::world_transform_component_base::WorldTransformComponentBase;
@@ -2192,33 +2194,56 @@ fn a_reset_restarts_a_nested_machine_and_leaves_what_only_its_later_state_keyed(
     };
     let mut fresh = Played::new(two_state_hosting());
     let mut played = Played::new(two_state_hosting());
-    let target = played.object("Nested");
-    let resetting = Rc::new(RefCell::new(false));
-    let result = Rc::new(RefCell::new(None));
-    let (armed, log) = (resetting.clone(), result.clone());
-    played.drive(move |round, scene| {
-        if round.index == 0 && *armed.borrow() {
-            *armed.borrow_mut() = false;
-            *log.borrow_mut() = Some(scene.reset(&target));
-        }
-    });
+    let mut replaced = Played::new(two_state_hosting());
+    // Each driver resets, or replaces the instance of, "Nested" once, in the
+    // first round of the step after it is armed.
+    let arm = |played: &Played, replace: bool| {
+        let target = played.object("Nested");
+        let armed = Rc::new(RefCell::new(false));
+        let result = Rc::new(RefCell::new(None));
+        let (on, log) = (armed.clone(), result.clone());
+        played.drive(move |round, scene| {
+            if round.index == 0 && *on.borrow() {
+                *on.borrow_mut() = false;
+                *log.borrow_mut() = Some(if replace {
+                    scene.replace_instance(&target)
+                } else {
+                    scene.reset(&target)
+                });
+            }
+        });
+        (armed, result)
+    };
+    let (resetting, result) = arm(&played, false);
+    let (replacing, replace_result) = arm(&replaced, true);
     for _ in 0..70 {
         played.step(FRAME, vec![]);
+        replaced.step(FRAME, vec![]);
     }
-    let (x, opacity, animation) = read(&played);
-    assert_eq!(
-        animation.map(|(name, _)| name).as_deref(),
-        Some("by"),
-        "the machine reached its later state"
-    );
-    assert!(near(x, 100.0), "\"ax\" moved the dot: {x}");
-    assert!(near(opacity, 0.25), "\"by\" faded the dot: {opacity}");
+    for copy in [&played, &replaced] {
+        let (x, opacity, animation) = read(copy);
+        assert_eq!(
+            animation.map(|(name, _)| name).as_deref(),
+            Some("by"),
+            "the machine reached its later state"
+        );
+        assert!(near(x, 100.0), "\"ax\" moved the dot: {x}");
+        assert!(near(opacity, 0.25), "\"by\" faded the dot: {opacity}");
+    }
 
     *resetting.borrow_mut() = true;
+    *replacing.borrow_mut() = true;
     played.step(FRAME, vec![]);
+    replaced.step(FRAME, vec![]);
     assert_eq!(*result.borrow(), Some(Ok(true)));
-    let (x, opacity, animation) = read(&played);
+    assert_eq!(*replace_result.borrow(), Some(Ok(true)));
     let (fresh_x, fresh_opacity, fresh_animation) = read(&fresh);
+    assert_eq!(
+        read(&replaced),
+        (fresh_x, fresh_opacity, fresh_animation.clone()),
+        "a replaced instance holds what a fresh copy holds, the opacity included"
+    );
+    let (x, opacity, animation) = read(&played);
     assert_eq!(
         animation,
         Some(("ax".to_string(), 0.0)),
@@ -2234,8 +2259,14 @@ fn a_reset_restarts_a_nested_machine_and_leaves_what_only_its_later_state_keyed(
     for frame in 1..=20 {
         played.step(FRAME, vec![]);
         fresh.step(FRAME, vec![]);
+        replaced.step(FRAME, vec![]);
         let (x, opacity, animation) = read(&played);
         let (fresh_x, fresh_opacity, fresh_animation) = read(&fresh);
+        assert_eq!(
+            read(&replaced),
+            (fresh_x, fresh_opacity, fresh_animation.clone()),
+            "frame {frame} after the replacement"
+        );
         assert_eq!(animation, fresh_animation, "frame {frame} after the reset");
         assert_eq!(x, fresh_x, "frame {frame} after the reset");
         assert!(

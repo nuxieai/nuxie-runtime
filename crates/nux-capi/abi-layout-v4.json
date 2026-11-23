@@ -620,7 +620,7 @@
     },
     {
       "name": "NuxPlayerDriverReport",
-      "size": 152,
+      "size": 168,
       "alignment": 8,
       "fields": [
         {
@@ -694,6 +694,14 @@
         {
           "name": "property_stride",
           "offset": 144
+        },
+        {
+          "name": "row_keys",
+          "offset": 152
+        },
+        {
+          "name": "row_key_count",
+          "offset": 160
         }
       ]
     },
@@ -1493,7 +1501,7 @@
     },
     {
       "name": "NuxSceneObject",
-      "size": 32,
+      "size": 48,
       "alignment": 8,
       "fields": [
         {
@@ -1511,6 +1519,14 @@
         {
           "name": "path_len",
           "offset": 24
+        },
+        {
+          "name": "row_keys",
+          "offset": 32
+        },
+        {
+          "name": "row_key_count",
+          "offset": 40
         }
       ]
     },
@@ -1526,6 +1542,25 @@
         {
           "name": "local_id",
           "offset": 8
+        }
+      ]
+    },
+    {
+      "name": "NuxSceneRowKey",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "artboard_global_id",
+          "offset": 0
+        },
+        {
+          "name": "host_local_id",
+          "offset": 8
+        },
+        {
+          "name": "key",
+          "offset": 16
         }
       ]
     },

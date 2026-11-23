@@ -11,12 +11,12 @@ use std::thread;
 
 use nuxie::page_player::{
     DriverFault, DriverRound, HostDriver, MAX_DRIVER_ROUNDS, OwnedPlayerEvent,
-    RuntimeGeometryHitPathSegment, SceneObject, SceneWriteError, SceneWriter,
+    RuntimeGeometryHitPathSegment, RuntimeListRowKey, SceneObject, SceneWriteError, SceneWriter,
 };
 
 use super::{
-    HandleKind, NuxPlayer, NuxPlayerEventPropertyView, NuxStatus, NuxStringView, enter_handle,
-    event_property_view, ffi_guard, optional_byte_view, page_status, register_handle,
+    HandleKind, NuxByteView, NuxPlayer, NuxPlayerEventPropertyView, NuxStatus, NuxStringView,
+    enter_handle, event_property_view, ffi_guard, optional_byte_view, page_status, register_handle,
     remove_handle, status_code, struct_size_supports, with_utf8_view,
 };
 
@@ -27,17 +27,19 @@ pub const NUX_PLAYER_DRIVER_MAX_ROUNDS: usize = 8;
 
 const _: () = assert!(NUX_PLAYER_DRIVER_MAX_ROUNDS == MAX_DRIVER_ROUNDS);
 
-/// One object of the player's artboard, or of one nested artboard
-/// occurrence under it. Fields may be appended; initialize `struct_size` to
-/// `sizeof(NuxSceneObject)`.
+/// One object of the player's artboard, or of one nested artboard or keyed
+/// list row occurrence under it. Fields may be appended; initialize
+/// `struct_size` to `sizeof(NuxSceneObject)`.
 ///
 /// `path` leads from the player's artboard to the occurrence that holds the
-/// object: the host of each nested artboard on the way, each by its local id
-/// in the artboard the path has reached, with that artboard's file-global
-/// id, as a report's `path` carries it. NULL with `path_len` 0 names the
-/// player's own artboard; a caller whose `struct_size` ends before `path`
-/// names it too. `local_id` is the object's local id in the artboard the
-/// path leads to.
+/// object: the host of each nested artboard or keyed list on the way, each by
+/// its local id in the artboard the path has reached, with that artboard's
+/// file-global id, as a report's `path` carries it. `row_keys` names the row
+/// of each keyed list step, in path order, as a report's `row_keys` carries
+/// them. NULL with `path_len` 0 names the player's own artboard; a caller
+/// whose `struct_size` ends before `path` names it too, and one whose
+/// `struct_size` ends before `row_keys` names no row. `local_id` is the
+/// object's local id in the artboard the path leads to.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct NuxSceneObject {
@@ -45,6 +47,8 @@ pub struct NuxSceneObject {
     pub local_id: usize,
     pub path: *const NuxScenePathSegment,
     pub path_len: usize,
+    pub row_keys: *const NuxSceneRowKey,
+    pub row_key_count: usize,
 }
 
 pub const NUX_SCENE_OBJECT_MIN_SIZE: usize =
@@ -53,6 +57,23 @@ pub const NUX_SCENE_OBJECT_MIN_SIZE: usize =
 /// The size of a `NuxSceneObject` that carries a path.
 pub const NUX_SCENE_OBJECT_PATH_SIZE: usize =
     std::mem::offset_of!(NuxSceneObject, path_len) + std::mem::size_of::<usize>();
+
+/// The size of a `NuxSceneObject` that carries row keys.
+pub const NUX_SCENE_OBJECT_ROWS_SIZE: usize =
+    std::mem::offset_of!(NuxSceneObject, row_key_count) + std::mem::size_of::<usize>();
+
+/// One keyed list row on the way from the player's artboard to an
+/// occurrence: the list's host, by its local id in the artboard with
+/// `artboard_global_id`, and the bytes of the key the row was mounted by.
+/// The engine compares a key only for equality. In a report, `key` borrows
+/// the round. This record's layout is fixed.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NuxSceneRowKey {
+    pub artboard_global_id: u32,
+    pub host_local_id: usize,
+    pub key: NuxByteView,
+}
 
 /// One nested artboard on the way from the player's artboard to where an
 /// event was reported. This record's layout is fixed.
@@ -102,6 +123,11 @@ pub struct NuxPlayerDriverReport {
     pub properties: *const NuxPlayerEventPropertyView,
     pub property_count: usize,
     pub property_stride: usize,
+    /// The row of each keyed list step of `path`, in path order. A report
+    /// from a row of a list that is not keyed has none; its rows are in
+    /// `list_items`.
+    pub row_keys: *const NuxSceneRowKey,
+    pub row_key_count: usize,
 }
 
 /// One round of a step. `reports` holds `report_count` reports,
@@ -168,12 +194,14 @@ struct ReportViews {
     _paths: Vec<Vec<NuxScenePathSegment>>,
     _list_items: Vec<Vec<NuxSceneListItem>>,
     _properties: Vec<Vec<NuxPlayerEventPropertyView>>,
+    _row_keys: Vec<Vec<NuxSceneRowKey>>,
 }
 
 fn report_views(events: &[OwnedPlayerEvent]) -> ReportViews {
     let mut paths: Vec<Vec<NuxScenePathSegment>> = Vec::with_capacity(events.len());
     let mut list_items: Vec<Vec<NuxSceneListItem>> = Vec::with_capacity(events.len());
     let mut properties = Vec::with_capacity(events.len());
+    let mut row_keys: Vec<Vec<NuxSceneRowKey>> = Vec::with_capacity(events.len());
     for event in events {
         let context = event.context.as_ref();
         paths.push(
@@ -213,39 +241,63 @@ fn report_views(events: &[OwnedPlayerEvent]) -> ReportViews {
                 .map(event_property_view)
                 .collect::<Vec<_>>(),
         );
+        row_keys.push(
+            context
+                .map(|context| {
+                    context
+                        .rows()
+                        .iter()
+                        .map(|row| NuxSceneRowKey {
+                            artboard_global_id: row.artboard_global_id,
+                            host_local_id: row.host_local_id,
+                            key: NuxByteView {
+                                data: row.key.as_ptr(),
+                                len: row.key.len(),
+                            },
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+        );
     }
     let reports = events
         .iter()
         .zip(&paths)
         .zip(&list_items)
         .zip(&properties)
-        .map(|(((event, path), items), props)| NuxPlayerDriverReport {
-            struct_size: u32::try_from(std::mem::size_of::<NuxPlayerDriverReport>())
-                .unwrap_or(u32::MAX),
-            event_local_index: event.event_local_index,
-            event_core_type: event.event_core_type,
-            name: optional_byte_view(event.name.as_deref()),
-            url: optional_byte_view(event.url.as_deref()),
-            target: optional_byte_view(event.target.as_deref()),
-            seconds_delay: event.seconds_delay,
-            has_source_artboard_global_id: event.source_artboard_global_id.is_some(),
-            source_artboard_global_id: event.source_artboard_global_id.unwrap_or(0),
-            has_listener_target: event.listener_target_local_id.is_some(),
-            listener_target_local_id: event.listener_target_local_id.unwrap_or(0),
-            path: path.as_ptr(),
-            path_len: path.len(),
-            list_items: items.as_ptr(),
-            list_item_count: items.len(),
-            properties: props.as_ptr(),
-            property_count: props.len(),
-            property_stride: std::mem::size_of::<NuxPlayerEventPropertyView>(),
-        })
+        .zip(&row_keys)
+        .map(
+            |((((event, path), items), props), rows)| NuxPlayerDriverReport {
+                struct_size: u32::try_from(std::mem::size_of::<NuxPlayerDriverReport>())
+                    .unwrap_or(u32::MAX),
+                event_local_index: event.event_local_index,
+                event_core_type: event.event_core_type,
+                name: optional_byte_view(event.name.as_deref()),
+                url: optional_byte_view(event.url.as_deref()),
+                target: optional_byte_view(event.target.as_deref()),
+                seconds_delay: event.seconds_delay,
+                has_source_artboard_global_id: event.source_artboard_global_id.is_some(),
+                source_artboard_global_id: event.source_artboard_global_id.unwrap_or(0),
+                has_listener_target: event.listener_target_local_id.is_some(),
+                listener_target_local_id: event.listener_target_local_id.unwrap_or(0),
+                path: path.as_ptr(),
+                path_len: path.len(),
+                list_items: items.as_ptr(),
+                list_item_count: items.len(),
+                properties: props.as_ptr(),
+                property_count: props.len(),
+                property_stride: std::mem::size_of::<NuxPlayerEventPropertyView>(),
+                row_keys: rows.as_ptr(),
+                row_key_count: rows.len(),
+            },
+        )
         .collect();
     ReportViews {
         reports,
         _paths: paths,
         _list_items: list_items,
         _properties: properties,
+        _row_keys: row_keys,
     }
 }
 
@@ -358,11 +410,27 @@ pub unsafe extern "C" fn nux_player_driver_clear(player: *mut NuxPlayer) -> NuxS
 
 fn write_status(error: SceneWriteError) -> NuxStatus {
     match error {
-        SceneWriteError::NotFound | SceneWriteError::PathNotFound => NuxStatus::NotFound,
-        SceneWriteError::UnknownProperty | SceneWriteError::InvalidValue => {
-            NuxStatus::InvalidArgument
-        }
+        SceneWriteError::NotFound
+        | SceneWriteError::PathNotFound
+        | SceneWriteError::KeyNotFound
+        | SceneWriteError::NoRowArtboard => NuxStatus::NotFound,
+        SceneWriteError::UnknownProperty
+        | SceneWriteError::InvalidValue
+        | SceneWriteError::NotKeyedList
+        | SceneWriteError::KeyExists
+        | SceneWriteError::PlaceOutOfRange => NuxStatus::InvalidArgument,
     }
+}
+
+/// Borrow `len` bytes at `data`: NULL is allowed only with `len` 0.
+unsafe fn byte_slice<'a>(data: *const u8, len: usize) -> Result<&'a [u8], NuxStatus> {
+    if len == 0 {
+        return Ok(&[]);
+    }
+    if data.is_null() {
+        return Err(NuxStatus::NullArgument);
+    }
+    Ok(unsafe { std::slice::from_raw_parts(data, len) })
 }
 
 unsafe fn read_scene_object(object: *const NuxSceneObject) -> Result<SceneObject, NuxStatus> {
@@ -374,25 +442,36 @@ unsafe fn read_scene_object(object: *const NuxSceneObject) -> Result<SceneObject
         return Err(NuxStatus::InvalidStructSize);
     }
     let caller_size = caller_size as usize;
-    // A caller built before the path was appended passes the shorter
-    // struct and names an object of the player's own artboard. Only the
-    // prefix the caller wrote is read.
-    if caller_size < NUX_SCENE_OBJECT_PATH_SIZE {
-        if caller_size > NUX_SCENE_OBJECT_MIN_SIZE {
-            return Err(NuxStatus::InvalidStructSize);
-        }
-        let local_id = unsafe {
-            object
-                .cast::<u8>()
-                .add(std::mem::offset_of!(NuxSceneObject, local_id))
-                .cast::<usize>()
-                .read_unaligned()
-        };
-        return Ok(SceneObject::root(local_id));
+    // A caller built before the path or the row keys were appended passes a
+    // shorter struct: 16 bytes names an object of the player's own artboard,
+    // 32 a path with no row keys. Only the prefix the caller wrote is read.
+    let known = [
+        NUX_SCENE_OBJECT_MIN_SIZE,
+        NUX_SCENE_OBJECT_PATH_SIZE,
+        NUX_SCENE_OBJECT_ROWS_SIZE,
+    ];
+    if caller_size < NUX_SCENE_OBJECT_ROWS_SIZE && !known.contains(&caller_size) {
+        return Err(NuxStatus::InvalidStructSize);
     }
-    let value = unsafe { object.read() };
+    let mut value = NuxSceneObject {
+        struct_size: 0,
+        local_id: 0,
+        path: std::ptr::null(),
+        path_len: 0,
+        row_keys: std::ptr::null(),
+        row_key_count: 0,
+    };
+    let prefix = caller_size.min(std::mem::size_of::<NuxSceneObject>());
+    unsafe {
+        std::ptr::copy_nonoverlapping(object.cast::<u8>(), (&raw mut value).cast::<u8>(), prefix);
+    }
     if value.path_len == 0 {
-        return Ok(SceneObject::root(value.local_id));
+        return if value.row_key_count == 0 {
+            Ok(SceneObject::root(value.local_id))
+        } else {
+            // Row keys need a path through the lists they name.
+            Err(NuxStatus::NotFound)
+        };
     }
     if value.path.is_null() {
         return Err(NuxStatus::NullArgument);
@@ -404,7 +483,23 @@ unsafe fn read_scene_object(object: *const NuxSceneObject) -> Result<SceneObject
             local_id: segment.local_id,
         })
         .collect();
-    Ok(SceneObject::nested(path, value.local_id))
+    if value.row_key_count == 0 {
+        return Ok(SceneObject::nested(path, value.local_id));
+    }
+    if value.row_keys.is_null() {
+        return Err(NuxStatus::NullArgument);
+    }
+    let rows = unsafe { std::slice::from_raw_parts(value.row_keys, value.row_key_count) }
+        .iter()
+        .map(|row| {
+            Ok(RuntimeListRowKey {
+                artboard_global_id: row.artboard_global_id,
+                host_local_id: row.host_local_id,
+                key: unsafe { byte_slice(row.key.data, row.key.len) }?.into(),
+            })
+        })
+        .collect::<Result<Vec<_>, NuxStatus>>()?;
+    Ok(SceneObject::in_rows(path, rows, value.local_id))
 }
 
 /// Run one writer call: check the writer is this turn's, read the object,
@@ -553,6 +648,87 @@ pub unsafe extern "C" fn nux_scene_writer_reset(
     })
 }
 
+/// Run one row call on the keyed list `list` with `key`: check the writer is
+/// this turn's, read the list and the key, write `changed` when the caller
+/// asked for it.
+fn with_row(
+    writer: *mut NuxSceneWriter,
+    list: *const NuxSceneObject,
+    key: NuxByteView,
+    out_changed: *mut bool,
+    body: impl FnOnce(&mut SceneWriter<'static>, &SceneObject, &[u8]) -> Result<bool, SceneWriteError>,
+) -> NuxStatus {
+    let key = match unsafe { byte_slice(key.data, key.len) } {
+        Ok(key) => key,
+        Err(status) => return status,
+    };
+    with_writer(writer, list, out_changed, |scene, list| {
+        body(scene, list, key)
+    })
+}
+
+/// Mount a row by `key` at the end of the keyed list `list`: a fresh
+/// instance of the list's row artboard with its machine at entry and the
+/// file's values. An object inside the row can be written in the same
+/// round. The key's bytes are copied and compared only for equality.
+/// `out_changed`, when not NULL, receives true. NOT_FOUND for a list that
+/// is not found, or whose row artboard the file does not have;
+/// INVALID_ARGUMENT for an object that is not a keyed list, or a key already
+/// mounted there.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_scene_writer_mount_row(
+    writer: *mut NuxSceneWriter,
+    list: *const NuxSceneObject,
+    key: NuxByteView,
+    out_changed: *mut bool,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        with_row(writer, list, key, out_changed, |scene, list, key| {
+            scene.mount_row(list, key)
+        })
+    })
+}
+
+/// Remove the row mounted by `key` from the keyed list `list`. Its
+/// instance, machine and every state they hold are discarded; a later mount
+/// of the same key makes a new row. `out_changed`, when not NULL, receives
+/// true. NOT_FOUND for a list that is not found or a key not mounted there;
+/// INVALID_ARGUMENT for an object that is not a keyed list.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_scene_writer_remove_row(
+    writer: *mut NuxSceneWriter,
+    list: *const NuxSceneObject,
+    key: NuxByteView,
+    out_changed: *mut bool,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        with_row(writer, list, key, out_changed, |scene, list, key| {
+            scene.remove_row(list, key)
+        })
+    })
+}
+
+/// Move the row mounted by `key` to `place` among the keyed list's rows, 0
+/// being the first; the other rows keep their order, and the row keeps its
+/// instance and all its state. `out_changed`, when not NULL, receives
+/// whether its place changed. NOT_FOUND for a list that is not found or a
+/// key not mounted there; INVALID_ARGUMENT for an object that is not a
+/// keyed list or a place past the last row.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_scene_writer_move_row(
+    writer: *mut NuxSceneWriter,
+    list: *const NuxSceneObject,
+    key: NuxByteView,
+    place: usize,
+    out_changed: *mut bool,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        with_row(writer, list, key, out_changed, |scene, list, key| {
+            scene.move_row(list, key, place)
+        })
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -694,6 +870,8 @@ mod tests {
                 local_id,
                 path,
                 path_len,
+                row_keys: std::ptr::null(),
+                row_key_count: 0,
             };
             unsafe {
                 let old = OldSceneObject {
@@ -888,6 +1066,416 @@ mod tests {
         assert_eq!(
             CoreRegistry::get_double_handle(
                 &object(&page_board, page::BELOW_RECORD),
+                i32::from(WIDTH)
+            ),
+            Some(120.0)
+        );
+        unsafe {
+            assert_eq!(crate::nux_player_free(player), NuxStatus::Ok);
+            assert_eq!(crate::nux_artboard_instance_free(instance), NuxStatus::Ok);
+            assert_eq!(crate::nux_file_free(file), NuxStatus::Ok);
+        }
+    }
+
+    /// A `NuxSceneObject` as a caller built before the row keys were
+    /// appended lays it out.
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct PathSceneObject {
+        struct_size: u32,
+        local_id: usize,
+        path: *const NuxScenePathSegment,
+        path_len: usize,
+    }
+
+    /// What the keyed rows driver does next, and what it was told.
+    #[derive(Default)]
+    struct Rows {
+        next: Option<unsafe fn(&mut Rows, *mut NuxSceneWriter)>,
+        answers: Vec<(&'static str, NuxStatus, bool)>,
+        heard: Vec<(Vec<(u32, usize)>, Vec<(u32, usize, Vec<u8>)>)>,
+    }
+
+    fn key(bytes: &[u8]) -> NuxByteView {
+        NuxByteView {
+            data: bytes.as_ptr(),
+            len: bytes.len(),
+        }
+    }
+
+    fn sized<T>() -> u32 {
+        u32::try_from(std::mem::size_of::<T>()).unwrap()
+    }
+
+    /// The "Cards" list as each size of caller names it.
+    fn cards_list() -> (OldSceneObject, PathSceneObject, NuxSceneObject) {
+        use nuxie::keyed_rows_fixture::page;
+        (
+            OldSceneObject {
+                struct_size: sized::<OldSceneObject>(),
+                local_id: page::CARDS,
+            },
+            PathSceneObject {
+                struct_size: sized::<PathSceneObject>(),
+                local_id: page::CARDS,
+                path: std::ptr::null(),
+                path_len: 0,
+            },
+            NuxSceneObject {
+                struct_size: sized::<NuxSceneObject>(),
+                local_id: page::CARDS,
+                path: std::ptr::null(),
+                path_len: 0,
+                row_keys: std::ptr::null(),
+                row_key_count: 0,
+            },
+        )
+    }
+
+    /// Mount three rows, one through each size of caller, and write the
+    /// footer through an old-size object.
+    unsafe fn mount_three(rows: &mut Rows, writer: *mut NuxSceneWriter) {
+        use nuxie::keyed_rows_fixture::page;
+        let (old, path, new) = cards_list();
+        unsafe {
+            answer_rows(rows, "mount through a 16 byte object", |changed| {
+                nux_scene_writer_mount_row(
+                    writer,
+                    (&raw const old).cast(),
+                    key(b"monthly"),
+                    changed,
+                )
+            });
+            answer_rows(rows, "mount through a 32 byte object", |changed| {
+                nux_scene_writer_mount_row(
+                    writer,
+                    (&raw const path).cast(),
+                    key(b"yearly"),
+                    changed,
+                )
+            });
+            answer_rows(rows, "mount through a 48 byte object", |changed| {
+                nux_scene_writer_mount_row(writer, &new, key(b"lifetime"), changed)
+            });
+            let footer = OldSceneObject {
+                struct_size: sized::<OldSceneObject>(),
+                local_id: page::FOOTER_RECORD,
+            };
+            answer_rows(rows, "an old size names the page", |changed| {
+                nux_scene_writer_set_number(
+                    writer,
+                    (&raw const footer).cast(),
+                    WIDTH,
+                    120.0,
+                    changed,
+                )
+            });
+        }
+    }
+
+    /// Move, remove, and every way a row call is refused.
+    unsafe fn reorder(rows: &mut Rows, writer: *mut NuxSceneWriter) {
+        use nuxie::keyed_rows_fixture::page;
+        let (_, _, list) = cards_list();
+        let footer = NuxSceneObject {
+            local_id: page::FOOTER,
+            ..list
+        };
+        unsafe {
+            answer_rows(rows, "move", |changed| {
+                nux_scene_writer_move_row(writer, &list, key(b"lifetime"), 0, changed)
+            });
+            answer_rows(rows, "remove", |changed| {
+                nux_scene_writer_remove_row(writer, &list, key(b"monthly"), changed)
+            });
+            answer_rows(rows, "move a key not mounted", |changed| {
+                nux_scene_writer_move_row(writer, &list, key(b"monthly"), 0, changed)
+            });
+            answer_rows(rows, "mount a key mounted", |changed| {
+                nux_scene_writer_mount_row(writer, &list, key(b"yearly"), changed)
+            });
+            answer_rows(rows, "move past the end", |changed| {
+                nux_scene_writer_move_row(writer, &list, key(b"yearly"), 2, changed)
+            });
+            answer_rows(rows, "mount on an object that is not a list", |changed| {
+                nux_scene_writer_mount_row(writer, &footer, key(b"weekly"), changed)
+            });
+            answer_rows(rows, "a null key with a length", |changed| {
+                nux_scene_writer_mount_row(
+                    writer,
+                    &list,
+                    NuxByteView {
+                        data: std::ptr::null(),
+                        len: 3,
+                    },
+                    changed,
+                )
+            });
+        }
+    }
+
+    unsafe fn answer_rows(
+        rows: &mut Rows,
+        what: &'static str,
+        call: impl FnOnce(*mut bool) -> NuxStatus,
+    ) {
+        let mut changed = false;
+        let status = call(&mut changed);
+        rows.answers.push((what, status, changed));
+    }
+
+    /// Runs the next step's work in round 0; on the "chosen" report, keeps
+    /// its path and row keys and writes through them, and tries the ways a
+    /// row key can be refused.
+    unsafe extern "C" fn drive_rows(
+        context: *mut c_void,
+        round: *const NuxPlayerDriverRound,
+        writer: *mut NuxSceneWriter,
+    ) -> NuxStatus {
+        use nuxie::keyed_rows_fixture::card;
+        let rows = unsafe { &mut *context.cast::<Rows>() };
+        let round = unsafe { &*round };
+        if round.index == 0
+            && let Some(next) = rows.next.take()
+        {
+            unsafe { next(rows, writer) };
+        }
+        let reports = unsafe { std::slice::from_raw_parts(round.reports, round.report_count) };
+        for report in reports {
+            let name = unsafe {
+                std::slice::from_raw_parts(report.name.data.cast::<u8>(), report.name.len)
+            };
+            if name != b"chosen" {
+                continue;
+            }
+            let path = unsafe { std::slice::from_raw_parts(report.path, report.path_len) };
+            let keys = unsafe { std::slice::from_raw_parts(report.row_keys, report.row_key_count) };
+            rows.heard.push((
+                path.iter()
+                    .map(|segment| (segment.artboard_global_id, segment.local_id))
+                    .collect(),
+                keys.iter()
+                    .map(|row| {
+                        (row.artboard_global_id, row.host_local_id, unsafe {
+                            std::slice::from_raw_parts(row.key.data, row.key.len).to_vec()
+                        })
+                    })
+                    .collect(),
+            ));
+            let run = NuxSceneObject {
+                struct_size: sized::<NuxSceneObject>(),
+                local_id: card::RUN,
+                path: report.path,
+                path_len: report.path_len,
+                row_keys: report.row_keys,
+                row_key_count: report.row_key_count,
+            };
+            let text = "Chosen";
+            unsafe {
+                answer_rows(rows, "the report's path and key", |changed| {
+                    nux_scene_writer_set_text(
+                        writer,
+                        &run,
+                        TEXT,
+                        NuxStringView {
+                            data: text.as_ptr().cast(),
+                            len: text.len(),
+                        },
+                        changed,
+                    )
+                });
+                let mut no_keys = run;
+                no_keys.struct_size = sized::<PathSceneObject>();
+                answer_rows(
+                    rows,
+                    "the report's path through a 32 byte object",
+                    |changed| nux_scene_writer_set_number(writer, &no_keys, WIDTH, 1.0, changed),
+                );
+                let mut inside = run;
+                inside.struct_size =
+                    u32::try_from(std::mem::offset_of!(NuxSceneObject, row_key_count)).unwrap();
+                answer_rows(rows, "a size that ends inside the row keys", |changed| {
+                    nux_scene_writer_set_number(writer, &inside, WIDTH, 1.0, changed)
+                });
+                let mut null = run;
+                null.row_keys = std::ptr::null();
+                answer_rows(rows, "null row keys with a count", |changed| {
+                    nux_scene_writer_set_number(writer, &null, WIDTH, 1.0, changed)
+                });
+                let unknown = [NuxSceneRowKey {
+                    key: key(b"weekly"),
+                    ..*report.row_keys
+                }];
+                let mut lost = run;
+                lost.row_keys = unknown.as_ptr();
+                answer_rows(rows, "a key not mounted", |changed| {
+                    nux_scene_writer_set_number(writer, &lost, WIDTH, 1.0, changed)
+                });
+            }
+        }
+        NuxStatus::Ok
+    }
+
+    /// Through the C edge: the three row calls mount, move and remove rows by
+    /// key, a 16 or 32 byte `NuxSceneObject` still names the list and the
+    /// page, a report from a row carries its key beside its path, and the
+    /// path and key handed back write that row only. Each refusal changes
+    /// nothing.
+    #[test]
+    fn row_calls_and_row_keys_through_the_c_edge() {
+        use nuxie::keyed_rows_fixture::{Cards, RUN_TEXT, card, keyed_plans_fixture, page};
+        use nuxie::runtime::{
+            artboard_component_list::ArtboardComponentList, generated::core_registry::CoreRegistry,
+            layout_component::LayoutComponent,
+        };
+        let bytes = keyed_plans_fixture(Cards::Keyed);
+        let mut file = std::ptr::null_mut();
+        let mut instance = std::ptr::null_mut();
+        let mut player = std::ptr::null_mut();
+        unsafe {
+            assert_eq!(
+                crate::nux_file_import(
+                    bytes.as_ptr(),
+                    bytes.len(),
+                    &crate::NuxRenderCallbacks::default(),
+                    &mut file
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                crate::nux_artboard_instance_new(file, 0, &mut instance),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                crate::nux_player_new_default(instance, &mut player),
+                NuxStatus::Ok
+            );
+        }
+        let mut rows = Rows::default();
+        let driver = NuxPlayerDriver {
+            struct_size: sized::<NuxPlayerDriver>(),
+            context: (&raw mut rows).cast(),
+            drive: Some(drive_rows),
+            release: None,
+        };
+        rows.next = Some(mount_three);
+        unsafe {
+            assert_eq!(nux_player_driver_set(player, &driver), NuxStatus::Ok);
+            for _ in 0..60 {
+                step(player, &[]);
+            }
+        }
+        let page_board = unsafe { &*player }
+            .artboard
+            .instance
+            .borrow()
+            .native_handle();
+        let object = |board: &nuxie::RuntimeArtboardInstanceHandle, local_id: usize| {
+            board
+                .with_artboard(|board| board.objects()[local_id].clone())
+                .expect("an object")
+        };
+        let list = object(&page_board, page::CARDS);
+        let keys = || {
+            list.with_downcast::<ArtboardComponentList, _>(|list| {
+                list.row_keys()
+                    .into_iter()
+                    .map(|key| String::from_utf8_lossy(key).into_owned())
+                    .collect::<Vec<_>>()
+            })
+            .expect("the list")
+        };
+        let row = |index: i32| {
+            list.with_downcast::<ArtboardComponentList, _>(|list| list.artboard_instance(index))
+                .flatten()
+                .expect("a row")
+        };
+        let run_text = |index| {
+            CoreRegistry::get_string_handle(&object(&row(index), card::RUN), i32::from(TEXT))
+                .expect("the run's text")
+        };
+        assert_eq!(keys(), ["monthly", "yearly", "lifetime"]);
+
+        let yearly = row(1);
+        let button = object(&yearly, card::BUTTON)
+            .with_downcast::<LayoutComponent, _>(|button| button.layout_bounds())
+            .expect("the button");
+        let (x, y) = yearly.with_artboard(|row| (row.layout_x(), row.layout_y()));
+        let (x, y) = (
+            x + button.left() + button.width() / 2.0,
+            y + button.top() + button.height() / 2.0,
+        );
+        let pointer = |kind| crate::NuxPlayerPointerEvent {
+            kind,
+            x,
+            y,
+            pointer_id: 0,
+            timestamp_seconds: 0.0,
+        };
+        unsafe {
+            step(
+                player,
+                &[
+                    pointer(crate::NUX_PLAYER_POINTER_KIND_DOWN),
+                    pointer(crate::NUX_PLAYER_POINTER_KIND_UP),
+                ],
+            );
+        }
+        assert_eq!(run_text(1), "Chosen");
+        assert_eq!(run_text(0), RUN_TEXT);
+        assert_eq!(run_text(2), RUN_TEXT);
+        let page_id = rows.heard[0].0[0].0;
+        assert_eq!(
+            rows.heard,
+            [(
+                vec![(page_id, page::CARDS)],
+                vec![(page_id, page::CARDS, b"yearly".to_vec())]
+            )]
+        );
+
+        rows.next = Some(reorder);
+        unsafe {
+            step(player, &[]);
+            assert_eq!(nux_player_driver_clear(player), NuxStatus::Ok);
+        }
+        assert_eq!(keys(), ["lifetime", "yearly"]);
+        assert_eq!(run_text(1), "Chosen");
+        assert_eq!(
+            rows.answers,
+            [
+                ("mount through a 16 byte object", NuxStatus::Ok, true),
+                ("mount through a 32 byte object", NuxStatus::Ok, true),
+                ("mount through a 48 byte object", NuxStatus::Ok, true),
+                ("an old size names the page", NuxStatus::Ok, true),
+                ("the report's path and key", NuxStatus::Ok, true),
+                (
+                    "the report's path through a 32 byte object",
+                    NuxStatus::NotFound,
+                    false
+                ),
+                (
+                    "a size that ends inside the row keys",
+                    NuxStatus::InvalidStructSize,
+                    false
+                ),
+                ("null row keys with a count", NuxStatus::NullArgument, false),
+                ("a key not mounted", NuxStatus::NotFound, false),
+                ("move", NuxStatus::Ok, true),
+                ("remove", NuxStatus::Ok, true),
+                ("move a key not mounted", NuxStatus::NotFound, false),
+                ("mount a key mounted", NuxStatus::InvalidArgument, false),
+                ("move past the end", NuxStatus::InvalidArgument, false),
+                (
+                    "mount on an object that is not a list",
+                    NuxStatus::InvalidArgument,
+                    false
+                ),
+                ("a null key with a length", NuxStatus::NullArgument, false),
+            ]
+        );
+        assert_eq!(
+            CoreRegistry::get_double_handle(
+                &object(&page_board, page::FOOTER_RECORD),
                 i32::from(WIDTH)
             ),
             Some(120.0)

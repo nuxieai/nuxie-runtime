@@ -9,6 +9,8 @@
 //! Applications and bindings must migrate to this API separately.
 
 #[cfg(feature = "test-support")]
+pub use nuxie_runtime::keyed_rows_fixture;
+#[cfg(feature = "test-support")]
 pub use nuxie_runtime::live_move_fixture;
 #[cfg(feature = "test-support")]
 pub use nuxie_runtime::occurrence_fixture;

@@ -594,6 +594,171 @@ fn display_none_on_a_hosted_artboards_record_hides_the_whole_use() {
     assert_eq!(semantic_nodes(&manager), shown_nodes);
 }
 
+/// Proof A, experiment 2 (UNIV-6661): a hidden use shown again as a fresh
+/// instance. The driver replaces the first use's instance, then in the same
+/// round writes it shown and writes what a host writes into a use: its text,
+/// its color and its field. The page is laid out around the new instance in
+/// that step, and nothing moves after it; the new instance holds the file's
+/// values where nothing wrote them and plays its machine from the entry; its
+/// nodes are back in the semantic snapshot. The other use is untouched: the
+/// same instance, with the same values and where it was.
+#[test]
+fn a_use_replaced_and_written_in_one_round_lays_out_in_its_step() {
+    use crate::source::generated::text::text_input_base::TextInputBase;
+    let mut played = Played::new(two_uses(PageMachine::OneLayer));
+    let manager = RuntimeSemanticManagerHandle::new(SemanticManager::new());
+    played
+        .f
+        .artboard
+        .build_semantic_tree(Some(manager.clone()), None);
+    played.frames_until_settled();
+    let shown = CoreRegistry::get_uint_handle(
+        &card_object(&played, page::FIRST, card::RECORD),
+        i32::from(DISPLAY),
+    )
+    .expect("the card record's display");
+    let height = host_height(&played, page::FIRST);
+    let label = card_box(&played, page::FIRST, card::LABEL)[3];
+    let below = played.f.bounds("Below")[1];
+    let second = card_of(&played, page::SECOND);
+    let second_top = host_top(&played, page::SECOND);
+    let second_values = (
+        run_text(&played, page::SECOND),
+        field_text(&played, page::SECOND),
+        dot_x(&played, page::SECOND),
+        card_box(&played, page::SECOND, card::LABEL),
+    );
+    assert!(near(second_values.2, fixture::DOT_TRAVEL));
+
+    // Hide the first use and let the page settle without it.
+    let record = in_use(&played, page::FIRST, card::RECORD);
+    write_once(&played, move |scene| {
+        assert_eq!(scene.set_unsigned(&record, DISPLAY, NONE as u32), Ok(true));
+    });
+    played.step(FRAME, vec![]);
+    played.frames_until_settled();
+    assert!(near(host_top(&played, page::SECOND), 0.0));
+    let old = card_of(&played, page::FIRST);
+
+    // One round: a fresh instance, shown, and written as a host writes it.
+    let [record, run, color, field] = [card::RECORD, card::RUN, card::RUN_COLOR, card::FIELD]
+        .map(|local_id| in_use(&played, page::FIRST, local_id));
+    let host = SceneObject::root(page::FIRST);
+    write_once(&played, move |scene| {
+        assert_eq!(scene.replace_instance(&host), Ok(true));
+        assert_eq!(scene.set_unsigned(&record, DISPLAY, shown), Ok(false));
+        assert_eq!(
+            scene.set_text(&run, TextValueRunBase::TEXT_PROPERTY_KEY, LONG),
+            Ok(true)
+        );
+        assert_eq!(
+            scene.set_color(
+                &color,
+                SolidColorBase::COLOR_VALUE_PROPERTY_KEY,
+                0xff99_0000
+            ),
+            Ok(true)
+        );
+        assert_eq!(
+            scene.set_text(
+                &field,
+                TextInputBase::TEXT_PROPERTY_KEY,
+                "typed by the host"
+            ),
+            Ok(true)
+        );
+    });
+    let output = played.step(FRAME, vec![]);
+    assert_eq!(output.driver_rounds, 2, "the write round and a quiet one");
+    let fresh = card_of(&played, page::FIRST);
+    assert_ne!(fresh.core_handle(), old.core_handle(), "a new instance");
+    let grown = card_box(&played, page::FIRST, card::LABEL)[3] - label;
+    assert!(grown > 10.0, "the label wraps: {grown}");
+    let laid_out = (
+        host_height(&played, page::FIRST),
+        host_top(&played, page::SECOND),
+        played.f.bounds("Below")[1],
+    );
+    assert!(near(laid_out.0, height + grown), "{laid_out:?}");
+    assert!(near(laid_out.1, height + grown), "{laid_out:?}");
+    assert!(near(laid_out.2, below + grown), "{laid_out:?}");
+    assert_eq!(run_text(&played, page::FIRST), LONG);
+    assert_eq!(field_text(&played, page::FIRST), "typed by the host");
+    assert!(
+        dot_x(&played, page::FIRST) < 10.0,
+        "the new machine plays its intro from the entry: {}",
+        dot_x(&played, page::FIRST)
+    );
+    let nodes = semantic_nodes(&manager);
+    assert_eq!(nodes.len(), 4, "{nodes:#?}");
+    assert!(
+        nodes
+            .iter()
+            .any(|(role, words, _, _)| *role == 7 && words == LONG)
+    );
+
+    // Nothing the step laid out moves after it.
+    played.frames_until_settled();
+    assert_eq!(
+        (
+            host_height(&played, page::FIRST),
+            host_top(&played, page::SECOND),
+            played.f.bounds("Below")[1],
+        ),
+        laid_out
+    );
+    assert!(near(dot_x(&played, page::FIRST), fixture::DOT_TRAVEL));
+
+    // The other use: the same instance, the same values, moved by the
+    // first use's growth only.
+    assert_eq!(
+        card_of(&played, page::SECOND).core_handle(),
+        second.core_handle()
+    );
+    assert_eq!(
+        (
+            run_text(&played, page::SECOND),
+            field_text(&played, page::SECOND),
+            dot_x(&played, page::SECOND),
+            card_box(&played, page::SECOND, card::LABEL),
+        ),
+        second_values
+    );
+    assert!(near(host_top(&played, page::SECOND), second_top + grown));
+}
+
+/// A host the driver may not replace is refused and nothing changes: an
+/// object that hosts no artboard, and an object that is not there.
+#[test]
+fn a_replacement_of_what_is_not_a_host_is_refused() {
+    let mut played = played(PageMachine::OneLayer);
+    let first = card_of(&played, page::FIRST);
+    let answers = Rc::new(RefCell::new(Vec::new()));
+    let log = answers.clone();
+    let inside = in_use(&played, page::FIRST, card::LABEL);
+    write_once(&played, move |scene| {
+        log.borrow_mut().extend([
+            scene.replace_instance(&SceneObject::root(page::BELOW)),
+            scene.replace_instance(&inside),
+            scene.replace_instance(&SceneObject::root(999)),
+        ]);
+    });
+    let output = played.step(FRAME, vec![]);
+    assert_eq!(
+        *answers.borrow(),
+        [
+            Err(SceneWriteError::NotReplaceable),
+            Err(SceneWriteError::NotReplaceable),
+            Err(SceneWriteError::NotFound),
+        ]
+    );
+    assert_eq!(output.driver_rounds, 1);
+    assert_eq!(
+        card_of(&played, page::FIRST).core_handle(),
+        first.core_handle()
+    );
+}
+
 fn badged(machine: PageMachine) -> Scene {
     import(&fixture::badged_fixture(machine))
 }

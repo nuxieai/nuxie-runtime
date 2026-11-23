@@ -367,8 +367,10 @@ impl<'a> SceneWriter<'a> {
     /// presses and hovers they hold under the object, as the player's own
     /// machine does in the player's artboard. Those machines belong to the
     /// host, one artboard up, so a reset that names the host returns them to
-    /// their entry states and a reset inside the occurrence does not. Whether
-    /// anything was reset.
+    /// their entry states and a reset inside the occurrence does not. Inside a
+    /// keyed list's row, that is the machine the list plays on the row; a
+    /// reset that names the list rebuilds each row it lays out, under its key
+    /// and in its place, and keeps none for reuse. Whether anything was reset.
     pub fn reset(&mut self, object: &SceneObject) -> Result<bool, SceneWriteError> {
         let changed = match self.occurrence(object)? {
             None => {
@@ -391,7 +393,8 @@ impl<'a> SceneWriter<'a> {
                 else {
                     return Err(SceneWriteError::PathNotFound);
                 };
-                super::reset::reset_subtree(&artboard, &hosted_machines(&host), &handle)
+                let machines = hosted_machines(&host, occurrence.host_list_item().as_ref());
+                super::reset::reset_subtree(&artboard, &machines, &handle)
             }
         };
         if changed {
@@ -458,8 +461,19 @@ impl<'a> SceneWriter<'a> {
     }
 }
 
-/// The machines a nested artboard host plays on the artboard it hosts.
-fn hosted_machines(host: &CoreHandle) -> Vec<RuntimeStateMachineInstanceHandle> {
+/// The machines a host plays on the artboard it hosts: a nested artboard
+/// host's nested machines, or the machine a list plays on the row of `row`.
+fn hosted_machines(
+    host: &CoreHandle,
+    row: Option<&CoreHandle>,
+) -> Vec<RuntimeStateMachineInstanceHandle> {
+    if let Some(row) = row {
+        return host
+            .with_downcast::<ArtboardComponentList, _>(|list| list.row_state_machine(row))
+            .flatten()
+            .into_iter()
+            .collect();
+    }
     host.with(|host| {
         host.as_nested_artboard()
             .map(|nested| nested.nested_animations().to_vec())

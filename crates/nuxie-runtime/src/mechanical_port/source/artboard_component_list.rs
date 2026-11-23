@@ -3888,6 +3888,14 @@ impl ArtboardComponentList {
         Some((item, artboard))
     }
 
+    /// The machine the list plays on the row of `item`.
+    pub(crate) fn row_state_machine(
+        &self,
+        item: &CoreHandle,
+    ) -> Option<RuntimeStateMachineInstanceHandle> {
+        self.state_machines_map.get(item).cloned()
+    }
+
     /// The key the row of `item` was mounted by, when the list is keyed.
     pub(crate) fn key_of_row(&self, item: &CoreHandle) -> Option<&[u8]> {
         self.keyed_row_keys.get(item).map(|key| &**key)

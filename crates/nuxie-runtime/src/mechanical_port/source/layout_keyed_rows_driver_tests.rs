@@ -831,3 +831,61 @@ fn a_row_then_use_path_writes_one_use_of_one_row() {
     assert_eq!(tag_color(&played, "yearly"), 0xffaa_0000);
     assert_eq!(tag_color(&played, "monthly"), fixture::TAG_COLOR);
 }
+
+/// A driver that logs every report, and runs the write it is handed once, in
+/// the first round of the next step.
+type NextWrite = Rc<RefCell<Option<Box<dyn FnOnce(&mut SceneWriter<'_>)>>>>;
+
+fn drive_logged(played: &Played) -> (Rc<RefCell<Vec<OwnedPlayerEvent>>>, NextWrite) {
+    let heard = Rc::new(RefCell::new(Vec::new()));
+    let log = heard.clone();
+    let next: NextWrite = Rc::new(RefCell::new(None));
+    let write = next.clone();
+    played.drive(move |round, scene| {
+        log.borrow_mut().extend(round.reports.iter().cloned());
+        if round.index == 0
+            && let Some(write) = write.borrow_mut().take()
+        {
+            write(scene);
+        }
+    });
+    (heard, next)
+}
+
+/// A reset of an object inside a row drops the press the row's machine holds
+/// there, as a reset inside a use does for the use's host machines: the
+/// release after it reports nothing. A press held on another row, which the
+/// reset did not reach, still reports its tap, with that row's key.
+#[test]
+fn a_reset_inside_a_row_drops_the_press_the_rows_machine_holds_there() {
+    let mut played = played_with(&["a", "b"]);
+    let (heard, next) = drive_logged(&played);
+    let button = in_row(&played, "a", card::BUTTON);
+
+    let at_a = button_center(&played, "a");
+    played.step(FRAME, vec![pointer(PointerKind::Down, at_a)]);
+    let reset = button.clone();
+    *next.borrow_mut() = Some(Box::new(move |scene| {
+        assert!(scene.reset(&reset).is_ok());
+    }));
+    played.step(FRAME, vec![]);
+    played.step(FRAME, vec![pointer(PointerKind::Up, at_a)]);
+    played.frames_until_settled();
+    assert_eq!(names(&heard.borrow()), Vec::<String>::new());
+
+    let at_b = button_center(&played, "b");
+    played.step(FRAME, vec![pointer(PointerKind::Down, at_b)]);
+    *next.borrow_mut() = Some(Box::new(move |scene| {
+        assert!(scene.reset(&button).is_ok());
+    }));
+    played.step(FRAME, vec![]);
+    played.step(FRAME, vec![pointer(PointerKind::Up, at_b)]);
+    played.frames_until_settled();
+    let heard = heard.borrow();
+    assert_eq!(names(&heard), ["chosen"]);
+    assert_eq!(
+        heard[0].context.as_ref().expect("a context").rows(),
+        [row_key(&played, "b")]
+    );
+}
+

@@ -25,7 +25,7 @@ use crate::mechanical_port::source::{
     math::vec2d::Vec2D,
     open_url_event::OpenUrlEvent,
 };
-use crate::{RuntimeGeometryHitOccurrence, RuntimeGeometryHitPathSegment};
+use crate::{RuntimeGeometryHitOccurrence, RuntimeGeometryHitPathSegment, RuntimeListRowKey};
 use std::cell::RefCell;
 
 pub use crate::mechanical_port::source::{
@@ -158,6 +158,7 @@ impl StateMachineCurrentAnimation {
 pub struct StateMachineEventContext {
     path: Vec<RuntimeGeometryHitPathSegment>,
     occurrence: Vec<RuntimeGeometryHitOccurrence>,
+    rows: Vec<RuntimeListRowKey>,
     view_model_instance_id: Option<u64>,
 }
 
@@ -169,8 +170,15 @@ impl StateMachineEventContext {
         Self {
             path,
             occurrence,
+            rows: Vec::new(),
             view_model_instance_id: None,
         }
+    }
+
+    /// The same context with the keyed list rows its path passes through.
+    pub fn with_rows(mut self, rows: Vec<RuntimeListRowKey>) -> Self {
+        self.rows = rows;
+        self
     }
 
     pub fn view_model_instance_id(&self) -> Option<u64> {
@@ -185,9 +193,24 @@ impl StateMachineEventContext {
         &self.occurrence
     }
 
-    /// Heap bytes retained by the owned path and occurrence records.
+    /// The keyed list rows the path passes through, in path order: one for
+    /// each step whose host is a keyed list, naming that host and the key
+    /// the row was mounted by. Steps through lists that are not keyed have
+    /// none; their rows are in `occurrence`.
+    pub fn rows(&self) -> &[RuntimeListRowKey] {
+        &self.rows
+    }
+
+    /// Heap bytes retained by the owned path, occurrence and row records,
+    /// row keys included.
     #[doc(hidden)]
     pub fn owned_bytes(&self) -> Option<usize> {
+        let rows = self.rows.iter().try_fold(
+            self.rows
+                .len()
+                .checked_mul(std::mem::size_of::<RuntimeListRowKey>())?,
+            |total, row| total.checked_add(row.key.len()),
+        )?;
         self.path
             .len()
             .checked_mul(std::mem::size_of::<RuntimeGeometryHitPathSegment>())?
@@ -195,7 +218,8 @@ impl StateMachineEventContext {
                 self.occurrence
                     .len()
                     .checked_mul(std::mem::size_of::<RuntimeGeometryHitOccurrence>())?,
-            )
+            )?
+            .checked_add(rows)
     }
 }
 

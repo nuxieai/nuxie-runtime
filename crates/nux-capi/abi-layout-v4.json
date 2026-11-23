@@ -1493,7 +1493,7 @@
     },
     {
       "name": "NuxSceneObject",
-      "size": 16,
+      "size": 32,
       "alignment": 8,
       "fields": [
         {
@@ -1503,6 +1503,14 @@
         {
           "name": "local_id",
           "offset": 8
+        },
+        {
+          "name": "path",
+          "offset": 16
+        },
+        {
+          "name": "path_len",
+          "offset": 24
         }
       ]
     },

@@ -26,6 +26,9 @@ pub mod page {
 
 /// The card's local ids, the same in each use.
 pub mod card {
+    /// The card artboard's own record, which gives a hosted card its
+    /// display.
+    pub const RECORD: usize = 1;
     pub const LABEL: usize = 2;
     pub const LABEL_RECORD: usize = 3;
     pub const WORDS: usize = 4;
@@ -37,7 +40,20 @@ pub mod card {
     pub const FIELD: usize = 15;
     pub const DOT: usize = 21;
     pub const CHOSEN: usize = 22;
+    /// In [`badged_fixture`] only: the card's two badge hosts.
+    pub const FIRST_BADGE: usize = 27;
+    pub const SECOND_BADGE: usize = 30;
 }
+
+/// The badge's local ids, the same in each use, in [`badged_fixture`].
+pub mod badge {
+    pub const TAG: usize = 2;
+    pub const TAG_COLOR: usize = 5;
+    pub const TAPPED: usize = 6;
+}
+
+/// The badge's tag color, as the file writes it.
+pub const TAG_COLOR: u32 = 0xff33_6699;
 
 /// The card's run text, as the file writes it.
 pub const RUN_TEXT: &str = "Monthly";
@@ -116,6 +132,20 @@ fn record(b: &mut Vec<u8>, parent: usize, width: Option<f32>, height: Option<f32
 
 /// The page and card file, with the page's state machine as `machine`.
 pub fn two_uses_fixture(machine: PageMachine) -> Vec<u8> {
+    build(machine, false)
+}
+
+/// As [`two_uses_fixture`], with the card hosting a third artboard,
+/// "Badge", twice after its field box: "First badge" and "Second badge",
+/// each a `NestedArtboardLayout` with its item record and a
+/// `NestedStateMachine`. So the page holds four badges, two in each card.
+/// The badge is a CSS artboard holding a 60 by 20 "Tag" box painted
+/// [`TAG_COLOR`], whose click its machine reports as "badge tapped".
+pub fn badged_fixture(machine: PageMachine) -> Vec<u8> {
+    build(machine, true)
+}
+
+fn build(machine: PageMachine, badges: bool) -> Vec<u8> {
     use V::*;
     let opaque = u64::from(DrawableFlag::OPAQUE.0);
     let mut b = b"RIVE".to_vec();
@@ -346,8 +376,73 @@ pub fn two_uses_fixture(machine: PageMachine) -> Vec<u8> {
             ],
         );
     }
+    if badges {
+        for (name, host) in [
+            ("First badge", card::FIRST_BADGE),
+            ("Second badge", card::SECOND_BADGE),
+        ] {
+            obj(
+                &mut b,
+                "NestedArtboardLayout",
+                &[("name", S(name)), ("parentId", U(0)), ("artboardId", U(2))],
+            ); // 27, 30
+            record(&mut b, host, Some(60.0), None); // 28, 31
+            obj(
+                &mut b,
+                "NestedStateMachine",
+                &[("parentId", U(host as u64)), ("animationId", U(0))],
+            ); // 29, 32
+        }
+    }
     obj(&mut b, "StateMachine", &[("name", S("card"))]);
     click(&mut b, card::BUTTON, card::CHOSEN);
     layer(&mut b, true);
+
+    if badges {
+        // Badge.
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S("Badge")),
+                ("width", F(60.0)),
+                ("height", F(20.0)),
+                ("styleId", U(7)),
+            ],
+        ); // 0
+        record(&mut b, 0, None, None); // 1
+        obj(
+            &mut b,
+            "LayoutComponent",
+            &[
+                ("name", S("Tag")),
+                ("parentId", U(0)),
+                ("styleId", U(8)),
+                ("drawableFlags", U(opaque)),
+            ],
+        ); // 2
+        record(&mut b, badge::TAG, Some(60.0), Some(20.0)); // 3
+        obj(&mut b, "Fill", &[("parentId", U(badge::TAG as u64))]); // 4
+        obj(
+            &mut b,
+            "SolidColor",
+            &[("parentId", U(4)), ("colorValue", Color(TAG_COLOR))],
+        ); // 5
+        obj(
+            &mut b,
+            "Event",
+            &[("name", S("badge tapped")), ("parentId", U(0))],
+        ); // 6
+        for parent in [0, badge::TAG] {
+            obj(
+                &mut b,
+                "LayoutComponentStyle",
+                &[("parentId", U(parent as u64))],
+            ); // 7, 8
+        }
+        obj(&mut b, "StateMachine", &[("name", S("badge"))]);
+        click(&mut b, badge::TAG, badge::TAPPED);
+        layer(&mut b, false);
+    }
     b
 }

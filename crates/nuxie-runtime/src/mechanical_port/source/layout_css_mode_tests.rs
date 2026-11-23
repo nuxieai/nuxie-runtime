@@ -22843,6 +22843,10 @@ const TAFFY_FORK_REPLACED_ROWS: &[(&str, &str, &str, &str)] = &[
     ("is-c-fitc-2-gr-t-f", "display:flex;flex-direction:column;width:300px;height:300px;align-items:flex-start", "2>1>display:flex;width:fit-content;aspect-ratio:2;flex-grow:1> & 3>2>width:40px;height:120px> & 4>1>height:40px;flex-grow:1>", "1=0,0,300,300 2=0,0,280,140 3=0,0,40,120 4=0,140,0,160"),
     ("is-c-fitc-2-fbg-t-b", "display:flex;flex-direction:column;width:300px;height:300px;align-items:flex-start", "2>1>display:block;width:fit-content;aspect-ratio:2;flex-basis:70px;flex-grow:1> & 3>2>width:40px;height:120px> & 4>1>height:40px;flex-grow:1>", "1=0,0,300,300 2=0,0,330,165 3=0,0,40,120 4=0,165,0,135"),
     ("is-c-fitc-2-fbg-t-f", "display:flex;flex-direction:column;width:300px;height:300px;align-items:flex-start", "2>1>display:flex;width:fit-content;aspect-ratio:2;flex-basis:70px;flex-grow:1> & 3>2>width:40px;height:120px> & 4>1>height:40px;flex-grow:1>", "1=0,0,300,300 2=0,0,330,165 3=0,0,40,120 4=0,165,0,135"),
+    ("p4931 random picture 918", "display:grid;grid-template-columns:auto 1fr;width:400px", "2>1>display:flex> & 3>2>picture:120x60;width:100%;padding:10px;aspect-ratio:3;align-self:center> & 4>2>height:10px> & 5>1>width:30px;height:10px>", "1=0,0,400,60 2=0,0,140,60 3=0,0,140,60 4=140,0,0,10 5=140,0,30,10"),
+    ("p6721 random picture 3098", "display:flex;width:400px;height:100px", "2>1>picture:120x60;width:100%;padding:10px;box-sizing:border-box;aspect-ratio:3> & 3>1>width:150px;height:10px>", "1=0,0,400,100 2=0,0,300,100 3=300,0,100,10"),
+    ("f2394", "display:flex;flex-direction:column;gap:10px", "2>1>display:flex> & 3>2>picture:40x40;width:100%;aspect-ratio:1> & 4>2>picture:40x40>", "1=0,0,800,760 2=0,0,800,760 3=0,0,760,760 4=760,0,40,760"),
+    ("Q11", "display:flex;flex-direction:column;gap:10px", "2>1>display:flex;min-height:0px> & 3>2>picture:40x40;width:100%;aspect-ratio:1> & 4>2>picture:40x40>", "1=0,0,800,760 2=0,0,800,760 3=0,0,760,760 4=760,0,40,760"),
 ];
 
 #[test]

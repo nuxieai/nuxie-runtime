@@ -1639,7 +1639,6 @@ pub fn is_id_property_key(key: u16) -> bool {
         966 => true,
         977 => true,
         1015 => true,
-        60024 => true,
         _ => false,
     }
 }
@@ -25143,13 +25142,13 @@ static DEF_265_PROPERTIES: &[Property] = &[
             name: "rowArtboardId",
         },
         alternates: &[],
-        declared_type: "Id",
+        declared_type: "uint",
         runtime_type: FieldKind::Uint,
         description: Some(
             "Nuxie keyed rows. The artboard a host\'s rows are made from, as an index into the file\'s artboards (as ArtboardListMapRule.artboardId names one). A list with this set takes its rows from a host driver, which mounts, removes and moves each row by its key; an id that names no artboard leaves the list empty. Readers without the key skip it and see an empty list.",
         ),
-        initial_value: Some("Core.missingId"),
-        initial_value_runtime: Some("-1"),
+        initial_value: Some("-1"),
+        initial_value_runtime: None,
         group: None,
         sidecar: None,
         nullable: false,

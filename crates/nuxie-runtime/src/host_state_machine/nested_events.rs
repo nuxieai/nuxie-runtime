@@ -9,7 +9,7 @@ use crate::mechanical_port::source::{
     artboard::RuntimeArtboardInstanceHandle,
     artboard_component_list::ArtboardComponentList,
 };
-use crate::{RuntimeGeometryHitOccurrence, RuntimeGeometryHitPathSegment};
+use crate::{RuntimeGeometryHitOccurrence, RuntimeGeometryHitPathSegment, RuntimeListRowKey};
 use std::collections::HashSet;
 
 type Child = (
@@ -17,6 +17,7 @@ type Child = (
     Vec<RuntimeStateMachineInstanceHandle>,
     Vec<RuntimeGeometryHitPathSegment>,
     Vec<RuntimeGeometryHitOccurrence>,
+    Vec<RuntimeListRowKey>,
 );
 
 pub(super) fn collect(
@@ -24,9 +25,10 @@ pub(super) fn collect(
     after: u64,
 ) -> Vec<StateMachineReportedEvent> {
     let mut events = Vec::new();
-    let mut pending: Vec<Child> = vec![(root.clone(), Vec::new(), Vec::new(), Vec::new())];
+    let mut pending: Vec<Child> =
+        vec![(root.clone(), Vec::new(), Vec::new(), Vec::new(), Vec::new())];
     let mut visited = HashSet::new();
-    while let Some((artboard, machines, path, occurrence)) = pending.pop() {
+    while let Some((artboard, machines, path, occurrence, rows)) = pending.pop() {
         if !visited.insert(artboard.core_handle().identity_key()) {
             continue;
         }
@@ -49,6 +51,7 @@ pub(super) fn collect(
                     Some(StateMachineEventContext {
                         path: path.clone(),
                         occurrence: occurrence.clone(),
+                        rows: rows.clone(),
                         view_model_instance_id,
                     }),
                 ) {
@@ -88,7 +91,13 @@ pub(super) fn collect(
                 })
                 .flatten()
             {
-                pending.push((child, machines, child_path, occurrence.clone()));
+                pending.push((
+                    child,
+                    machines,
+                    child_path,
+                    occurrence.clone(),
+                    rows.clone(),
+                ));
                 continue;
             }
             object.with_downcast::<ArtboardComponentList, _>(|list| {
@@ -111,6 +120,15 @@ pub(super) fn collect(
                         item_index: index,
                         occurrence_identity: retained_occurrence_identity(&item),
                     });
+                    // A keyed row's reports carry the key it was mounted by.
+                    let mut child_rows = rows.clone();
+                    if let Some(key) = list.key_of_row(&item) {
+                        child_rows.push(RuntimeListRowKey {
+                            artboard_global_id,
+                            host_local_id: local_id,
+                            key: key.into(),
+                        });
+                    }
                     pending.push((
                         child,
                         list.state_machine_instance(item_index)
@@ -118,6 +136,7 @@ pub(super) fn collect(
                             .collect(),
                         child_path.clone(),
                         child_occurrence,
+                        child_rows,
                     ));
                 }
             });

@@ -1021,7 +1021,7 @@ All 14 runtime regressions are in `nuxie-runtime`, `tests/live_moves.rs`, using 
 - `unbound_typed_text_writes_the_incoming_prop_source_in_both_directions`
 - `authored_unbound_text_does_not_override_the_incoming_prop`
 - `takeoff_and_landing_without_an_advance_adopt_destination_values_at_once`
-- `two_versions_blend_against_their_own_landing_slot_values`
+- `in_place_a_value_that_changes_in_flight_shows_at_once_in_each_copy`
 - `values_follow_the_same_native_keyed_progress_as_the_pose`
 - `converted_two_way_numbers_blend_without_writing_back_presentation_values`
 - `outgoing_bound_typed_text_does_not_write_the_incoming_source`

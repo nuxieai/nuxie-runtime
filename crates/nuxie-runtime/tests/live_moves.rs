@@ -2712,24 +2712,6 @@ fn a_never_advanced_incoming_version_departs_bound_and_follows_its_screen() {
     close(val(&property(&incoming, "prop"), 575), 400.0);
 }
 
-#[test]
-fn two_versions_blend_against_their_own_landing_slot_values() {
-    let mut s = Scene::from_bytes(&fixture::two_version_values_fixture());
-    let outgoing = vm(&child(&s.s).unwrap());
-    let incoming = vm(&child(&s.d).unwrap());
-    s.begin();
-    close(val(&property(&outgoing, "prop"), 575), 10.0);
-    close(val(&property(&incoming, "prop"), 575), 200.0);
-    set(&property(&vm(&s.a), "offset"), 575, 110.0);
-    set(&property(&vm(&s.b), "offset"), 575, 400.0);
-    flight_progress(&mut s, 0.5);
-    close(val(&property(&outgoing, "prop"), 575), 60.0);
-    close(val(&property(&incoming, "prop"), 575), 300.0);
-    s.end();
-    close(val(&property(&outgoing, "prop"), 575), 110.0);
-    close(val(&property(&incoming, "prop"), 575), 400.0);
-}
-
 // Inline VM import normally makes two-way props source-first. Explicitly
 // restore authored target-first ordering in the native and mounted bindings.
 fn target_first_props(row: &RuntimeArtboardInstanceHandle, slot: &CoreHandle, names: &[&str]) {
@@ -6065,17 +6047,20 @@ mod paint_order {
                 self.fly(way, |s, p| each(s, way, p));
             }
         }
-        /// Taps the page at (x, y) and reads B's "hits", which a pointer
-        /// down on B's listened box sets to 9.
-        fn tap(&mut self, x: f32, y: f32) -> f32 {
+        /// The upper Screen's machine.
+        fn upper_machine(&self) -> RuntimeStateMachineInstanceHandle {
             let list = self
                 .root
                 .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
                 .unwrap();
-            let upper = list
-                .with_downcast::<ArtboardComponentList, _>(|l| l.state_machine_instance(1))
+            list.with_downcast::<ArtboardComponentList, _>(|l| l.state_machine_instance(1))
                 .flatten()
-                .unwrap();
+                .unwrap()
+        }
+        /// Taps the page at (x, y) and reads B's "hits", which a pointer
+        /// down on B's listened box sets to 9.
+        fn tap(&mut self, x: f32, y: f32) -> f32 {
+            let upper = self.upper_machine();
             upper.set_number("hits", 0.0);
             self.pointer += 1;
             let pointer = self.pointer;
@@ -6152,12 +6137,11 @@ mod paint_order {
         s.fly(Way::Back, |s, p| {
             if p == 0.5 {
                 s.advance(0.0);
-                let red = machine(&s.slot("B", "red flight"));
-                red.set_number("hits", 0.0);
                 let panel = s.tap(200.0, 180.0);
+                let red = s.upper_machine();
                 hits = Some((
                     panel,
-                    red.with_instance(|m| m.get_number("hits").unwrap().value()),
+                    red.with_instance(|m| m.get_number("red hits").unwrap().value()),
                 ));
             }
         });
@@ -8857,10 +8841,13 @@ mod drawn {
     }
     impl DrawnScene {
         fn new(case: PaintCase) -> Self {
+            Self::shaped(case, PaintShape::InPlace)
+        }
+        fn shaped(case: PaintCase, shape: PaintShape) -> Self {
             let mut factory = PersistentFactory::new(RecordingFactory::new());
             let file = File::import(
-                &fixture::css_paint_fixture_shaped(case, PaintShape::InPlace)
-                    .unwrap_or_else(|why| panic!("{case:?} has no in-place page: {why}")),
+                &fixture::css_paint_fixture_shaped(case, shape)
+                    .unwrap_or_else(|why| panic!("{case:?} has no {shape:?} page: {why}")),
                 RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
                 None,
                 None,
@@ -9210,8 +9197,8 @@ mod drawn {
     fn a_layout_flight_lays_out_at_the_blend() {
         let mut s = corner_scene(&fixture::css_two_version_corner_fixture(false));
         s.begin();
-        for flight in s.moves.flights(&s.root) {
-            set(&flight.controls(), 62003, 0.5);
+        for flight in s.moves.flight_controls(&s.root) {
+            set(&flight, 62033, 0.5);
         }
         s.advance(0.0);
         let draws = page_draws(&s.factory, &s.root);
@@ -9272,9 +9259,9 @@ mod drawn {
         let mut s = corner_scene(&fixture::css_box_root_versions_fixture());
         assert!(s.factory.borrow_mut().canvas_content_host().is_none());
         s.begin();
-        for flight in s.moves.flights(&s.root) {
-            set(&flight.controls(), 62003, 0.5);
-            set(&flight.controls(), 62014, 0.5);
+        for flight in s.moves.flight_controls(&s.root) {
+            set(&flight, 62033, 0.5);
+            set(&flight, 62036, 0.5);
         }
         s.advance(0.0);
         let stream = recorded(&s.factory, &s.root);
@@ -11048,49 +11035,44 @@ mod drawn {
             }
         }
 
-        /// How many of each entry the plan holds.
-        fn entries(s: &mut DrawnScene) -> (usize, usize) {
-            let (mut ones, mut pairs) = (0, 0);
-            s.moves.with_flights(&s.root, |flights| {
-                for entry in flights.iter() {
-                    match entry {
-                        Entry::One(_) => ones += 1,
-                        Entry::Pair(_) => pairs += 1,
-                    }
-                }
-            });
-            (ones, pairs)
+        /// How many zoomed pairs the step holds, and how many copies fly in
+        /// place.
+        fn flying(s: &DrawnScene) -> (usize, usize) {
+            (
+                s.moves.pair_ends(&s.root).len(),
+                s.moves.lifted_records(&s.root).len(),
+            )
         }
+        /// No copy in `color` is clipped half way.
         fn no_clip(s: &mut DrawnScene, version: &str) {
             let draws = Run::new(Case::Plain, Way::Forward).at(s, 0.5, 0.0);
-            let draw = one_of(&draws, color(version), version);
-            assert!(draw.clips.is_empty(), "{version}: {:?}", draw.clips);
+            let drawn: Vec<_> = draws.iter().filter(|d| d.rgb == color(version)).collect();
+            assert!(!drawn.is_empty(), "{version} draws");
+            for draw in drawn {
+                assert!(draw.clips.is_empty(), "{version}: {:?}", draw.clips);
+            }
         }
 
-        /// R7. (a) One unit at both ends with zoom 1 flies one ordinary flight
-        /// with no clip. (c) Two versions with zoom 3 aren't dropped: both fly as
-        /// today. (b) During a zoom step `flights()` gives two plain flights, and
-        /// dropping the entry through `with_flights` removes both.
+        /// R7. (a) One unit at both ends with zoom 1 transfers as one
+        /// instance, on one flight with no clip. (c) Two versions with zoom
+        /// 3 aren't dropped: both fly, as zoom 0 does. (b) A zoomed step
+        /// holds one pair of two copies.
         #[test]
         fn the_zoom_lives_only_in_a_pair() {
-            let mut s = DrawnScene::new(PaintCase::Zoom(Case::OneUnit));
+            let mut s = DrawnScene::shaped(PaintCase::Zoom(Case::OneUnit), PaintShape::InPlaceCarry);
             s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
-            assert_eq!(entries(&mut s), (1, 0), "one unit flies one flight");
-            assert_eq!(s.moves.flights(&s.root).len(), 1);
+            assert_eq!(flying(&s), (0, 1), "one unit flies one flight");
             no_clip(&mut s, "a");
 
             let mut s = DrawnScene::new(PaintCase::Zoom(Case::ZoomOutOfRange));
             s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
-            assert_eq!(entries(&mut s), (2, 0), "zoom 3 reads 0");
+            assert_eq!(flying(&s), (0, 2), "zoom 3 reads 0");
             no_clip(&mut s, "a");
             no_clip(&mut s, "b");
 
             let mut s = DrawnScene::new(PaintCase::Zoom(Case::Plain));
             s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
-            assert_eq!(entries(&mut s), (0, 1), "a zoomed step holds one pair");
-            assert_eq!(s.moves.flights(&s.root).len(), 2, "two plain flights");
-            s.moves.with_flights(&s.root, |flights| flights.clear());
-            assert!(s.moves.flights(&s.root).is_empty(), "the pair goes whole");
+            assert_eq!(flying(&s), (1, 2), "a zoomed step holds one pair");
         }
 
         /// R8's first check on every end: each version is at the rule where it
@@ -13902,89 +13884,53 @@ return function() return {init=init,advance=advance} end
         close(val(&property(&model, "count"), 575), 7.0);
     }
 
-    /// What two copies' own values read through a step, on a slot page and in
-    /// place, printed. In the order number, color, string; A's copy then B's.
+    /// A bound value that changes while its pair of copies flies shows on the
+    /// frame of the change: a number and a color as a string, in each copy,
+    /// with no blend (docs/live-moves.md). One instance that transfers blends
+    /// still: `in_place_incoming_number_and_color_blend_then_bindings_drive_after_landing`.
     #[test]
-    fn record_two_copies_values_on_both_shapes() {
-        let read = |shape: &str, label: &str, models: [&CoreHandle; 2]| {
-            let [a, b] = models.map(|m| {
-                format!(
-                    "{} {:08x} {:?}",
-                    val(&property(m, "prop"), 575),
-                    color_value(m, "accent"),
-                    string_value(m, "label")
-                )
-            });
-            eprintln!("copies values | {shape} | {label} | A {a} | B {b}");
-        };
-        let frames = [0.0, 0.25, 0.5, 0.75, 1.0];
-
-        let mut s = Scene::from_bytes(&fixture::two_version_values_fixture());
-        let models = [vm(&child(&s.s).unwrap()), vm(&child(&s.d).unwrap())];
-        read("slots", "rest", [&models[0], &models[1]]);
-        s.begin();
-        read("slots", "take-off", [&models[0], &models[1]]);
-        for p in frames {
-            if p == 0.5 {
-                // The Screens' own values change half way.
-                set(&property(&vm(&s.a), "offset"), 575, 110.0);
-                set(&property(&vm(&s.b), "offset"), 575, 400.0);
-                for (row, color, text) in [
-                    (&s.a, 0xff000000_u32, "changed a"),
-                    (&s.b, 0xffffffff, "changed b"),
-                ] {
-                    let model = vm(row);
-                    assert!(CoreRegistry::set_color_handle(
-                        &property(&model, "accent"),
-                        555,
-                        color as i32
-                    ));
-                    assert!(CoreRegistry::set_string_handle(
-                        &property(&model, "label"),
-                        561,
-                        text.into()
-                    ));
-                }
-            }
-            flight_progress(&mut s, p);
-            read("slots", &format!("{p}"), [&models[0], &models[1]]);
-        }
-        s.end();
-        s.advance(0.0);
-        read("slots", "landed", [&models[0], &models[1]]);
-
+    fn in_place_a_value_that_changes_in_flight_shows_at_once_in_each_copy() {
         let mut s = Page::new(InPlaceCarry::CopiesValues);
         let models = [vm(&child(&s.pa).unwrap()), vm(&child(&s.pb).unwrap())];
-        read("in place", "rest", [&models[0], &models[1]]);
-        s.begin("B", "t1");
-        read("in place", "take-off", [&models[0], &models[1]]);
-        for p in frames {
-            if p == 0.5 {
-                // The Screens' own values change half way.
-                set(&property(&vm(&s.a), "offset"), 575, 110.0);
-                set(&property(&vm(&s.b), "offset"), 575, 400.0);
-                for (row, color, text) in [
-                    (&s.a, 0xff000000_u32, "changed a"),
-                    (&s.b, 0xffffffff, "changed b"),
-                ] {
-                    let model = vm(row);
-                    assert!(CoreRegistry::set_color_handle(
-                        &property(&model, "accent"),
-                        555,
-                        color as i32
-                    ));
-                    assert!(CoreRegistry::set_string_handle(
-                        &property(&model, "label"),
-                        561,
-                        text.into()
-                    ));
-                }
+        let read = |label: &str, expected: [(f32, u32, &str); 2]| {
+            for (model, (number, color, text)) in models.iter().zip(expected) {
+                let prop = val(&property(model, "prop"), 575);
+                assert!((prop - number).abs() < 0.001, "{label}: {prop}");
+                assert_eq!(color_value(model, "accent"), color, "{label}");
+                assert_eq!(string_value(model, "label"), text, "{label}");
             }
+        };
+        let own = [
+            (10.0, 0x2040_6080, "outgoing"),
+            (200.0, 0xe0c0_a080, "incoming"),
+        ];
+        let changed = [(110.0, 0xff00_0000, "changed a"), (400.0, 0xffff_ffff, "changed b")];
+        read("at rest", own);
+        s.begin("B", "t1");
+        for p in [0.0, 0.25] {
             s.fly(p);
-            read("in place", &format!("{p}"), [&models[0], &models[1]]);
+            read(&format!("at {p}"), own);
+        }
+        for (row, (number, color, text)) in [&s.a, &s.b].into_iter().zip(changed) {
+            let model = vm(row);
+            set(&property(&model, "offset"), 575, number);
+            assert!(CoreRegistry::set_color_handle(
+                &property(&model, "accent"),
+                555,
+                color as i32
+            ));
+            assert!(CoreRegistry::set_string_handle(
+                &property(&model, "label"),
+                561,
+                text.into()
+            ));
+        }
+        for p in [0.25, 0.5, 1.0] {
+            s.fly(p);
+            read(&format!("changed, at {p}"), changed);
         }
         s.end("B", "t1");
-        read("in place", "landed", [&models[0], &models[1]]);
+        read("landed", changed);
     }
 
     /// Row 11: with no frame between them, take-off and landing give the

@@ -1,5 +1,5 @@
 //! A Screen added between frames opens through the C API in each SDK's order
-//! when its unit's spare copy writes its own model on its first advance
+//! when its unit writes its own model on its first advance
 //! (UNIV-5924). The small fixture has no env global and no Screen phase, so
 //! the SDK writes for those have nothing to write here.
 //!
@@ -265,11 +265,11 @@ impl Drop for Page {
 
 /// C1. iOS opens its first Screen this way (ExperienceScreenViewController,
 /// mountInteractiveScreen): prepare the row, insert it at 0, then the first
-/// 0 s frame. Screen A's spare copy writes on its first advance.
+/// 0 s frame. Screen A's copy of the unit writes on its first advance.
 #[test]
-fn a_screen_opens_in_the_ios_order_when_a_spare_copy_writes() {
+fn a_screen_opens_in_the_ios_order_when_its_unit_writes() {
     unsafe {
-        let mut page = Page::open(&fixture::spare_writes_fixture(true));
+        let mut page = Page::open(&fixture::unit_writes_fixture(true));
         let row = page.prepare_row("Screen0");
         assert_eq!(page.insert(row, 0), NuxStatus::Ok);
         page.frame(0.0, "the first frame");
@@ -281,7 +281,7 @@ fn a_screen_opens_in_the_ios_order_when_a_spare_copy_writes() {
 #[test]
 fn a_screen_woken_after_its_insert_opens_in_the_ios_order() {
     unsafe {
-        let mut page = Page::open(&fixture::spare_writes_fixture(true));
+        let mut page = Page::open(&fixture::unit_writes_fixture(true));
         let row = page.prepare_row("Screen0");
         assert_eq!(page.insert(row, 0), NuxStatus::Ok);
         assert_eq!(page.wake(0), NuxStatus::Ok);
@@ -294,11 +294,12 @@ fn a_screen_woken_after_its_insert_opens_in_the_ios_order() {
 /// takeIncomingOnLane, ExperiencePageStep): insert the row with no wake, a
 /// 0 s settle frame, then Begin, the flight's frames and End. Screen A is
 /// woken after its own insert, so only the incoming Screen is added between
-/// frames.
+/// frames. The flight transfers the unit, so A takes a copy of its own, which
+/// writes on its first advance.
 #[test]
 fn a_new_incoming_screen_opens_in_the_android_order() {
     unsafe {
-        let mut page = Page::open(&fixture::spare_writes_fixture(true));
+        let mut page = Page::open(&fixture::unit_writes_fixture(true));
         let a = page.prepare_row("Screen0");
         assert_eq!(page.insert(a, 0), NuxStatus::Ok);
         assert_eq!(page.wake(0), NuxStatus::Ok);
@@ -419,14 +420,10 @@ struct FadePage {
     at: Option<(f32, f32)>,
 }
 impl FadePage {
+    /// The in-place page, whose unit transfers between two keyed component
+    /// placements. Its Screens draw boxes of their own too, so only the
+    /// unit's red button is recorded.
     unsafe fn on_b(callbacks: &NuxRenderCallbacks) -> Self {
-        INK.with_borrow_mut(|ink| ink.only = None);
-        unsafe { Self::on_b_of(&fixture::fixture(2), callbacks) }
-    }
-    /// `on_b` on the in-place page, whose unit transfers between two keyed
-    /// component placements. Its Screens draw boxes of their own too, so
-    /// only the unit's red button is recorded.
-    unsafe fn in_place_on_b(callbacks: &NuxRenderCallbacks) -> Self {
         INK.with_borrow_mut(|ink| ink.only = Some(0xffff0000));
         unsafe {
             Self::on_b_of(
@@ -490,14 +487,14 @@ impl FadePage {
             );
             page.frame(1.0 / 60.0, "at rest on B");
             let on_b = page.draw();
-            // Before t1 B's slot holds its own copy, drawn to the right of U.
-            // After it, A's slot holds a copy of its own, drawn where U was
+            // Before t1 B's placement holds its own copy, drawn to the right of U.
+            // After it, A's placement holds a copy of its own, drawn where U was
             // at its entry state, and U rests in B's.
             let (&[a, _], &[a2, b]) = (on_a.as_slice(), on_b.as_slice()) else {
                 panic!("each Screen's copy draws once on both frames: {on_a:?}, {on_b:?}");
             };
-            assert!(b - a > 100.0, "B's slot is to the right of A's: {a}, {b}");
-            assert!((a2 - a).abs() < 0.5, "A's copy draws in A's slot: {on_a:?}, {on_b:?}");
+            assert!(b - a > 100.0, "B's placement is to the right of A's: {a}, {b}");
+            assert!((a2 - a).abs() < 0.5, "A's copy draws in A's placement: {on_a:?}, {on_b:?}");
             page.at = Some((a, b));
             page
         }
@@ -531,7 +528,7 @@ impl FadePage {
         INK.with_borrow(|ink| ink.xs.clone())
     }
     /// Draws the page and says, for each path in draw order, which Screen's
-    /// slot it is in.
+    /// placement it is in.
     unsafe fn ink(&self) -> Vec<Where> {
         let (a, b) = self.at.expect("measured after t1");
         unsafe { self.draw() }
@@ -601,9 +598,10 @@ enum Retire {
 /// a nameless Begin, the fade's frames, then End and retiring B in one batch
 /// (iOS `ExperiencePageStep.swift`, Android `ExperiencePageStep.kt`). The
 /// SDKs retire B by collapsing it while it stays reachable and by removing it
-/// otherwise, and the test runs both. Nothing moves (decision 297): each
-/// Screen's own copy draws once on every frame of the fade, and A's alone
-/// once B is retired.
+/// otherwise, and the test runs both. After t1 the unit rests in B's
+/// placement and A's holds a copy of its own. Nothing moves (decision 297):
+/// each Screen's own copy draws once on every frame of the fade, and A's
+/// alone once B is retired.
 #[test]
 fn a_fade_after_a_transfer_draws_each_screens_own_copy_once() {
     for retire in [Retire::Collapse, Retire::Remove] {
@@ -644,66 +642,6 @@ fn a_fade_after_a_transfer_draws_each_screens_own_copy_once() {
 fn a_fade_after_a_transfer_retired_before_its_end_draws_each_copy_once() {
     unsafe {
         let page = FadePage::on_b(&ink_callbacks());
-        page.call(
-            nux_player_step_begin(page.player, sv("A"), ptr::null()),
-            "fade begin",
-        );
-        page.collapse_b();
-        for i in 0..3 {
-            page.frame(1.0 / 60.0, "a frame before End");
-            assert_eq!(page.ink(), [Where::A], "frame {i} before End");
-        }
-        page.call(
-            nux_player_step_end(page.player, sv("A"), ptr::null()),
-            "fade end",
-        );
-        page.frame(1.0 / 60.0, "a frame after End");
-        assert_eq!(page.ink(), [Where::A], "after End");
-    }
-}
-
-/// `a_fade_after_a_transfer_draws_each_screens_own_copy_once` on the
-/// in-place page: after t1 the unit rests in B's placement and A's holds a
-/// copy of its own, and a fade draws each once.
-#[test]
-fn in_place_a_fade_after_a_transfer_draws_each_screens_own_copy_once() {
-    for retire in [Retire::Collapse, Retire::Remove] {
-        unsafe {
-            let page = FadePage::in_place_on_b(&ink_callbacks());
-            page.call(
-                nux_player_step_begin(page.player, sv("A"), ptr::null()),
-                "fade begin",
-            );
-            for i in 0..10 {
-                page.frame(1.0 / 60.0, "a fade frame");
-                assert_eq!(
-                    page.ink(),
-                    [Where::A, Where::B],
-                    "{retire:?}: fade frame {i}"
-                );
-            }
-            page.call(
-                nux_player_step_end(page.player, sv("A"), ptr::null()),
-                "fade end",
-            );
-            match retire {
-                Retire::Collapse => page.collapse_b(),
-                Retire::Remove => page.remove_b(),
-            }
-            for i in 0..3 {
-                page.frame(1.0 / 60.0, "a frame on A");
-                assert_eq!(page.ink(), [Where::A], "{retire:?}: frame {i} on A");
-            }
-        }
-    }
-}
-
-/// `a_fade_after_a_transfer_retired_before_its_end_draws_each_copy_once`
-/// on the in-place page.
-#[test]
-fn in_place_a_fade_after_a_transfer_retired_before_its_end_draws_each_copy_once() {
-    unsafe {
-        let page = FadePage::in_place_on_b(&ink_callbacks());
         page.call(
             nux_player_step_begin(page.player, sv("A"), ptr::null()),
             "fade begin",

@@ -322,49 +322,6 @@ unsafe fn video_ids(player: *mut NuxPlayer) -> Vec<usize> {
 }
 
 #[test]
-fn live_moves_players_share_the_occurrence_flight_and_history() {
-    unsafe {
-        let mut scene = LiveScene::new();
-        let mut second = ptr::null_mut();
-        assert_eq!(
-            nux_player_new_default(scene.artboard, &mut second),
-            NuxStatus::Ok
-        );
-        let t = view("t1");
-        assert_eq!(
-            nux_player_step_begin(scene.player, view("B"), &t),
-            NuxStatus::Ok
-        );
-        let flying = video_ids(scene.player);
-        assert_eq!(video_ids(second), flying);
-        step_ok(second);
-        assert_eq!(
-            nux_player_step_end(scene.player, view("B"), &t),
-            NuxStatus::Ok
-        );
-        // The other player also sees the landed unit and its coming-home history.
-        assert_eq!(
-            nux_player_step_begin(second, view("A"), ptr::null()),
-            NuxStatus::Ok
-        );
-        assert_eq!(
-            nux_player_step_end(scene.player, view("A"), ptr::null()),
-            NuxStatus::Ok
-        );
-        assert_eq!(video_ids(second), video_ids(scene.player));
-        assert_eq!(
-            nux_player_step_begin(scene.player, view("B"), &t),
-            NuxStatus::Ok
-        );
-        nux_player_free(scene.player);
-        scene.player = ptr::null_mut();
-        step_ok(second);
-        assert_eq!(nux_player_step_end(second, view("B"), &t), NuxStatus::Ok);
-        nux_player_free(second);
-    }
-}
-
-#[test]
 fn live_moves_sleeping_video_can_reclaim_and_resume_the_same_id() {
     unsafe fn observe(
         player: *mut NuxPlayer,
@@ -529,7 +486,7 @@ unsafe fn acknowledge_current(player: *mut NuxPlayer) -> u64 {
 fn set_live_flight_progress(root: &nuxie::RuntimeArtboardInstanceHandle, progress: f32) {
     set_flight_progress(root, 2, progress);
 }
-/// Writes `progress` to the record of Screen B's flight slot for `flight_key`.
+/// Writes `progress` to Screen B's flight record `flight_key`.
 fn set_flight_progress(
     root: &nuxie::RuntimeArtboardInstanceHandle,
     flight_key: u32,
@@ -537,623 +494,19 @@ fn set_flight_progress(
 ) {
     let rows = nuxie::live_move::screens(root).unwrap();
     for record in
-        rows["B"].with_artboard(|b| b.find_all_handles::<nuxie::live_move::records::LiveSlot>())
+        rows["B"].with_artboard(|b| b.find_all_handles::<nuxie::live_move::records::LiveFlight>())
     {
         let is_flight = record
-            .with_downcast::<nuxie::live_move::records::LiveSlot, _>(|r| {
-                r.values.flight_key == flight_key && r.values.role == 1
+            .with_downcast::<nuxie::live_move::records::LiveFlight, _>(|r| {
+                r.values.key == flight_key
             })
             .unwrap();
         if is_flight {
             assert!(
                 nuxie::runtime::generated::core_registry::CoreRegistry::set_double_handle(
-                    &record, 62003, progress
+                    &record, 62033, progress
                 )
             );
-        }
-    }
-}
-
-#[test]
-fn live_moves_publish_exact_binding_owners_on_takeoff_landing_and_wake() {
-    unsafe {
-        let scene = LiveScene::new();
-        let mut shared = ptr::null_mut();
-        assert_eq!(
-            nux_view_model_instance_new_schema_default(scene.file, 0, &mut shared),
-            NuxStatus::Ok
-        );
-        let root = (&(*scene.player).artboard)
-            .instance
-            .borrow()
-            .native_handle();
-        let rows = nuxie::live_move::screens(&root).unwrap();
-        let source = rows["A"].with_artboard(|b| b.nested_artboards()[0].clone());
-        let unit = source
-            .with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
-            .flatten()
-            .unwrap();
-        // Test setup: expose this nested unit's model through a public shared
-        // handle. The C API currently exports root and list models only.
-        let native_model = unit
-            .data_context()
-            .unwrap()
-            .with_context(|context| context.main_view_model_instance())
-            .unwrap();
-        (*shared).instance =
-            RuntimeOwnedViewModelHandle::from_native((*scene.file).file.clone(), native_model)
-                .unwrap();
-        (*shared).identity = (*shared).instance.instance_identity();
-        let mut observer = ptr::null_mut();
-        let mut observer_player = ptr::null_mut();
-        assert_eq!(
-            nux_artboard_instance_new(scene.file, 3, &mut observer),
-            NuxStatus::Ok
-        );
-        assert_eq!(
-            nux_artboard_instance_bind_view_model(observer, shared),
-            NuxStatus::Ok
-        );
-        assert_eq!(
-            nux_player_new_default(observer, &mut observer_player),
-            NuxStatus::Ok
-        );
-        // A second model with the same schema must not receive broad invalidation.
-        let mut unrelated = ptr::null_mut();
-        let mut unrelated_vm = ptr::null_mut();
-        let mut unrelated_player = ptr::null_mut();
-        assert_eq!(
-            nux_artboard_instance_new(scene.file, 3, &mut unrelated),
-            NuxStatus::Ok
-        );
-        assert_eq!(
-            nux_view_model_instance_new_default(unrelated, &mut unrelated_vm),
-            NuxStatus::Ok
-        );
-        assert_eq!(
-            nux_artboard_instance_bind_view_model(unrelated, unrelated_vm),
-            NuxStatus::Ok
-        );
-        assert_eq!(
-            nux_player_new_default(unrelated, &mut unrelated_player),
-            NuxStatus::Ok
-        );
-        let unrelated_revision = acknowledge_current(unrelated_player);
-        let mut screen_b = ptr::null_mut();
-        assert_eq!(
-            nux_view_model_instance_list_item_acquire(scene.vm, view("screens"), 1, &mut screen_b),
-            NuxStatus::Ok
-        );
-        let property = || {
-            let mut snapshot = ptr::null_mut();
-            assert_eq!(
-                nux_view_model_instance_snapshot(shared, &mut snapshot),
-                NuxStatus::Ok
-            );
-            let mut value = NuxViewModelSnapshotValueView::default();
-            assert_eq!(
-                nux_view_model_snapshot_value(snapshot, 1, &mut value),
-                NuxStatus::Ok
-            );
-            nux_view_model_snapshot_free(snapshot);
-            value.number_value
-        };
-        // This regression covers immediate value publication at a completed flight.
-        set_live_flight_progress(&root, 1.0);
-        let revision = acknowledge_current(observer_player);
-        assert_eq!(
-            nux_player_step_begin(scene.player, view("B"), &view("t1")),
-            NuxStatus::Ok
-        );
-        assert_eq!(property(), 200.0);
-        assert_eq!(
-            nux_player_acknowledge_presented(observer_player, revision),
-            NuxStatus::HandleMismatch,
-            "takeoff must invalidate the other holder"
-        );
-        let revision = acknowledge_current(observer_player);
-        assert_eq!(
-            nux_view_model_instance_set_number(screen_b, c"offset".as_ptr(), 321.0),
-            NuxStatus::Ok
-        );
-        assert_eq!(
-            nux_player_step_end(scene.player, view("B"), &view("t1")),
-            NuxStatus::Ok
-        );
-        assert_eq!(property(), 321.0);
-        assert_eq!(
-            nux_player_acknowledge_presented(observer_player, revision),
-            NuxStatus::HandleMismatch,
-            "landing must invalidate the other holder"
-        );
-        assert_eq!(
-            nux_player_set_row_collapsed(scene.player, view("screens"), 1, 1),
-            NuxStatus::Ok
-        );
-        let revision = acknowledge_current(observer_player);
-        assert_eq!(
-            nux_view_model_instance_set_number(screen_b, c"offset".as_ptr(), 456.0),
-            NuxStatus::Ok
-        );
-        assert_eq!(
-            nux_player_acknowledge_presented(observer_player, revision),
-            NuxStatus::Ok,
-            "a sleeping binding has not written the unit yet"
-        );
-        assert_eq!(
-            nux_player_set_row_collapsed(scene.player, view("screens"), 1, 0),
-            NuxStatus::Ok
-        );
-        assert_eq!(property(), 456.0);
-        assert_eq!(
-            nux_player_acknowledge_presented(observer_player, revision),
-            NuxStatus::HandleMismatch,
-            "wake must publish owners that were outside the active index"
-        );
-        assert_eq!(
-            nux_player_acknowledge_presented(unrelated_player, unrelated_revision),
-            NuxStatus::Ok,
-            "only exact changed owners are published"
-        );
-        nux_view_model_instance_free(screen_b);
-        nux_player_free(unrelated_player);
-        nux_view_model_instance_free(unrelated_vm);
-        nux_artboard_instance_free(unrelated);
-        nux_player_free(observer_player);
-        nux_artboard_instance_free(observer);
-        nux_view_model_instance_free(shared);
-    }
-}
-
-/// Through the C API, a transferred unit lands in the arriving Screen and
-/// the slot it left draws a fresh copy of its own (decision 297); a NULL
-/// step name moves nothing.
-#[test]
-fn step_end_lands_and_refills_through_the_c_api() {
-    unsafe {
-        let bytes = fixture::fixture(2);
-        let mut file = ptr::null_mut();
-        assert_eq!(import_fixture(&bytes, &mut file), NuxStatus::Ok);
-        let mut artboard = ptr::null_mut();
-        assert_eq!(
-            nux_artboard_instance_new(file, 0, &mut artboard),
-            NuxStatus::Ok
-        );
-        let mut vm = ptr::null_mut();
-        assert_eq!(
-            nux_view_model_instance_new_default(artboard, &mut vm),
-            NuxStatus::Ok
-        );
-        assert_eq!(
-            nux_artboard_instance_bind_view_model(artboard, vm),
-            NuxStatus::Ok
-        );
-        let mut player = ptr::null_mut();
-        assert_eq!(nux_player_new_default(artboard, &mut player), NuxStatus::Ok);
-        let mut result = ptr::null_mut();
-        assert_eq!(
-            step_status(player, &NuxPlayerStep::default(), &mut result),
-            NuxStatus::Ok
-        );
-        nux_player_step_result_free(result);
-        let root = (&(*player).artboard).instance.borrow().native_handle();
-        let rows = nuxie::live_move::screens(&root).unwrap();
-        let a = rows["A"].with_artboard(|b| b.nested_artboards()[0].clone());
-        let b = rows["B"].with_artboard(|b| b.nested_artboards().to_vec());
-        let child = |h: &nuxie::CoreHandle| {
-            h.with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
-                .flatten()
-        };
-        let original = child(&a).unwrap();
-        let keyed = original
-            .with_artboard(|b| b.find_handle::<nuxie::runtime::node::Node>("keyed"))
-            .unwrap();
-        let transition = view("t1");
-        let step = NuxPlayerStep {
-            elapsed_seconds: 0.3,
-            ..Default::default()
-        };
-        let mut result = ptr::null_mut();
-        assert_eq!(step_status(player, &step, &mut result), NuxStatus::Ok);
-        nux_player_step_result_free(result);
-        assert_eq!(
-            nux_player_step_begin(player, view("B"), &transition),
-            NuxStatus::Ok
-        );
-        assert!(child(&a).is_none());
-        assert_eq!(child(&b[1]).unwrap().core_handle(), original.core_handle());
-        let step = NuxPlayerStep {
-            elapsed_seconds: 0.2,
-            ..Default::default()
-        };
-        let mut result = ptr::null_mut();
-        assert_eq!(step_status(player, &step, &mut result), NuxStatus::Ok);
-        nux_player_step_result_free(result);
-        assert_eq!(
-            nux_player_step_end(player, view("B"), &transition),
-            NuxStatus::Ok
-        );
-        assert_eq!(child(&b[0]).unwrap().core_handle(), original.core_handle());
-        let x =
-            nuxie::runtime::generated::core_registry::CoreRegistry::get_double_handle(&keyed, 13)
-                .unwrap();
-        assert!((x - 50.0).abs() < 0.002, "x={x}");
-        // The departure slot draws a copy of its own.
-        let own = child(&a).unwrap();
-        assert_ne!(own.core_handle(), original.core_handle());
-        assert!(
-            a.with(|o| o.as_nested_artboard().unwrap().will_draw())
-                .unwrap()
-        );
-        assert_eq!(
-            nux_player_step_begin(player, view("A"), ptr::null()),
-            NuxStatus::Ok
-        );
-        assert_eq!(child(&a).unwrap().core_handle(), own.core_handle());
-        assert_eq!(child(&b[0]).unwrap().core_handle(), original.core_handle());
-        assert_eq!(
-            nux_player_step_end(player, view("A"), ptr::null()),
-            NuxStatus::Ok
-        );
-        assert_eq!(child(&a).unwrap().core_handle(), own.core_handle());
-        assert_eq!(child(&b[0]).unwrap().core_handle(), original.core_handle());
-        assert_eq!(
-            nux_player_set_row_collapsed(player, view("screens"), 1, 1),
-            NuxStatus::Ok
-        );
-        assert_eq!(
-            nux_player_set_row_collapsed(player, view("screens"), 1, 0),
-            NuxStatus::Ok
-        );
-        assert_eq!(
-            nux_player_step_begin(player, view("A"), &view("missing")),
-            NuxStatus::InvalidArgument
-        );
-        nux_player_free(player);
-        nux_view_model_instance_free(vm);
-        nux_artboard_instance_free(artboard);
-        nux_file_free(file);
-    }
-}
-
-#[test]
-fn live_moves_keep_the_c_api_video_id_reachable() {
-    unsafe extern "C" fn collect(data: *mut c_void, info: *const NuxVideoInfo) {
-        unsafe { &mut *data.cast::<Vec<usize>>() }.push(unsafe { &*info }.component_id);
-    }
-    unsafe fn ids(player: *mut NuxPlayer) -> Vec<usize> {
-        let mut ids = Vec::new();
-        assert_eq!(
-            unsafe {
-                nux_player_visit_videos(player, Some(collect), ptr::from_mut(&mut ids).cast())
-            },
-            NuxStatus::Ok
-        );
-        ids
-    }
-    unsafe {
-        let bytes = fixture::fixture(2);
-        let mut file = ptr::null_mut();
-        let mut artboard = ptr::null_mut();
-        let mut vm = ptr::null_mut();
-        let mut player = ptr::null_mut();
-        assert_eq!(import_fixture(&bytes, &mut file), NuxStatus::Ok);
-        assert_eq!(
-            nux_artboard_instance_new(file, 0, &mut artboard),
-            NuxStatus::Ok
-        );
-        assert_eq!(
-            nux_view_model_instance_new_default(artboard, &mut vm),
-            NuxStatus::Ok
-        );
-        assert_eq!(
-            nux_artboard_instance_bind_view_model(artboard, vm),
-            NuxStatus::Ok
-        );
-        assert_eq!(nux_player_new_default(artboard, &mut player), NuxStatus::Ok);
-        let mut result = ptr::null_mut();
-        assert_eq!(
-            step_status(player, &NuxPlayerStep::default(), &mut result),
-            NuxStatus::Ok
-        );
-        nux_player_step_result_free(result);
-        let root = (&(*player).artboard).instance.borrow().native_handle();
-        let rows = nuxie::live_move::screens(&root).unwrap();
-        for (name, row) in rows {
-            for (index, host) in row
-                .with_artboard(|b| b.nested_artboards().to_vec())
-                .into_iter()
-                .enumerate()
-            {
-                if name != "A" || index != 0 {
-                    nuxie::live_move::empty_slot(&host).unwrap();
-                }
-            }
-        }
-        let original = ids(player);
-        assert_eq!(original.len(), 1);
-        let t = view("t1");
-        assert_eq!(nux_player_step_begin(player, view("B"), &t), NuxStatus::Ok);
-        assert_eq!(ids(player), original);
-        assert_eq!(nux_player_step_end(player, view("B"), &t), NuxStatus::Ok);
-        // The flown video keeps its id; the copy A gets has a video of its
-        // own (decision 297).
-        let landed = ids(player);
-        assert_eq!(landed.len(), 2);
-        assert!(landed.contains(&original[0]));
-        assert_eq!(
-            nux_player_step_begin(player, view("A"), ptr::null()),
-            NuxStatus::Ok
-        );
-        assert_eq!(ids(player), landed);
-        assert_eq!(
-            nux_player_step_end(player, view("A"), ptr::null()),
-            NuxStatus::Ok
-        );
-        assert_eq!(ids(player), landed);
-        println!("video id across S/F/D: {}", original[0]);
-        nux_player_free(player);
-        nux_view_model_instance_free(vm);
-        nux_artboard_instance_free(artboard);
-        nux_file_free(file);
-    }
-}
-
-#[test]
-fn live_moves_semantic_snapshot_keeps_one_field_and_focus() {
-    use nuxie::runtime::{
-        focus_data::FocusData, semantic::semantic_data::SemanticData, text::text_input::TextInput,
-    };
-    use std::collections::HashSet;
-    unsafe {
-        for focused in [false, true] {
-            let bytes = fixture::semantic_fixture();
-            let mut file = ptr::null_mut();
-            assert_eq!(import_fixture(&bytes, &mut file), NuxStatus::Ok);
-            let mut artboard = ptr::null_mut();
-            assert_eq!(
-                nux_artboard_instance_new(file, 0, &mut artboard),
-                NuxStatus::Ok
-            );
-            let mut vm = ptr::null_mut();
-            assert_eq!(
-                nux_view_model_instance_new_default(artboard, &mut vm),
-                NuxStatus::Ok
-            );
-            assert_eq!(
-                nux_artboard_instance_bind_view_model(artboard, vm),
-                NuxStatus::Ok
-            );
-            let mut player = ptr::null_mut();
-            assert_eq!(nux_player_new_default(artboard, &mut player), NuxStatus::Ok);
-            let mut result = ptr::null_mut();
-            assert_eq!(
-                step_status(player, &NuxPlayerStep::default(), &mut result),
-                NuxStatus::Ok
-            );
-            nux_player_step_result_free(result);
-            let root = (&(*player).artboard).instance.borrow().native_handle();
-            let rows = nuxie::live_move::screens(&root).unwrap();
-            let a = rows["A"].with_artboard(|b| b.nested_artboards().to_vec());
-            let b = rows["B"].with_artboard(|b| b.nested_artboards().to_vec());
-            nuxie::live_move::empty_slot(&a[1]).unwrap();
-            nuxie::live_move::empty_slot(&b[1]).unwrap();
-            let unit = a[0]
-                .with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
-                .flatten()
-                .unwrap();
-            assert_eq!(nux_player_enable_semantics(player), NuxStatus::Ok);
-            let semantic_data = unit.with_artboard(|b| b.find_all_handles::<SemanticData>());
-            let ids: HashSet<_> = semantic_data
-                .iter()
-                .map(|h| {
-                    h.with_downcast::<SemanticData, _>(|d| {
-                        d.existing_semantic_node().unwrap().borrow().id()
-                    })
-                    .unwrap()
-                })
-                .collect();
-            assert_eq!(ids.len(), 3);
-            let group_id = semantic_data
-                .iter()
-                .find_map(|h| {
-                    h.with_downcast::<SemanticData, _>(|d| d.existing_semantic_node())
-                        .flatten()
-                        .filter(|n| n.borrow().role == 9)
-                })
-                .unwrap()
-                .borrow()
-                .id();
-            let field_id = semantic_data
-                .iter()
-                .find_map(|h| {
-                    h.with_downcast::<SemanticData, _>(|d| d.existing_semantic_node())
-                        .flatten()
-                        .filter(|n| n.borrow().role == 6)
-                })
-                .unwrap()
-                .borrow()
-                .id();
-            let text = unit
-                .with_artboard(|b| b.find_handle::<TextInput>("edit"))
-                .unwrap();
-            text.with_downcast_mut::<TextInput, _>(|t| t.text_input("hello mascot"));
-            let focus_node = unit.with_artboard(|b| b.find_all_handles::<FocusData>())[0]
-                .with_downcast::<FocusData, _>(|f| f.existing_focus_node())
-                .flatten()
-                .unwrap();
-            let focus_manager = unit.with_artboard(|b| b.focus_manager()).unwrap();
-            if focused {
-                focus_manager.with_focus_manager_mut(|m| m.set_focus(focus_node.clone()));
-            }
-            let check = |host: &nuxie::CoreHandle, copies: usize| {
-                let revision = (&(*player).artboard).render_revision.get();
-                assert_eq!(
-                    nux_player_acknowledge_presented(player, revision),
-                    NuxStatus::Ok
-                );
-                let mut snapshot = ptr::null_mut();
-                assert_eq!(
-                    nux_player_semantic_snapshot(player, &mut snapshot),
-                    NuxStatus::Ok
-                );
-                let mut info = NuxSemanticSnapshotInfo {
-                    struct_size: std::mem::size_of::<NuxSemanticSnapshotInfo>() as u32,
-                    ..Default::default()
-                };
-                assert_eq!(
-                    nux_semantic_snapshot_info(snapshot, &mut info),
-                    NuxStatus::Ok
-                );
-                let nodes: Vec<_> = (0..info.node_count)
-                    .map(|i| {
-                        let mut node = NuxSemanticNodeView {
-                            struct_size: std::mem::size_of::<NuxSemanticNodeView>() as u32,
-                            ..Default::default()
-                        };
-                        assert_eq!(
-                            nux_semantic_snapshot_node(snapshot, i, &mut node),
-                            NuxStatus::Ok
-                        );
-                        (node.id, node.parent_id, node.role, node.state_flags)
-                    })
-                    .collect();
-                let unique: HashSet<_> = nodes.iter().map(|n| n.0).collect();
-                assert_eq!(
-                    unique.len(),
-                    nodes.len(),
-                    "duplicate semantic ids: {nodes:?}"
-                );
-                assert_eq!(nodes.len(), 4 + copies * 3);
-                assert_eq!(
-                    nodes.iter().find(|n| n.0 == field_id).unwrap().3 & NUX_SEMANTIC_STATE_FOCUSED
-                        != 0,
-                    focused
-                );
-                for id in &ids {
-                    assert_eq!(nodes.iter().filter(|n| n.0 == *id).count(), 1);
-                }
-                let mut descendants = HashSet::from([group_id]);
-                loop {
-                    let old_len = descendants.len();
-                    for n in &nodes {
-                        if descendants.contains(&(n.1 as u32)) {
-                            descendants.insert(n.0);
-                        }
-                    }
-                    if descendants.len() == old_len {
-                        break;
-                    }
-                }
-                assert_eq!(descendants, ids);
-                let parent =
-                    SemanticData::find_closest_semantic_node_handle(Some(host.clone())).unwrap();
-                assert_eq!(
-                    nodes.iter().find(|n| n.0 == group_id).unwrap().1,
-                    parent.borrow().id() as i32
-                );
-                assert_eq!(
-                    nodes
-                        .iter()
-                        .filter(|n| n.2 == NUX_SEMANTIC_ROLE_TEXT_FIELD)
-                        .count(),
-                    copies
-                );
-                assert_eq!(
-                    nodes.iter().find(|n| n.0 == field_id).unwrap().2,
-                    NUX_SEMANTIC_ROLE_TEXT_FIELD
-                );
-                // The same snapshot id still resolves to the live TextInput through the C API.
-                let mut length = 0;
-                assert_eq!(
-                    nux_player_field_string_copy(
-                        player,
-                        snapshot,
-                        field_id,
-                        view("edit"),
-                        ptr::null_mut(),
-                        0,
-                        &mut length
-                    ),
-                    NuxStatus::Ok
-                );
-                let mut value = vec![0; length];
-                assert_eq!(
-                    nux_player_field_string_copy(
-                        player,
-                        snapshot,
-                        field_id,
-                        view("edit"),
-                        value.as_mut_ptr(),
-                        value.len(),
-                        &mut length
-                    ),
-                    NuxStatus::Ok
-                );
-                assert_eq!(value, b"hello mascot");
-                assert_eq!(
-                    text.with_downcast::<TextInput, _>(|t| t.is_focused())
-                        .unwrap(),
-                    focused
-                );
-                assert_eq!(
-                    focus_manager.with_focus_manager(|m| m.has_primary_focus(&focus_node)),
-                    focused
-                );
-                nux_semantic_snapshot_free(snapshot);
-            };
-            check(&a[0], 2);
-            let transition = view("t1");
-            assert_eq!(
-                nux_player_step_begin(player, view("B"), &transition),
-                NuxStatus::Ok
-            );
-            check(&b[1], 1);
-            let mut result = ptr::null_mut();
-            assert_eq!(
-                step_status(
-                    player,
-                    &NuxPlayerStep {
-                        elapsed_seconds: 0.1,
-                        ..Default::default()
-                    },
-                    &mut result
-                ),
-                NuxStatus::Ok
-            );
-            nux_player_step_result_free(result);
-            check(&b[1], 1);
-            assert_eq!(
-                nux_player_step_end(player, view("B"), &transition),
-                NuxStatus::Ok
-            );
-            // A holds a copy of its own, with a field of its own (decision 297).
-            check(&b[0], 2);
-            // A cut moves nothing.
-            assert_eq!(
-                nux_player_step_begin(player, view("A"), ptr::null()),
-                NuxStatus::Ok
-            );
-            check(&b[0], 2);
-            assert_eq!(
-                nux_player_step_end(player, view("A"), ptr::null()),
-                NuxStatus::Ok
-            );
-            check(&b[0], 2);
-            // Back flies the same unit; take-off discards A's never-shown copy,
-            // and B gets a copy of its own when it lands.
-            let back = view("back");
-            assert_eq!(
-                nux_player_step_begin(player, view("A"), &back),
-                NuxStatus::Ok
-            );
-            check(&b[1], 1);
-            assert_eq!(nux_player_step_end(player, view("A"), &back), NuxStatus::Ok);
-            check(&a[0], 2);
-            nux_player_free(player);
-            nux_view_model_instance_free(vm);
-            nux_artboard_instance_free(artboard);
-            nux_file_free(file);
         }
     }
 }
@@ -1320,146 +673,6 @@ fn live_moves_checkpoint_overflow_poisons_the_occurrence_after_playback() {
             nux_artboard_instance_free(artboard);
             nux_file_free(file);
         }
-    }
-}
-
-#[test]
-fn live_moves_sleep_wake_and_hidden_transfers_keep_sdk_identities_round4() {
-    use nuxie::{live_move, runtime::semantic::semantic_data::SemanticData};
-    unsafe {
-        let scene = LiveScene::from_bytes(&fixture::semantic_fixture());
-        let root = (&(*scene.player).artboard)
-            .instance
-            .borrow()
-            .native_handle();
-        let rows = live_move::screens(&root).unwrap();
-        let a = rows["A"].with_artboard(|b| b.nested_artboards().to_vec());
-        let b = rows["B"].with_artboard(|b| b.nested_artboards().to_vec());
-        for slot in [&a[1], &b[1], &b[0]] {
-            live_move::empty_slot(slot).unwrap();
-        }
-        let unit = a[0]
-            .with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
-            .flatten()
-            .unwrap();
-        assert_eq!(nux_player_enable_semantics(scene.player), NuxStatus::Ok);
-        let field = || {
-            unit.with_artboard(|b| b.find_all_handles::<SemanticData>())
-                .iter()
-                .find_map(|h| {
-                    h.with_downcast::<SemanticData, _>(|d| d.existing_semantic_node())
-                        .flatten()
-                        .filter(|n| n.borrow().role == 6)
-                })
-                .unwrap()
-        };
-        let node = field();
-        let semantic_id = node.borrow().id();
-        let ids = video_ids(scene.player);
-        assert_eq!(ids.len(), 1);
-        let video_id = ids[0];
-        let check = |shown: bool| {
-            assert!(std::rc::Rc::ptr_eq(&node, &field()));
-            assert_eq!(field().borrow().id(), semantic_id);
-            let revision = (&(*scene.player).artboard).render_revision.get();
-            assert_eq!(
-                nux_player_acknowledge_presented(scene.player, revision),
-                NuxStatus::Ok
-            );
-            let mut snapshot = ptr::null_mut();
-            assert_eq!(
-                nux_player_semantic_snapshot(scene.player, &mut snapshot),
-                NuxStatus::Ok
-            );
-            let mut info = NuxSemanticSnapshotInfo {
-                struct_size: size_of::<NuxSemanticSnapshotInfo>() as u32,
-                ..Default::default()
-            };
-            assert_eq!(
-                nux_semantic_snapshot_info(snapshot, &mut info),
-                NuxStatus::Ok
-            );
-            let mut matches = 0;
-            for i in 0..info.node_count {
-                let mut view = NuxSemanticNodeView {
-                    struct_size: size_of::<NuxSemanticNodeView>() as u32,
-                    ..Default::default()
-                };
-                assert_eq!(
-                    nux_semantic_snapshot_node(snapshot, i, &mut view),
-                    NuxStatus::Ok
-                );
-                if view.id == semantic_id {
-                    matches += 1;
-                }
-            }
-            nux_semantic_snapshot_free(snapshot);
-            assert_eq!(matches, usize::from(shown));
-            assert_eq!(
-                video_ids(scene.player),
-                if shown { vec![video_id] } else { vec![] }
-            );
-            // A sleeping video remains addressable by the same SDK ID.
-            let mut visible = 0;
-            assert_eq!(
-                nux_player_video_is_visible(
-                    scene.player,
-                    video_id,
-                    -10000.0,
-                    -10000.0,
-                    10000.0,
-                    10000.0,
-                    &mut visible
-                ),
-                NuxStatus::Ok
-            );
-            if !shown {
-                assert_eq!(visible, 0);
-            }
-        };
-        let sleep = |row, value| {
-            assert_eq!(
-                nux_player_set_row_collapsed(scene.player, view("screens"), row, value),
-                NuxStatus::Ok
-            )
-        };
-        check(true);
-        sleep(0, 1);
-        check(false);
-        sleep(0, 0);
-        check(true);
-        let t = view("t1");
-        assert_eq!(
-            nux_player_step_begin(scene.player, view("B"), &t),
-            NuxStatus::Ok
-        );
-        assert_eq!(
-            nux_player_step_end(scene.player, view("B"), &t),
-            NuxStatus::Ok
-        );
-        // Both SDKs retire A in the batch that ends the step; the copy A gets
-        // (decision 297) is shown only when A is shown again.
-        sleep(0, 1);
-        check(true);
-        sleep(1, 1);
-        check(false);
-        // Waking B shows the same occurrence.
-        sleep(1, 0);
-        check(true);
-        // Step incoming Screens must be awake. Exercise the transport seam for
-        // an attachment into a sleeping destination instead: A's slot, while
-        // A sleeps.
-        live_move::move_live(&b[0], &a[0]).unwrap();
-        check(false);
-        sleep(0, 0);
-        check(true);
-        sleep(0, 1);
-        check(false);
-        live_move::move_live(&a[0], &b[0]).unwrap();
-        check(true);
-        println!(
-            "SDK identities through sleep/wake and hidden transfers: semantic={semantic_id} video={video_id}"
-        );
     }
 }
 
@@ -1973,127 +1186,6 @@ return function() return {value=0,last=0,atSource=false,update=update} end"#;
             "queued commands were delivered twice"
         );
         nux_player_step_result_free(result);
-    }
-}
-
-#[test]
-fn live_moves_remove_outgoing_row_after_back_then_step_round9() {
-    use crate::data_binding::*;
-    unsafe {
-        let scene = LiveScene::from_bytes(&nuxie::live_move::device_fixture::device_fixture(2));
-        let mut a = ptr::null_mut();
-        let mut b = ptr::null_mut();
-        for (index, row) in [(0, &mut a), (1, &mut b)] {
-            assert_eq!(
-                nux_view_model_instance_list_item_acquire(scene.vm, view("screens"), index, row),
-                NuxStatus::Ok
-            );
-        }
-        let write = |row, path: &str, value: &str| {
-            let path = std::ffi::CString::new(path).unwrap();
-            let value = std::ffi::CString::new(value).unwrap();
-            assert_eq!(
-                nux_view_model_instance_set_string(row, path.as_ptr(), value.as_ptr()),
-                NuxStatus::Ok
-            );
-        };
-        let mutate_list = |kind, index, second_index| {
-            let mutation = NuxViewModelMutation {
-                kind,
-                instance: scene.vm,
-                path: view("screens"),
-                index,
-                second_index,
-                ..Default::default()
-            };
-            let batch = NuxViewModelMutationBatch {
-                mutations: &mutation,
-                mutation_count: 1,
-                ..Default::default()
-            };
-            let mut result = ptr::null_mut();
-            assert_eq!(nux_view_model_mutate(&batch, &mut result), NuxStatus::Ok);
-            nux_view_model_mutation_result_free(result);
-        };
-        write(a, "screen/phase", "active");
-        for (step, incoming, incoming_vm, outgoing_vm) in [("t1", "B", b, a), ("back", "A", a, b)] {
-            if step == "back" {
-                // The SDK's Back move leaves this two-row order [A, B].
-                mutate_list(NUX_VIEW_MODEL_MUTATION_KIND_LIST_MOVE, 0, 0);
-                step_ok(scene.player);
-                assert_eq!(
-                    nux_player_set_row_collapsed(scene.player, view("screens"), 0, 0),
-                    NuxStatus::Ok
-                );
-            }
-            write(incoming_vm, "screen/phase", "entering");
-            write(outgoing_vm, "screen/phase", "exiting");
-            write(incoming_vm, "screen/transition", step);
-            write(outgoing_vm, "screen/transition", step);
-            let name = view(step);
-            assert_eq!(
-                nux_player_step_begin(scene.player, view(incoming), &name),
-                NuxStatus::Ok
-            );
-            let expected = format!("nx_enter_done:{step}");
-            let mut completed = false;
-            for frame in 0..=90 {
-                let mut result = ptr::null_mut();
-                assert_eq!(
-                    step_status(
-                        scene.player,
-                        &NuxPlayerStep {
-                            elapsed_seconds: if frame == 0 { 0.0 } else { 1.0 / 60.0 },
-                            ..Default::default()
-                        },
-                        &mut result,
-                    ),
-                    NuxStatus::Ok,
-                    "{step} frame {frame}"
-                );
-                completed = (&(*result).events)
-                    .iter()
-                    .any(|event| event.name.as_deref() == Some(expected.as_bytes()));
-                nux_player_step_result_free(result);
-                if completed {
-                    break;
-                }
-            }
-            assert!(completed, "missing authored completion for {step}");
-            assert_eq!(
-                nux_player_step_end(scene.player, view(incoming), &name),
-                NuxStatus::Ok
-            );
-            write(incoming_vm, "screen/phase", "active");
-            write(outgoing_vm, "screen/phase", "hidden");
-            if step == "t1" {
-                assert_eq!(
-                    nux_player_set_row_collapsed(scene.player, view("screens"), 0, 1),
-                    NuxStatus::Ok
-                );
-            }
-        }
-        // Do not keep an SDK row handle alive across removal. This must exercise
-        // retirement, rather than accidentally retaining the removed VM storage.
-        nux_view_model_instance_free(b);
-        nux_view_model_instance_free(a);
-        mutate_list(NUX_VIEW_MODEL_MUTATION_KIND_LIST_REMOVE, 1, 0);
-        for frame in 1..=2 {
-            let mut result = ptr::null_mut();
-            assert_eq!(
-                step_status(
-                    scene.player,
-                    &NuxPlayerStep {
-                        elapsed_seconds: 1.0 / 60.0,
-                        ..Default::default()
-                    },
-                    &mut result,
-                ),
-                NuxStatus::Ok,
-                "ordinary step {frame} after removing B following Back"
-            );
-            nux_player_step_result_free(result);
-        }
     }
 }
 
@@ -2745,98 +1837,6 @@ fn page_player_content_height_c_query_preserves_render_revision() {
     }
 }
 
-#[test]
-fn live_moves_blended_midpoint_step_publishes_to_the_shared_owner_observer() {
-    unsafe {
-        let scene = LiveScene::from_bytes(&fixture::keyed_fixture());
-        let root = (&(*scene.player).artboard)
-            .instance
-            .borrow()
-            .native_handle();
-        let rows = nuxie::live_move::screens(&root).unwrap();
-        let source = rows["A"].with_artboard(|b| b.nested_artboards()[0].clone());
-        let unit = source
-            .with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
-            .flatten()
-            .unwrap();
-        let native_model = unit
-            .data_context()
-            .unwrap()
-            .with_context(|c| c.main_view_model_instance())
-            .unwrap();
-        // As in the exact-owner regression, expose the nested unit's actual
-        // model through a public handle and bind another occurrence to it.
-        let mut shared = ptr::null_mut();
-        assert_eq!(
-            nux_view_model_instance_new_schema_default(scene.file, 0, &mut shared),
-            NuxStatus::Ok
-        );
-        (*shared).instance =
-            RuntimeOwnedViewModelHandle::from_native((*scene.file).file.clone(), native_model)
-                .unwrap();
-        (*shared).identity = (*shared).instance.instance_identity();
-        let mut observer = ptr::null_mut();
-        let mut observer_player = ptr::null_mut();
-        assert_eq!(
-            nux_artboard_instance_new(scene.file, 3, &mut observer),
-            NuxStatus::Ok
-        );
-        assert_eq!(
-            nux_artboard_instance_bind_view_model(observer, shared),
-            NuxStatus::Ok
-        );
-        assert_eq!(
-            nux_player_new_default(observer, &mut observer_player),
-            NuxStatus::Ok
-        );
-        let runtime = nuxie::ViewModelInstanceRuntime::new((*shared).instance.native_handle());
-        let number = runtime.property_number("prop").unwrap();
-        let transition = view("t1");
-        assert_eq!(
-            nux_player_step_begin(scene.player, view("B"), &transition),
-            NuxStatus::Ok
-        );
-        assert_eq!(number.value(), 10.0);
-        let revision = acknowledge_current(observer_player);
-        number.value_runtime().clear_changes();
-        let mut result = ptr::null_mut();
-        assert_eq!(
-            nux_player_step(
-                scene.player,
-                &NuxPlayerStep {
-                    elapsed_seconds: 0.5,
-                    ..Default::default()
-                },
-                &mut result
-            ),
-            NuxStatus::Ok
-        );
-        nux_player_step_result_free(result);
-        assert_eq!(number.value(), 105.0);
-        assert_eq!(
-            nux_player_acknowledge_presented(observer_player, revision),
-            NuxStatus::HandleMismatch
-        );
-        assert!(number.value_runtime().flush_changes());
-        assert!(!number.value_runtime().flush_changes());
-        let revision = acknowledge_current(observer_player);
-        number.value_runtime().clear_changes();
-        assert_eq!(
-            nux_player_step_end(scene.player, view("B"), &transition),
-            NuxStatus::Ok
-        );
-        assert_eq!(number.value(), 200.0);
-        assert_eq!(
-            nux_player_acknowledge_presented(observer_player, revision),
-            NuxStatus::HandleMismatch
-        );
-        assert!(number.value_runtime().flush_changes());
-        nux_player_free(observer_player);
-        nux_artboard_instance_free(observer);
-        nux_view_model_instance_free(shared);
-    }
-}
-
 #[path = "form_script_tests.rs"]
 mod form_script_tests;
 
@@ -2990,8 +1990,8 @@ fn a_plain_video_on_a_screen_at_zero_reads_hidden() {
 }
 
 /// Design T21: an action on a flight stays eligible with its Screen at 0, as
-/// the flight draws at its own strength. Unit c's root carries a button's
-/// semantics, and the unit flies from A to B. A walk that reads the Screen's
+/// the flight draws at its own strength. Unit c's box on A carries a button's
+/// semantics, and flies from A to B. A walk that reads the Screen's
 /// 0 as hiding everything on it refuses the action.
 #[test]
 fn an_action_on_a_flight_stays_eligible_with_its_screen_at_zero() {
@@ -3000,15 +2000,7 @@ fn an_action_on_a_flight_stays_eligible_with_its_screen_at_zero() {
         let scene = LiveScene::from_bytes_named(&fixture::css_flight_video_fixture(), "Page");
         let root = page_root(&scene);
         let rows = nuxie::live_move::screens(&root).unwrap();
-        let home = rows["A"].with_artboard(|b| b.nested_artboards().to_vec());
-        let unit = home
-            .iter()
-            .find_map(|slot| {
-                slot.with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
-                    .flatten()
-                    .filter(|unit| unit.with_artboard(|b| b.name() == "unit c"))
-            })
-            .expect("unit c at its home on A");
+        let home = rows["A"].clone();
         assert_eq!(nux_player_enable_semantics(scene.player), NuxStatus::Ok);
         let t = view("t2");
         assert_eq!(
@@ -3016,7 +2008,7 @@ fn an_action_on_a_flight_stays_eligible_with_its_screen_at_zero() {
             NuxStatus::Ok
         );
         let button = || {
-            unit.with_artboard(|b| b.find_all_handles::<SemanticData>())
+            home.with_artboard(|b| b.find_all_handles::<SemanticData>())
                 .iter()
                 .find_map(|h| {
                     h.with_downcast::<SemanticData, _>(|d| d.existing_semantic_node())
@@ -3071,7 +2063,7 @@ fn a_video_in_a_flight_stays_visible_with_its_screen_below_zero() {
 unsafe fn marked_videos_at_zero() -> LiveScene {
     unsafe {
         let scene = LiveScene::from_bytes_named(
-            &fixture::css_paint_fixture(fixture::PaintCase::MarkedVideos),
+            &fixture::css_paint_fixture_in_place(fixture::PaintCase::MarkedVideos).unwrap(),
             "Page",
         );
         let root = page_root(&scene);
@@ -3656,14 +2648,15 @@ fn in_place_live_moves_keep_the_c_api_video_id_reachable() {
     unsafe {
         let scene = carry_page(fixture::InPlaceCarry::TransferVideo);
         let player = scene.player;
-        let root = page_root(&scene);
-        // B's placement empty, so the one video is A's unit's.
-        nuxie::live_move::empty_slot(&placements(&root, "B")[0]).unwrap();
-        let original = video_ids(player);
-        assert_eq!(original.len(), 1);
+        // A's unit's video, and B's own.
+        let at_rest = video_ids(player);
+        assert_eq!(at_rest.len(), 2);
         let t = view("t1");
         assert_eq!(nux_player_step_begin(player, view("B"), &t), NuxStatus::Ok);
-        assert_eq!(video_ids(player), original);
+        // The carry puts B's own away, so the one left is A's unit's.
+        let original = video_ids(player);
+        assert_eq!(original.len(), 1);
+        assert!(at_rest.contains(&original[0]));
         assert_eq!(nux_player_step_end(player, view("B"), &t), NuxStatus::Ok);
         // The flown video keeps its id; the copy A gets has a video of its
         // own.
@@ -3886,8 +2879,12 @@ fn in_place_live_moves_sleep_wake_and_hidden_transfers_keep_sdk_identities_round
         let root = page_root(&scene);
         let a = placements(&root, "A");
         let b = placements(&root, "B");
-        live_move::empty_slot(&b[0]).unwrap();
         let unit = held(&a[0]).unwrap();
+        // B asleep, so the one video is A's unit's.
+        assert_eq!(
+            nux_player_set_row_collapsed(scene.player, view("screens"), 1, 1),
+            NuxStatus::Ok
+        );
         assert_eq!(nux_player_enable_semantics(scene.player), NuxStatus::Ok);
         let field = || {
             unit.with_artboard(|b| b.find_all_handles::<SemanticData>())
@@ -3932,6 +2929,7 @@ fn in_place_live_moves_sleep_wake_and_hidden_transfers_keep_sdk_identities_round
         check(false);
         sleep(0, 0);
         check(true);
+        sleep(1, 0);
         let t = view("t1");
         assert_eq!(
             nux_player_step_begin(scene.player, view("B"), &t),
@@ -3953,13 +2951,13 @@ fn in_place_live_moves_sleep_wake_and_hidden_transfers_keep_sdk_identities_round
         // Step incoming Screens must be awake. Exercise the transport seam for
         // an attachment into a sleeping destination instead: A's placement,
         // while A sleeps.
-        live_move::move_live(&b[0], &a[0]).unwrap();
+        live_move::carry(&b[0], &a[0], false).unwrap();
         check(false);
         sleep(0, 0);
         check(true);
         sleep(0, 1);
         check(false);
-        live_move::move_live(&a[0], &b[0]).unwrap();
+        live_move::carry(&a[0], &b[0], false).unwrap();
         check(true);
         scene.close();
     }

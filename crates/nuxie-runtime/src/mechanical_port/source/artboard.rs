@@ -127,6 +127,11 @@ struct ArtboardHostAttachment {
     // Our layer: the host is a list on an artboard that clips and has no host
     // of its own, the page's `screens` (css_layout/group_opacity.rs).
     page_row: bool,
+    // Nuxie: this row's own inactive mark, beside its host's. A list keeps
+    // running while one of its rows sleeps (live_move/collapse.rs), so the
+    // changes a sleeping row missed are marked on the row, not on the list
+    // every awake row shares. Set when the row wakes.
+    row_inactive_change_sequence: Cell<u64>,
 }
 /// The actual Artboard dirty fields live separately from its mutable geometry,
 /// so synchronous property callbacks can dirty the root currently being set.
@@ -3648,6 +3653,7 @@ impl Artboard {
             host,
             parent_artboard,
             page_row,
+            row_inactive_change_sequence: Cell::new(0),
         });
         if was_screen != crate::css_layout::group_opacity::is_screen(self) {
             self.add_dirt(ComponentDirt::RENDER_OPACITY, true);
@@ -3725,10 +3731,22 @@ impl Artboard {
     pub(crate) fn host_change_context(&self) -> Option<(u64, Option<CoreHandle>)> {
         self.dirty_state.0.host.borrow().as_ref().map(|attachment| {
             (
-                attachment.inactive_change_sequence.get(),
+                attachment
+                    .inactive_change_sequence
+                    .get()
+                    .max(attachment.row_inactive_change_sequence.get()),
                 attachment.parent_artboard.clone(),
             )
         })
+    }
+
+    /// Nuxie: marks the changes up to `sequence` as made while this row
+    /// slept, so its machines don't take them once it wakes. Rows only.
+    pub(crate) fn mark_row_inactive_through(&self, sequence: u64) {
+        if let Some(attachment) = self.dirty_state.0.host.borrow().as_ref() {
+            let row = &attachment.row_inactive_change_sequence;
+            row.set(row.get().max(sequence));
+        }
     }
 
     pub fn layout_width(&self) -> f32 {

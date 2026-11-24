@@ -4657,6 +4657,84 @@ fn a_fire_written_as_a_screen_wakes_reaches_it() {
     }
 }
 
+/// A Screen that sleeps, wakes, sleeps and wakes again hears only what was
+/// fired while it was awake, or after the last frame it slept through.
+#[test]
+fn a_screen_that_sleeps_twice_hears_only_its_awake_fires() {
+    // A asleep throughout, so the list always has a sleeping row.
+    for (what, fire_at) in [
+        ("first sleep", 0),
+        ("awake between", 1),
+        ("second sleep", 2),
+        ("after the second wake", 3),
+    ] {
+        let mut s = pulse_scene(Some(1));
+        let list = screens_list(&s);
+        set_row_collapsed(&list, 0, true).unwrap();
+        let fire = |s: &Scene, at: u8| {
+            if at == fire_at {
+                fire_go(s, 1);
+            }
+        };
+        fire(&s, 0);
+        s.advance(0.0);
+        set_row_collapsed(&list, 1, false).unwrap();
+        s.advance(0.0);
+        fire(&s, 1);
+        s.advance(0.0);
+        let heard_awake = pulse_plays(&s, 1);
+        set_row_collapsed(&list, 1, true).unwrap();
+        s.advance(0.0);
+        fire(&s, 2);
+        s.advance(0.0);
+        set_row_collapsed(&list, 1, false).unwrap();
+        fire(&s, 3);
+        s.advance(0.0);
+        let heard = heard_awake || pulse_plays(&s, 1);
+        let expected = fire_at == 1 || fire_at == 3;
+        assert_eq!(heard, expected, "{what}: B hears go");
+    }
+}
+
+/// A collapsed list marks its own changes, as upstream's does: its rows,
+/// awake or woken, don't take what was fired while the list itself was
+/// collapsed, whether the list or the node holding it collapses. A row's own
+/// mark doesn't lower the list's: the row reads the higher of the two.
+#[test]
+fn a_collapsed_list_keeps_its_own_mark_over_its_rows() {
+    use source::component::ComponentOccurrenceHandle;
+    for (what, holder) in [("list", false), ("node holding the list", true)] {
+        for b_slept in [false, true] {
+            let mut s = pulse_scene(b_slept.then_some(1));
+            let list = screens_list(&s);
+            if b_slept {
+                // B's own mark is set here, before the list collapses.
+                set_row_collapsed(&list, 1, false).unwrap();
+                s.advance(0.0);
+            }
+            let collapsed = if holder {
+                s.root
+                    .with_artboard(|b| b.find_handle::<Node>("overlap"))
+                    .unwrap()
+            } else {
+                list.clone()
+            };
+            ComponentOccurrenceHandle::Authored(collapsed.clone()).collapse(true);
+            fire_go(&s, 0);
+            fire_go(&s, 1);
+            s.advance(0.0);
+            ComponentOccurrenceHandle::Authored(collapsed).collapse(false);
+            s.advance(0.0);
+            assert!(!pulse_plays(&s, 0), "{what}, B slept {b_slept}: A");
+            assert!(!pulse_plays(&s, 1), "{what}, B slept {b_slept}: B");
+            // And they hear the next fire.
+            fire_go(&s, 1);
+            s.advance(0.0);
+            assert!(pulse_plays(&s, 1), "{what}, B slept {b_slept}: B's next go");
+        }
+    }
+}
+
 #[test]
 fn a_landed_unit_follows_its_new_screen_while_its_home_sleeps() {
     let mut s = Scene::from_bytes(&fixture::values_fixture(false));

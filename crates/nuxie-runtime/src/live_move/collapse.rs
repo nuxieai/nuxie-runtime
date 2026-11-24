@@ -13,6 +13,9 @@ pub(crate) struct RowState {
     pub(crate) mask: Vec<u64>,
     pub(crate) active: Vec<i32>,
     pub(crate) pending_collapse: Option<bool>,
+    /// The latest view-model change as of the list's last advance. A row
+    /// asleep at that advance missed every change up to here.
+    pub(crate) advanced_through: std::cell::Cell<u64>,
 }
 impl Drop for RowState {
     fn drop(&mut self) {
@@ -28,6 +31,18 @@ impl ArtboardComponentList {
     }
     pub(crate) fn live_move_collapse_enabled(&self) -> bool {
         self.live_move_rows.is_some()
+    }
+    /// Notes where an advance starts, for the rows it skips. Like upstream's
+    /// collapsed-host mark (`inactiveChangeSequence`), but kept for the rows
+    /// that sleep rather than set on the whole list, which keeps running.
+    pub(crate) fn live_move_note_advance(&self) {
+        if let Some(state) = self.live_move_rows.as_ref() {
+            if !state.collapsed.is_empty() {
+                state.advanced_through.set(
+                    crate::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue::latest_change_sequence(),
+                );
+            }
+        }
     }
     pub(crate) fn live_move_has_sleeping_rows(&self) -> bool {
         self.live_move_rows
@@ -112,6 +127,13 @@ pub fn set_row_collapsed(list: &CoreHandle, index: i32, collapsed: bool) -> Resu
             } else {
                 state.collapsed.remove(&item)
             };
+            if changed && !collapsed {
+                // What the row slept through had its frames without it.
+                let through = state.advanced_through.get();
+                if let Some(row) = l.artboard_instance(index) {
+                    row.with_artboard(|row| row.mark_row_inactive_through(through));
+                }
+            }
             if changed {
                 l.live_move_rebuild_collapse_mask();
                 crate::hosted_scene::membership_changed(l);

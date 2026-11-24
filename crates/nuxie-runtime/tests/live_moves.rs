@@ -10165,21 +10165,20 @@ mod paint_order {
     /// quarter of a flight, after each landing and cancel.
     struct Recording(Vec<(String, Vec<RecordedDraw>)>);
     /// One recorded draw: color (none for an image), opacity, clip box and
-    /// outline. An outline past 8 points is its point count and its box.
+    /// outline. An outline past 8 points is `@n`, line n of outlines.txt: many
+    /// frames draw the same few glyph runs and curves.
     #[derive(Debug)]
     struct RecordedDraw {
         rgb: Option<u32>,
         opacity: f32,
         clip: Option<Rect>,
-        outline: RecordedOutline,
-    }
-    #[derive(Debug)]
-    enum RecordedOutline {
-        Points(Vec<Vec2D>),
-        Bounds(usize, Rect),
+        points: Vec<Vec2D>,
     }
     impl Recording {
         fn of(case: PaintCase, text: &str) -> Self {
+            let outlines: Vec<&str> = include_str!("live_move_flights/outlines.txt")
+                .lines()
+                .collect();
             let pair = |s: &str| {
                 let (x, y) = s.split_once(',').expect("a point");
                 Vec2D::new(x.parse().unwrap(), y.parse().unwrap())
@@ -10194,17 +10193,18 @@ mod paint_order {
                 let opacity = words.next().unwrap().parse().unwrap();
                 let clip = words.next().unwrap();
                 let rest: Vec<&str> = words.collect();
-                let outline = match rest.first().and_then(|w| w.split_once(':')) {
-                    Some((count, box_)) => {
-                        RecordedOutline::Bounds(count.parse().unwrap(), bounds(box_))
-                    }
-                    None => RecordedOutline::Points(rest.into_iter().map(pair).collect()),
+                let points = match rest.first().and_then(|w| w.strip_prefix('@')) {
+                    Some(line) => outlines[line.parse::<usize>().unwrap()]
+                        .split(' ')
+                        .map(pair)
+                        .collect(),
+                    None => rest.into_iter().map(pair).collect(),
                 };
                 RecordedDraw {
                     rgb: (rgb != "image").then(|| u32::from_str_radix(rgb, 16).unwrap()),
                     opacity,
                     clip: (clip != "-").then(|| bounds(clip)),
-                    outline,
+                    points,
                 }
             };
             let name = format!("{case:?} ");
@@ -10243,8 +10243,8 @@ mod paint_order {
     fn recorded_at(p: f32) -> bool {
         ((p * 4.0).round() - p * 4.0).abs() <= 1e-4
     }
-    /// `drawn` is what was recorded, in the same order, to 2e-3 (the
-    /// recording is to 3 decimals); with `near_zero`, to that and a part in
+    /// `drawn` is what was recorded, in the same order, to 1e-3 (the
+    /// recording is to 4 decimals); with `near_zero`, to that and a part in
     /// 1e4 of the coordinate, where a copy flies inside a box scaled near
     /// zero and f32 loses digits inverting that box's matrix.
     fn as_recorded(label: &str, slots: &[RecordedDraw], drawn: &[Shown], near_zero: bool) {
@@ -10254,26 +10254,22 @@ mod paint_order {
             "{label}: draw order\nrecorded: {slots:?}\ndrawn: {drawn:?}"
         );
         let slack = if near_zero { 1e-4 } else { 0.0 };
-        let near = |a: f32, b: f32| (a - b).abs() <= 2e-3 + slack * a.abs().max(b.abs());
+        let near = |a: f32, b: f32| (a - b).abs() <= 1e-3 + slack * a.abs().max(b.abs());
         let near_point = |a: &Vec2D, b: &Vec2D| near(a.x, b.x) && near(a.y, b.y);
         let near_box = |a: &Rect, b: &Rect| near_point(&a.0, &b.0) && near_point(&a.1, &b.1);
         for (n, (a, b)) in slots.iter().zip(drawn).enumerate() {
-            let outline = match &a.outline {
-                RecordedOutline::Points(points) => {
-                    points.len() == b.points.len()
-                        && points.iter().zip(&b.points).all(|(p, q)| near_point(p, q))
-                }
-                RecordedOutline::Bounds(count, bounds) => {
-                    *count == b.points.len() && near_box(bounds, &drawn_rect(&b.points))
-                }
-            };
+            let same_points = a.points.len() == b.points.len()
+                && a.points
+                    .iter()
+                    .zip(&b.points)
+                    .all(|(p, q)| near_point(p, q));
             assert!(
-                outline,
+                same_points,
                 "{label}: draw {n} ({:06x?}) outline {:?} against {:?}",
-                a.rgb, a.outline, b.points
+                a.rgb, a.points, b.points
             );
             assert!(
-                (a.opacity - b.opacity).abs() <= 1.0 / 255.0 + 1e-4,
+                (a.opacity - b.opacity).abs() <= 1.0 / 255.0,
                 "{label}: draw {n} ({:06x?}) alpha {} against {}",
                 a.rgb,
                 a.opacity,

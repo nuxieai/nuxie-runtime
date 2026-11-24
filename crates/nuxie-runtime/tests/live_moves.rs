@@ -2634,10 +2634,22 @@ fn color_value(model: &CoreHandle, name: &str) -> u32 {
     CoreRegistry::get_color_handle(&property(model, name), 555).unwrap() as u32
 }
 fn flight_progress(s: &mut Scene, progress: f32) {
-    for flight in s.moves.flights(&s.root) {
-        set(&flight.controls(), 62003, progress);
+    for controls in s.moves.flight_controls(&s.root) {
+        set(&controls, progress_key(&controls), progress);
     }
     s.advance(0.0);
+}
+/// The progress control of a flight's controls: a flight slot's, or a
+/// flight record's.
+fn progress_key(controls: &CoreHandle) -> i32 {
+    if controls
+        .with_downcast::<live_move::records::LiveFlight, _>(|_| ())
+        .is_some()
+    {
+        62033
+    } else {
+        62003
+    }
 }
 
 /// Flies the unit's `accent` from `from`, its current value, to `to`, the
@@ -4415,9 +4427,8 @@ const UNIT_C: &str = "color=0xff33cc33";
 type Rect = (source::math::vec2d::Vec2D, source::math::vec2d::Vec2D);
 
 /// The page of `css_two_version_corner_fixture` and its variants, mounted
-/// as `Scene::load` mounts a published page. `s` is unit a's home on A,
-/// `d` unit b's home on B and `f` unit a's flight slot on B. Preparing
-/// empties the fresh flight slots.
+/// as `Scene::load` mounts a published page. `s` is box a on A and `d` box b
+/// on B, which step t1 flies.
 fn corner_scene(bytes: &[u8]) -> Scene {
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let file = File::import(
@@ -4444,16 +4455,16 @@ fn corner_scene(bytes: &[u8]) -> Scene {
         factory,
         root,
         machine,
-        s: corner_slot(&a, "a"),
-        d: corner_slot(&b, "b"),
-        f: corner_slot(&b, "a flight"),
+        s: corner_box(&a, "a"),
+        d: corner_box(&b, "b"),
+        f: corner_box(&b, "b"),
         a,
         b,
         moves,
     }
 }
-fn corner_slot(row: &RuntimeArtboardInstanceHandle, name: &str) -> CoreHandle {
-    row.with_artboard(|r| r.find_handle::<NestedArtboard>(name))
+fn corner_box(row: &RuntimeArtboardInstanceHandle, name: &str) -> CoreHandle {
+    row.with_artboard(|r| r.find_handle::<source::layout_component::LayoutComponent>(name))
         .unwrap()
 }
 fn drawn_rect(points: &[source::math::vec2d::Vec2D]) -> Rect {
@@ -4571,12 +4582,12 @@ fn corner_controls_guard_authored_corners() {
         s.advance(t - elapsed);
         elapsed = t;
         let keyed = 4.0 + (8.0 - 4.0) * t;
-        for flight in s.moves.flights(&s.root) {
-            close(val(&flight.controls(), 62003), t);
-            for corner in 62015..=62017 {
-                close(val(&flight.controls(), corner), keyed);
+        for controls in s.moves.flight_controls(&s.root) {
+            close(val(&controls, 62033), t);
+            for corner in 62037..=62039 {
+                close(val(&controls, corner), keyed);
             }
-            close(val(&flight.controls(), 62018), -1.0);
+            close(val(&controls, 62040), -1.0);
         }
         let rect = mix_rect(a, b, t);
         assert_outline(
@@ -4595,70 +4606,42 @@ fn corner_controls_guard_authored_corners() {
         );
     }
 
-    // (c) Corner keys on translated units: they draw as without the keys.
-    let draws = [false, true].map(|keyed| {
-        let mut s = Scene::from_bytes(&if keyed {
-            fixture::two_version_corner_keys_fixture()
-        } else {
-            fixture::two_version_fixture()
-        });
-        let draw = |s: &Scene| {
-            s.factory.borrow_mut().clear();
-            let mut renderer = s.factory.borrow().make_renderer();
-            s.root.draw(&mut renderer);
-            s.factory.borrow().canonical_recording().stream().to_owned()
-        };
-        s.begin();
-        for flight in s.moves.flights(&s.root) {
-            set(&flight.controls(), 62003, 0.5);
-        }
-        s.advance(0.5);
-        if keyed {
-            for flight in s.moves.flights(&s.root) {
-                for corner in 62015..=62018 {
-                    close(val(&flight.controls(), corner), 6.0);
-                }
+    // (c) A placement paints no box of its own, so corner controls change
+    // nothing it draws.
+    let draws = [false, true].map(|corners| {
+        let page = InPlacePage::load(fixture::InPlaceFixture::Keyed(
+            fixture::KeyedKind::Placement,
+        ));
+        let mut moves = LiveMoves::default();
+        moves.prepare(&page.root).unwrap();
+        moves.step_begin(&page.root, "B", Some("t1")).unwrap();
+        let controls = moves.flight_controls(&page.root);
+        assert_eq!(controls.len(), 2);
+        for controls in &controls {
+            set(controls, 62033, 0.5);
+            for corner in 62037..=62040 {
+                set(controls, corner, if corners { 6.0 } else { -1.0 });
             }
         }
-        let flying = draw(&s);
-        s.end();
-        (flying, draw(&s))
+        page.frame(&mut moves, 0.0);
+        page.draw()
     });
-    assert_eq!(
-        draws[0].0, draws[1].0,
-        "translated units draw as without corner keys, in flight"
-    );
-    assert_eq!(
-        draws[0].1, draws[1].1,
-        "translated units draw as without corner keys, landed"
-    );
+    assert_eq!(draws[0], draws[1], "a placement draws no flight corners");
 
-    // (d) Bad records: a resting slot with a corner other than -1, and a
-    // flight slot with a NaN corner, are each dropped at import.
-    for (kind, screen, host) in [(1, "A", "a"), (2, "B", "a flight")] {
-        let good = slot_records_on(
-            &fixture::css_two_version_corner_fixture(false),
-            screen,
-            host,
-        );
-        let bad = slot_records_on(&fixture::css_bad_corner_record_fixture(kind), screen, host);
-        assert_eq!(good.iter().filter(|on| **on).count(), 1, "kind {kind}");
-        assert_eq!(
-            bad.iter().filter(|on| **on).count(),
-            0,
-            "kind {kind}: the malformed record on {screen}'s slot {host} is dropped at import"
-        );
-        assert_eq!(
-            bad.len(),
-            good.len() - 1,
-            "kind {kind}: the Screen's other records stay"
-        );
-    }
+    // (d) A flight record with a NaN corner is dropped at import, and the
+    // Screen's others stay.
+    assert_eq!(
+        flight_records_on_b(&fixture::css_two_version_corner_fixture(false)),
+        [11, 12, 13, 14]
+    );
+    assert_eq!(
+        flight_records_on_b(&fixture::css_bad_corner_record_fixture()),
+        [12, 13, 14]
+    );
 }
 
-/// Whether each of `screen`'s LiveSlot records, as the file imports them, is
-/// on the slot named `host`.
-fn slot_records_on(bytes: &[u8], screen: &str, host: &str) -> Vec<bool> {
+/// The keys of B's flight records, as the file imports them.
+fn flight_records_on_b(bytes: &[u8]) -> Vec<u32> {
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let file = File::import(
         bytes,
@@ -4668,33 +4651,26 @@ fn slot_records_on(bytes: &[u8], screen: &str, host: &str) -> Vec<bool> {
         None,
     )
     .expect("fixture imports");
-    let row = file.with_file(|f| f.artboard_named(screen)).unwrap();
+    let row = file.with_file(|f| f.artboard_named("B")).unwrap();
     row.with_artboard(|board| {
-        let host = board.find_handle::<NestedArtboard>(host).unwrap();
         board
-            .find_all_handles::<live_move::records::LiveSlot>()
+            .find_all_handles::<live_move::records::LiveFlight>()
             .iter()
             .map(|record| {
                 record
-                    .with_downcast::<live_move::records::LiveSlot, _>(|r| r.parent())
-                    .flatten()
-                    == Some(host.clone())
+                    .with_downcast::<live_move::records::LiveFlight, _>(|r| r.values.key)
+                    .unwrap()
             })
-            .collect::<Vec<_>>()
+            .collect()
     })
 }
 
 /// Two versions of an element share one outline (docs/live-moves.md): in
-/// flight, each draws its flight slot's corner controls as its own corners,
-/// so at progress t both draw 4 + (8 - 4) t point corners on the blended
-/// rectangle. A one-version flight draws them over its own corners, which
-/// it draws again from landing on.
+/// flight, each draws its flight record's corner controls as its own
+/// corners, so at progress t both draw 4 + (8 - 4) t point corners on the
+/// blended rectangle.
 #[test]
-fn two_versions_draw_their_flight_slots_corners() {
-    use source::{
-        layout::layout_component_style::LayoutComponentStyle,
-        shapes::paint::solid_color::SolidColor,
-    };
+fn two_versions_draw_their_flight_records_corners() {
     let mut s = corner_scene(&fixture::css_two_version_corner_fixture(true));
     let (a, b) = corner_rest_rects(&s);
     s.begin();
@@ -4703,10 +4679,10 @@ fn two_versions_draw_their_flight_slots_corners() {
         s.advance(t - elapsed);
         elapsed = t;
         let radius = 4.0 + (8.0 - 4.0) * t;
-        for flight in s.moves.flights(&s.root) {
-            close(val(&flight.controls(), 62003), t);
-            for corner in 62015..=62018 {
-                close(val(&flight.controls(), corner), radius);
+        for controls in s.moves.flight_controls(&s.root) {
+            close(val(&controls, 62033), t);
+            for corner in 62037..=62040 {
+                close(val(&controls, corner), radius);
             }
         }
         let rect = mix_rect(a, b, t);
@@ -4720,72 +4696,6 @@ fn two_versions_draw_their_flight_slots_corners() {
             );
         }
     }
-
-    // One version: unit c, its own corners written to 2 after load as a
-    // binding writes them, flies with the same keys and lands with its own.
-    const MOVED: &str = "color=0xff007766";
-    let mut s = corner_scene(&fixture::css_two_version_corner_fixture(true));
-    let (home, landing) = (corner_slot(&s.a, "c"), corner_slot(&s.b, "c"));
-    let unit = child(&home).unwrap();
-    let (ink, style) = unit.with_artboard(|board| {
-        (
-            board.find_handle::<SolidColor>("ink").unwrap(),
-            board
-                .objects()
-                .iter()
-                .flatten()
-                .find(|object| object.is_type_of(LayoutComponentStyle::TYPE_KEY))
-                .cloned()
-                .unwrap(),
-        )
-    });
-    // Its own color tells it from the fresh unit c in its landing slot.
-    assert!(CoreRegistry::set_color_handle(
-        &ink,
-        37,
-        0xff007766_u32 as i32
-    ));
-    set(&style, 640, 2.0);
-    s.advance(0.0);
-    let from = drawn_rect(&ink_points(&s.factory, &s.root, MOVED));
-    assert_outline(
-        &ink_points(&s.factory, &s.root, MOVED),
-        from,
-        2.0,
-        &[],
-        "one version at rest",
-    );
-    let to = drawn_rect(&ink_points(&s.factory, &s.root, UNIT_C));
-    s.moves.step_begin(&s.root, "B", Some("t2")).unwrap();
-    let mut elapsed = 0.0;
-    for t in [0.25, 0.5, 1.0] {
-        s.advance(t - elapsed);
-        elapsed = t;
-        assert_outline(
-            &ink_points(&s.factory, &s.root, MOVED),
-            mix_rect(from, to, t),
-            4.0 + (8.0 - 4.0) * t,
-            &[2.0],
-            &format!("one version at t={t}"),
-        );
-    }
-    s.moves.step_end(&s.root, "B", Some("t2")).unwrap();
-    assert_eq!(child(&landing).unwrap().core_handle(), unit.core_handle());
-    assert_outline(
-        &ink_points(&s.factory, &s.root, MOVED),
-        to,
-        2.0,
-        &[8.0],
-        "one version landed",
-    );
-    s.advance(0.0);
-    assert_outline(
-        &ink_points(&s.factory, &s.root, MOVED),
-        to,
-        2.0,
-        &[8.0],
-        "one version at rest on B",
-    );
 }
 
 /// The Page's Screens list in `corner_scene`'s fixtures: A is row 0, B row 1.
@@ -4813,10 +4723,10 @@ fn landing_draws_each_versions_own_corners_at_once() {
         let list = corner_screens(&s);
         s.begin();
         s.advance(1.0);
-        for flight in s.moves.flights(&s.root) {
-            close(val(&flight.controls(), 62003), 1.0);
-            for corner in 62015..=62018 {
-                close(val(&flight.controls(), corner), 8.0);
+        for controls in s.moves.flight_controls(&s.root) {
+            close(val(&controls, 62033), 1.0);
+            for corner in 62037..=62040 {
+                close(val(&controls, corner), 8.0);
             }
         }
         if asleep_at_landing {
@@ -4883,18 +4793,12 @@ fn assert_drawn_box(
 
 /// A cancelled step leaves each surviving version at rest with its own
 /// corners, as authored (docs/live-moves.md). At progress 0.5 both draw 6.
-/// Removing B brings a home to A through the unmount's loan return, where it
-/// draws 4; removing A brings b home on B through the unused-flight pass,
-/// where it draws 8.
+/// Removing B leaves a on A, drawing 4; removing A leaves b on B, drawing 8.
 #[test]
 fn a_cancelled_step_leaves_both_versions_at_their_own_corners() {
     for removed in [1, 0] {
         let mut s = corner_scene(&fixture::css_two_version_corner_fixture(true));
         let (a, b) = corner_rest_rects(&s);
-        let (unit_a, unit_b) = (
-            child(&s.s).unwrap().core_handle(),
-            child(&s.d).unwrap().core_handle(),
-        );
         s.begin();
         s.advance(0.5);
         let rect = mix_rect(a, b, 0.5);
@@ -4915,11 +4819,10 @@ fn a_cancelled_step_leaves_both_versions_at_their_own_corners() {
         ArtboardComponentList::update_list_occurrence(&list, &[kept]);
         s.advance(0.0);
         assert!(
-            s.moves.flights(&s.root).is_empty(),
+            s.moves.flight_controls(&s.root).is_empty(),
             "removing a Screen cancels the step"
         );
         if removed == 1 {
-            assert_eq!(child(&s.s).unwrap().core_handle(), unit_a);
             assert_drawn_box(
                 &s,
                 UNIT_A,
@@ -4929,7 +4832,6 @@ fn a_cancelled_step_leaves_both_versions_at_their_own_corners() {
                 "B removed: a home on A",
             );
         } else {
-            assert_eq!(child(&s.d).unwrap().core_handle(), unit_b);
             assert_drawn_box(
                 &s,
                 UNIT_B,
@@ -4943,8 +4845,8 @@ fn a_cancelled_step_leaves_both_versions_at_their_own_corners() {
 }
 
 /// B is added as a row only for the step, the path a host takes going
-/// forward (`add_row_b_for_the_step`). Both versions fly in its fresh flight
-/// slots and draw their corner controls, 6 at the half, then their own
+/// forward (`add_row_b_for_the_step`). Both versions fly through its
+/// flight records and draw their corner controls, 6 at the half, then their own
 /// corners from the landing on (docs/live-moves.md).
 #[test]
 fn versions_flying_into_a_row_added_for_the_step_share_corners() {
@@ -4952,18 +4854,17 @@ fn versions_flying_into_a_row_added_for_the_step_share_corners() {
         let mut s = corner_scene(&fixture::css_two_version_corner_fixture(false));
         let (a, b) = corner_rest_rects(&s);
         add_row_b_for_the_step(&mut s);
-        // Waking the row flushes the insert and empties its fresh flight
-        // slots before any advance, as the SDK does; it may then settle one
-        // frame.
+        // Waking the row flushes the insert before any advance, as the SDK
+        // does; it may then settle one frame.
         set_row_collapsed(&corner_screens(&s), 1, false).unwrap();
         if settle {
             s.advance(0.0);
         }
         s.begin();
-        for flight in s.moves.flights(&s.root) {
-            set(&flight.controls(), 62003, 0.5);
-            for corner in 62015..=62018 {
-                set(&flight.controls(), corner, 6.0);
+        for controls in s.moves.flight_controls(&s.root) {
+            set(&controls, 62033, 0.5);
+            for corner in 62037..=62040 {
+                set(&controls, corner, 6.0);
             }
         }
         s.advance(0.0);
@@ -4998,28 +4899,23 @@ fn versions_flying_into_a_row_added_for_the_step_share_corners() {
     }
 }
 
-/// A second step through the same flight slots takes off with its own
+/// A second step through the same flight records takes off with its own
 /// corners. The first step's keys ended at 8; the second step's frame-0
 /// keys (4) are applied before it begins, as a host's step begin applies
 /// them, and its take-off frame draws 4 on both versions.
 #[test]
-fn a_reused_flight_slot_takes_off_with_this_steps_corners() {
+fn a_reused_flight_record_takes_off_with_this_steps_corners() {
     let mut s = corner_scene(&fixture::css_two_version_corner_fixture(true));
     let (a, _) = corner_rest_rects(&s);
     s.begin();
-    let controls = s
-        .moves
-        .flights(&s.root)
-        .iter()
-        .map(|flight| flight.controls())
-        .collect::<Vec<_>>();
+    let controls = s.moves.flight_controls(&s.root);
     assert_eq!(controls.len(), 2);
     s.advance(1.0);
     s.end();
     s.advance(0.0);
     for control in &controls {
-        close(val(control, 62003), 1.0);
-        for corner in 62015..=62018 {
+        close(val(control, 62033), 1.0);
+        for corner in 62037..=62040 {
             close(val(control, corner), 8.0);
         }
     }
@@ -5027,19 +4923,15 @@ fn a_reused_flight_slot_takes_off_with_this_steps_corners() {
     keys.set_time(0.0);
     keys.apply(1.0);
     for control in &controls {
-        close(val(control, 62003), 0.0);
-        for corner in 62015..=62018 {
+        close(val(control, 62033), 0.0);
+        for corner in 62037..=62040 {
             close(val(control, corner), 4.0);
         }
     }
     s.begin();
-    let flights = s.moves.flights(&s.root);
-    assert_eq!(flights.len(), 2);
-    assert!(
-        flights
-            .iter()
-            .all(|flight| controls.contains(&flight.controls()))
-    );
+    let again = s.moves.flight_controls(&s.root);
+    assert_eq!(again.len(), 2);
+    assert!(again.iter().all(|record| controls.contains(record)));
     for (color, version) in [(UNIT_A, "a"), (UNIT_B, "b")] {
         assert_outline(
             &ink_points(&s.factory, &s.root, color),
@@ -5132,37 +5024,36 @@ fn drawn_as([alpha, red, green, blue, blur, x, y]: [f32; 7]) -> fixture::Shadow 
 }
 
 fn assert_shadow_controls(controls: &CoreHandle, values: [f32; 7]) {
-    for (control, value) in (62019..).zip(values) {
+    for (control, value) in (62041..).zip(values) {
         close(val(controls, control), value);
     }
 }
 
 fn write_shadow_controls(controls: &CoreHandle, values: [f32; 7]) {
-    for (control, value) in (62019..).zip(values) {
+    for (control, value) in (62041..).zip(values) {
         set(controls, control, value);
     }
 }
 
-/// The controls of the flight slots "a flight" and "b flight".
+/// The flight records of the copies of a and b.
 fn pair_controls(s: &Scene) -> (CoreHandle, CoreHandle) {
-    let controls = |name| {
-        let slot = corner_slot(&s.b, name);
+    let controls = |element: &CoreHandle| {
         s.moves
-            .flights(&s.root)
-            .iter()
-            .find(|flight| flight.flight == slot)
-            .unwrap()
-            .controls()
+            .lifted_records(&s.root)
+            .into_iter()
+            .find(|(flying, ..)| flying == element)
+            .expect("the box flies")
+            .2
     };
-    (controls("a flight"), controls("b flight"))
+    (controls(&s.s), controls(&s.d))
 }
 
 /// Unit b's own shadow, which the fixture authors clear, made visible as a
 /// binding writes it.
 fn show_b_shadow(s: &mut Scene) {
     use source::shapes::paint::solid_color::SolidColor;
-    let shadow = child(&s.d)
-        .unwrap()
+    let shadow = s
+        .b
         .with_artboard(|b| b.find_handle::<SolidColor>("shadow"))
         .unwrap();
     assert!(CoreRegistry::set_color_handle(
@@ -5173,25 +5064,28 @@ fn show_b_shadow(s: &mut Scene) {
     s.advance(0.0);
 }
 
-/// Clears a unit's ink, as a binding writes it, so its shadow is the only paint
-/// that can draw.
-fn clear_ink(unit: &RuntimeArtboardInstanceHandle) {
+/// Clears the ink of every box on `row`, as a binding writes it, so a shadow
+/// is the only paint that can draw there.
+fn clear_ink(row: &RuntimeArtboardInstanceHandle) {
     use source::shapes::paint::solid_color::SolidColor;
-    let ink = unit
-        .with_artboard(|u| u.find_handle::<SolidColor>("ink"))
-        .unwrap();
-    assert!(CoreRegistry::set_color_handle(&ink, 37, 0));
+    let paints = row.with_artboard(|r| r.find_all_handles::<SolidColor>());
+    for paint in paints {
+        let ink = paint.with(|p| p.as_component().is_some_and(|c| c.name() == "ink"));
+        if ink.unwrap_or(false) {
+            assert!(CoreRegistry::set_color_handle(&paint, 37, 0));
+        }
+    }
 }
 
-/// Host geometry, queried on a unit, lists its root at `size` or, for None,
-/// not at all. A unit's root is the only geometry it has.
+/// Host geometry, queried on `row`, lists one box at `size` or, for None, no
+/// box.
 fn assert_catalogued(
     s: &Scene,
-    unit: &RuntimeArtboardInstanceHandle,
+    row: &RuntimeArtboardInstanceHandle,
     size: Option<(f32, f32)>,
     label: &str,
 ) {
-    let mut host = ArtboardInstance::from_native_handle(s._file.clone(), 0, unit.clone());
+    let mut host = ArtboardInstance::from_native_handle(s._file.clone(), 0, row.clone());
     let listed: Vec<_> = host
         .visible_geometry_with_bounds()
         .iter()
@@ -5213,18 +5107,26 @@ fn assert_catalogued(
     }
 }
 
-/// A unit's painted bounds, in its own space.
-fn painted_bounds(unit: &RuntimeArtboardInstanceHandle) -> source::math::aabb::Aabb {
+/// A box's painted bounds, on its Screen.
+fn painted_bounds(element: &CoreHandle) -> source::math::aabb::Aabb {
     let mut bounds = source::math::aabb::Aabb::default();
-    unit.with_artboard_mut(|u| u.base.base.base.painted_world_bounds(&mut bounds));
+    element
+        .with_mut(|o| {
+            o.as_layout_component_mut()?
+                .painted_world_bounds(&mut bounds);
+            Some(())
+        })
+        .flatten()
+        .expect("a box");
     bounds
 }
 
-/// One shadow for a held pair (docs/live-moves.md). In flight, a flight slot's
-/// seven shadow controls replace the color, blur and offset of its unit's outer
-/// shadow, and alpha 0 draws none: a's slot keys all seven, b's alpha 0.
+/// One shadow for a held pair (docs/live-moves.md). In flight, a flight
+/// record's seven shadow controls replace the color, blur and offset of its
+/// box's outer shadow, and alpha 0 draws none: a's record keys all seven, b's
+/// alpha 0.
 #[test]
-fn two_versions_draw_their_flight_slots_shadow() {
+fn two_versions_draw_their_flight_records_shadow() {
     let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(true));
     let (a, b) = corner_rest_rects(&s);
     show_b_shadow(&mut s);
@@ -5295,9 +5197,8 @@ fn landing_draws_each_versions_own_shadow_at_once() {
 }
 
 /// A cancelled step leaves each surviving version at rest with its own shadow,
-/// as authored (docs/live-moves.md). Removing B brings a home to A through the
-/// unmount's loan return; removing A brings b home on B through the
-/// unused-flight pass. Each draws its own in the first frame.
+/// as authored (docs/live-moves.md), in the first frame after B or A is
+/// removed.
 #[test]
 fn a_cancelled_step_leaves_both_versions_at_their_own_shadow() {
     for removed in [1, 0] {
@@ -5319,7 +5220,7 @@ fn a_cancelled_step_leaves_both_versions_at_their_own_shadow() {
         ArtboardComponentList::update_list_occurrence(&list, &[kept]);
         s.advance(0.0);
         assert!(
-            s.moves.flights(&s.root).is_empty(),
+            s.moves.flight_controls(&s.root).is_empty(),
             "removing a Screen cancels the step"
         );
         // The Screen left moves up the list, so each box is read where it is.
@@ -5333,12 +5234,12 @@ fn a_cancelled_step_leaves_both_versions_at_their_own_shadow() {
     }
 }
 
-/// A second step through the same flight slots takes off with its own shadow.
+/// A second step through the same flight records takes off with its own shadow.
 /// The first step's keys ended at the last frame's values; the second step's
 /// frame-0 keys are applied before it begins, as a host's step begin applies
 /// them, and its take-off frame draws them.
 #[test]
-fn a_reused_flight_slot_takes_off_with_this_steps_shadow() {
+fn a_reused_flight_record_takes_off_with_this_steps_shadow() {
     let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(true));
     let (a, _) = corner_rest_rects(&s);
     show_b_shadow(&mut s);
@@ -5354,12 +5255,12 @@ fn a_reused_flight_slot_takes_off_with_this_steps_shadow() {
     assert_shadow_controls(&controls_a, keyed_shadow(0.0));
     assert_shadow_controls(&controls_b, [0.0; 7]);
     s.begin();
-    let flights = s.moves.flights(&s.root);
-    assert_eq!(flights.len(), 2);
+    let again = s.moves.flight_controls(&s.root);
+    assert_eq!(again.len(), 2);
     assert!(
-        flights
+        again
             .iter()
-            .all(|flight| [&controls_a, &controls_b].contains(&&flight.controls()))
+            .all(|record| [&controls_a, &controls_b].contains(&record))
     );
     assert_shadows(&s, &[(drawn_as(keyed_shadow(0.0)), a)], "at take-off");
 }
@@ -5370,7 +5271,7 @@ fn a_reused_flight_slot_takes_off_with_this_steps_shadow() {
 #[test]
 fn shadow_controls_guard_authored_shadows() {
     use fixture::{UNIT_A_SHADOW, UNIT_B_SHADOW};
-    // The blur each keyed case's flight slot read, and its keys' value there.
+    // The blur each keyed case's flight record read, and its keys' value there.
     // Checked last: the keys of a runtime without these controls are pruned,
     // and every case drawing its own says nothing unless they arrived.
     let mut arrived = Vec::new();
@@ -5407,48 +5308,10 @@ fn shadow_controls_guard_authored_shadows() {
             &format!("alpha -1 at t={t}"),
         );
     }
-    arrived.push((val(&pair_controls(&s).0, 62023), keyed_shadow(1.0)[4]));
+    arrived.push((val(&pair_controls(&s).0, 62045), keyed_shadow(1.0)[4]));
 
-    // (c) Shadow keys on translated units, each with Rive's own soft shadow:
-    // they draw as without the keys.
-    let draws = [false, true].map(|keyed| {
-        let mut s = Scene::from_bytes(&fixture::two_version_shadow_keys_fixture(keyed));
-        let draw = |s: &Scene| {
-            s.factory.borrow_mut().clear();
-            let mut renderer = s.factory.borrow().make_renderer();
-            s.root.draw(&mut renderer);
-            s.factory.borrow().canonical_recording().stream().to_owned()
-        };
-        s.begin();
-        let flights = s.moves.flights(&s.root);
-        for flight in &flights {
-            set(&flight.controls(), 62003, 0.5);
-        }
-        s.advance(0.5);
-        if keyed {
-            for flight in &flights {
-                arrived.push((val(&flight.controls(), 62023), half));
-            }
-        }
-        let flying = draw(&s);
-        s.end();
-        (flying, draw(&s))
-    });
-    assert!(
-        draws[0].0.contains(",feather=12,"),
-        "translated units draw their Feather"
-    );
-    assert_eq!(
-        draws[0].0, draws[1].0,
-        "translated units draw as without shadow keys, in flight"
-    );
-    assert_eq!(
-        draws[0].1, draws[1].1,
-        "translated units draw as without shadow keys, landed"
-    );
-
-    // (d) An inset shadow is left alone, and a unit whose only shadow is inset
-    // draws no outer one: a's slot keys all seven at their half.
+    // (c) An inset shadow is left alone, and a unit whose only shadow is inset
+    // draws no outer one: a's record keys all seven at their half.
     let inset = |keyed: bool| {
         let mut s = corner_scene(&fixture::css_inset_shadow_fixture(keyed));
         s.begin();
@@ -5457,7 +5320,7 @@ fn shadow_controls_guard_authored_shadows() {
         } else {
             flight_progress(&mut s, 0.5);
         }
-        (val(&pair_controls(&s).0, 62023), drawn_shadows(&s))
+        (val(&pair_controls(&s).0, 62045), drawn_shadows(&s))
     };
     let ((blur, keyed), (_, own)) = (inset(true), inset(false));
     arrived.push((blur, half));
@@ -5470,49 +5333,31 @@ fn shadow_controls_guard_authored_shadows() {
         "{keyed:x?} against {own:x?}"
     );
 
-    // (e) A box with no outer shadow draws none: unit c flies alone under the
+    // (d) A box with no outer shadow draws none: unit c flies alone under the
     // same keys, past a at home and the clear b.
     let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(true));
     let (a, _) = corner_rest_rects(&s);
     s.moves.step_begin(&s.root, "B", Some("t2")).unwrap();
     s.advance(0.5);
-    arrived.push((val(&s.moves.flights(&s.root)[0].controls(), 62023), half));
+    arrived.push((val(&s.moves.flight_controls(&s.root)[0], 62045), half));
     assert_shadows(&s, &[(UNIT_A_SHADOW, a)], "unit c flies with shadow keys");
 
-    // (f) Bad records: a resting slot with a shadow value, and a flight slot
-    // with a NaN, are each dropped at import, on any of the seven controls.
-    for (kind, screen, host) in [(1, "A", "a"), (2, "B", "a flight")] {
-        let good = slot_records_on(
-            &fixture::css_two_version_shadow_fixture(false),
-            screen,
-            host,
+    // (e) A flight record with a NaN in any of the seven controls is dropped
+    // at import, and the Screen's others stay.
+    for control in 0..fixture::SHADOW_CONTROLS.len() {
+        assert_eq!(
+            flight_records_on_b(&fixture::css_bad_shadow_record_fixture(control)),
+            [12, 13, 14],
+            "control {control}"
         );
-        assert_eq!(good.iter().filter(|on| **on).count(), 1, "kind {kind}");
-        for control in 0..fixture::SHADOW_CONTROLS.len() {
-            let bad = slot_records_on(
-                &fixture::css_bad_shadow_record_fixture(kind, control),
-                screen,
-                host,
-            );
-            assert_eq!(
-                bad.iter().filter(|on| **on).count(),
-                0,
-                "kind {kind}, control {control}: dropped from {screen}'s slot {host} at import"
-            );
-            assert_eq!(
-                bad.len(),
-                good.len() - 1,
-                "kind {kind}, control {control}: the Screen's other records stay"
-            );
-        }
     }
 
     for (read, keyed) in arrived {
         close(read, keyed);
     }
 
-    // (g) A non-finite control fails the frame, as a non-finite fade does.
-    for control in 62019..=62025 {
+    // (f) A non-finite control fails the frame, as a non-finite fade does.
+    for control in 62041..=62047 {
         let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(false));
         s.begin();
         set(&pair_controls(&s).0, control, f32::NAN);
@@ -5532,7 +5377,7 @@ fn a_flight_shadow_wider_than_its_own_reaches_its_region() {
     const OVERRIDE: [f32; 7] = [0.5, 0.0, 0.0, 0.0, 40.0, 3.0, -4.0];
     let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(false));
     let (a, b) = corner_rest_rects(&s);
-    let unit = child(&s.s).unwrap();
+    let unit = s.s.clone();
     let measure = |s: &Scene, rect: Rect, blur: f32, (x, y): (f32, f32), label: &str| {
         let drawn = drawn_shadows(s);
         assert_eq!(drawn.len(), 1, "{label}: {drawn:x?}");
@@ -5573,7 +5418,7 @@ fn a_flight_shadow_wider_than_its_own_reaches_its_region() {
 fn a_bound_shadow_is_replaced_in_flight_and_back_at_landing() {
     let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(true));
     let (a, b) = corner_rest_rects(&s);
-    let mut pulse = child(&s.s).unwrap().animation_named("pulse").unwrap();
+    let mut pulse = s.a.animation_named("pulse").unwrap();
     // "pulse" keys the strength 10 to 30 over a second.
     let own = |at: f32| fixture::Shadow {
         blur: 10.0 + 20.0 * at,
@@ -5614,7 +5459,7 @@ fn a_clear_own_shadow_draws_the_flight_shadow() {
     const NO_BLUR: [f32; 7] = [0.3, 10.0, 20.0, 30.0, 0.0, 0.0, 4.0];
     let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(false));
     let (a, b) = corner_rest_rects(&s);
-    let (unit_a, unit_b) = (child(&s.s).unwrap(), child(&s.d).unwrap());
+    let (unit_a, unit_b) = (s.s.clone(), s.d.clone());
     s.begin();
     let (controls_a, controls_b) = pair_controls(&s);
     write_shadow_controls(&controls_a, [0.0; 7]);
@@ -5649,7 +5494,7 @@ fn host_geometry_lists_a_root_by_its_flight_shadow() {
     const SHOWN: [f32; 7] = [0.3, 10.0, 20.0, 30.0, 8.0, 0.0, 4.0];
     let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(false));
     let (a, b) = corner_rest_rects(&s);
-    let (unit_a, unit_b) = (child(&s.s).unwrap(), child(&s.d).unwrap());
+    let (unit_a, unit_b) = (s.a.clone(), s.b.clone());
     clear_ink(&unit_a);
     clear_ink(&unit_b);
     s.advance(0.0);
@@ -5693,7 +5538,7 @@ fn the_flight_shadow_takes_the_units_fade() {
     let (a, b) = corner_rest_rects(&s);
     s.begin();
     let (controls, _) = pair_controls(&s);
-    set(&controls, 62014, 0.5);
+    set(&controls, 62036, 0.5);
     write_shadow_controls(&controls, [0.4, 200.0, 100.0, 50.0, 12.0, 0.0, 3.0]);
     flight_progress(&mut s, 0.5);
     assert_shadows(
@@ -5800,19 +5645,6 @@ mod paint_order {
     };
 
     const PROGRESS: [f32; 5] = [0.0, 0.25, 0.5, 0.75, 1.0];
-
-    /// The progress control of a flight's controls: a flight slot's, or a
-    /// flight record's.
-    fn progress_key(controls: &CoreHandle) -> i32 {
-        if controls
-            .with_downcast::<live_move::records::LiveFlight, _>(|_| ())
-            .is_some()
-        {
-            62033
-        } else {
-            62003
-        }
-    }
 
     #[derive(Clone, Copy, Debug, PartialEq)]
     enum Way {

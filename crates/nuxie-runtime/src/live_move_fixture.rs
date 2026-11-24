@@ -363,6 +363,10 @@ struct Options {
     /// The Unit model's default instance's `count`, in place of 0. Every
     /// slot still authors its own `count` as 0.
     default_count: Option<f32>,
+    /// Each Screen's model has a trigger `go` after `offset`, and each
+    /// Screen's machine a layer "pulse" that plays its timeline "pulse"
+    /// when `go` fires. See `row_trigger_fixture`.
+    row_trigger: bool,
 }
 /// `fixture(2)` whose Unit model's default instance has `count` 9, while
 /// each slot's own authored instance keeps `count` 0.
@@ -1778,6 +1782,19 @@ pub fn entry_event_fixture() -> Vec<u8> {
         },
     )
 }
+/// `fixture(2)` whose Screens each have a trigger `go` in their model, as a
+/// published Screen's `state.go`. Each Screen's machine has, after its own
+/// layers, a layer "pulse" that waits in an idle state and plays the Screen's
+/// timeline "pulse" when `go` fires, as an authored `when="state.go"` does.
+pub fn row_trigger_fixture() -> Vec<u8> {
+    build(
+        2,
+        Options {
+            row_trigger: true,
+            ..Options::default()
+        },
+    )
+}
 /// Number, color, switched string and locally bound text on the same unit.
 pub fn values_fixture(text_two_way: bool) -> Vec<u8> {
     build(
@@ -2019,6 +2036,20 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 && !semantics
         );
     }
+    if options.row_trigger {
+        // `go` is the Screen model's property 1, and B's "pulse" is its
+        // second timeline, after its entrance.
+        assert!(
+            rows >= 2
+                && !options.value_props
+                && !options.entry_event
+                && !options.reference_prop
+                && !options.keyed
+                && !options.two_versions
+                && !options.parity_counter
+                && options.flight_animation.is_none()
+        );
+    }
     assert!(!options.same_key_copies || options.two_versions);
     // The unit key and definition offset of B's copy with two versions.
     let (second_key, second_board) = if options.same_key_copies {
@@ -2138,6 +2169,9 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
         if options.entry_event {
             obj(&mut b, "ViewModelPropertyNumber", &[("name", S("entered"))]);
         }
+        if options.row_trigger {
+            obj(&mut b, "ViewModelPropertyTrigger", &[("name", S("go"))]);
+        }
         if options.reference_prop {
             obj(&mut b, reference.0, &reference.1);
         }
@@ -2183,6 +2217,13 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                     ("viewModelPropertyId", U(entered)),
                     ("propertyValue", F(0.0)),
                 ],
+            );
+        }
+        if options.row_trigger {
+            obj(
+                &mut b,
+                "ViewModelInstanceTrigger",
+                &[("viewModelPropertyId", U(1)), ("propertyValue", U(0))],
             );
         }
         if options.reference_prop {
@@ -2864,7 +2905,34 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 }
             }
         }
+        if options.row_trigger {
+            // The Screen's own node, moved 50 to the right.
+            let x = if i == 0 { 10.0 } else { 200.0 };
+            timeline(&mut b, "pulse", 1, 13, x, x + 50.0);
+        }
         machine(&mut b, i == 1);
+        if options.row_trigger {
+            obj(&mut b, "StateMachineLayer", &[("name", S("pulse"))]);
+            obj(&mut b, "EntryState", &[]); // 0
+            obj(&mut b, "StateTransition", &[("stateToId", U(1))]);
+            obj(&mut b, "BlendStateDirect", &[]); // 1, idle
+            obj(&mut b, "StateTransition", &[("stateToId", U(2))]);
+            // `when="state.go"`, as the publisher writes it.
+            obj(&mut b, "BindablePropertyTrigger", &[]);
+            bind(
+                &mut b,
+                key("BindablePropertyTrigger", "propertyValue").into(),
+                &[i as u8 + 1, 1],
+            );
+            obj(&mut b, "TransitionViewModelCondition", &[("opValue", U(0))]);
+            obj(&mut b, "TransitionPropertyViewModelComparator", &[]);
+            obj(&mut b, "TransitionValueTriggerComparator", &[]);
+            obj(
+                &mut b,
+                "AnimationState",
+                &[("animationId", U(u64::from(i == 1)))],
+            ); // 2
+        }
         if options.entry_event && i == 1 {
             // Fired as the machine enters "entrance", the state written just
             // before it. The listener's view-model change sets `entered` to 1.

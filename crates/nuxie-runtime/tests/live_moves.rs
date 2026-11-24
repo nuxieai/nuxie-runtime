@@ -4564,6 +4564,99 @@ fn close_in(what: &str, a: f32, b: f32) {
     assert!((a - b).abs() < 0.002, "{what}: expected {b}, got {a}");
 }
 
+/// Fires `go` in Screen `row`'s model, as a tap's `fire(state.go)` does.
+fn fire_go(s: &Scene, row: usize) {
+    let board = if row == 0 { &s.a } else { &s.b };
+    assert!(
+        source::viewmodel::viewmodel_instance_trigger::ViewModelInstanceTrigger::trigger_handle(
+            &property(&vm(board), "go")
+        )
+    );
+}
+/// Whether Screen `row`'s "pulse" layer plays its timeline. The layer is
+/// A's first and B's second, after B's entrance.
+fn pulse_plays(s: &Scene, row: usize) -> bool {
+    let machine = screens_list(s)
+        .with_downcast::<ArtboardComponentList, _>(|l| l.state_machine_instance(row as i32))
+        .flatten()
+        .unwrap();
+    machine
+        .with_instance_mut(|m| m.layer_state(row))
+        .is_some_and(|state| {
+            state.is_type_of(source::animation::animation_state::AnimationState::TYPE_KEY)
+        })
+}
+fn pulse_scene(asleep: Option<usize>) -> Scene {
+    let mut s = Scene::from_bytes(&fixture::row_trigger_fixture());
+    if let Some(row) = asleep {
+        set_row_collapsed(&screens_list(&s), row as i32, true).unwrap();
+    }
+    for _ in 0..3 {
+        s.advance(0.0);
+    }
+    s
+}
+
+#[test]
+fn a_fire_reaches_the_shown_screen_while_another_sleeps() {
+    // B awake is the guard; B asleep, as Back leaves it, is the case.
+    for b_asleep in [false, true] {
+        let what = if b_asleep { "B asleep" } else { "B awake" };
+        let mut s = pulse_scene(b_asleep.then_some(1));
+        assert!(!pulse_plays(&s, 0), "{what}: A waits for go");
+        fire_go(&s, 0);
+        s.advance(0.0);
+        assert!(pulse_plays(&s, 0), "{what}: A's go plays A's pulse");
+    }
+}
+
+#[test]
+fn a_sleeping_screen_does_not_hear_fires_from_while_it_slept() {
+    let mut s = pulse_scene(Some(1));
+    fire_go(&s, 1);
+    s.advance(0.0);
+    set_row_collapsed(&screens_list(&s), 1, false).unwrap();
+    s.advance(0.0);
+    s.advance(0.0);
+    assert!(!pulse_plays(&s, 1), "B slept through its go");
+    // Once awake, B hears its next fire, with A asleep or awake.
+    for a_asleep in [false, true] {
+        let mut s = pulse_scene(Some(1));
+        if a_asleep {
+            set_row_collapsed(&screens_list(&s), 0, true).unwrap();
+        }
+        set_row_collapsed(&screens_list(&s), 1, false).unwrap();
+        s.advance(0.0);
+        fire_go(&s, 1);
+        s.advance(0.0);
+        assert!(pulse_plays(&s, 1), "a_asleep {a_asleep}: woken B hears go");
+    }
+}
+
+/// A fire written after a Screen wakes and before its first frame is that
+/// frame's, as the SDK writes a step's values and wakes its Screen with no
+/// frame between.
+#[test]
+fn a_fire_written_as_a_screen_wakes_reaches_it() {
+    for fire_first in [false, true] {
+        let mut s = pulse_scene(Some(1));
+        set_row_collapsed(&screens_list(&s), 0, true).unwrap();
+        if fire_first {
+            fire_go(&s, 1);
+        }
+        set_row_collapsed(&screens_list(&s), 1, false).unwrap();
+        if !fire_first {
+            fire_go(&s, 1);
+        }
+        s.advance(0.0);
+        assert!(
+            pulse_plays(&s, 1),
+            "fire {} the wake: B hears go",
+            if fire_first { "before" } else { "after" }
+        );
+    }
+}
+
 #[test]
 fn a_landed_unit_follows_its_new_screen_while_its_home_sleeps() {
     let mut s = Scene::from_bytes(&fixture::values_fixture(false));

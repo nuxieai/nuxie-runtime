@@ -9868,18 +9868,15 @@ mod paint_order {
     }
 
     /// 4.3 of the in-place plan: each paint case, flown in place, draws
-    /// what its slot page draws when each unit that transfers flies as two
-    /// copies. Both pages go and come back, in 21 frames each way, then go
-    /// again and are cancelled half way by removing B. Every frame, and
-    /// each page at rest after a landing and after the cancel, draws the
-    /// same on both, and each page home draws what it draws never having
-    /// stepped.
+    /// what its slot page drew when each unit that transfers flew as two
+    /// copies (`Recording`). It goes and comes back, in 21 frames each way,
+    /// then goes again and is cancelled half way by removing B.
     #[test]
-    fn in_place_matches_the_slot_path() {
+    fn in_place_draws_what_the_slot_path_drew() {
         let frames: Vec<f32> = (0..=20).map(|n| n as f32 * 0.05).collect();
         let mut failed = Vec::new();
         for case in in_place_cases() {
-            let run = std::panic::catch_unwind(|| equivalent(case, &frames));
+            let run = std::panic::catch_unwind(|| flies_as_recorded(case, PaintShape::InPlace, &frames));
             if let Err(err) = run {
                 let why = err
                     .downcast_ref::<String>()
@@ -9901,19 +9898,19 @@ mod paint_order {
     /// flown in place as one instance (`PaintShape::InPlaceCarry`), draws
     /// what its slot page draws flying it as one instance, every frame of a
     /// go and a Back, at rest after each, and through the same cancels as
-    /// `in_place_matches_the_slot_path`. That covers a component whose own
+    /// `in_place_draws_what_the_slot_path_drew`. That covers a component whose own
     /// root is turned, scaled or faded (UNIV-6476): its lift sorts as the
     /// placement it carries, and its cover reads where the root draws past
     /// its box.
     #[test]
-    fn in_place_a_transfer_matches_the_slot_path() {
+    fn in_place_a_transfer_draws_what_the_slot_path_drew() {
         let ran = known_differences(
             in_place_cases().into_iter().filter(|&case| {
                 let shaped = |shape| fixture::css_paint_fixture_shaped(case, shape);
                 shaped(PaintShape::Slots) != shaped(PaintShape::SlotCopies)
                     && shaped(PaintShape::InPlaceCarry).is_ok()
             }),
-            [PaintShape::Slots, PaintShape::InPlaceCarry],
+            PaintShape::InPlaceCarry,
             &[],
         );
         eprintln!("transferring cases: {ran:?}");
@@ -9944,7 +9941,7 @@ mod paint_order {
                     && shaped(PaintShape::Slots) != shaped(PaintShape::SlotCopies)
                     && shaped(PaintShape::InPlaceBoxedCopies).is_ok()
             }),
-            [PaintShape::SlotCopies, PaintShape::InPlaceBoxedCopies],
+            PaintShape::InPlaceBoxedCopies,
             &[
                 (PaintCase::TurnedFrame, "go at 0", [c, e], [e, c]),
                 (
@@ -10108,13 +10105,14 @@ mod paint_order {
         }
     }
 
-    /// Each of `cases` in `shapes` draws the same (`equivalent_shapes`),
-    /// except the `expected` ones, which differ exactly as given: (case,
-    /// first frame that differs, slot order, in-place order). A known
+    /// Each of `cases` in `shape` draws what was recorded
+    /// (`flies_as_recorded`), except the `expected` ones, which differ exactly
+    /// as given: (case, first frame that differs, recorded order, in-place
+    /// order). A known
     /// difference that matches fails, so its row is dropped. The cases run.
     fn known_differences(
         cases: impl IntoIterator<Item = PaintCase>,
-        shapes: [PaintShape; 2],
+        shape: PaintShape,
         expected: &[(PaintCase, &str, [u32; 2], [u32; 2])],
     ) -> Vec<PaintCase> {
         let frames: Vec<f32> = (0..=20).map(|n| n as f32 * 0.05).collect();
@@ -10122,7 +10120,7 @@ mod paint_order {
         let (mut ran, mut failed) = (Vec::new(), Vec::new());
         for case in cases {
             ran.push(case);
-            let run = std::panic::catch_unwind(|| equivalent_shapes(case, shapes, &frames));
+            let run = std::panic::catch_unwind(|| flies_as_recorded(case, shape, &frames));
             let known = expected.iter().find(|(known, ..)| *known == case);
             match (run, known) {
                 (Ok(()), None) => {}
@@ -10161,52 +10159,146 @@ mod paint_order {
         ran
     }
 
-    /// With NUXIE_RECORD_FLIGHTS set, prints what the slot page
-    /// shows at `label`: one line a draw, color, opacity, clip and outline. A
-    /// mid-step frame is kept only at a quarter of the way.
-    fn record_draws(shapes: [PaintShape; 2], label: &str, shown: &[Shown]) {
-        use std::fmt::Write as _;
-        if std::env::var_os("NUXIE_RECORD_FLIGHTS").is_none() {
-            return;
-        }
-        let at = label
-            .rsplit_once(" at ")
-            .and_then(|(_, p)| p.parse::<f32>().ok());
-        if at.is_some_and(|p| ((p * 4.0).round() - p * 4.0).abs() > 1e-4) {
-            return;
-        }
-        let mut text = format!("# {label}\n");
-        for draw in shown {
-            match draw.rgb {
-                Some(rgb) => write!(text, "{rgb:06x}").unwrap(),
-                None => text.push_str("image"),
-            }
-            write!(text, " {:.4} ", draw.opacity).unwrap();
-            match draw.clip {
-                Some((lo, hi)) => {
-                    write!(text, "{:.4},{:.4},{:.4},{:.4}", lo.x, lo.y, hi.x, hi.y).unwrap();
+    /// What each case drew when its units flew through slots, recorded at
+    /// runtime 9aca088d3 before that shape was removed (UNIV-6369): a case's
+    /// frames in the order `flies_as_recorded` draws them, at rest, at each
+    /// quarter of a flight, after each landing and cancel.
+    struct Recording(Vec<(String, Vec<RecordedDraw>)>);
+    /// One recorded draw: color (none for an image), opacity, clip box and
+    /// outline. An outline past 8 points is its point count and its box.
+    #[derive(Debug)]
+    struct RecordedDraw {
+        rgb: Option<u32>,
+        opacity: f32,
+        clip: Option<Rect>,
+        outline: RecordedOutline,
+    }
+    #[derive(Debug)]
+    enum RecordedOutline {
+        Points(Vec<Vec2D>),
+        Bounds(usize, Rect),
+    }
+    impl Recording {
+        fn of(case: PaintCase, text: &str) -> Self {
+            let pair = |s: &str| {
+                let (x, y) = s.split_once(',').expect("a point");
+                Vec2D::new(x.parse().unwrap(), y.parse().unwrap())
+            };
+            let bounds = |s: &str| {
+                let n: Vec<f32> = s.split(',').map(|n| n.parse().unwrap()).collect();
+                (Vec2D::new(n[0], n[1]), Vec2D::new(n[2], n[3]))
+            };
+            let parse = |line: &str| {
+                let mut words = line.split(' ');
+                let rgb = words.next().unwrap();
+                let opacity = words.next().unwrap().parse().unwrap();
+                let clip = words.next().unwrap();
+                let rest: Vec<&str> = words.collect();
+                let outline = match rest.first().and_then(|w| w.split_once(':')) {
+                    Some((count, box_)) => {
+                        RecordedOutline::Bounds(count.parse().unwrap(), bounds(box_))
+                    }
+                    None => RecordedOutline::Points(rest.into_iter().map(pair).collect()),
+                };
+                RecordedDraw {
+                    rgb: (rgb != "image").then(|| u32::from_str_radix(rgb, 16).unwrap()),
+                    opacity,
+                    clip: (clip != "-").then(|| bounds(clip)),
+                    outline,
                 }
-                None => text.push('-'),
+            };
+            let name = format!("{case:?} ");
+            let mut frames = Vec::new();
+            let mut lines: Vec<&str> = Vec::new();
+            for block in text.split("# ").skip(1) {
+                let mut block_lines = block.lines();
+                let label = block_lines.next().unwrap();
+                // A frame marked `=` draws what the frame before it drew.
+                let label = match label.strip_suffix(" =") {
+                    Some(label) => label,
+                    None => {
+                        lines = block_lines.filter(|line| !line.is_empty()).collect();
+                        label
+                    }
+                };
+                if let Some(frame) = label.strip_prefix(&name) {
+                    frames.push((
+                        frame.to_owned(),
+                        lines.iter().map(|line| parse(line)).collect(),
+                    ));
+                }
             }
-            for p in &draw.points {
-                write!(text, " {:.4},{:.4}", p.x, p.y).unwrap();
-            }
-            text.push('\n');
+            assert!(!frames.is_empty(), "{case:?} was recorded");
+            frames.reverse();
+            Self(frames)
         }
-        print!("\n@@REC {:?}-{:?}\n{text}@@END\n", shapes[0], shapes[1]);
+        /// The next frame, which must be `label`.
+        fn next(&mut self, label: &str) -> Vec<RecordedDraw> {
+            let (recorded, draws) = self.0.pop().expect("a recorded frame");
+            assert_eq!(recorded, label, "the recorded frames are in drawing order");
+            draws
+        }
+    }
+    /// Whether a frame at `p` was recorded: a quarter of the way or a whole.
+    fn recorded_at(p: f32) -> bool {
+        ((p * 4.0).round() - p * 4.0).abs() <= 1e-4
+    }
+    /// `drawn` is what was recorded, in the same order, to 2e-3 (the
+    /// recording is to 3 decimals); with `near_zero`, to that and a part in
+    /// 1e4 of the coordinate, where a copy flies inside a box scaled near
+    /// zero and f32 loses digits inverting that box's matrix.
+    fn as_recorded(label: &str, slots: &[RecordedDraw], drawn: &[Shown], near_zero: bool) {
+        assert_eq!(
+            slots.iter().map(|s| s.rgb).collect::<Vec<_>>(),
+            drawn.iter().map(|s| s.rgb).collect::<Vec<_>>(),
+            "{label}: draw order\nrecorded: {slots:?}\ndrawn: {drawn:?}"
+        );
+        let slack = if near_zero { 1e-4 } else { 0.0 };
+        let near = |a: f32, b: f32| (a - b).abs() <= 2e-3 + slack * a.abs().max(b.abs());
+        let near_point = |a: &Vec2D, b: &Vec2D| near(a.x, b.x) && near(a.y, b.y);
+        let near_box = |a: &Rect, b: &Rect| near_point(&a.0, &b.0) && near_point(&a.1, &b.1);
+        for (n, (a, b)) in slots.iter().zip(drawn).enumerate() {
+            let outline = match &a.outline {
+                RecordedOutline::Points(points) => {
+                    points.len() == b.points.len()
+                        && points.iter().zip(&b.points).all(|(p, q)| near_point(p, q))
+                }
+                RecordedOutline::Bounds(count, bounds) => {
+                    *count == b.points.len() && near_box(bounds, &drawn_rect(&b.points))
+                }
+            };
+            assert!(
+                outline,
+                "{label}: draw {n} ({:06x?}) outline {:?} against {:?}",
+                a.rgb, a.outline, b.points
+            );
+            assert!(
+                (a.opacity - b.opacity).abs() <= 1.0 / 255.0 + 1e-4,
+                "{label}: draw {n} ({:06x?}) alpha {} against {}",
+                a.rgb,
+                a.opacity,
+                b.opacity
+            );
+            assert!(
+                match (&a.clip, &b.clip) {
+                    (None, None) => true,
+                    (Some(p), Some(q)) => near_box(p, q),
+                    _ => false,
+                },
+                "{label}: draw {n} ({:06x?}) clip {:?} against {:?}",
+                a.rgb,
+                a.clip,
+                b.clip
+            );
+        }
     }
 
-    fn equivalent(case: PaintCase, frames: &[f32]) {
-        equivalent_shapes(case, [PaintShape::SlotCopies, PaintShape::InPlace], frames);
-    }
-
-    /// `case` drawn in `shapes`, a slot page and an in-place one, draws the
-    /// same at rest, every frame of a go and a Back, after each, home, and
-    /// through two cancels.
-    fn equivalent_shapes(case: PaintCase, shapes: [PaintShape; 2], frames: &[f32]) {
-        let [slot_shape, in_place_shape] = shapes;
-        let mut slots = PaintScene::shaped(case, slot_shape);
-        let mut in_place = PaintScene::shaped(case, in_place_shape);
+    /// `case` flown in place, in `shape`, draws what was recorded at rest,
+    /// through a go and a Back, after each, and through two cancels; and home,
+    /// it draws what the page draws that never stepped.
+    fn flies_as_recorded(case: PaintCase, shape: PaintShape, frames: &[f32]) {
+        let mut recording = Recording::of(case, recording_of(shape));
+        let mut s = PaintScene::shaped(case, shape);
         // The one case whose cards scale through zero.
         let near_zero = matches!(
             case,
@@ -10215,116 +10307,61 @@ mod paint_order {
         );
         // The third known difference (docs/live-moves.md, Flying in place):
         // b is static, so its absolutely placed child rests against the
-        // Screen. Its slot flies in an absolute flight slot, which carries the
-        // child inside b, jumping in at take-off and out at landing; in place
-        // it stays placed against the Screen. Only mid-step frames differ.
+        // Screen. Its slot flew in an absolute flight slot, which carried the
+        // child inside b; in place it stays placed against the Screen. Only
+        // mid-step frames differ, and none was recorded.
         let mid_step_differs = matches!(case, PaintCase::Zoom(fixture::ZoomCase::BoundSubtitle));
-        // The fourth: inside a card at scale exactly 0, a copy flying in
-        // place draws nothing, as nothing draws inside a `scale(0)` box; the
-        // slot path's copies fly outside the cards and still draw. The two
-        // Screens' clocks can differ (a Screen put back after a cancel starts
-        // its timelines again), so each card is read on its own: where a
-        // card draws nothing with area on both pages, the slot page's copies
-        // inside it are left out of that frame's comparison, and nothing
-        // else is.
-        let rgb = |name: &str| Some(fixture::paint_color(name) & 0x00ff_ffff);
-        // What each copy draws in: its own colors, or for an element its
-        // element's (an image's draw has none).
-        let copy_colors = |copy: &str| -> Vec<Option<u32>> {
-            match case {
-                PaintCase::Element(fixture::ElementKind::Text, _) => {
-                    vec![rgb(&format!("{copy} text"))]
-                }
-                PaintCase::Element(
-                    fixture::ElementKind::Image | fixture::ElementKind::Video,
-                    _,
-                ) => {
-                    vec![None]
-                }
-                PaintCase::Element(fixture::ElementKind::Placement, _) => vec![
-                    rgb(&format!("{copy} inner")),
-                    rgb(&format!("{copy} inner child")),
+        let mut check = |s: &PaintScene, label: &str| {
+            as_recorded(
+                &format!("{case:?} {label}"),
+                &recording.next(label),
+                &shown(&page_draws(s)),
+                near_zero,
+            );
+        };
+        check(&s, "at rest");
+        // A page whose keyed element draws nothing would match whatever its
+        // readers do.
+        if let PaintCase::Element(kind, _) = case {
+            let rgb = |name: &str| Some(fixture::paint_color(name) & 0x00ff_ffff);
+            let colors = match kind {
+                fixture::ElementKind::Text => vec![rgb("a text"), rgb("b text")],
+                fixture::ElementKind::Image | fixture::ElementKind::Video => vec![None],
+                fixture::ElementKind::Placement => vec![
+                    rgb("a inner"),
+                    rgb("a inner child"),
+                    rgb("b inner"),
+                    rgb("b inner child"),
                 ],
-                _ => vec![rgb(copy), rgb(&format!("{copy} child"))],
-            }
-        };
-        let inside = [("card a", copy_colors("a")), ("card b", copy_colors("b"))]
-            .map(|(card, copies)| (rgb(card), copies));
-        let has = |shown: &[Shown], color: Option<u32>| shown.iter().any(|d| d.rgb == color);
-        let both = |slots: &PaintScene, in_place: &PaintScene, label: &str| {
-            let (mut slots, in_place) = (shown(&page_draws(slots)), shown(&page_draws(in_place)));
-            if near_zero {
-                let images = |shown: &[Shown]| shown.iter().filter(|d| d.rgb.is_none()).count();
-                for (card, copies) in &inside {
-                    if !has(&in_place, *card) {
-                        assert!(
-                            !has(&slots, *card),
-                            "{case:?} {label}: only a card at 0 is skipped"
-                        );
-                        slots.retain(|d| d.rgb.is_none() || !copies.contains(&d.rgb));
-                        // An image's draw has no color to tell whose it is,
-                        // and a flight's two copies draw the same image at
-                        // the same place: what is left out is an image draw
-                        // the slot page has beyond the in-place page's, one
-                        // for each image copy inside the card.
-                        let extra = images(&slots).saturating_sub(images(&in_place));
-                        let left_out = copies.iter().filter(|c| c.is_none()).count().min(extra);
-                        for _ in 0..left_out {
-                            let last = slots.iter().rposition(|d| d.rgb.is_none()).unwrap();
-                            slots.remove(last);
-                        }
-                    }
-                }
-            }
-            record_draws(shapes, &format!("{case:?} {label}"), &slots);
-            same_draws(&format!("{case:?} {label}"), &slots, &in_place, near_zero);
-        };
-        both(&slots, &in_place, "at rest");
-        // A page whose keyed element draws nothing would compare equal
-        // whatever its readers do.
-        if let PaintCase::Element(..) = case {
-            let drawn = shown(&page_draws(&in_place));
+            };
             assert!(
-                ["a", "b"]
-                    .into_iter()
-                    .flat_map(copy_colors)
-                    .any(|color| has(&drawn, color)),
+                shown(&page_draws(&s))
+                    .iter()
+                    .any(|draw| colors.contains(&draw.rgb)),
                 "{case:?}: the keyed element draws"
             );
         }
         for (to, step) in [("B", "go"), ("A", "back")] {
-            for s in [&mut slots, &mut in_place] {
-                s.begin(to, step);
-            }
+            s.begin(to, step);
             for &p in frames {
-                for s in [&mut slots, &mut in_place] {
-                    s.to(p);
-                }
-                if !mid_step_differs {
-                    both(&slots, &in_place, &format!("{step} at {p}"));
+                s.to(p);
+                if !mid_step_differs && recorded_at(p) {
+                    check(&s, &format!("{step} at {p}"));
                 }
             }
-            for s in [&mut slots, &mut in_place] {
-                s.end(to, step);
-            }
-            both(&slots, &in_place, &format!("after {step}"));
+            s.end(to, step);
+            check(&s, &format!("after {step}"));
         }
-        // Home: each page draws what the same page draws that never
-        // stepped, after the same time (its timelines keep playing). Not
-        // for a transfer: the copy refilled where the instance left starts
+        // Not for a transfer: the copy refilled where the instance left starts
         // at its entry state, so a page that stepped is not one that never
         // did.
-        let transfers = matches!(slot_shape, PaintShape::Slots);
-        for (s, shape) in [(&slots, slot_shape), (&in_place, in_place_shape)] {
-            if transfers {
-                break;
-            }
+        if shape != PaintShape::InPlaceCarry {
             let mut still = PaintScene::shaped(case, shape);
             still.advance(2.0);
             same_draws(
                 &format!("{case:?} {shape:?} home"),
                 &shown(&page_draws(&still)),
-                &shown(&page_draws(s)),
+                &shown(&page_draws(&s)),
                 near_zero,
             );
         }
@@ -10332,71 +10369,59 @@ mod paint_order {
         // landing, then come back and cancel half way by removing A. A
         // cancelled step's records end where its keys were, so the next
         // step's take-off frame reads its own first keys.
-        let pages = [&slots, &in_place].map(|s| {
-            RuntimeOwnedViewModelHandle::from_native(
-                s._file.clone(),
-                s.root
-                    .data_context()
-                    .unwrap()
-                    .with_context(|c| c.main_view_model_instance())
-                    .unwrap(),
-            )
-            .unwrap()
-        });
-        let frame = |slots: &PaintScene, in_place: &PaintScene, label: &str| {
-            if !mid_step_differs {
-                both(slots, in_place, label);
-            }
-        };
+        let page = RuntimeOwnedViewModelHandle::from_native(
+            s._file.clone(),
+            s.root
+                .data_context()
+                .unwrap()
+                .with_context(|c| c.main_view_model_instance())
+                .unwrap(),
+        )
+        .unwrap();
         for (to, step, row, cancelled, halves) in [
             ("B", "go", 1, true, &[0.0, 0.25, 0.5][..]),
             ("B", "go", 1, false, frames),
             ("A", "back", 0, true, &[0.0, 0.25, 0.5][..]),
         ] {
-            for s in [&mut slots, &mut in_place] {
-                s.begin(to, step);
-            }
+            s.begin(to, step);
             for &p in halves {
-                for s in [&mut slots, &mut in_place] {
-                    s.to(p);
+                s.to(p);
+                if !mid_step_differs && recorded_at(p) {
+                    check(&s, &format!("{step} again at {p}"));
                 }
-                frame(&slots, &in_place, &format!("{step} again at {p}"));
             }
             if !cancelled {
-                for s in [&mut slots, &mut in_place] {
-                    s.end(to, step);
-                }
-                both(&slots, &in_place, &format!("after {step} again"));
+                s.end(to, step);
+                check(&s, &format!("after {step} again"));
                 continue;
             }
-            let removed = pages[0]
+            let removed = page
                 .list_item_by_property_name_path("screens", row)
                 .unwrap();
-            let removed_in_place = pages[1]
-                .list_item_by_property_name_path("screens", row)
-                .unwrap();
-            for (s, page) in [(&mut slots, &pages[0]), (&mut in_place, &pages[1])] {
-                assert!(page.remove_list_item_by_property_name_path("screens", row));
-                s.advance(0.0);
-                assert!(
-                    s.moves.flight_controls(&s.root).is_empty(),
-                    "{case:?}: removing {} cancels {step}",
-                    ["A", "B"][row]
-                );
-            }
-            both(
-                &slots,
-                &in_place,
+            assert!(page.remove_list_item_by_property_name_path("screens", row));
+            s.advance(0.0);
+            assert!(
+                s.moves.flight_controls(&s.root).is_empty(),
+                "{case:?}: removing {} cancels {step}",
+                ["A", "B"][row]
+            );
+            check(
+                &s,
                 &format!("{step} cancelled, {} removed", ["A", "B"][row]),
             );
-            for (s, page, item) in [
-                (&mut slots, &pages[0], &removed),
-                (&mut in_place, &pages[1], &removed_in_place),
-            ] {
-                assert!(page.insert_list_item_by_property_name_path("screens", row, item));
-                s.advance(0.0);
-            }
-            both(&slots, &in_place, &format!("after {step} cancelled"));
+            assert!(page.insert_list_item_by_property_name_path("screens", row, &removed));
+            s.advance(0.0);
+            check(&s, &format!("after {step} cancelled"));
+        }
+        assert!(recording.0.is_empty(), "{case:?}: every recorded frame drew");
+    }
+
+    /// What `shape`'s pages are compared with.
+    fn recording_of(shape: PaintShape) -> &'static str {
+        match shape {
+            PaintShape::InPlaceCarry => include_str!("live_move_flights/transfers.txt"),
+            PaintShape::InPlaceBoxedCopies => include_str!("live_move_flights/boxed-copies.txt"),
+            _ => include_str!("live_move_flights/two-copies.txt"),
         }
     }
 
@@ -13922,7 +13947,7 @@ mod drawn {
         /// the slot plan's entries and its units landing back in their slots,
         /// which in place has neither (no copy leaves its Screen); their
         /// cases, `OneUnit`, `ZoomOutOfRange` and `OneKeyCopies`, are cases of
-        /// `in_place_matches_the_slot_path`. `LayerFromZero` keys the
+        /// `in_place_draws_what_the_slot_path_drew`. `LayerFromZero` keys the
         /// compiler's flight layer, which no file can (see `in_place_cases`).
         mod in_place_twins {
             #[test]

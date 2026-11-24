@@ -411,7 +411,7 @@ struct Options {
     unnamed_screen: bool,
     empty_screens: bool,
     overshoot: bool,
-    spare_writes: bool,
+    unit_writes: bool,
     entry_event: bool,
     reference_prop: bool,
     /// With `two_versions`: both Screens' copies on unit key 1 and one
@@ -1982,15 +1982,14 @@ pub fn text_field_pair_fixture() -> Vec<u8> {
 /// `fixture(2)` whose unit holds a nested "button" component with its own
 /// stateful Button model. The button's machine keys its knob's x to 30, and a
 /// two-way binding writes x back into the model's `value`, which starts at 0.
-/// So every copy of the unit writes its own model on its first advance,
-/// including a flight slot's spare copy. The model also has `isset:value`,
+/// So every copy of the unit writes its own model on its first advance. The model also has `isset:value`,
 /// the marker the SDKs pair with `value`. With `empty_screens`, the page's
 /// screens list starts empty.
-pub fn spare_writes_fixture(empty_screens: bool) -> Vec<u8> {
+pub fn unit_writes_fixture(empty_screens: bool) -> Vec<u8> {
     build(
         2,
         Options {
-            spare_writes: true,
+            unit_writes: true,
             empty_screens,
             ..Options::default()
         },
@@ -2214,7 +2213,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
     use V::*;
     assert!(rows >= 1);
     // These options use fixed object ids on the default shapes.
-    if options.spare_writes {
+    if options.unit_writes {
         assert!(
             !semantics
                 && !options.nested_list
@@ -2480,7 +2479,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             ],
         );
     }
-    if options.spare_writes {
+    if options.unit_writes {
         obj(&mut b, "ViewModel", &[("name", S("Button"))]);
         obj(&mut b, "ViewModelPropertyNumber", &[("name", S("value"))]);
         obj(
@@ -3156,7 +3155,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             "LayoutComponentStyle",
             &[("parentId", U(10)), ("layoutWidthScaleType", U(1))],
         ); // 11
-        if options.spare_writes {
+        if options.unit_writes {
             // A nested component with its own stateful Button model, which
             // lives and dies with this copy of the unit.
             obj(
@@ -3306,7 +3305,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             pulse_layer(&mut b, &[0, 2], 1);
         }
     }
-    if options.spare_writes {
+    if options.unit_writes {
         obj(
             &mut b,
             "Artboard",
@@ -4060,9 +4059,10 @@ pub fn css_flight_over_cached_backing_fixture() -> Vec<u8> {
         },
     )
 }
-/// `css_flight_over_backing_fixture` with videos: one named "clip" in unit c,
-/// whose root also carries a button's semantics, and a plain one named
-/// "plain" on Screen B, in front of B's slots.
+/// `css_flight_over_backing_fixture` with videos: one named "clip" in A's
+/// unit c, "landing clip" in B's, each box also carrying a button's
+/// semantics, and a plain one named "plain" on Screen B, in front of its
+/// boxes.
 pub fn css_flight_video_fixture() -> Vec<u8> {
     build_css_versions_fixture(
         0,
@@ -4337,10 +4337,16 @@ fn version_box(
         next += 5;
     }
     if shadows.videos && unit.name == "c" {
+        // B's own copy is the larger, where the flight lands.
+        let clip = if unit.size == (50.0, 40.0) {
+            "clip"
+        } else {
+            "landing clip"
+        };
         obj(
             b,
             "Video",
-            &[("name", S("clip")), ("parentId", U(at)), ("assetId", U(0))],
+            &[("name", S(clip)), ("parentId", U(at)), ("assetId", U(0))],
         );
         obj(
             b,

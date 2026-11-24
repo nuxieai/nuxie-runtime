@@ -149,25 +149,27 @@ fn arrival_machine(b: &mut Vec<u8>, model: u8, step: &str) {
     obj(b, "StateTransition", &[("stateToId", U(1))]);
     lifecycle_condition(b, model, false, 1, step);
 }
-fn flight(b: &mut Vec<u8>, layer: u64, unit: u64, model: u8, flight_key: u64) {
+/// The style and record of box `id`, at `left` of the box that holds it, 180
+/// by 280.
+fn css_box(b: &mut Vec<u8>, id: u64, left: f32, clips: bool) {
     use V::*;
-    obj(
-        b,
-        "Node",
-        &[("name", S("flight")), ("parentId", U(0)), ("x", F(35.0))],
-    );
-    slot(b, layer, layer + 1, "mascot", unit, 0.0, model);
-    obj(
-        b,
-        "LiveSlot",
-        &[
-            ("parentId", U(layer + 1)),
-            ("unitKey", U(1)),
-            ("role", U(1)),
-            ("flightKey", U(flight_key)),
-            ("sizeMode", U(1)),
-        ],
-    );
+    obj(b, "LayoutComponentStyle", &[("parentId", U(id))]);
+    let mut css = vec![
+        ("parentId", U(id)),
+        ("position", U(2)),
+        ("insetLeftKind", U(1)),
+        ("insetLeft", F(left)),
+        ("insetTopKind", U(1)),
+        ("insetTop", F(0.0)),
+        ("widthKind", U(1)),
+        ("width", F(180.0)),
+        ("heightKind", U(1)),
+        ("height", F(280.0)),
+    ];
+    if clips {
+        css.extend([("overflowX", U(2)), ("overflowY", U(2))]);
+    }
+    obj(b, "LayoutCssStyle", &css);
 }
 fn arrival_timeline(b: &mut Vec<u8>, step: &str, target: u64, event: u64) {
     use V::*;
@@ -182,7 +184,7 @@ fn arrival_timeline(b: &mut Vec<u8>, step: &str, target: u64, event: u64) {
         ],
     );
     obj(b, "KeyedObject", &[("objectId", U(target))]);
-    obj(b, "KeyedProperty", &[("propertyKey", U(62003))]);
+    obj(b, "KeyedProperty", &[("propertyKey", U(62033))]);
     for (frame, value) in [(0, 0.0), (60, 1.0)] {
         obj(
             b,
@@ -216,18 +218,20 @@ fn slot(
     host_id: u64,
     name: &str,
     unit: u64,
-    x: f32,
     screen_model: u8,
 ) {
     use V::*;
     obj(
         b,
-        "NestedArtboard",
+        "NestedArtboardLayout",
         &[
             ("name", S(name)),
             ("parentId", U(parent)),
             ("artboardId", U(unit)),
-            ("x", F(x)),
+            ("instanceWidth", F(160.0)),
+            ("instanceHeight", F(260.0)),
+            ("instanceWidthScaleType", U(0)),
+            ("instanceHeightScaleType", U(0)),
             ("isStateful", B(true)),
         ],
     );
@@ -506,6 +510,12 @@ fn build(rows: usize, _controls: bool) -> (Vec<u8>, serde_json::Value) {
         } else {
             format!("R{i}")
         };
+        let clipped = i == 1;
+        let has_flight = rows > 1 && i < 2;
+        let host_id = if clipped { 3 } else { 2 };
+        let layer_id = host_id + 8;
+        // Screen A's inline content, 151 objects, comes before its styles.
+        let tail = if i == 0 { layer_id + 151 } else { layer_id };
         obj(
             &mut b,
             "Artboard",
@@ -514,6 +524,7 @@ fn build(rows: usize, _controls: bool) -> (Vec<u8>, serde_json::Value) {
                 ("width", F(800.0)),
                 ("height", F(600.0)),
                 ("viewModelId", U(i as u64 + 1)),
+                ("styleId", U(tail)),
                 ("clip", B(false)),
                 ("defaultStateMachineId", U(0)),
             ],
@@ -521,14 +532,14 @@ fn build(rows: usize, _controls: bool) -> (Vec<u8>, serde_json::Value) {
         let parent = if i == 0 { "card" } else { "header" };
         obj(
             &mut b,
-            "Node",
+            "LayoutComponent",
             &[
                 ("name", S(parent)),
                 ("parentId", U(0)),
-                ("x", F(if i == 0 { 15.0 } else { 215.0 })),
+                ("styleId", U(tail + 2)),
+                ("clip", B(false)),
             ],
         ); // 1
-        let clipped = i == 1;
         if clipped {
             obj(
                 &mut b,
@@ -536,29 +547,18 @@ fn build(rows: usize, _controls: bool) -> (Vec<u8>, serde_json::Value) {
                 &[
                     ("name", S("clip")),
                     ("parentId", U(1)),
-                    ("width", F(180.0)),
-                    ("height", F(280.0)),
-                    ("clip", B(true)),
+                    ("styleId", U(tail + 5)),
                 ],
             ); // 2
         }
-        let host_id = if clipped { 3 } else { 2 };
         slot(
             &mut b,
             if clipped { 2 } else { 1 },
             host_id,
             "mascot",
             rows as u64 + 1,
-            5.0,
             i as u8 + 1,
         );
-        let layer_id = host_id + 8;
-        let has_flight = rows > 1 && i < 2;
-        // Preserve inline component IDs used by the published video inventory.
-        let flight_layer = if i == 0 { layer_id + 151 } else { layer_id };
-        if has_flight && i == 1 {
-            flight(&mut b, flight_layer, rows as u64 + 1, i as u8 + 1, 1);
-        }
         // Same content inline. No NestedArtboard around it.
         if i == 0 {
             let inline = layer_id;
@@ -570,22 +570,39 @@ fn build(rows: usize, _controls: bool) -> (Vec<u8>, serde_json::Value) {
             let video = content(&mut b, inline, inline + 1, false);
             video_elements.push(video_element(i + 1, &name, "inlineClip", video));
         }
-        if has_flight && i == 0 {
-            flight(&mut b, flight_layer, rows as u64 + 1, i as u8 + 1, 2);
-        }
+        obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // tail
+        obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // tail + 1
+        css_box(&mut b, 1, if i == 0 { 15.0 } else { 215.0 }, false); // tail + 2, 3
         obj(
             &mut b,
-            "LiveSlot",
+            "LayoutCssStyle",
             &[
                 ("parentId", U(host_id)),
-                ("unitKey", U(1)),
-                ("role", U(0)),
-                ("sizeMode", U(1)),
+                ("flexShrink", F(0.0)),
+                ("marginLeft", F(5.0)),
+                ("widthKind", U(1)),
+                ("width", F(160.0)),
+                ("heightKind", U(1)),
+                ("height", F(260.0)),
+                ("flightKey", U(1)),
             ],
-        );
+        ); // tail + 4
+        let mut next = tail + 5;
+        if clipped {
+            css_box(&mut b, 2, 0.0, true); // tail + 5, 6
+            next += 2;
+        }
         if has_flight {
             let step = if i == 0 { "back" } else { "t1" };
-            let event = flight_layer + 11;
+            obj(
+                &mut b,
+                "LiveFlight",
+                &[
+                    ("parentId", U(0)),
+                    ("key", U(if i == 0 { 2 } else { 1 })),
+                    ("sizeMode", U(1)),
+                ],
+            ); // next
             obj(
                 &mut b,
                 "Event",
@@ -593,8 +610,8 @@ fn build(rows: usize, _controls: bool) -> (Vec<u8>, serde_json::Value) {
                     ("parentId", U(0)),
                     ("name", S(&format!("nx_enter_done:{step}"))),
                 ],
-            );
-            arrival_timeline(&mut b, step, flight_layer + 9, event);
+            ); // next + 1
+            arrival_timeline(&mut b, step, next, next + 1);
             arrival_machine(&mut b, i as u8 + 1, step);
         } else {
             machine(&mut b, false);
@@ -612,11 +629,14 @@ fn build(rows: usize, _controls: bool) -> (Vec<u8>, serde_json::Value) {
             ("width", F(160.0)),
             ("height", F(260.0)),
             ("viewModelId", U(0)),
+            ("styleId", U(151)),
             ("clip", B(false)),
             ("defaultStateMachineId", U(0)),
         ],
     );
-    let video = content(&mut b, 0, 1, true);
+    let video = content(&mut b, 0, 1, true); // 1 to 150
+    obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 151
+    obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 152
     // A definition-local target covers every mounted row/flight occurrence of this unit.
     video_elements.push(video_element(rows + 1, "mascot", "clip", video));
     timeline(&mut b, "walk", 1, 13, 0.0, 100.0);

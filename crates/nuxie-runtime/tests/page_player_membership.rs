@@ -2,12 +2,13 @@
 //! is set up before the frame plays (UNIV-5924). Every test drives a page
 //! player with the page model subscribed, as the SDKs do.
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
-use nuxie_runtime::live_move::{records::LiveSlot, screens};
+use nuxie_runtime::live_move::screens;
 use nuxie_runtime::live_move_fixture as fixture;
 use nuxie_runtime::page_player::{self, Output, Playback, Step};
 use nuxie_runtime::{
     source::{
-        generated::core_registry::CoreRegistry, nested_artboard::NestedArtboard, node::Node,
+        generated::core_registry::CoreRegistry, layout_component::LayoutComponent,
+        nested_artboard::NestedArtboard,
         viewmodel::viewmodel_instance::ViewModelInstance,
     },
     *,
@@ -26,8 +27,7 @@ struct Page {
 }
 impl Page {
     /// The page at rest on Screen A alone. B's model is taken out of the
-    /// list, and A is created, with its spare copies put away, by one row
-    /// wake before the first frame.
+    /// list, and A is created by one row wake before the first frame.
     fn resting_on_a(bytes: &[u8]) -> Self {
         Self::open(bytes, None)
     }
@@ -157,18 +157,8 @@ impl Page {
             .stream()
             .to_string()
     }
-    /// Every spare slot in Screen B is empty, and every reported change
-    /// belongs to a model the scene still holds. A spare's own models leave
-    /// the scene with the spare.
-    fn assert_spares_away(&self, output: &Output) {
-        let slots = spare_slots(&self.row("B"));
-        assert!(!slots.is_empty(), "Screen B has spare slots");
-        for slot in &slots {
-            assert!(
-                child(slot).is_none(),
-                "a spare slot in Screen B still holds a copy"
-            );
-        }
+    /// Every reported change belongs to a model the scene holds.
+    fn assert_changes_in_scene(&self, output: &Output) {
         let mut scene: HashSet<u64> = hosted_scene::HostedIndex::default()
             .active_owned_models(&self.root())
             .into_iter()
@@ -203,21 +193,6 @@ fn ok(result: Result<Output, page_player::Error>, what: &str) -> Output {
 fn child(host: &CoreHandle) -> Option<RuntimeArtboardInstanceHandle> {
     host.with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
         .flatten()
-}
-/// A Screen's flight slots: the hosts of its role-1 slot records.
-fn spare_slots(row: &RuntimeArtboardInstanceHandle) -> Vec<CoreHandle> {
-    row.with_artboard(|b| b.find_all_handles::<LiveSlot>())
-        .into_iter()
-        .filter_map(|record| {
-            record
-                .with_downcast::<LiveSlot, _>(
-                    |r| {
-                        if r.values.role == 1 { r.parent() } else { None }
-                    },
-                )
-                .flatten()
-        })
-        .collect()
 }
 fn vm(board: &RuntimeArtboardInstanceHandle) -> CoreHandle {
     board
@@ -305,33 +280,13 @@ fn reported(page: &Page, output: &Output) -> (Vec<String>, Vec<String>) {
 }
 
 /// R1. A host that steps right after the insert, as Android and iOS's first
-/// Screen do. The new row's spare copies write on their first advance.
+/// Screen do, on a Screen whose unit writes nothing on its first advance.
 #[test]
-fn a_screen_added_between_frames_puts_its_spare_copies_away_before_they_play() {
-    let mut page = Page::resting_on_a(&fixture::spare_writes_fixture(false));
-    page.insert_b();
-    let output = ok(page.step(0.0), "the frame after the insert");
-    page.assert_spares_away(&output);
-}
-
-/// R1's first control: the same order with a row wake between the insert
-/// and the step.
-#[test]
-fn a_screen_woken_before_its_first_frame_puts_its_spare_copies_away() {
-    let mut page = Page::resting_on_a(&fixture::spare_writes_fixture(false));
-    page.insert_b();
-    page.wake(1);
-    let output = ok(page.step(0.0), "the frame after the insert and wake");
-    page.assert_spares_away(&output);
-}
-
-/// R1's second control: spare copies that write nothing, added the same way.
-#[test]
-fn a_screen_whose_spares_write_nothing_opens_when_added_between_frames() {
+fn a_screen_whose_unit_writes_nothing_opens_when_added_between_frames() {
     let mut page = Page::resting_on_a(&fixture::fixture(2));
     page.insert_b();
     let output = ok(page.step(0.0), "the frame after the insert");
-    page.assert_spares_away(&output);
+    page.assert_changes_in_scene(&output);
 }
 
 /// R2. Host F wakes the new row before its first frame; host U steps right
@@ -375,7 +330,7 @@ fn a_screen_added_between_frames_plays_its_first_frame_like_a_flushed_one() {
 fn a_screen_added_between_frames_plays_the_frames_time() {
     for (what, bytes) in [
         ("entry event", fixture::entry_event_fixture()),
-        ("spare writes", fixture::spare_writes_fixture(false)),
+        ("unit writes", fixture::unit_writes_fixture(false)),
     ] {
         let mut page = Page::resting_on_a(&bytes);
         page.insert_b();
@@ -385,7 +340,7 @@ fn a_screen_added_between_frames_plays_the_frames_time() {
         );
         let header = page
             .row("B")
-            .with_artboard(|b| b.find_handle::<Node>("header"))
+            .with_artboard(|b| b.find_handle::<LayoutComponent>("header"))
             .unwrap();
         close(
             CoreRegistry::get_double_handle(&header, 13).unwrap(),
@@ -423,59 +378,12 @@ fn a_frame_with_nothing_pending_runs_no_flush() {
     );
 }
 
-/// R4. A guard for the removal that runs before the advance: once the unit
-/// lands in B, Screen A holds a copy of its own with A's bindings (decision
-/// 297), and removing B, which takes the landed unit with it, leaves it so.
-#[test]
-fn a_screen_removed_between_frames_leaves_the_other_screen_its_own_copy() {
-    let mut page = Page::resting_on_a(&fixture::fixture(2));
-    page.insert_b();
-    page.wake(1);
-    ok(page.step(0.0), "B's first frame");
-    let home = page
-        .row("A")
-        .with_artboard(|b| b.find_all_handles::<NestedArtboard>())[0]
-        .clone();
-    let unit = child(&home).unwrap();
-    page.begin("B", "t1");
-    for _ in 0..3 {
-        ok(page.step(1.0 / 60.0), "a flight frame");
-    }
-    page.end("B", "t1");
-    ok(page.step(1.0 / 60.0), "the first frame in B");
-    let own = child(&home).expect("A holds a copy of its own");
-    assert_ne!(
-        own.core_handle(),
-        unit.core_handle(),
-        "the unit has landed in B"
-    );
-    assert!(page.vm.remove_list_item_by_property_name_path("screens", 1));
-    ok(page.step(0.0), "the frame after B's removal");
-    assert!(!screens(&page.root()).unwrap().contains_key("B"));
-    assert_eq!(
-        child(&home).map(|c| c.core_handle()),
-        Some(own.core_handle()),
-        "A keeps its own copy"
-    );
-    assert!(
-        page.screen_model(0)
-            .borrow_mut()
-            .set_number_by_property_name("offset", 77.0)
-    );
-    ok(page.step(1.0 / 60.0), "the frame after A's offset changes");
-    close(
-        number(&vm(&own), "prop"),
-        77.0,
-        "the copy's prop follows A's offset",
-    );
-}
-
-/// R4 on the in-place page: the unit transfers between two keyed component
+/// R4. A guard for the removal that runs before the advance: the unit transfers between two keyed component
 /// placements. Once it lands in B's placement, A's holds a copy of its own
 /// with A's bindings, and removing B, which takes the landed unit with it,
 /// leaves it so.
 #[test]
-fn in_place_a_screen_removed_between_frames_leaves_the_other_screen_its_own_copy() {
+fn a_screen_removed_between_frames_leaves_the_other_screen_its_own_copy() {
     let mut page = Page::resting_on_a_named(
         &fixture::in_place_carry_fixture(fixture::InPlaceCarry::Transfer),
         "Page",

@@ -28,7 +28,7 @@ fn check_lifecycle_arrivals(count: usize) {
     use nuxie_render_api::{PersistentFactory, RecordingFactory};
     use nuxie_runtime::{
         File, RuntimeFactoryHandle, RuntimeOwnedViewModelHandle,
-        live_move::{LiveMoves, records::LiveSlot, screens},
+        live_move::{LiveMoves, records::LiveFlight, screens},
         source::{
             artboard_component_list::ArtboardComponentList, generated::core_registry::CoreRegistry,
         },
@@ -75,13 +75,10 @@ fn check_lifecycle_arrivals(count: usize) {
     let a = vm.list_item_by_property_name_path("screens", 0).unwrap();
     let b = vm.list_item_by_property_name_path("screens", 1).unwrap();
     let b_flight = rows["B"]
-        .with_artboard(|a| a.find_all_handles::<LiveSlot>())
+        .with_artboard(|a| a.find_all_handles::<LiveFlight>())
         .into_iter()
-        .find(|h| {
-            h.with_downcast::<LiveSlot, _>(|s| s.values.role == 1)
-                .unwrap()
-        })
-        .unwrap();
+            .next()
+            .unwrap();
     // Both guards matter: entering with another name, and the right name while
     // active, must leave the authored progress at zero.
     for (phase, step) in [("entering", "other"), ("active", "t1")] {
@@ -91,7 +88,7 @@ fn check_lifecycle_arrivals(count: usize) {
             .set_string_by_property_name_path("screen/transition", step.as_bytes());
         machine.advance_and_apply(0.25);
         moves.after_advance(&root).unwrap();
-        assert_eq!(CoreRegistry::get_double_handle(&b_flight, 62003), Some(0.0));
+        assert_eq!(CoreRegistry::get_double_handle(&b_flight, 62033), Some(0.0));
     }
     b.borrow_mut()
         .set_string_by_property_name_path("screen/phase", b"hidden");
@@ -116,12 +113,9 @@ fn check_lifecycle_arrivals(count: usize) {
         }
         moves.step_begin(&root, incoming, Some(step)).unwrap();
         let flight = rows[incoming]
-            .with_artboard(|a| a.find_all_handles::<LiveSlot>())
+            .with_artboard(|a| a.find_all_handles::<LiveFlight>())
             .into_iter()
-            .find(|h| {
-                h.with_downcast::<LiveSlot, _>(|s| s.values.role == 1)
-                    .unwrap()
-            })
+            .next()
             .unwrap();
         let screen_machine = root
             .with_artboard(|a| a.find_handle::<ArtboardComponentList>("screens"))
@@ -134,7 +128,7 @@ fn check_lifecycle_arrivals(count: usize) {
         for (dt, expected) in [(0.0, 0.0), (0.5, 0.5), (0.5, 1.0)] {
             machine.advance_and_apply(dt);
             moves.after_advance(&root).unwrap();
-            let progress = CoreRegistry::get_double_handle(&flight, 62003).unwrap();
+            let progress = CoreRegistry::get_double_handle(&flight, 62033).unwrap();
             assert!(
                 (progress - expected).abs() < 0.0001,
                 "{step} progress expected {expected}, got {progress}"

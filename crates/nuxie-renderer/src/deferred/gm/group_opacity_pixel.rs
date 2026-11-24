@@ -3284,21 +3284,41 @@ fn zoom_at(case: ZoomCase, shape: PaintShape, progress: f32) -> Drawn {
     journey.live.draw(PLAIN)
 }
 
-/// With NUXIE_RECORD_FLIGHTS set, prints what the slot page
-/// reads: its pictures, and a pixel every 10 points.
+/// With NUXIE_RECORD_FLIGHTS set, prints what the slot page reads: its
+/// pictures, and every pixel. A row is runs of equal pixels, `count*rgba` (the
+/// count left out for one), and `=` repeats the row above.
 fn record_pixels(drawn: &Drawn, what: &str) {
     if std::env::var_os("NUXIE_RECORD_FLIGHTS").is_none() {
         return;
     }
-    let mut text = format!("# {what}\n{:?} {}\n", drawn.canvases, drawn.composites);
-    let rows = drawn.pixels.len() / 4 / drawn.width;
-    for y in (5..rows).step_by(10) {
-        for x in (5..drawn.width).step_by(10) {
-            let i = (y * drawn.width + x) * 4;
-            let p = &drawn.pixels[i..i + 4];
-            text.push_str(&format!("{:02x}{:02x}{:02x}{:02x} ", p[0], p[1], p[2], p[3]));
+    let mut text = format!(
+        "# {what}\n{:?} {} {}\n",
+        drawn.canvases, drawn.composites, drawn.width
+    );
+    let mut above = String::new();
+    for row in drawn.pixels.chunks_exact(drawn.width * 4) {
+        let mut runs: Vec<(usize, &[u8])> = Vec::new();
+        for pixel in row.chunks_exact(4) {
+            match runs.last_mut() {
+                Some((count, last)) if *last == pixel => *count += 1,
+                _ => runs.push((1, pixel)),
+            }
         }
+        let line = runs
+            .iter()
+            .map(|(count, p)| {
+                let hex = format!("{:02x}{:02x}{:02x}{:02x}", p[0], p[1], p[2], p[3]);
+                if *count == 1 {
+                    hex
+                } else {
+                    format!("{count}*{hex}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        text.push_str(if line == above { "=" } else { &line });
         text.push('\n');
+        above = line;
     }
     print!("\n@@REC pixels\n{text}@@END\n");
 }

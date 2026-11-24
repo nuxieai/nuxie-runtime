@@ -23,12 +23,13 @@ use nuxie_render_stream::{frame_draws, Canvas, FrameDraw, StreamOp};
 use nuxie_runtime::group_opacity_fixture::{
     bind_page, screen_row, set_row_opacity, Block, Host, Item, Overflow, Page, Scene, Unit,
 };
-use nuxie_runtime::live_move::{records::LiveSlot, slot_pose, Flight, LiveMoves, When};
+use nuxie_runtime::live_move::{records::LiveFlight, LiveMoves};
 use nuxie_runtime::mechanical_port::source::{
     artboard::FlightClip,
     generated::{
         core_registry::CoreRegistry, world_transform_component_base::WorldTransformComponentBase,
     },
+    layout_component::LayoutComponent,
     nested_artboard::NestedArtboard,
     offscreen_raster::K_SHRINK_DRAWS,
 };
@@ -349,92 +350,96 @@ fn a_held_canvas_shrinks_after_its_smaller_draws() {
     );
 }
 
-fn unit_key(flight: &Flight) -> u32 {
-    flight
-        .controls()
-        .with_downcast::<LiveSlot, _>(|record| record.values.unit_key)
-        .expect("flight record")
+/// A flight record's progress and fade (docs/live-moves.md).
+const PROGRESS: i32 = 62033;
+const FADE: i32 = 62036;
+
+/// `css_box_root_versions_fixture` played on its page, two boxes flying in
+/// place from A to B by "t1": unit a's copy under unit b's.
+struct BoxStage {
+    session: PersistentFactory<DeferredSession>,
+    _context: ObservingFactory,
+    _file: RuntimeFileHandle,
+    root: RuntimeArtboardInstanceHandle,
+    machine: nuxie_runtime::RuntimeStateMachineInstanceHandle,
+    moves: LiveMoves,
+}
+impl BoxStage {
+    /// Halfway through the flight: unit b, the top version, at fade 0.5, and
+    /// unit a held at 1.
+    fn halfway() -> Self {
+        /// Unit b's flight record on B, the arriving one.
+        const TOP: u32 = 12;
+        let (context, _, _) = observing_factory(1, 1);
+        context
+            .borrow()
+            .with_backend_mut_for_test(|backend| backend.set_max_texture_size(BIG_LIMIT));
+        let mut session = PersistentFactory::new(DeferredSession::with_caps(Default::default()));
+        session
+            .borrow_mut()
+            .bind_render_context(context.persistent_context());
+        let file = nuxie_runtime::File::import(
+            &nuxie_runtime::live_move_fixture::css_box_root_versions_fixture(),
+            nuxie_runtime::RuntimeFactoryHandle::from_factory(&mut session).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .expect("the page imports");
+        let root = file.with_file(|f| f.artboard_named("Page")).unwrap();
+        let model = file
+            .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+            .unwrap();
+        let machine = root.default_state_machine_handle().unwrap();
+        machine.with_instance_mut(|m| m.bind_view_model_instance(model));
+        machine.advance_and_apply(0.0);
+        let mut moves = LiveMoves::default();
+        moves.prepare(&root).unwrap();
+        moves.step_begin(&root, "B", Some("t1")).unwrap();
+        let controls = moves.flight_controls(&root);
+        assert_eq!(controls.len(), 2);
+        for control in &controls {
+            let key = control
+                .with_downcast::<LiveFlight, _>(|record| record.values.key)
+                .expect("a flight record");
+            let fade = if key == TOP { 0.5 } else { 1.0 };
+            for (property, value) in [(PROGRESS, 0.5), (FADE, fade)] {
+                assert!(CoreRegistry::set_double_handle(control, property, value));
+            }
+        }
+        let mut stage = Self {
+            session,
+            _context: context,
+            _file: file,
+            root,
+            machine,
+            moves,
+        };
+        stage.advance();
+        stage
+    }
+    fn advance(&mut self) {
+        self.machine.advance_and_apply(0.0);
+        self.moves.after_advance(&self.root).unwrap();
+    }
+    /// Unit b's box, at rest on B.
+    fn top(&self) -> CoreHandle {
+        screen_row(&self.root, "B")
+            .with_artboard(|b| b.find_handle::<LayoutComponent>("b"))
+            .expect("unit b's box")
+    }
 }
 
-fn hosted_artboard(host: &CoreHandle) -> RuntimeArtboardInstanceHandle {
-    host.with(|object| {
-        object
-            .as_nested_artboard()
-            .expect("nested artboard")
-            .artboard_instance_default()
-    })
-    .flatten()
-    .expect("hosted artboard")
-}
-
-/// Night T9: a real flight, whose units clip by their records and not by their
-/// frames. At progress 0.5 the versions draw 120 by 90, the mix of 80 by 60 and
-/// 160 by 120, so with 2 guard pixels a side the top's canvas rounds to 128 by
-/// 128. The held version, at fade 1, takes none.
+/// Night T9: a real flight of boxes that clip both axes. At progress 0.5 the
+/// versions draw 120 by 90, the mix of 80 by 60 and 160 by 120, so with 2
+/// guard pixels a side the top's canvas rounds to 128 by 128. The held
+/// version, at fade 1, takes none.
 #[test]
 fn a_flights_top_version_takes_one_picture_at_its_pose_opacity() {
-    const PROGRESS: i32 = 62003;
-    const FADE: i32 = 62014;
-    /// Unit b, whose slot is above unit a's on Screen B.
-    const TOP: u32 = 2;
-    let (context, _, _) = observing_factory(1, 1);
-    context
-        .borrow()
-        .with_backend_mut_for_test(|backend| backend.set_max_texture_size(BIG_LIMIT));
-    let mut session = PersistentFactory::new(DeferredSession::with_caps(Default::default()));
-    session
-        .borrow_mut()
-        .bind_render_context(context.persistent_context());
-    let file = nuxie_runtime::File::import(
-        &nuxie_runtime::live_move_fixture::css_box_root_versions_fixture(),
-        nuxie_runtime::RuntimeFactoryHandle::from_factory(&mut session).unwrap(),
-        None,
-        None,
-        None,
-    )
-    .expect("the page imports");
-    let root = file.with_file(|f| f.artboard_named("Page")).unwrap();
-    let model = file
-        .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
-        .unwrap();
-    let machine = root.default_state_machine_handle().unwrap();
-    machine.with_instance_mut(|m| m.bind_view_model_instance(model));
-    machine.advance_and_apply(0.0);
-    let mut moves = LiveMoves::default();
-    moves.prepare(&root).unwrap();
-    moves.step_begin(&root, "B", Some("t1")).unwrap();
-    let flights = moves.flights(&root);
-    assert_eq!(flights.len(), 2);
-    for flight in &flights {
-        let fade = if unit_key(flight) == TOP { 0.5 } else { 1.0 };
-        assert!(CoreRegistry::set_double_handle(
-            &flight.controls(),
-            PROGRESS,
-            0.5
-        ));
-        assert!(CoreRegistry::set_double_handle(
-            &flight.controls(),
-            FADE,
-            fade
-        ));
-    }
-    machine.advance_and_apply(0.0);
-    moves.after_advance(&root).unwrap();
-
-    let top = flights
-        .iter()
-        .find(|flight| unit_key(flight) == TOP)
-        .expect("the top version");
-    let (css_clips, frame_clips) =
-        hosted_artboard(&top.flight).with_artboard(|unit| (unit.css_clips(), unit.clip()));
-    assert!(css_clips, "the unit clips by its record");
-    assert!(!frame_clips, "and not by its frame");
-
-    let frame = record(&mut session, &root, IDENTITY);
+    let mut stage = BoxStage::halfway();
+    let frame = record(&mut stage.session, &stage.root, IDENTITY);
     assert_eq!(canvas_sizes(&frame), [(128, 128)], "one, for the top alone");
-    let pose = slot_pose(&top.flight).unwrap();
-    assert!((pose.opacity - 0.5).abs() < 0.002, "{}", pose.opacity);
-    assert_eq!(composites(&frame), [pose.opacity]);
+    assert_eq!(composites(&frame), [0.5]);
 }
 
 /// What `frame_draws` replays, read from the frame's commands: the screen's ops
@@ -527,59 +532,11 @@ fn stream_input(frame: &DeferredFrame) -> (Vec<StreamOp>, Vec<Canvas>) {
 /// by the composite's placement, and the composite's opacity is the fade.
 #[test]
 fn the_reader_is_the_draw_of_a_frame_fading_as_one_picture() {
-    const PROGRESS: i32 = 62003;
-    const FADE: i32 = 62014;
     /// Unit b's own background, as it draws under the unit's one box.
     const UNIT_B_RGB: u32 = 0x33_33cc;
-    const UNIT_B: u32 = 2;
-    let (context, _, _) = observing_factory(1, 1);
-    context
-        .borrow()
-        .with_backend_mut_for_test(|backend| backend.set_max_texture_size(BIG_LIMIT));
-    let mut session = PersistentFactory::new(DeferredSession::with_caps(Default::default()));
-    session
-        .borrow_mut()
-        .bind_render_context(context.persistent_context());
-    let file = nuxie_runtime::File::import(
-        &nuxie_runtime::live_move_fixture::css_box_root_versions_fixture(),
-        nuxie_runtime::RuntimeFactoryHandle::from_factory(&mut session).unwrap(),
-        None,
-        None,
-        None,
-    )
-    .expect("the page imports");
-    let root = file.with_file(|f| f.artboard_named("Page")).unwrap();
-    let model = file
-        .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
-        .unwrap();
-    let machine = root.default_state_machine_handle().unwrap();
-    machine.with_instance_mut(|m| m.bind_view_model_instance(model));
-    machine.advance_and_apply(0.0);
-    let mut moves = LiveMoves::default();
-    moves.prepare(&root).unwrap();
-    moves.step_begin(&root, "B", Some("t1")).unwrap();
-    let flights = moves.flights(&root);
-    for flight in &flights {
-        let fade = if unit_key(flight) == UNIT_B { 0.5 } else { 1.0 };
-        for (key, value) in [(PROGRESS, 0.5), (FADE, fade)] {
-            assert!(CoreRegistry::set_double_handle(
-                &flight.controls(),
-                key,
-                value
-            ));
-        }
-    }
-    machine.advance_and_apply(0.0);
-    moves.after_advance(&root).unwrap();
-    let flying = flights
-        .iter()
-        .find(|flight| unit_key(flight) == UNIT_B)
-        .expect("unit b");
-    let read = moves
-        .drawn(&hosted_artboard(&flying.flight).core_handle(), When::Live)
-        .unwrap();
-
-    let frame = record(&mut session, &root, IDENTITY);
+    let mut stage = BoxStage::halfway();
+    let read = stage.moves.drawn_now(&stage.root, &stage.top()).unwrap();
+    let frame = record(&mut stage.session, &stage.root, IDENTITY);
     assert_eq!(frame.content_canvases.len(), 1, "unit b takes a canvas");
     let (screen, canvases) = stream_input(&frame);
     let draws = frame_draws(&screen, &canvases);
@@ -607,66 +564,21 @@ fn the_reader_is_the_draw_of_a_frame_fading_as_one_picture() {
 /// canvases' sizes and its draws, each read through its composite.
 fn top_version_under(clip: Option<(f32, f32)>) -> (Vec<(u32, u32)>, Vec<FrameDraw>) {
     use nuxie_runtime::mechanical_port::source::math::vec2d::Vec2D as RuntimeVec2D;
-    const PROGRESS: i32 = 62003;
-    const FADE: i32 = 62014;
-    /// Unit b, whose slot is above unit a's on Screen B.
-    const TOP: u32 = 2;
-    let (context, _, _) = observing_factory(1, 1);
-    context
-        .borrow()
-        .with_backend_mut_for_test(|backend| backend.set_max_texture_size(BIG_LIMIT));
-    let mut session = PersistentFactory::new(DeferredSession::with_caps(Default::default()));
-    session
-        .borrow_mut()
-        .bind_render_context(context.persistent_context());
-    let file = nuxie_runtime::File::import(
-        &nuxie_runtime::live_move_fixture::css_box_root_versions_fixture(),
-        nuxie_runtime::RuntimeFactoryHandle::from_factory(&mut session).unwrap(),
-        None,
-        None,
-        None,
-    )
-    .expect("the page imports");
-    let root = file.with_file(|f| f.artboard_named("Page")).unwrap();
-    let model = file
-        .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
-        .unwrap();
-    let machine = root.default_state_machine_handle().unwrap();
-    machine.with_instance_mut(|m| m.bind_view_model_instance(model));
-    machine.advance_and_apply(0.0);
-    let mut moves = LiveMoves::default();
-    moves.prepare(&root).unwrap();
-    moves.step_begin(&root, "B", Some("t1")).unwrap();
-    let flights = moves.flights(&root);
-    for flight in &flights {
-        let fade = if unit_key(flight) == TOP { 0.5 } else { 1.0 };
-        for (key, value) in [(PROGRESS, 0.5), (FADE, fade)] {
-            assert!(CoreRegistry::set_double_handle(
-                &flight.controls(),
-                key,
-                value
-            ));
-        }
-    }
-    machine.advance_and_apply(0.0);
-    moves.after_advance(&root).unwrap();
-    let top = flights
-        .iter()
-        .find(|flight| unit_key(flight) == TOP)
-        .expect("the top version");
+    let mut stage = BoxStage::halfway();
     if let Some((width, height)) = clip {
-        moves.set_flight_clip(
-            &hosted_artboard(&top.flight),
+        let top = stage.top();
+        stage.moves.set_lift_clip(
+            &stage.root,
+            &top,
             Some(FlightClip {
                 width,
                 height,
                 radii: [RuntimeVec2D::new(4.0, 2.0); 4],
             }),
         );
-        machine.advance_and_apply(0.0);
-        moves.after_advance(&root).unwrap();
+        stage.advance();
     }
-    let frame = record(&mut session, &root, IDENTITY);
+    let frame = record(&mut stage.session, &stage.root, IDENTITY);
     let (screen, canvases) = stream_input(&frame);
     (canvas_sizes(&frame), frame_draws(&screen, &canvases))
 }
@@ -896,7 +808,7 @@ struct ZoomStage {
 }
 impl ZoomStage {
     fn new(own_opacity: f32) -> Self {
-        use nuxie_runtime::live_move_fixture::{css_paint_fixture, PaintCase, ZoomCase};
+        use nuxie_runtime::live_move_fixture::{css_paint_fixture_in_place, PaintCase, ZoomCase};
         let (context, _, _) = observing_factory(1, 1);
         context
             .borrow()
@@ -906,7 +818,7 @@ impl ZoomStage {
             .borrow_mut()
             .bind_render_context(context.persistent_context());
         let file = nuxie_runtime::File::import(
-            &css_paint_fixture(PaintCase::Zoom(ZoomCase::Page { own_opacity })),
+            &css_paint_fixture_in_place(PaintCase::Zoom(ZoomCase::Page { own_opacity })).unwrap(),
             nuxie_runtime::RuntimeFactoryHandle::from_factory(&mut session).unwrap(),
             None,
             None,
@@ -941,12 +853,8 @@ impl ZoomStage {
         self.moves.step_begin(&self.root, "B", Some("go")).unwrap();
     }
     fn progress(&mut self, p: f32) {
-        for flight in self.moves.flights(&self.root) {
-            assert!(CoreRegistry::set_double_handle(
-                &flight.controls(),
-                62003,
-                p
-            ));
+        for control in self.moves.flight_controls(&self.root) {
+            assert!(CoreRegistry::set_double_handle(&control, PROGRESS, p));
         }
     }
     fn draws(&mut self) -> (DeferredFrame, Vec<FrameDraw>) {

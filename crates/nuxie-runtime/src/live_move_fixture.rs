@@ -136,20 +136,57 @@ pub(crate) fn bind(b: &mut Vec<u8>, property: u64, path: &[u8]) {
         ],
     );
 }
+/// A box at `id` in `parent`, `size` and `left` of it, whose CSS record
+/// carries `flight_key` unless it is 0 (`id` to `id + 2`).
+fn keyed_box(
+    b: &mut Vec<u8>,
+    parent: u64,
+    id: u64,
+    name: &str,
+    left: f32,
+    flight_key: u64,
+) {
+    use V::*;
+    obj(
+        b,
+        "LayoutComponent",
+        &[
+            ("name", S(name)),
+            ("parentId", U(parent)),
+            ("styleId", U(id + 1)),
+        ],
+    );
+    obj(b, "LayoutComponentStyle", &[("parentId", U(id))]);
+    let mut css = vec![
+        ("parentId", U(id)),
+        ("flexShrink", F(0.0)),
+        ("marginLeft", F(left)),
+        ("widthKind", U(1)),
+        ("width", F(100.0)),
+        ("heightKind", U(1)),
+        ("height", F(80.0)),
+    ];
+    if flight_key != 0 {
+        css.push(("flightKey", U(flight_key)));
+    }
+    obj(b, "LayoutCssStyle", &css);
+}
+/// A placement of the unit at `host_id`, filling nothing: 100 by 80, with its
+/// machine, its "bob" and its own model, whose `prop` follows the Screen's
+/// `offset`.
 fn slot(
     b: &mut Vec<u8>,
     parent: u64,
     host_id: u64,
     name: &str,
     unit: u64,
-    x: f32,
     screen_model: u8,
     value_props: bool,
     text_two_way: bool,
     reference_prop: bool,
     unit_trigger: bool,
 ) {
-    slot_with_props(b, parent, host_id, name, unit, x, Some(screen_model));
+    slot_with_props(b, parent, host_id, name, unit, Some(screen_model));
     if value_props {
         for (kind, id, value, key) in [
             ("ViewModelInstanceColor", 2, V::Color(0), 555),
@@ -218,18 +255,20 @@ fn slot_with_props(
     host_id: u64,
     name: &str,
     unit: u64,
-    x: f32,
     screen_model: Option<u8>,
 ) {
     use V::*;
     obj(
         b,
-        "NestedArtboard",
+        "NestedArtboardLayout",
         &[
             ("name", S(name)),
             ("parentId", U(parent)),
             ("artboardId", U(unit)),
-            ("x", F(x)),
+            ("instanceWidth", F(100.0)),
+            ("instanceHeight", F(80.0)),
+            ("instanceWidthScaleType", U(0)),
+            ("instanceHeightScaleType", U(0)),
             ("isStateful", B(true)),
         ],
     );
@@ -371,9 +410,6 @@ struct Options {
     paint_list: bool,
     unnamed_screen: bool,
     empty_screens: bool,
-    corner_keys: bool,
-    shadow_keys: bool,
-    feathered: bool,
     overshoot: bool,
     spare_writes: bool,
     entry_event: bool,
@@ -2096,34 +2132,6 @@ pub fn two_version_fixture() -> Vec<u8> {
         },
     )
 }
-/// As `two_version_fixture`, with B's timeline also keying the four corner
-/// controls of step t1's two flight slots, 4 to 8. Its units are translated
-/// artboards.
-pub fn two_version_corner_keys_fixture() -> Vec<u8> {
-    build(
-        2,
-        Options {
-            two_versions: true,
-            corner_keys: true,
-            ..Options::default()
-        },
-    )
-}
-/// As `two_version_fixture`, each unit's root also drawing a Fill with a
-/// Feather of strength 12, Rive's own soft shadow. When `keyed`, B's timeline
-/// also keys the seven shadow controls of step t1's two flight slots, as
-/// `SHADOW_KEYS`. Its units are translated artboards.
-pub fn two_version_shadow_keys_fixture(keyed: bool) -> Vec<u8> {
-    build(
-        2,
-        Options {
-            two_versions: true,
-            feathered: true,
-            shadow_keys: keyed,
-            ..Options::default()
-        },
-    )
-}
 pub fn two_version_mixed_size_fixture() -> Vec<u8> {
     build(
         2,
@@ -2208,8 +2216,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
     // These options use fixed object ids on the default shapes.
     if options.spare_writes {
         assert!(
-            !options.feathered
-                && !semantics
+            !semantics
                 && !options.nested_list
                 && !options.paint_list
                 && !options.two_versions
@@ -2706,17 +2713,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
         }
     }
     if options.page_unit {
-        slot_with_props(&mut b, 0, 7, "root unit", rows as u64 + 1, 0.0, None);
-        obj(
-            &mut b,
-            "LiveSlot",
-            &[
-                ("parentId", U(7)),
-                ("unitKey", U(1)),
-                ("role", U(0)),
-                ("sizeMode", U(1)),
-            ],
-        );
+        slot_with_props(&mut b, 0, 7, "root unit", rows as u64 + 1, None);
     }
     if options.paint_list {
         obj(&mut b, "Shape", &[("parentId", U(0))]); // 7
@@ -2782,42 +2779,47 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 ("width", F(800.0)),
                 ("height", F(600.0)),
                 ("viewModelId", U(i as u64 + 1)),
+                ("styleId", U(2)),
                 ("clip", B(false)),
                 ("defaultStateMachineId", U(0)),
             ],
         );
+        obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+        obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
         let parent = if i == 0 { "card" } else { "header" };
         obj(
             &mut b,
-            "Node",
+            "LayoutComponent",
             &[
                 ("name", S(parent)),
                 ("parentId", U(0)),
+                ("styleId", U(4)),
                 ("x", F(if i == 0 { 10.0 } else { 200.0 })),
             ],
-        ); // 1
-        let clipped = i == 1;
-        if clipped {
-            obj(
-                &mut b,
-                "LayoutComponent",
-                &[
-                    ("name", S("clip")),
-                    ("parentId", U(1)),
-                    ("width", F(300.0)),
-                    ("height", F(200.0)),
-                    ("clip", B(true)),
-                ],
-            ); // 2
+        ); // 3
+        obj(&mut b, "LayoutComponentStyle", &[("parentId", U(3))]); // 4
+        let mut css = vec![("parentId", U(3))];
+        css.extend(css_at(0.0, 0.0, 300.0, 200.0));
+        if i == 1 {
+            // B clips the unit at rest.
+            css.extend([("overflowX", U(2)), ("overflowY", U(2))]);
         }
-        let host_id = if clipped { 3 } else { 2 };
+        obj(&mut b, "LayoutCssStyle", &css); // 5
+        let unit_key = if options.ordinary {
+            0
+        } else if options.two_versions && i == 1 {
+            second_key
+        } else {
+            1
+        };
+        keyed_box(&mut b, 3, 6, "mascot box", 5.0, unit_key); // 6 to 8
+        let host_id = 9;
         slot(
             &mut b,
-            if clipped { 2 } else { 1 },
+            6,
             host_id,
             "mascot",
             rows as u64 + 1 + second_board * u64::from(options.two_versions && i == 1),
-            5.0,
             i as u8 + 1,
             options.value_props,
             options.text_two_way,
@@ -2827,54 +2829,22 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
         let slot_width = (if options.value_props { 9 } else { 6 })
             + u64::from(options.reference_prop)
             + u64::from(options.row_trigger);
-        let layer_id = host_id + slot_width;
-        obj(
-            &mut b,
-            "Node",
-            &[("name", S("flight")), ("parentId", U(0)), ("x", F(35.0))],
-        );
-        let flight_id = layer_id + 1;
-        // Step t1's flight records on this Screen, for its corner keys.
-        let mut corner_records = Vec::new();
-        // Step back's flight records on this Screen: its arriving copy's
-        // (key 14), then its leaving copy's (key 13).
+        let mut next = host_id + slot_width;
+        // Step t1's flight records on this Screen: its arriving copy's (key
+        // 12), then its leaving copy's (key 11).
+        let mut flight_records = Vec::new();
+        // Step back's: its arriving copy's (key 14), then its leaving
+        // copy's (key 13).
         let mut back_records = Vec::new();
         if options.two_versions {
-            // Rive draws sibling objects in reverse file order. Author B then
-            // A for forward, A then B for back, so incoming draws above.
-            // The same Screen owns both named pairs; runtime never reorders.
             for (j, version) in [2, 1, 1, 2].into_iter().enumerate() {
-                let id = layer_id + 1 + j as u64 * (slot_width + 1);
-                let key = if version == 2 { second_key } else { 1 };
-                slot(
-                    &mut b,
-                    layer_id,
-                    id,
-                    if version == 1 {
-                        "version A flight"
-                    } else {
-                        "version B flight"
-                    },
-                    rows as u64
-                        + 1
-                        + if version == 2 { second_board } else { 0 }
-                        + u64::from(options.invalid_plan == 2 && i == 1 && j == 1),
-                    0.0,
-                    i as u8 + 1,
-                    options.value_props,
-                    options.text_two_way,
-                    options.reference_prop,
-                    options.row_trigger,
-                );
                 obj(
                     &mut b,
-                    "LiveSlot",
+                    "LiveFlight",
                     &[
-                        ("parentId", U(id)),
-                        ("unitKey", U(key)),
-                        ("role", U(1)),
+                        ("parentId", U(0)),
                         (
-                            "flightKey",
+                            "key",
                             U(i as u64 * 10
                                 + if options.invalid_plan == 3 && j == 1 {
                                     2
@@ -2889,94 +2859,59 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                     ],
                 );
                 if j < 2 {
-                    corner_records.push(id + slot_width);
+                    flight_records.push(next);
                 } else {
-                    back_records.push(id + slot_width);
+                    back_records.push(next);
                 }
+                next += 1;
             }
-        } else {
-            slot(
-                &mut b,
-                layer_id,
-                flight_id,
-                "mascot",
-                rows as u64 + 1,
-                0.0,
-                i as u8 + 1,
-                options.value_props,
-                options.text_two_way,
-                options.reference_prop,
-                options.row_trigger,
-            );
-        }
-        if !options.ordinary {
+        } else if !options.ordinary {
             obj(
                 &mut b,
-                "LiveSlot",
+                "LiveFlight",
                 &[
-                    ("parentId", U(host_id)),
-                    (
-                        "unitKey",
-                        U(if options.two_versions && i == 1 {
-                            second_key
-                        } else {
-                            1
-                        }),
-                    ),
-                    ("role", U(0)),
-                    ("sizeMode", U(1)),
+                    ("parentId", U(0)),
+                    ("key", U(i as u64 + 1)),
+                    ("sizeMode", U(if options.scale { 0 } else { 1 })),
+                    ("progress", F(if controls { 0.25 } else { 0.0 })),
+                    ("pathX", F(if controls { 7.0 } else { 0.0 })),
+                    ("pathY", F(if controls { 11.0 } else { 0.0 })),
                 ],
             );
-            if !options.two_versions {
-                obj(
-                    &mut b,
-                    "LiveSlot",
-                    &[
-                        ("parentId", U(flight_id)),
-                        ("unitKey", U(1)),
-                        ("role", U(1)),
-                        ("flightKey", U(i as u64 + 1)),
-                        ("sizeMode", U(if options.scale { 0 } else { 1 })),
-                        ("progress", F(if controls { 0.25 } else { 0.0 })),
-                        ("pathX", F(if controls { 7.0 } else { 0.0 })),
-                        ("pathY", F(if controls { 11.0 } else { 0.0 })),
-                    ],
-                );
-            }
+            flight_records.push(next);
+            next += 1;
         }
         if options.overlapping_units {
-            let id = host_id + 36;
             let key = if i == 0 { 2 } else { 1 };
+            keyed_box(&mut b, 3, next, "second box", 75.0, key);
             slot(
                 &mut b,
-                0,
-                id,
+                next,
+                next + 3,
                 "second unit",
                 rows as u64 + key,
-                80.0,
                 i as u8 + 1,
                 options.value_props,
                 options.text_two_way,
                 options.reference_prop,
                 options.row_trigger,
             );
-            obj(
-                &mut b,
-                "LiveSlot",
-                &[("parentId", U(id)), ("unitKey", U(key)), ("role", U(0))],
-            );
+            next += 3 + slot_width;
         }
         if semantics {
-            for (parent, label) in [(host_id, "slot"), (flight_id, "flight slot")] {
-                obj(
-                    &mut b,
-                    "SemanticData",
-                    &[("parentId", U(parent)), ("role", U(9)), ("label", S(label))],
-                );
-            }
+            obj(
+                &mut b,
+                "SemanticData",
+                &[
+                    ("parentId", U(host_id)),
+                    ("role", U(9)),
+                    ("label", S("slot")),
+                ],
+            );
+            next += 1;
         }
-        // Screen B's "entered" event, the next object after its slot records.
-        let event_id = flight_id + slot_width + 2;
+        // Screen B's "entered" event, the next object.
+        let event_id = next;
         if options.entry_event && i == 1 {
             obj(
                 &mut b,
@@ -2985,32 +2920,32 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             );
         }
         if i == 1 {
-            timeline(&mut b, "entrance", 1, 13, 200.0, 300.0);
+            timeline(&mut b, "entrance", 3, 13, 200.0, 300.0);
             if options.keyed && options.two_versions {
                 // Step t1's crossfade: the arriving copy's flight (key 12)
                 // fades in from 0 to 1 and the leaving copy's (key 11) out
                 // from 1 to 0, both progressing from 0 to 1.
-                for (record, fade) in corner_records.iter().zip([(0.0, 1.0), (1.0, 0.0)]) {
+                for (record, fade) in flight_records.iter().zip([(0.0, 1.0), (1.0, 0.0)]) {
                     obj(&mut b, "KeyedObject", &[("objectId", U(*record))]);
                     match options.flight_animation {
                         // With a path x from 0 to 12, all in the window.
                         Some(window) => {
                             for (property, (from, to)) in
-                                [(62003, (0.0, 1.0)), (62014, fade), (62004, (0.0, 12.0))]
+                                [(62033, (0.0, 1.0)), (62036, fade), (62034, (0.0, 12.0))]
                             {
                                 window_track(&mut b, property, from, to, window);
                             }
                         }
                         None => {
-                            linear_track(&mut b, 62003, 0.0, 1.0);
-                            linear_track(&mut b, 62014, fade.0, fade.1);
+                            linear_track(&mut b, 62033, 0.0, 1.0);
+                            linear_track(&mut b, 62036, fade.0, fade.1);
                         }
                     }
                 }
             }
             if options.keyed && !options.two_versions {
-                obj(&mut b, "KeyedObject", &[("objectId", U(host_id + 14))]);
-                obj(&mut b, "KeyedProperty", &[("propertyKey", U(62003))]);
+                obj(&mut b, "KeyedObject", &[("objectId", U(flight_records[0]))]);
+                obj(&mut b, "KeyedProperty", &[("propertyKey", U(62033))]);
                 obj(
                     &mut b,
                     "KeyFrameDouble",
@@ -3042,7 +2977,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 );
                 // The compiler keys no fade on a unit that transfers.
                 if options.flight_animation.is_none() {
-                    obj(&mut b, "KeyedProperty", &[("propertyKey", U(62014))]);
+                    obj(&mut b, "KeyedProperty", &[("propertyKey", U(62036))]);
                     for (frame, value) in [(0, 0.0), (60, 1.0)] {
                         obj(
                             &mut b,
@@ -3053,38 +2988,6 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                                 ("interpolationType", U(1)),
                             ],
                         );
-                    }
-                }
-            }
-            if options.corner_keys {
-                for record in &corner_records {
-                    obj(&mut b, "KeyedObject", &[("objectId", U(*record))]);
-                    for corner in CORNERS {
-                        obj(
-                            &mut b,
-                            "KeyedProperty",
-                            &[("propertyKey", U(key("LiveSlot", corner).into()))],
-                        );
-                        for (frame, value) in [(0, 4.0), (60, 8.0)] {
-                            obj(
-                                &mut b,
-                                "KeyFrameDouble",
-                                &[
-                                    ("frame", U(frame)),
-                                    ("value", F(value)),
-                                    ("interpolationType", U(1)),
-                                ],
-                            );
-                        }
-                    }
-                }
-            }
-            if options.shadow_keys {
-                for record in &corner_records {
-                    obj(&mut b, "KeyedObject", &[("objectId", U(*record))]);
-                    for ((_, property), (from, to)) in SHADOW_CONTROLS.into_iter().zip(SHADOW_KEYS)
-                    {
-                        linear_track(&mut b, property, from, to);
                     }
                 }
             }
@@ -3103,11 +3006,11 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 );
                 for (record, held) in back_records.iter().zip([true, false]) {
                     obj(&mut b, "KeyedObject", &[("objectId", U(*record))]);
-                    linear_track(&mut b, 62003, 0.0, 1.0);
+                    linear_track(&mut b, 62033, 0.0, 1.0);
                     if held {
-                        hold_track(&mut b, 62014, 1.0);
+                        hold_track(&mut b, 62036, 1.0);
                     } else {
-                        linear_track(&mut b, 62014, 1.0, 0.0);
+                        linear_track(&mut b, 62036, 1.0, 0.0);
                     }
                 }
             }
@@ -3115,7 +3018,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
         if options.row_trigger {
             // The Screen's own node, moved 50 to the right.
             let x = if i == 0 { 10.0 } else { 200.0 };
-            timeline(&mut b, "pulse", 1, 13, x, x + 50.0);
+            timeline(&mut b, "pulse", 3, 13, x, x + 50.0);
         }
         machine(&mut b, i == 1);
         if options.row_trigger {
@@ -3253,23 +3156,6 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             "LayoutComponentStyle",
             &[("parentId", U(10)), ("layoutWidthScaleType", U(1))],
         ); // 11
-        if options.feathered {
-            obj(&mut b, "Fill", &[("parentId", U(0))]); // 12
-            obj(
-                &mut b,
-                "SolidColor",
-                &[("parentId", U(12)), ("colorValue", Color(0x8010_2030))],
-            );
-            obj(
-                &mut b,
-                "Feather",
-                &[
-                    ("parentId", U(12)),
-                    ("spaceValue", U(1)),
-                    ("strength", F(12.0)),
-                ],
-            );
-        }
         if options.spare_writes {
             // A nested component with its own stateful Button model, which
             // lives and dies with this copy of the unit.
@@ -3455,87 +3341,16 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
     b
 }
 
-/// A flex sibling after a NestedArtboardLayout, exercising its real layout node.
-pub fn layout_fixture() -> Vec<u8> {
-    build_layout_fixture(false, None, false, false, None, false)
-}
-pub fn layout_flight_fixture() -> Vec<u8> {
-    build_layout_fixture(true, None, false, false, None, false)
-}
-pub fn hosted_css_layout_fixture(destination_css: bool) -> Vec<u8> {
-    build_layout_fixture(true, Some(destination_css), false, false, None, false)
-}
-pub fn hosted_css_plain_flight_fixture() -> Vec<u8> {
-    build_layout_fixture(true, Some(true), true, false, None, false)
-}
-pub fn native_layout_flight_reflow_fixture() -> Vec<u8> {
-    build_layout_fixture(true, None, false, true, None, false)
-}
-
-/// A content-sized flight row followed by a fixed-size, animated hit target.
-pub fn shared_layout_flight_fixture() -> Vec<u8> {
-    build_shared_layout_flight_fixture(false, false)
-}
-/// The landing slot follows the content-sized flight row in the shared tree.
-pub fn shared_layout_endpoint_fixture() -> Vec<u8> {
-    build_shared_layout_flight_fixture(true, false)
-}
-pub fn shared_layout_two_flight_endpoint_fixture() -> Vec<u8> {
-    build_shared_layout_flight_fixture(true, true)
-}
-/// An absolute, hugging layout box at `index`, with its style after it.
-fn absolute_box(b: &mut Vec<u8>, name: &str, index: u64) {
-    use V::*;
-    obj(
-        b,
-        "LayoutComponent",
-        &[
-            ("name", S(name)),
-            ("parentId", U(0)),
-            ("styleId", U(index + 1)),
-        ],
-    );
-    obj(
-        b,
-        "LayoutComponentStyle",
-        &[
-            ("parentId", U(index)),
-            ("positionTypeValue", U(2)),
-            ("layoutWidthScaleType", U(2)),
-            ("layoutHeightScaleType", U(2)),
-        ],
-    );
-}
-/// A stateful 60 x 40 layout host at `index`, in the box before it or in the
-/// Screen, with its state machine after it.
-fn flight_layout_host(b: &mut Vec<u8>, name: &str, index: u64, boxed: bool) {
-    use V::*;
-    obj(
-        b,
-        "NestedArtboardLayout",
-        &[
-            ("name", S(name)),
-            ("parentId", U(if boxed { index - 2 } else { 0 })),
-            ("artboardId", U(1)),
-            ("instanceWidth", F(60.0)),
-            ("instanceHeight", F(40.0)),
-            ("isStateful", B(true)),
-        ],
-    );
-    obj(
-        b,
-        "NestedStateMachine",
-        &[("parentId", U(index)), ("animationId", U(0))],
-    );
-}
-fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) -> Vec<u8> {
+/// A content-sized Screen, its CSS placement "item" above a spacer, followed
+/// in the page's list by a fixed-size row.
+pub fn shared_layout_fixture() -> Vec<u8> {
     use V::*;
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
         var(&mut b, n);
     }
     obj(&mut b, "Backboard", &[]);
-    for (model, name) in ["FlightScreen", "Sibling", "SharedPage"]
+    for (model, name) in ["ItemScreen", "Sibling", "SharedPage"]
         .into_iter()
         .enumerate()
     {
@@ -3567,7 +3382,7 @@ fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) 
         &mut b,
         "Artboard",
         &[
-            ("name", S("FlightScreen")),
+            ("name", S("ItemScreen")),
             ("viewModelId", U(0)),
             ("width", F(400.0)),
             ("height", F(80.0)),
@@ -3575,114 +3390,56 @@ fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) 
             ("clip", B(false)),
         ],
     );
-    let mut style = vec![("parentId", U(0)), ("layoutHeightScaleType", U(2))];
-    if two_flights || !moving_endpoint {
-        style.push(("flexDirectionValue", U(0)));
-    }
-    obj(&mut b, "LayoutComponentStyle", &style); // 1: Hug the Screen's rows
-    obj(&mut b, "Node", &[("parentId", U(0))]); // 2: plain endpoints
-    for (name, host) in [("source", 3), ("destination", 5)] {
-        obj(
-            &mut b,
-            "NestedArtboard",
-            &[
-                ("name", S(name)),
-                ("parentId", U(2)),
-                ("artboardId", U(1)),
-                ("isStateful", B(true)),
-            ],
-        );
-        obj(
-            &mut b,
-            "NestedStateMachine",
-            &[("parentId", U(host)), ("animationId", U(0))],
-        );
-    }
-    // A native layout flight slot must be out of flow. A plain Node joins its
-    // contents to the layout, so it sits in an absolute layout box, upstream's
-    // route. The runtime takes a CSS flight slot out of flow itself, so the
-    // in-flow fixture keeps its slot in the Screen's column.
-    let flight = if moving_endpoint {
-        absolute_box(&mut b, "flightBox", 7); // 7, 8
-        9
-    } else {
-        7
-    };
-    flight_layout_host(&mut b, "flight", flight, moving_endpoint); // +0, +1
-    for (host, unit, role) in [(3, 1, 0), (5, 2, 0), (flight, 1, 1)] {
-        obj(
-            &mut b,
-            "LiveSlot",
-            &[
-                ("parentId", U(host)),
-                ("unitKey", U(unit)),
-                ("role", U(role)),
-                ("flightKey", U(role)),
-                ("sizeMode", U(1)),
-            ],
-        );
-    }
-    if !moving_endpoint {
-        obj(
-            &mut b,
-            "LayoutCssStyle",
-            &[
-                ("parentId", U(7)),
-                ("boxSizing", U(1)),
-                ("widthKind", U(1)),
-                ("width", F(60.0)),
-                ("heightKind", U(1)),
-                ("height", F(40.0)),
-            ],
-        ); // 12
-        obj(
-            &mut b,
-            "LayoutComponent",
-            &[
-                ("name", S("spacer")),
-                ("parentId", U(0)),
-                ("width", F(20.0)),
-                ("height", F(30.0)),
-                ("styleId", U(14)),
-            ],
-        ); // 13: the next row in the Screen
-        obj(&mut b, "LayoutComponentStyle", &[("parentId", U(13))]); // 14
-    }
-    if two_flights {
-        obj(
-            &mut b,
-            "NestedArtboard",
-            &[
-                ("name", S("source2")),
-                ("parentId", U(2)),
-                ("artboardId", U(1)),
-                ("isStateful", B(true)),
-            ],
-        ); // 14
-        obj(
-            &mut b,
-            "NestedStateMachine",
-            &[("parentId", U(14)), ("animationId", U(0))],
-        ); // 15
-        absolute_box(&mut b, "flight2Box", 16); // 16, 17
-        flight_layout_host(&mut b, "flight2", 18, true); // 18, 19
-        obj(
-            &mut b,
-            "LiveSlot",
-            &[("parentId", U(14)), ("unitKey", U(3))],
-        ); // 20
-        obj(
-            &mut b,
-            "LiveSlot",
-            &[
-                ("parentId", U(18)),
-                ("unitKey", U(3)),
-                ("role", U(1)),
-                ("flightKey", U(2)),
-                ("sizeMode", U(1)),
-            ],
-        ); // 21
-    }
+    obj(
+        &mut b,
+        "LayoutComponentStyle",
+        &[
+            ("parentId", U(0)),
+            ("layoutHeightScaleType", U(2)),
+            ("flexDirectionValue", U(0)),
+        ],
+    ); // 1: Hug the Screen's rows
+    obj(
+        &mut b,
+        "NestedArtboardLayout",
+        &[
+            ("name", S("item")),
+            ("parentId", U(0)),
+            ("artboardId", U(1)),
+            ("instanceWidth", F(60.0)),
+            ("instanceHeight", F(40.0)),
+            ("isStateful", B(true)),
+        ],
+    ); // 2
+    obj(
+        &mut b,
+        "NestedStateMachine",
+        &[("parentId", U(2)), ("animationId", U(0))],
+    ); // 3
+    obj(
+        &mut b,
+        "LayoutCssStyle",
+        &[
+            ("parentId", U(2)),
+            ("boxSizing", U(1)),
+            ("widthKind", U(1)),
+            ("width", F(60.0)),
+            ("heightKind", U(1)),
+            ("height", F(40.0)),
+        ],
+    ); // 4
+    obj(
+        &mut b,
+        "LayoutComponent",
+        &[
+            ("name", S("spacer")),
+            ("parentId", U(0)),
+            ("width", F(20.0)),
+            ("height", F(30.0)),
+            ("styleId", U(6)),
+        ],
+    ); // 5: the next row in the Screen
+    obj(&mut b, "LayoutComponentStyle", &[("parentId", U(5))]); // 6
     obj(
         &mut b,
         "Artboard",
@@ -3697,52 +3454,8 @@ fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) 
     );
     obj(&mut b, "Node", &[("name", S("clock")), ("parentId", U(0))]); // 1
     obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
-    if !moving_endpoint {
-        // A CSS unit, so the flight host's item record sizes and places it.
-        obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 3
-    }
-    if moving_endpoint {
-        obj(
-            &mut b,
-            "Shape",
-            &[("name", S("marker")), ("parentId", U(0))],
-        ); // 3
-        obj(
-            &mut b,
-            "Rectangle",
-            &[
-                ("parentId", U(3)),
-                ("width", F(10.0)),
-                ("height", F(10.0)),
-                ("x", F(5.0)),
-                ("y", F(5.0)),
-            ],
-        ); // 4
-        obj(&mut b, "Fill", &[("parentId", U(3))]); // 5
-        obj(
-            &mut b,
-            "SolidColor",
-            &[
-                ("name", S("markerColor")),
-                ("parentId", U(5)),
-                ("colorValue", Color(0xffedcba9)),
-            ],
-        ); // 6
-        obj(
-            &mut b,
-            "LayoutComponent",
-            &[("name", S("reflow")), ("parentId", U(0)), ("styleId", U(8))],
-        ); // 7
-        obj(
-            &mut b,
-            "LayoutComponentStyle",
-            &[
-                ("parentId", U(7)),
-                ("layoutWidthScaleType", U(1)),
-                ("layoutHeightScaleType", U(1)),
-            ],
-        ); // 8
-    }
+    // A CSS unit, so the placement's item record sizes and places it.
+    obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 3
     timeline(&mut b, "clock", 1, 13, 0.0, 100.0);
     machine(&mut b, true);
 
@@ -3795,46 +3508,6 @@ fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) 
             ("flexShrink", F(0.0)),
         ],
     );
-    if moving_endpoint {
-        obj(
-            &mut b,
-            "NestedArtboard",
-            &[
-                ("name", S("landing")),
-                ("parentId", U(0)),
-                ("artboardId", U(1)),
-                ("isStateful", B(true)),
-            ],
-        ); // 8
-        obj(
-            &mut b,
-            "NestedStateMachine",
-            &[("parentId", U(8)), ("animationId", U(0))],
-        ); // 9
-        obj(&mut b, "LiveSlot", &[("parentId", U(8)), ("unitKey", U(1))]); // 10
-    }
-    if two_flights {
-        obj(
-            &mut b,
-            "NestedArtboard",
-            &[
-                ("name", S("landing2")),
-                ("parentId", U(0)),
-                ("artboardId", U(1)),
-                ("isStateful", B(true)),
-            ],
-        ); // 11
-        obj(
-            &mut b,
-            "NestedStateMachine",
-            &[("parentId", U(11)), ("animationId", U(0))],
-        ); // 12
-        obj(
-            &mut b,
-            "LiveSlot",
-            &[("parentId", U(11)), ("unitKey", U(3))],
-        ); // 13
-    }
     timeline(&mut b, "clock", 1, 13, 0.0, 100.0);
     machine(&mut b, true);
     obj(
@@ -3888,58 +3561,24 @@ fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) 
         &[
             ("parentId", U(0)),
             ("name", S("shared")),
-            ("fromArtboard", S("FlightScreen")),
+            ("fromArtboard", S("ItemScreen")),
             ("toArtboard", S("Sibling")),
         ],
     );
-    if moving_endpoint {
-        obj(
-            &mut b,
-            "LiveStepUnit",
-            &[
-                ("parentId", U(4)),
-                ("transfers", B(true)),
-                ("outgoingUnitKey", U(1)),
-                ("incomingUnitKey", U(1)),
-                ("outgoingFlightKey", U(1)),
-                ("incomingFlightKey", U(1)),
-            ],
-        );
-    }
-    if two_flights {
-        obj(
-            &mut b,
-            "LiveStepUnit",
-            &[
-                ("parentId", U(4)),
-                ("transfers", B(true)),
-                ("outgoingUnitKey", U(3)),
-                ("incomingUnitKey", U(3)),
-                ("outgoingFlightKey", U(2)),
-                ("incomingFlightKey", U(2)),
-            ],
-        );
-    }
     machine(&mut b, false);
     b
 }
-/// Sources: 0 plain, 1 CSS item carrier, 2 native layout overrides.
-pub fn css_follower_fixture(source: u8) -> Vec<u8> {
-    build_layout_fixture(true, Some(true), false, true, Some(source), false)
+/// One Screen with two placements of a CSS unit, both with a CSS item record
+/// that carries a flight key, and a box between them.
+pub fn hosted_css_layout_fixture() -> Vec<u8> {
+    build_layout_fixture(false)
 }
-/// As `css_follower_fixture(1)`, with the unit artboard turned 0.35 rad in
-/// the file about its own center, and no slot `ComponentOrigin`.
-pub fn css_follower_turned_fixture() -> Vec<u8> {
-    build_layout_fixture(true, Some(true), false, true, Some(1), true)
+/// `hosted_css_layout_fixture`, with the unit artboard turned 0.35 rad in
+/// the file about its own center, and no placement `ComponentOrigin`.
+pub fn css_turned_fixture() -> Vec<u8> {
+    build_layout_fixture(true)
 }
-fn build_layout_fixture(
-    flight: bool,
-    hosted_css: Option<bool>,
-    plain_flight: bool,
-    reflow: bool,
-    follower_source: Option<u8>,
-    own_pivot: bool,
-) -> Vec<u8> {
+fn build_layout_fixture(turned: bool) -> Vec<u8> {
     use V::*;
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
@@ -3967,10 +3606,10 @@ fn build_layout_fixture(
         &[
             ("name", S("LayoutScreen")),
             ("viewModelId", U(0)),
-            ("width", F(if hosted_css.is_some() { 800.0 } else { 400.0 })),
+            ("width", F(800.0)),
             (
                 "height",
-                F(if hosted_css.is_some() { 600.0 } else { 100.0 }),
+                F(600.0),
             ),
             ("styleId", U(1)),
             ("clip", B(false)),
@@ -3981,32 +3620,16 @@ fn build_layout_fixture(
         "LayoutComponentStyle",
         &[("parentId", U(0)), ("flexDirectionValue", U(2))],
     ); // 1
-    let mut source_props = vec![
-        ("name", S("source")),
-        ("parentId", U(0)),
-        ("artboardId", U(1)),
-    ];
-    if follower_source != Some(0) {
-        source_props.extend([
-            (
-                "instanceWidth",
-                F(if follower_source.is_some() {
-                    100.0
-                } else {
-                    150.0
-                }),
-            ),
-            ("instanceHeight", F(80.0)),
-        ]);
-    }
     obj(
         &mut b,
-        if follower_source == Some(0) {
-            "NestedArtboard"
-        } else {
-            "NestedArtboardLayout"
-        },
-        &source_props,
+        "NestedArtboardLayout",
+        &[
+            ("name", S("source")),
+            ("parentId", U(0)),
+            ("artboardId", U(1)),
+            ("instanceWidth", F(150.0)),
+            ("instanceHeight", F(80.0)),
+        ],
     ); // 2
     obj(
         &mut b,
@@ -4022,150 +3645,40 @@ fn build_layout_fixture(
     obj(&mut b, "LayoutComponentStyle", &[("parentId", U(3))]); // 4
     obj(
         &mut b,
-        "Node",
-        &[("name", S("overlay")), ("parentId", U(0))],
+        "NestedArtboardLayout",
+        &[
+            ("name", S("destination")),
+            ("parentId", U(0)),
+            ("artboardId", U(1)),
+        ],
     ); // 5
     obj(
         &mut b,
-        if hosted_css.is_some() {
-            "NestedArtboardLayout"
-        } else {
-            "NestedArtboard"
-        },
+        "LayoutCssStyle",
         &[
-            ("name", S("destination")),
-            ("parentId", U(if hosted_css.is_some() { 0 } else { 5 })),
-            ("artboardId", U(1)),
-        ],
-    ); // 6
-    // A native layout flight slot must be out of flow, so it comes last, in
-    // an absolute layout box where the row would have placed it.
-    let native = flight && hosted_css.is_none() && !plain_flight;
-    if flight && !native {
-        let mut props = vec![
-            ("name", S("flight")),
             ("parentId", U(0)),
-            ("artboardId", U(1)),
-        ];
-        if !plain_flight {
-            props.extend([("instanceWidth", F(150.0)), ("instanceHeight", F(80.0))]);
-        }
-        obj(
-            &mut b,
-            if plain_flight {
-                "NestedArtboard"
-            } else {
-                "NestedArtboardLayout"
-            },
-            &props,
-        ); // 7
-        obj(
-            &mut b,
-            "LiveSlot",
-            &[
-                ("parentId", U(7)),
-                ("unitKey", U(1)),
-                ("role", U(1)),
-                ("flightKey", U(1)),
-                ("sizeMode", U(1)),
-            ],
-        );
-    }
-    // Both endpoints are physical slots in the Screen row.
-    obj(&mut b, "LiveSlot", &[("parentId", U(2)), ("unitKey", U(1))]);
-    obj(&mut b, "LiveSlot", &[("parentId", U(6)), ("unitKey", U(2))]);
-    if native {
-        obj(
-            &mut b,
-            "LayoutComponent",
-            &[
-                ("name", S("flightBox")),
-                ("parentId", U(0)),
-                ("styleId", U(10)),
-            ],
-        ); // 9
-        obj(
-            &mut b,
-            "LayoutComponentStyle",
-            &[
-                ("parentId", U(9)),
-                ("positionTypeValue", U(2)),
-                ("positionLeft", F(170.0)),
-                ("positionLeftUnitsValue", U(1)),
-                ("layoutWidthScaleType", U(2)),
-                ("layoutHeightScaleType", U(2)),
-            ],
-        ); // 10
-        obj(
-            &mut b,
-            "NestedArtboardLayout",
-            &[
-                ("name", S("flight")),
-                ("parentId", U(9)),
-                ("artboardId", U(1)),
-                ("instanceWidth", F(150.0)),
-                ("instanceHeight", F(80.0)),
-            ],
-        ); // 11
-        obj(
-            &mut b,
-            "LiveSlot",
-            &[
-                ("parentId", U(11)),
-                ("unitKey", U(1)),
-                ("role", U(1)),
-                ("flightKey", U(1)),
-                ("sizeMode", U(1)),
-            ],
-        ); // 12
-    }
-    if let Some(destination_css) = hosted_css {
+            ("display", U(1)),
+            ("flexDirection", U(2)),
+        ],
+    );
+    for (key, (host, width, left)) in [(2, 260.0, 36.0), (5, 300.0, 56.0)].into_iter().enumerate() {
         obj(
             &mut b,
             "LayoutCssStyle",
             &[
-                ("parentId", U(0)),
-                ("display", U(1)),
-                ("flexDirection", U(2)),
-            ],
-        );
-        for (host, width, height, left) in [
-            (2, 260.0, 108.0, 36.0),
-            (6, 300.0, 108.0, 56.0),
-            (7, 180.0, 90.0, 20.0),
-        ] {
-            if (host == 6 && !destination_css)
-                || (host == 7 && plain_flight)
-                || (host == 2 && follower_source.is_some_and(|source| source != 1))
-            {
-                continue;
-            }
-            let (width, height) = if follower_source.is_some() {
-                match host {
-                    2 => (100.0, 80.0),
-                    6 => (200.0, 120.0),
-                    _ => (width, height),
-                }
-            } else {
-                (width, height)
-            };
-            let mut props = vec![
                 ("parentId", U(host)),
                 ("widthKind", U(1)),
                 ("width", F(width)),
                 ("heightKind", U(1)),
-                ("height", F(height)),
+                ("height", F(108.0)),
                 ("marginLeft", F(left)),
-            ];
-            if follower_source.is_some() {
-                props.push(("boxSizing", U(1)));
-            }
-            obj(&mut b, "LayoutCssStyle", &props);
-        }
+                ("flightKey", U(key as u64 + 1)),
+            ],
+        );
     }
-    if hosted_css.is_some() && !own_pivot {
+    if !turned {
         // Different native origins exercise borrowed-host dirt on every move.
-        for (host, origin) in [(2, 0.5), (6, 0.25), (7, 0.0)] {
+        for (host, origin) in [(2, 0.5), (5, 0.25)] {
             obj(
                 &mut b,
                 "ComponentOrigin",
@@ -4184,7 +3697,7 @@ fn build_layout_fixture(
         ("styleId", U(2)),
         ("clip", B(false)),
     ];
-    if own_pivot {
+    if turned {
         unit.extend([
             ("rotation", F(0.35)),
             ("originX", F(0.5)),
@@ -4194,48 +3707,7 @@ fn build_layout_fixture(
     obj(&mut b, "Artboard", &unit);
     obj(&mut b, "Node", &[("name", S("inside")), ("parentId", U(0))]);
     obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]);
-    if reflow {
-        obj(
-            &mut b,
-            "LayoutComponent",
-            &[("name", S("reflow")), ("parentId", U(0)), ("styleId", U(4))],
-        ); // 3
-        obj(
-            &mut b,
-            "LayoutComponentStyle",
-            &[
-                ("parentId", U(3)),
-                ("layoutWidthScaleType", U(1)),
-                ("layoutHeightScaleType", U(1)),
-            ],
-        ); // 4
-    }
-    if follower_source.is_some() {
-        obj(
-            &mut b,
-            "LayoutCssStyle",
-            &[
-                ("parentId", U(3)),
-                ("widthKind", U(7)),
-                ("widthPercent", F(100.0)),
-                ("heightKind", U(7)),
-                ("heightPercent", F(100.0)),
-            ],
-        ); // 5
-        obj(&mut b, "Fill", &[("parentId", U(3))]); // 6
-        obj(
-            &mut b,
-            "SolidColor",
-            &[
-                ("name", S("ink")),
-                ("parentId", U(6)),
-                ("colorValue", Color(0xff123456)),
-            ],
-        ); // 7
-    }
-    if hosted_css.is_some() {
-        obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]);
-    }
+    obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]);
     obj(
         &mut b,
         "Artboard",
@@ -4268,10 +3740,10 @@ fn build_layout_fixture(
     b
 }
 
-/// Two CSS Screens, A and B. Each holds a CSS slot for one unit, 100 by 60
+/// Two CSS Screens, A and B. Each holds a keyed placement of one unit, 100 by 60
 /// at (36, 20), then a later 200 by 100 flow box 30 points up into it. The
-/// unit is turned at rest about its center, so wherever a CSS slot places
-/// it, it is a CSS stacking context.
+/// unit is turned at rest about its center, so wherever it is
+/// placed, it is a CSS stacking context.
 pub fn css_two_screen_stacking_fixture() -> Vec<u8> {
     use V::*;
     let mut b = b"RIVE".to_vec();
@@ -4334,33 +3806,33 @@ pub fn css_two_screen_stacking_fixture() -> Vec<u8> {
                 ("height", F(60.0)),
                 ("marginTop", F(20.0)),
                 ("marginLeft", F(36.0)),
+                ("flightKey", U(1)),
             ],
         ); // 4
-        obj(&mut b, "LiveSlot", &[("parentId", U(3)), ("unitKey", U(1))]); // 5
         obj(
             &mut b,
             "LayoutComponent",
-            &[("name", S("later")), ("parentId", U(0)), ("styleId", U(7))],
-        ); // 6
-        obj(&mut b, "LayoutComponentStyle", &[("parentId", U(6))]); // 7
+            &[("name", S("later")), ("parentId", U(0)), ("styleId", U(6))],
+        ); // 5
+        obj(&mut b, "LayoutComponentStyle", &[("parentId", U(5))]); // 6
         obj(
             &mut b,
             "LayoutCssStyle",
             &[
-                ("parentId", U(6)),
+                ("parentId", U(5)),
                 ("widthKind", U(1)),
                 ("width", F(200.0)),
                 ("heightKind", U(1)),
                 ("height", F(100.0)),
                 ("marginTop", F(-30.0)),
             ],
-        ); // 8
-        obj(&mut b, "Fill", &[("parentId", U(6))]); // 9
+        ); // 7
+        obj(&mut b, "Fill", &[("parentId", U(5))]); // 8
         obj(
             &mut b,
             "SolidColor",
-            &[("parentId", U(9)), ("colorValue", Color(0xff3333cc))],
-        ); // 10
+            &[("parentId", U(8)), ("colorValue", Color(0xff3333cc))],
+        ); // 9
     }
     obj(
         &mut b,
@@ -5138,19 +4610,6 @@ fn build_css_versions_fixture(
 }
 
 /// A malformed record under a Node, for import diagnostics and drop behavior.
-pub fn invalid_parent_fixture() -> Vec<u8> {
-    use V::*;
-    let mut b = b"RIVE".to_vec();
-    for n in [7, 0, 0, 0] {
-        var(&mut b, n);
-    }
-    obj(&mut b, "Backboard", &[]);
-    obj(&mut b, "Artboard", &[("name", S("Bad"))]);
-    obj(&mut b, "Node", &[("parentId", U(0))]);
-    obj(&mut b, "LiveSlot", &[("parentId", U(1)), ("unitKey", U(1))]);
-    b
-}
-
 /// Real playback writes a wide graph through authored to-source bindings.
 /// Two instances share one schema, keeping import metadata within its bound.
 /// Separate from every device fixture and compiled only with test-support.
@@ -5280,7 +4739,6 @@ pub fn checkpoint_overflow_fixture(properties: usize) -> Vec<u8> {
         "NestedArtboard",
         &[("parentId", U(0)), ("artboardId", U(2))],
     );
-    obj(&mut b, "LiveSlot", &[("parentId", U(1)), ("unitKey", U(1))]);
     machine(&mut b, false);
     obj(
         &mut b,
@@ -9456,6 +8914,11 @@ pub fn css_paint_fixture_shaped(
             paint_file_shaped(&spec, true)
         }
     }
+}
+
+/// Whether one paint case's steps move one instance between Screens.
+pub fn css_paint_transfers(case: PaintCase) -> bool {
+    !paint_spec(case).transferring().is_empty()
 }
 
 /// The page for one paint case in place, `PaintShape::InPlace`.

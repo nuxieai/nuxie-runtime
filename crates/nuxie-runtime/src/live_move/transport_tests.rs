@@ -1,5 +1,5 @@
 //! A layout host marks the instance it lays out: the mounted one, else a
-//! vacated slot's placeholder, else nothing.
+//! vacated placement's placeholder, else nothing.
 use crate::source::{
     artboard::Artboard, artboard_host::ArtboardHost, nested_artboard::NestedArtboard,
     nested_artboard_layout::NestedArtboardLayout,
@@ -15,10 +15,10 @@ fn mark(host: &CoreHandle, caller: &RuntimeArtboardInstanceHandle) {
 }
 
 #[test]
-fn a_vacated_layout_slot_marks_its_placeholder() {
+fn a_vacated_layout_placement_marks_its_placeholder() {
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let file = File::import(
-        &crate::live_move_fixture::layout_fixture(),
+        &crate::live_move_fixture::hosted_css_layout_fixture(),
         RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
         None,
         None,
@@ -40,7 +40,7 @@ fn a_vacated_layout_slot_marks_its_placeholder() {
         .with_artboard(|b| b.find_handle::<NestedArtboard>("destination"))
         .unwrap();
     let unit = super::child(&source).unwrap().unwrap();
-    super::move_live(&source, &destination).unwrap();
+    super::carry(&source, &destination, false).unwrap();
     machine.advance_and_apply(0.0);
     let placeholder = super::read(&source, |s| {
         assert!(s.instance.is_none());
@@ -48,7 +48,7 @@ fn a_vacated_layout_slot_marks_its_placeholder() {
         s.live_move_placeholder_root()
     })
     .unwrap()
-    .expect("vacated slot keeps its placeholder");
+    .expect("vacated placement keeps its placeholder");
     assert!(!screen.with_artboard(|b| b.has_dirty_layout()));
 
     mark(&source, &unit);
@@ -64,7 +64,7 @@ fn a_vacated_layout_slot_marks_its_placeholder() {
 fn an_unmounted_layout_host_marks_nothing() {
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let file = File::import(
-        &crate::live_move_fixture::layout_fixture(),
+        &crate::live_move_fixture::hosted_css_layout_fixture(),
         RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
         None,
         None,

@@ -4512,6 +4512,34 @@ fn host_geometry_lists_a_root_by_its_flight_shadow() {
     assert_catalogued(&s, &unit_b, None, "b landed");
 }
 
+/// The reverse alone: a box whose own shadow is clear, and which draws nothing
+/// else, is listed while its flight draws a shadow, and left out at rest.
+#[test]
+fn host_geometry_lists_a_clear_box_by_its_flight_shadow() {
+    const SHOWN: [f32; 7] = [0.3, 10.0, 20.0, 30.0, 8.0, 0.0, 4.0];
+    let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(false));
+    let (a, b) = corner_rest_rects(&s);
+    let unit_b = s.b.clone();
+    clear_ink(&unit_b);
+    s.advance(0.0);
+    assert_catalogued(&s, &unit_b, None, "at rest");
+    s.begin();
+    let (_, controls_b) = pair_controls(&s);
+    write_shadow_controls(&controls_b, SHOWN);
+    flight_progress(&mut s, 0.5);
+    let rect = mix_rect(a, b, 0.5);
+    let reach = 2.0 * (1.5 * SHOWN[4] + SHOWN[6]);
+    assert_catalogued(
+        &s,
+        &unit_b,
+        Some((rect.1.x - rect.0.x + reach, rect.1.y - rect.0.y + reach)),
+        "under the flight's shadow",
+    );
+    flight_progress(&mut s, 1.0);
+    s.end();
+    assert_catalogued(&s, &unit_b, None, "landed");
+}
+
 /// A flight's shadow takes its unit's opacity as the unit's other paints do:
 /// its own alpha .4 under the fade's scope at .5 draws .2. A CSS unit holds
 /// the fade out of its paints, and this factory has no canvas to take a picture.

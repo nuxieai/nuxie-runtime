@@ -10268,8 +10268,10 @@ mod paint_order {
                 "{label}: draw {n} ({:06x?}) outline {:?} against {:?}",
                 a.rgb, a.points, b.points
             );
+            // One 8-bit level, and the half unit a level loses recorded to 4
+            // decimals.
             assert!(
-                (a.opacity - b.opacity).abs() <= 1.0 / 255.0,
+                (a.opacity - b.opacity).abs() <= 1.0 / 255.0 + 5e-5,
                 "{label}: draw {n} ({:06x?}) alpha {} against {}",
                 a.rgb,
                 a.opacity,

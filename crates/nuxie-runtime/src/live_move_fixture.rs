@@ -70,6 +70,27 @@ fn machine(b: &mut Vec<u8>, animated: bool) {
         obj(b, "AnimationState", &[("animationId", U(0))]);
     }
 }
+/// A layer "pulse" that waits in an idle state and plays animation
+/// `animation` when the trigger at `path` fires, as an authored
+/// `when="state.go"` does, written as the publisher writes it.
+fn pulse_layer(b: &mut Vec<u8>, path: &[u8], animation: u64) {
+    use V::*;
+    obj(b, "StateMachineLayer", &[("name", S("pulse"))]);
+    obj(b, "EntryState", &[]); // 0
+    obj(b, "StateTransition", &[("stateToId", U(1))]);
+    obj(b, "BlendStateDirect", &[]); // 1, idle
+    obj(b, "StateTransition", &[("stateToId", U(2))]);
+    obj(b, "BindablePropertyTrigger", &[]);
+    bind(
+        b,
+        key("BindablePropertyTrigger", "propertyValue").into(),
+        path,
+    );
+    obj(b, "TransitionViewModelCondition", &[("opValue", U(0))]);
+    obj(b, "TransitionPropertyViewModelComparator", &[]);
+    obj(b, "TransitionValueTriggerComparator", &[]);
+    obj(b, "AnimationState", &[("animationId", U(animation))]); // 2
+}
 fn timeline(b: &mut Vec<u8>, name: &str, target: u64, property: u64, a: f32, z: f32) {
     use V::*;
     obj(
@@ -126,6 +147,7 @@ fn slot(
     value_props: bool,
     text_two_way: bool,
     reference_prop: bool,
+    unit_trigger: bool,
 ) {
     slot_with_props(b, parent, host_id, name, unit, x, Some(screen_model));
     if value_props {
@@ -174,6 +196,18 @@ fn slot(
                 ("propertyKey", V::U(577)),
                 ("sourcePathIds", V::Bytes(&[screen_model, 4])),
                 ("flags", V::U(2)),
+            ],
+        );
+    }
+    if unit_trigger {
+        // The slot's own instance of the Unit model's trigger `go`.
+        obj(
+            b,
+            "ViewModelInstanceTrigger",
+            &[
+                ("parentId", V::U(host_id + 3)),
+                ("viewModelPropertyId", V::U(2)),
+                ("propertyValue", V::U(0)),
             ],
         );
     }
@@ -365,7 +399,8 @@ struct Options {
     default_count: Option<f32>,
     /// Each Screen's model has a trigger `go` after `offset`, and each
     /// Screen's machine a layer "pulse" that plays its timeline "pulse"
-    /// when `go` fires. See `row_trigger_fixture`.
+    /// when `go` fires; the Unit model and machine likewise. See
+    /// `row_trigger_fixture`.
     row_trigger: bool,
 }
 /// `fixture(2)` whose Unit model's default instance has `count` 9, while
@@ -1786,6 +1821,8 @@ pub fn entry_event_fixture() -> Vec<u8> {
 /// published Screen's `state.go`. Each Screen's machine has, after its own
 /// layers, a layer "pulse" that waits in an idle state and plays the Screen's
 /// timeline "pulse" when `go` fires, as an authored `when="state.go"` does.
+/// The Unit model has a trigger `go` too (each slot's instance its own), and
+/// the unit's machine a second layer "pulse" that plays "bob" when it fires.
 pub fn row_trigger_fixture() -> Vec<u8> {
     build(
         2,
@@ -2120,6 +2157,10 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
     if options.reference_prop {
         obj(&mut b, reference.0, &reference.1);
     }
+    if options.row_trigger {
+        // Unit property 2.
+        obj(&mut b, "ViewModelPropertyTrigger", &[("name", S("go"))]);
+    }
     obj(&mut b, "ViewModelInstance", &[("viewModelId", U(0))]);
     for i in 0..2 {
         let value = if i == 0 {
@@ -2151,6 +2192,13 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             &mut b,
             "ViewModelInstanceViewModel",
             &[("viewModelPropertyId", U(5)), ("propertyValue", U(0))],
+        );
+    }
+    if options.row_trigger {
+        obj(
+            &mut b,
+            "ViewModelInstanceTrigger",
+            &[("viewModelPropertyId", U(2)), ("propertyValue", U(0))],
         );
     }
     for i in 0..rows {
@@ -2620,9 +2668,11 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             options.value_props,
             options.text_two_way,
             options.reference_prop,
+            options.row_trigger,
         );
-        let slot_width =
-            (if options.value_props { 9 } else { 6 }) + u64::from(options.reference_prop);
+        let slot_width = (if options.value_props { 9 } else { 6 })
+            + u64::from(options.reference_prop)
+            + u64::from(options.row_trigger);
         let layer_id = host_id + slot_width;
         obj(
             &mut b,
@@ -2660,6 +2710,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                     options.value_props,
                     options.text_two_way,
                     options.reference_prop,
+                    options.row_trigger,
                 );
                 obj(
                     &mut b,
@@ -2701,6 +2752,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 options.value_props,
                 options.text_two_way,
                 options.reference_prop,
+                options.row_trigger,
             );
         }
         if !options.ordinary {
@@ -2752,6 +2804,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 options.value_props,
                 options.text_two_way,
                 options.reference_prop,
+                options.row_trigger,
             );
             obj(
                 &mut b,
@@ -2912,26 +2965,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
         }
         machine(&mut b, i == 1);
         if options.row_trigger {
-            obj(&mut b, "StateMachineLayer", &[("name", S("pulse"))]);
-            obj(&mut b, "EntryState", &[]); // 0
-            obj(&mut b, "StateTransition", &[("stateToId", U(1))]);
-            obj(&mut b, "BlendStateDirect", &[]); // 1, idle
-            obj(&mut b, "StateTransition", &[("stateToId", U(2))]);
-            // `when="state.go"`, as the publisher writes it.
-            obj(&mut b, "BindablePropertyTrigger", &[]);
-            bind(
-                &mut b,
-                key("BindablePropertyTrigger", "propertyValue").into(),
-                &[i as u8 + 1, 1],
-            );
-            obj(&mut b, "TransitionViewModelCondition", &[("opValue", U(0))]);
-            obj(&mut b, "TransitionPropertyViewModelComparator", &[]);
-            obj(&mut b, "TransitionValueTriggerComparator", &[]);
-            obj(
-                &mut b,
-                "AnimationState",
-                &[("animationId", U(u64::from(i == 1)))],
-            ); // 2
+            pulse_layer(&mut b, &[i as u8 + 1, 1], u64::from(i == 1));
         }
         if options.entry_event && i == 1 {
             // Fired as the machine enters "entrance", the state written just
@@ -3227,6 +3261,10 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             "ListenerNumberChange",
             &[("inputId", U(0)), ("value", F(9.0))],
         );
+        if options.row_trigger {
+            // The unit's own `go`, playing "bob".
+            pulse_layer(&mut b, &[0, 2], 1);
+        }
     }
     if options.spare_writes {
         obj(

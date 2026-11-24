@@ -131,7 +131,7 @@ pub fn set_row_collapsed(list: &CoreHandle, index: i32, collapsed: bool) -> Resu
                 // What the row slept through had its frames without it.
                 let through = state.advanced_through.get();
                 if let Some(row) = l.artboard_instance(index) {
-                    row.with_artboard(|row| row.mark_row_inactive_through(through));
+                    row.with_artboard(|row| row.mark_own_inactive_through(through));
                 }
             }
             if changed {
@@ -167,6 +167,46 @@ pub fn set_row_collapsed(list: &CoreHandle, index: i32, collapsed: bool) -> Resu
     // path to this call, at this mutation boundary: its rows, its validation
     // and its unused flight slots, before any frame.
     scene.prepare()
+}
+
+/// The changes `instance` has missed where it is now: every inactive mark up
+/// its hosts, and for a row asleep on the way, what its list advanced
+/// through while it slept. A live move that carries the instance elsewhere
+/// hands it this, so it doesn't take those changes at its new host.
+pub(crate) fn missed_changes(instance: &crate::RuntimeArtboardInstanceHandle) -> u64 {
+    let mut missed = 0;
+    let mut board = Some(instance.clone());
+    while let Some(current) = board {
+        let Some((sequence, parent, host)) = current.with_artboard(|b| {
+            b.host_change_context()
+                .map(|(sequence, parent)| (sequence, parent, b.host()))
+        }) else {
+            break;
+        };
+        missed = missed.max(sequence);
+        if let Some(host) = host {
+            let asleep = host
+                .with_downcast::<ArtboardComponentList, _>(|list| {
+                    let index = list.index_of_artboard_instance(&current);
+                    list.live_move_row_collapsed(index)
+                        .then(|| {
+                            list.live_move_rows
+                                .as_ref()
+                                .map(|s| s.advanced_through.get())
+                        })
+                        .flatten()
+                })
+                .flatten();
+            missed = missed.max(asleep.unwrap_or(0));
+        }
+        board = parent.and_then(|parent| {
+            parent
+                .with(|o| o.as_artboard().map(|b| b.runtime_weak_handle().upgrade()))
+                .flatten()
+                .flatten()
+        });
+    }
+    missed
 }
 
 /// Extend upstream list collapse only after the host opts into row sleep.

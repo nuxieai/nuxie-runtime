@@ -606,6 +606,9 @@ fn move_with_props(
         .map(|(id, _)| *id)
         .collect::<Vec<_>>();
     let typed = TypedText::capture(&instance, &bound);
+    // What the unit missed where it was, a sleeping Screen's fires included,
+    // stays missed where it goes.
+    let missed = super::collapse::missed_changes(&instance);
     let parent = read(to, NestedArtboard::parent_artboard_handle)?.expect("validated parent");
     let scene = crate::hosted_scene::scene_for(from).expect("validated live scene");
     let owner = scene
@@ -722,6 +725,7 @@ fn move_with_props(
         b.set_frame_origin(false);
         b.set_host_opacity(opacity);
         b.set_host_state(Some(to.clone()), Some(parent.clone()), Some(mark));
+        b.mark_own_inactive_through(missed);
         // Every move starts unstretched; a flight's pose stretches it again.
         b.set_flight_stretch(Vec2D::new(1.0, 1.0));
         // Every move starts with the unit's own corners, shadow and opacity

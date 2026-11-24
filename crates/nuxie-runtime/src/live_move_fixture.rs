@@ -913,6 +913,33 @@ pub enum InPlaceCarry {
     /// after its note, as the slot suites' semantic page has them on each
     /// slot.
     TransferSemantics,
+    /// `Transfer`, with the component's size written on each placement.
+    TransferSized(CarrySize),
+}
+
+/// How `InPlaceCarry::TransferSized`'s placements size the component.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CarrySize {
+    /// As the compiler publishes one: the component has a CSS record, its
+    /// placements none, and they size it by `instanceWidth` and
+    /// `instanceHeight`: 60 by 40 on A, 100 by 80 on B.
+    Instance,
+    /// The placement's own record, 60 by 40 on A and 100 by 80 on B.
+    Fixed,
+    /// `Fixed`, centered in its card both ways.
+    Centered,
+    /// A record of 100% by 100% on both, so it fills its card.
+    Fill,
+    /// The component has no CSS record, as a Rive-made one has none: 60 by
+    /// 40 and 100 by 80 through the instance size.
+    Native,
+}
+
+impl CarrySize {
+    /// Whether each placement has a CSS record of its own.
+    fn has_record(self) -> bool {
+        matches!(self, Self::Fixed | Self::Centered | Self::Fill)
+    }
 }
 
 /// An in-place page shaped as the compiler publishes a matched component
@@ -971,6 +998,10 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
         &[]
     };
     let video = kind == InPlaceCarry::TransferVideo;
+    let sized = match kind {
+        InPlaceCarry::TransferSized(sized) => Some(sized),
+        _ => None,
+    };
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
         var(&mut b, n);
@@ -1170,6 +1201,10 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
     // bound to `screen`'s model, each extra as `shown` has it or bound.
     let placement =
         |b: &mut Vec<u8>, parent: u64, id: u64, name: &str, screen: u8, artboard: u64| {
+            let size = match sized {
+                Some(_) if screen == 0 => (60.0, 40.0),
+                _ => (100.0, 80.0),
+            };
             obj(
                 b,
                 "NestedArtboardLayout",
@@ -1177,8 +1212,8 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
                     ("name", S(name)),
                     ("parentId", U(parent)),
                     ("artboardId", U(artboard)),
-                    ("instanceWidth", F(100.0)),
-                    ("instanceHeight", F(80.0)),
+                    ("instanceWidth", F(size.0)),
+                    ("instanceHeight", F(size.1)),
                     ("instanceWidthScaleType", U(0)),
                     ("instanceHeightScaleType", U(0)),
                     ("isStateful", B(true)),
@@ -1301,6 +1336,27 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
                     ],
                 );
             }
+            if let Some(sized) = sized.filter(|sized| sized.has_record()) {
+                let length = |length, percent| {
+                    if sized == CarrySize::Fill {
+                        (percent, F(100.0))
+                    } else {
+                        (length, F(if length == "width" { size.0 } else { size.1 }))
+                    }
+                };
+                obj(
+                    b,
+                    "LayoutCssStyle",
+                    &[
+                        ("parentId", U(id)),
+                        ("flexShrink", F(0.0)),
+                        ("widthKind", U(1)),
+                        length("width", "widthPercent"),
+                        ("heightKind", U(1)),
+                        length("height", "heightPercent"),
+                    ],
+                );
+            }
         };
     // A box at `id` under the Screen: the component, its style and its
     // record (`id` to `id + 2`), then a Fill and its color when painted.
@@ -1326,6 +1382,13 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             ];
             if key != 0 {
                 record.push(("flightKey", U(key)));
+            }
+            if name == "card" && sized == Some(CarrySize::Centered) {
+                record.extend([
+                    ("display", U(1)),
+                    ("alignItems", U(8)),
+                    ("justifyContent", U(5)),
+                ]);
             }
             obj(b, "LayoutCssStyle", &record);
             if let Some(color) = paint {
@@ -1354,6 +1417,7 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             | TransferNestedList
             | TransferVideo
             | TransferSemantics
+            | TransferSized(_)
     );
     let third = three.then_some(("R2", (160.0, 100.0), 3));
     for (screen, card, key) in [("A", (120.0, 90.0), 1), ("B", (200.0, 140.0), 2)]
@@ -1411,6 +1475,7 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             + 6
             + extras.len() as u64
             + u64::from(picture)
+            + u64::from(sized.is_some_and(CarrySize::has_record))
             + if values { 2 + u64::from(reference) } else { 0 };
         let note_key = match (kind, screen) {
             (TransferMixed | TransferBox, "A") => 3,
@@ -1512,7 +1577,13 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             ("defaultStateMachineId", U(0)),
         ],
     ); // 0
-    obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+    // A component without its own record holds an empty node in its place.
+    let record = if sized == Some(CarrySize::Native) {
+        "Node"
+    } else {
+        "LayoutCssStyle"
+    };
+    obj(&mut b, record, &[("parentId", U(0))]); // 1
     obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
     obj(&mut b, "Node", &[("name", S("keyed")), ("parentId", U(0))]); // 3
     obj(
@@ -1634,7 +1705,8 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
         | TransferPlayed { .. }
         | TransferNestedList
         | TransferVideo
-        | TransferSemantics => &[(1, 2, 11, 11, true)],
+        | TransferSemantics
+        | TransferSized(_) => &[(1, 2, 11, 11, true)],
         TransferTwoKeys => &[(1, 2, 11, 12, true)],
         CopiesOneKey => &[(1, 2, 11, 11, false)],
         TransferMixed => &[(1, 2, 11, 11, true), (3, 4, 13, 14, false)],

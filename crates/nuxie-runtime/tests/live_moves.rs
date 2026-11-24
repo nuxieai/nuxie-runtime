@@ -15249,6 +15249,106 @@ mod in_place_carry {
         assert_eq!(s.count(BUTTON), 2, "each Screen draws its own at rest");
     }
 
+    /// A carried root's place in its box and its size, as laid out.
+    fn root_box(unit: &RuntimeArtboardInstanceHandle) -> [f32; 4] {
+        unit.with_artboard(|b| {
+            [
+                b.layout_x(),
+                b.layout_y(),
+                b.layout_width(),
+                b.layout_height(),
+            ]
+        })
+    }
+    fn root_off(
+        unit: &RuntimeArtboardInstanceHandle,
+        want: [f32; 4],
+        at: String,
+        wrong: &mut Vec<String>,
+    ) {
+        let got = root_box(unit);
+        if !got.iter().zip(want).all(|(a, b)| (a - b).abs() < 0.01) {
+            wrong.push(format!("{at}: the root is {got:?}, not {want:?}"));
+        }
+    }
+    fn remove_screen(s: &Page, index: usize) {
+        let page = RuntimeOwnedViewModelHandle::from_native(
+            s._file.clone(),
+            s.root
+                .data_context()
+                .unwrap()
+                .with_context(|c| c.main_view_model_instance())
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(page.remove_list_item_by_property_name_path("screens", index));
+    }
+
+    /// UNIV-6945: a carried component's root is laid out at the blend of
+    /// its two resting sizes on every frame, below and above its arriving
+    /// size, and its flying box places it as at rest, both ways: sized as
+    /// the compiler publishes it, by its placement's record, or by its box.
+    /// An early landing and a cancel lay it out at rest where it ends, the
+    /// next frame.
+    #[test]
+    fn in_place_a_transferred_root_flies_at_the_blend_of_its_sizes() {
+        use fixture::CarrySize::{Centered, Fill, Fixed, Instance};
+        let mut wrong = Vec::new();
+        // The cards are 120 by 90 and 200 by 140.
+        for (kind, a, b) in [
+            (Instance, [0.0, 0.0, 60.0, 40.0], [0.0, 0.0, 100.0, 80.0]),
+            (Fixed, [0.0, 0.0, 60.0, 40.0], [0.0, 0.0, 100.0, 80.0]),
+            (
+                Centered,
+                [30.0, 25.0, 60.0, 40.0],
+                [50.0, 30.0, 100.0, 80.0],
+            ),
+            (Fill, [0.0, 0.0, 120.0, 90.0], [0.0, 0.0, 200.0, 140.0]),
+        ] {
+            let mut s = Page::new(InPlaceCarry::TransferSized(kind));
+            let unit = child(&s.pa).unwrap();
+            root_off(&unit, a, format!("{kind:?} rests on A"), &mut wrong);
+            root_off(
+                &child(&s.pb).unwrap(),
+                b,
+                format!("{kind:?} rests on B"),
+                &mut wrong,
+            );
+            for (to, step, from, rest) in [("B", "t1", a, b), ("A", "back", b, a)] {
+                let holds = nuxie_runtime::in_place_holds_begun();
+                s.begin(to, step);
+                assert_eq!(
+                    nuxie_runtime::in_place_holds_begun(),
+                    holds + 1,
+                    "only the box is held"
+                );
+                for p in [0.0, 0.25, 0.5, 0.75, 1.0, 0.5] {
+                    s.fly(p);
+                    let want = std::array::from_fn(|n| from[n] + (rest[n] - from[n]) * p);
+                    root_off(&unit, want, format!("{kind:?} to {to} at {p}"), &mut wrong);
+                }
+                s.end(to, step);
+                root_off(&unit, rest, format!("{kind:?} lands on {to}"), &mut wrong);
+            }
+            // The Screen it flies to goes, then the one it left.
+            for (gone, want) in [(1, a), (0, b)] {
+                let mut s = Page::new(InPlaceCarry::TransferSized(kind));
+                let unit = child(&s.pa).unwrap();
+                s.begin("B", "t1");
+                s.fly(0.5);
+                remove_screen(&s, gone);
+                s.advance(0.0);
+                root_off(
+                    &unit,
+                    want,
+                    format!("{kind:?}, Screen {gone} gone"),
+                    &mut wrong,
+                );
+            }
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
     /// Pick (a) of B1-read: while the instance flies, the box it left is
     /// left out of its own Screen's draw, its own paint too, with no lift
     /// drawing it, so one occurrence of the element shows, as through

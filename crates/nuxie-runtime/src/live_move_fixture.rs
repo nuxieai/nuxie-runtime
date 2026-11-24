@@ -895,6 +895,9 @@ pub enum InPlaceCarry {
     /// Screen's model also hold `ref`, a reference to view model "Ref"
     /// (instances "first" and "second"), which each placement binds two-way.
     TransferValues { two_way_text: bool, reference: bool },
+    /// `TransferValues` with neither option, t1 flying two copies through
+    /// records 11 and 12.
+    CopiesValues,
     /// `Transfer`, with a third Screen "R2" (model `offset` 390, card keyed
     /// 3, painted 0xffaa2222) and a step "third", B to R2, that transfers the
     /// unit through R2's flight record 13.
@@ -989,6 +992,7 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             two_way_text,
             reference,
         } => (true, two_way_text, reference),
+        InPlaceCarry::CopiesValues => (true, false, false),
         _ => (false, false, false),
     };
     let three = kind == InPlaceCarry::TransferThree;
@@ -1445,6 +1449,7 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             | TransferWrittenBound
             | TransferWrittenBoundOnB
             | TransferValues { .. }
+            | CopiesValues
             | TransferThree
             | TransferPlayed { .. }
             | TransferNestedList
@@ -1763,7 +1768,7 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
     bind(&mut b, 800, &[2, 0]);
     // (outgoing, incoming, outgoing flight, incoming flight, transfers)
     let t1: &[(u64, u64, u64, u64, bool)] = match kind {
-        Duo | Unkeyed | TwoInCard | CopiesSized(_) => &[(1, 2, 11, 12, false)],
+        Duo | Unkeyed | TwoInCard | CopiesSized(_) | CopiesValues => &[(1, 2, 11, 12, false)],
         CopiesToBox => &[(1, 4, 11, 12, false)],
         Transfer
         | TransferElsewhere
@@ -8124,9 +8129,6 @@ impl PaintArt<'_> {
             }
             PaintKind::Plain { .. } | PaintKind::Native { .. } if self.in_place => {
                 self.unexpressible = Some("a plain or native host has no in-place shape");
-            }
-            PaintKind::List if self.in_place => {
-                self.unexpressible = Some("a list's rows are hosted artboards");
             }
             PaintKind::Slot { unit, key } | PaintKind::Plain { unit, key, .. } => {
                 let (artboard, u) = self.unit(unit);

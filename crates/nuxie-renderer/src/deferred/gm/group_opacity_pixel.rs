@@ -3284,6 +3284,32 @@ fn zoom_at(case: ZoomCase, shape: PaintShape, progress: f32) -> Drawn {
     journey.live.draw(PLAIN)
 }
 
+/// With NUXIE_RECORD_FLIGHTS set to a directory, appends what the slot page
+/// reads: its pictures, and a pixel every 10 points.
+fn record_pixels(drawn: &Drawn, what: &str) {
+    use std::io::Write as _;
+    let Some(dir) = std::env::var_os("NUXIE_RECORD_FLIGHTS") else {
+        return;
+    };
+    let mut text = format!("# {what}\n{:?} {}\n", drawn.canvases, drawn.composites);
+    let rows = drawn.pixels.len() / 4 / drawn.width;
+    for y in (5..rows).step_by(10) {
+        for x in (5..drawn.width).step_by(10) {
+            let i = (y * drawn.width + x) * 4;
+            let p = &drawn.pixels[i..i + 4];
+            text.push_str(&format!("{:02x}{:02x}{:02x}{:02x} ", p[0], p[1], p[2], p[3]));
+        }
+        text.push('\n');
+    }
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(std::path::Path::new(&dir).join("pixels.txt"))
+        .unwrap()
+        .write_all(text.as_bytes())
+        .unwrap();
+}
+
 /// Both pages read the same at every pixel, within a level, and composite
 /// as many pictures.
 fn same_pixels(slots: &Drawn, in_place: &Drawn, what: &str) {
@@ -3351,6 +3377,7 @@ fn in_place_a_lift_fades_as_one_picture() {
             assert!(slots.composites > 0, "{what}: the units fade as pictures");
         }
         let in_place = zoom_at(ZoomCase::FadeHeld, PaintShape::InPlace, progress);
+        record_pixels(&slots, &what);
         same_pixels(&slots, &in_place, &what);
     }
 }
@@ -3369,6 +3396,7 @@ fn in_place_a_fading_ancestor_does_not_fade_the_lift() {
             let what = format!("{case:?} at {progress}");
             let slots = zoom_at(case, PaintShape::SlotCopies, progress);
             let in_place = zoom_at(case, PaintShape::InPlace, progress);
+            record_pixels(&slots, &what);
             same_pixels(&slots, &in_place, &what);
         }
     }

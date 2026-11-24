@@ -10162,6 +10162,47 @@ mod paint_order {
         ran
     }
 
+    /// With NUXIE_RECORD_FLIGHTS set to a directory, appends what the slot page
+    /// shows at `label`: one line a draw, color, opacity, clip and outline. A
+    /// mid-step frame is kept only at a quarter of the way.
+    fn record_draws(shapes: [PaintShape; 2], label: &str, shown: &[Shown]) {
+        use std::{fmt::Write as _, io::Write as _};
+        let Some(dir) = std::env::var_os("NUXIE_RECORD_FLIGHTS") else {
+            return;
+        };
+        let at = label
+            .rsplit_once(" at ")
+            .and_then(|(_, p)| p.parse::<f32>().ok());
+        if at.is_some_and(|p| ((p * 4.0).round() - p * 4.0).abs() > 1e-4) {
+            return;
+        }
+        let mut text = format!("# {label}\n");
+        for draw in shown {
+            match draw.rgb {
+                Some(rgb) => write!(text, "{rgb:06x}").unwrap(),
+                None => text.push_str("image"),
+            }
+            write!(text, " {:.4} ", draw.opacity).unwrap();
+            match draw.clip {
+                Some((lo, hi)) => {
+                    write!(text, "{:.4},{:.4},{:.4},{:.4}", lo.x, lo.y, hi.x, hi.y).unwrap();
+                }
+                None => text.push('-'),
+            }
+            for p in &draw.points {
+                write!(text, " {:.4},{:.4}", p.x, p.y).unwrap();
+            }
+            text.push('\n');
+        }
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(std::path::Path::new(&dir).join(format!("{:?}-{:?}.txt", shapes[0], shapes[1])))
+            .unwrap()
+            .write_all(text.as_bytes())
+            .unwrap();
+    }
+
     fn equivalent(case: PaintCase, frames: &[f32]) {
         equivalent_shapes(case, [PaintShape::SlotCopies, PaintShape::InPlace], frames);
     }
@@ -10242,6 +10283,7 @@ mod paint_order {
                     }
                 }
             }
+            record_draws(shapes, &format!("{case:?} {label}"), &slots);
             same_draws(&format!("{case:?} {label}"), &slots, &in_place, near_zero);
         };
         both(&slots, &in_place, "at rest");

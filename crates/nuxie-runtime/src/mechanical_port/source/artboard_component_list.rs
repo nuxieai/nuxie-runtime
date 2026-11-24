@@ -1690,10 +1690,9 @@ impl ArtboardComponentList {
         });
         let inactive = owner
             .with_downcast::<Self, _>(|owner| {
-                // Nuxie: preserve inactive VM change windows for collapsed rows.
-                if owner.live_move_has_sleeping_rows() {
-                    owner.inactive_change_sequence.mark_latest();
-                }
+                // Nuxie: the change a row that sleeps through this advance
+                // misses; it is marked on that row when it wakes.
+                owner.live_move_note_advance();
                 if owner.artboard_count() == 0 {
                     return true;
                 }

@@ -3284,13 +3284,12 @@ fn zoom_at(case: ZoomCase, shape: PaintShape, progress: f32) -> Drawn {
     journey.live.draw(PLAIN)
 }
 
-/// With NUXIE_RECORD_FLIGHTS set to a directory, appends what the slot page
+/// With NUXIE_RECORD_FLIGHTS set, prints what the slot page
 /// reads: its pictures, and a pixel every 10 points.
 fn record_pixels(drawn: &Drawn, what: &str) {
-    use std::io::Write as _;
-    let Some(dir) = std::env::var_os("NUXIE_RECORD_FLIGHTS") else {
+    if std::env::var_os("NUXIE_RECORD_FLIGHTS").is_none() {
         return;
-    };
+    }
     let mut text = format!("# {what}\n{:?} {}\n", drawn.canvases, drawn.composites);
     let rows = drawn.pixels.len() / 4 / drawn.width;
     for y in (5..rows).step_by(10) {
@@ -3301,13 +3300,7 @@ fn record_pixels(drawn: &Drawn, what: &str) {
         }
         text.push('\n');
     }
-    std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(std::path::Path::new(&dir).join("pixels.txt"))
-        .unwrap()
-        .write_all(text.as_bytes())
-        .unwrap();
+    print!("\n@@REC pixels\n{text}@@END\n");
 }
 
 /// Both pages read the same at every pixel, within a level, and composite

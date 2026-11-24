@@ -10161,14 +10161,14 @@ mod paint_order {
         ran
     }
 
-    /// With NUXIE_RECORD_FLIGHTS set to a directory, appends what the slot page
+    /// With NUXIE_RECORD_FLIGHTS set, prints what the slot page
     /// shows at `label`: one line a draw, color, opacity, clip and outline. A
     /// mid-step frame is kept only at a quarter of the way.
     fn record_draws(shapes: [PaintShape; 2], label: &str, shown: &[Shown]) {
-        use std::{fmt::Write as _, io::Write as _};
-        let Some(dir) = std::env::var_os("NUXIE_RECORD_FLIGHTS") else {
+        use std::fmt::Write as _;
+        if std::env::var_os("NUXIE_RECORD_FLIGHTS").is_none() {
             return;
-        };
+        }
         let at = label
             .rsplit_once(" at ")
             .and_then(|(_, p)| p.parse::<f32>().ok());
@@ -10193,13 +10193,7 @@ mod paint_order {
             }
             text.push('\n');
         }
-        std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(std::path::Path::new(&dir).join(format!("{:?}-{:?}.txt", shapes[0], shapes[1])))
-            .unwrap()
-            .write_all(text.as_bytes())
-            .unwrap();
+        print!("\n@@REC {:?}-{:?}\n{text}@@END\n", shapes[0], shapes[1]);
     }
 
     fn equivalent(case: PaintCase, frames: &[f32]) {
@@ -16800,6 +16794,22 @@ return function() return {init=init,advance=advance} end
                 // The Screens' own values change half way.
                 set(&property(&vm(&s.a), "offset"), 575, 110.0);
                 set(&property(&vm(&s.b), "offset"), 575, 400.0);
+                for (row, color, text) in [
+                    (&s.a, 0xff000000_u32, "changed a"),
+                    (&s.b, 0xffffffff, "changed b"),
+                ] {
+                    let model = vm(row);
+                    assert!(CoreRegistry::set_color_handle(
+                        &property(&model, "accent"),
+                        555,
+                        color as i32
+                    ));
+                    assert!(CoreRegistry::set_string_handle(
+                        &property(&model, "label"),
+                        561,
+                        text.into()
+                    ));
+                }
             }
             flight_progress(&mut s, p);
             read("slots", &format!("{p}"), [&models[0], &models[1]]);
@@ -16818,6 +16828,22 @@ return function() return {init=init,advance=advance} end
                 // The Screens' own values change half way.
                 set(&property(&vm(&s.a), "offset"), 575, 110.0);
                 set(&property(&vm(&s.b), "offset"), 575, 400.0);
+                for (row, color, text) in [
+                    (&s.a, 0xff000000_u32, "changed a"),
+                    (&s.b, 0xffffffff, "changed b"),
+                ] {
+                    let model = vm(row);
+                    assert!(CoreRegistry::set_color_handle(
+                        &property(&model, "accent"),
+                        555,
+                        color as i32
+                    ));
+                    assert!(CoreRegistry::set_string_handle(
+                        &property(&model, "label"),
+                        561,
+                        text.into()
+                    ));
+                }
             }
             s.fly(p);
             read("in place", &format!("{p}"), [&models[0], &models[1]]);

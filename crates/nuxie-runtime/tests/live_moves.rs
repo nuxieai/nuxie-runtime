@@ -4735,6 +4735,58 @@ fn a_collapsed_list_keeps_its_own_mark_over_its_rows() {
     }
 }
 
+/// A unit carried out of a sleeping Screen doesn't take, where it lands,
+/// what it missed while that Screen slept: up to the last frame the Screen
+/// slept through, as a woken Screen doesn't.
+#[test]
+fn a_unit_carried_from_a_sleeping_screen_does_not_hear_what_it_missed() {
+    // (case, A asleep, a frame after the fire, A woken before the move, heard)
+    for (what, asleep, frame, woken, heard) in [
+        ("A awake", false, true, false, true),
+        ("fired, a frame, then carried", true, true, false, false),
+        (
+            "fired, a frame, A woken, then carried",
+            true,
+            true,
+            true,
+            false,
+        ),
+        (
+            "fired after A's last frame, then carried",
+            true,
+            false,
+            false,
+            true,
+        ),
+    ] {
+        let mut s = pulse_scene(asleep.then_some(0));
+        let list = screens_list(&s);
+        let unit = machine(&s.s);
+        let plays = || {
+            unit.with_instance_mut(|m| m.layer_state(1))
+                .is_some_and(|state| {
+                    state.is_type_of(source::animation::animation_state::AnimationState::TYPE_KEY)
+                })
+        };
+        assert!(!plays(), "{what}: the unit waits for its go");
+        assert!(
+            source::viewmodel::viewmodel_instance_trigger::ViewModelInstanceTrigger::trigger_handle(
+                &property(&vm(&child(&s.s).unwrap()), "go")
+            )
+        );
+        if frame {
+            s.advance(0.0);
+        }
+        if woken {
+            set_row_collapsed(&list, 0, false).unwrap();
+        }
+        empty_slot(&s.d).unwrap();
+        move_live(&s.s, &s.d).unwrap();
+        s.advance(0.0);
+        assert_eq!(plays(), heard, "{what}: the unit hears its go");
+    }
+}
+
 #[test]
 fn a_landed_unit_follows_its_new_screen_while_its_home_sleeps() {
     let mut s = Scene::from_bytes(&fixture::values_fixture(false));

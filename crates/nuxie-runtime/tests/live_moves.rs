@@ -15349,6 +15349,83 @@ mod in_place_carry {
         assert!(wrong.is_empty(), "{wrong:#?}");
     }
 
+    /// A component without its own CSS record, as a Rive-made one, keeps its
+    /// arriving size in flight: its own layout sizes it.
+    #[test]
+    fn in_place_a_transferred_native_root_keeps_its_arriving_size() {
+        let mut s = Page::new(InPlaceCarry::TransferSized(fixture::CarrySize::Native));
+        let unit = child(&s.pa).unwrap();
+        for (to, step, size) in [("B", "t1", [100.0, 80.0]), ("A", "back", [60.0, 40.0])] {
+            s.begin(to, step);
+            for p in [0.25, 0.5, 0.75] {
+                s.fly(p);
+                assert_eq!(root_box(&unit)[2..], size, "to {to} at {p}");
+            }
+            s.end(to, step);
+            assert_eq!(root_box(&unit)[2..], size, "lands on {to}");
+        }
+    }
+
+    /// Resizes `screen`'s card mid-step to `width`.
+    fn widen_card(screen: &RuntimeArtboardInstanceHandle, width: f32) {
+        let card = screen
+            .with_artboard(|b| b.find_handle::<source::layout_component::LayoutComponent>("card"))
+            .unwrap();
+        let record = card
+            .with(|o| o.as_container_component().map(|c| c.children().to_vec()))
+            .flatten()
+            .unwrap()
+            .into_iter()
+            .find(|c| c.is_type_of(nuxie_runtime::css_layout::keys::LAYOUT_CSS_STYLE))
+            .unwrap();
+        set(&record, 61022, width);
+    }
+
+    /// The arriving box grows by 40 mid-step. A root of a fixed size still
+    /// arrives at 100 by 80, so half way it is still half way there, 80 by
+    /// 60; one that fills its box goes half way to the new one.
+    #[test]
+    fn in_place_a_transferred_root_follows_its_arriving_box_resized_mid_step() {
+        use fixture::CarrySize::{Fill, Instance};
+        let mut wrong = Vec::new();
+        for (kind, flying, rest) in [
+            (Instance, [80.0, 60.0], [100.0, 80.0]),
+            (Fill, [180.0, 115.0], [240.0, 140.0]),
+        ] {
+            let mut s = Page::new(InPlaceCarry::TransferSized(kind));
+            let unit = child(&s.pa).unwrap();
+            s.begin("B", "t1");
+            s.fly(0.5);
+            widen_card(&s.b, 240.0);
+            s.fly(0.5);
+            let at = |size: [f32; 2]| [0.0, 0.0, size[0], size[1]];
+            root_off(&unit, at(flying), format!("{kind:?} resized"), &mut wrong);
+            s.end("B", "t1");
+            root_off(&unit, at(rest), format!("{kind:?} landed"), &mut wrong);
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
+    /// The limit: the box it left grows by 40 mid-step. What its root's
+    /// size added to that box's was read at take-off, so a root of a fixed
+    /// size flies with half of those 40, 100 by 60 and not 80 by 60, and
+    /// lands at its own size.
+    #[test]
+    fn in_place_a_fixed_root_flies_with_the_box_it_left_resized_mid_step() {
+        let mut s = Page::new(InPlaceCarry::TransferSized(fixture::CarrySize::Instance));
+        let unit = child(&s.pa).unwrap();
+        s.begin("B", "t1");
+        s.fly(0.5);
+        widen_card(&s.a, 160.0);
+        s.fly(0.5);
+        let mut wrong = Vec::new();
+        let resized = [0.0, 0.0, 100.0, 60.0];
+        root_off(&unit, resized, "resized".into(), &mut wrong);
+        s.end("B", "t1");
+        root_off(&unit, [0.0, 0.0, 100.0, 80.0], "landed".into(), &mut wrong);
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
     /// Pick (a) of B1-read: while the instance flies, the box it left is
     /// left out of its own Screen's draw, its own paint too, with no lift
     /// drawing it, so one occurrence of the element shows, as through

@@ -4828,11 +4828,12 @@ impl LayoutComponent {
         let mut held = tree.held.clone();
         held.sort_by_cached_key(|&(id, _)| depth(&tree.taffy, id));
         let mut flights = Vec::with_capacity(held.len());
-        for (id, size) in held {
+        for (id, flying) in held {
             if let Some(flight) = crate::css_layout::flight_hold::fly(
                 &mut tree.taffy,
                 id,
-                size,
+                &flying,
+                |context| &context.owner,
                 Self::measure_tree_node,
             ) {
                 touched.push(id);
@@ -5178,17 +5179,22 @@ impl LayoutComponent {
         // first (a node is built after its descendants).
         let mut flights = Vec::new();
         for (node_owner, id) in nodes.iter().rev() {
-            let size = node_owner
+            let flying = node_owner
                 .with_mut(|object| {
                     Self::layout_data_of(object)?
                         .flight_hold
                         .as_ref()
-                        .map(|hold| hold.size())
+                        .map(|hold| hold.flying().clone())
                 })
                 .flatten();
-            if let Some(size) = size
-                && let Some(flight) =
-                    crate::css_layout::flight_hold::fly(&mut taffy, *id, size, measure)
+            if let Some(flying) = flying
+                && let Some(flight) = crate::css_layout::flight_hold::fly(
+                    &mut taffy,
+                    *id,
+                    &flying,
+                    |context: &Context| &context.0,
+                    measure,
+                )
             {
                 flights.push((*id, flight));
             }
@@ -5250,6 +5256,30 @@ impl LayoutComponent {
                     .taffy
                     .total_node_count(),
             )
+        })
+        .flatten()
+    }
+
+    /// The style `owner`'s node has in the root's layout tree.
+    #[cfg(test)]
+    pub(crate) fn layout_tree_style(root: &CoreHandle, owner: &CoreHandle) -> Option<Style> {
+        fn find(
+            tree: &crate::source::layout::layout_tree::LayoutTree,
+            id: taffy::prelude::NodeId,
+            owner: &CoreHandle,
+        ) -> Option<taffy::prelude::NodeId> {
+            use taffy::TraversePartialTree;
+            if &tree.taffy.get_node_context(id)?.owner == owner {
+                return Some(id);
+            }
+            tree.taffy
+                .child_ids(id)
+                .find_map(|child| find(tree, child, owner))
+        }
+        root.with(|object| {
+            let tree = object.as_layout_component()?.layout_tree.as_ref()?;
+            let id = find(tree, tree.root, owner)?;
+            tree.taffy.style(id).ok().cloned()
         })
         .flatten()
     }
@@ -5560,7 +5590,10 @@ impl LayoutComponent {
                 let Some(data) = Self::layout_data_of(object) else {
                     return None;
                 };
-                let held = data.flight_hold.as_ref().map(|hold| hold.size());
+                let held = data
+                    .flight_hold
+                    .as_ref()
+                    .map(|hold| hold.flying().clone());
                 let Some(update) = data.take_update(&link) else {
                     return virtual_tracks;
                 };

@@ -569,9 +569,29 @@ pub(super) struct Carried {
     /// anchor, recorded at take-off for the lift's cover; unknown until
     /// then.
     placed: super::follow::TakeOff,
+    /// Its root's border box less its box's where it left, read before it
+    /// is carried: the leaving end of what its root's flight size adds to
+    /// its box's (`flight_hold::carry`).
+    over_box: Vec2D,
 }
 
 impl Carried {
+    /// Has its held box `element` lay its root out with it. A root without
+    /// its own CSS record, as a Rive-made component's, is left to its own
+    /// layout.
+    fn fly_in(&self, element: &CoreHandle) {
+        let Some(root) = self.instance.upgrade().map(|unit| unit.core_handle()) else {
+            return;
+        };
+        let css = root
+            .with(|o| o.as_layout_component().map(|l| l.is_css_mode()))
+            .flatten()
+            .unwrap_or(false);
+        if css {
+            flight_hold::carry(element, &root, (self.over_box.x, self.over_box.y));
+        }
+    }
+
     /// After the carry: the placement it left names the one that holds its
     /// instance as carrying its frame at rest (`frame_at_rest`).
     pub(super) fn link(&self) {
@@ -633,6 +653,11 @@ impl Carried {
             .ok_or_else(|| anyhow::anyhow!("leaving copy has no instance"))?;
         super::transport::validate_move(&from_placement, &to_placement)?;
         let written = super::transport::written_values(&from_placement, &to_placement)?;
+        let root = flight_hold::resting_box(&instance.core_handle())
+            .map_or_else(Vec2D::default, |rest| {
+                Vec2D::new(rest.width(), rest.height())
+            });
+        let over_box = root - Flying::of(from)?.resting_size();
         Ok(Self {
             from: from_placement,
             to: to_placement,
@@ -642,6 +667,7 @@ impl Carried {
             instance: instance.downgrade(),
             context: Cell::new(None),
             placed: super::follow::TakeOff::Unknown,
+            over_box,
         })
     }
 }
@@ -772,6 +798,7 @@ impl InPlaceFlight {
         if let Some(node) = &self.held {
             let size = frame.blended_size();
             flight_hold::set_size(node, (size.x.max(0.0), size.y.max(0.0)));
+            flight_hold::set_progress(node, frame.progress);
         }
         self.flying.set_paint(frame.corners, frame.shadow);
     }
@@ -891,6 +918,10 @@ impl InPlaceFlight {
     pub(super) fn mark(&self, opacity_root: OpacityRoot) {
         if let Some(node) = &self.held {
             flight_hold::begin(node, (self.departure.x, self.departure.y));
+            // A zoomed version's inside stays as it rests.
+            if let Some(carried) = self.carried.as_ref().filter(|_| !self.zoomed) {
+                carried.fly_in(node);
+            }
         }
         set_opacity_root(&self.element, opacity_root);
         self.row.with_downcast::<Artboard, _>(|row| {

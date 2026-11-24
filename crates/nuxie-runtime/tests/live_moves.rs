@@ -16796,6 +16796,11 @@ return function() return {init=init,advance=advance} end
         s.begin();
         read("slots", "take-off", [&models[0], &models[1]]);
         for p in frames {
+            if p == 0.5 {
+                // The Screens' own values change half way.
+                set(&property(&vm(&s.a), "offset"), 575, 110.0);
+                set(&property(&vm(&s.b), "offset"), 575, 400.0);
+            }
             flight_progress(&mut s, p);
             read("slots", &format!("{p}"), [&models[0], &models[1]]);
         }
@@ -16809,6 +16814,11 @@ return function() return {init=init,advance=advance} end
         s.begin("B", "t1");
         read("in place", "take-off", [&models[0], &models[1]]);
         for p in frames {
+            if p == 0.5 {
+                // The Screens' own values change half way.
+                set(&property(&vm(&s.a), "offset"), 575, 110.0);
+                set(&property(&vm(&s.b), "offset"), 575, 400.0);
+            }
             s.fly(p);
             read("in place", &format!("{p}"), [&models[0], &models[1]]);
         }

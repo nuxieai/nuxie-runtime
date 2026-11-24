@@ -9677,10 +9677,9 @@ mod paint_order {
             EmptiedCover { copies: true },
         ];
         // The eleventh resting case turns its slot and its unit about two
-        // origins, which one box can't; `L` flies a list's row, a hosted
-        // artboard. Neither has an in-place page.
+        // origins, which one box can't: it has no in-place page.
         cases.extend((1..=10).map(Resting));
-        cases.extend("CDFGHKMNOPQRTUVWXY".chars().map(KeyedLayout));
+        cases.extend("CDFGHKLMNOPQRTUVWXY".chars().map(KeyedLayout));
         cases.extend(element_cases());
         {
             use fixture::ZoomCase::*;
@@ -11261,6 +11260,7 @@ mod paint_order {
         paint_order_12_keyed_layout_w_pushed_through_a_wrapper,
         paint_order_12_keyed_layout_f_wrapper_fill,
         paint_order_12_keyed_layout_k_absolute_at_a_wrapper_edge,
+        paint_order_12_keyed_layout_l_pushed_by_a_list_row,
         paint_order_12_keyed_layout_v_placement_in_an_auto_high_grid,
         paint_order_12_keyed_layout_t_static_position,
         paint_order_12_keyed_layout_h_pushed_through_a_hosted_frame,
@@ -16771,6 +16771,49 @@ return function() return {init=init,advance=advance} end
         s.fly(0.5);
         s.end_at_once("B", "t1");
         close(val(&property(&model, "count"), 575), 7.0);
+    }
+
+    /// What two copies' own values read through a step, on a slot page and in
+    /// place, printed. In the order number, color, string; A's copy then B's.
+    #[test]
+    fn record_two_copies_values_on_both_shapes() {
+        let read = |shape: &str, label: &str, models: [&CoreHandle; 2]| {
+            let [a, b] = models.map(|m| {
+                format!(
+                    "{} {:08x} {:?}",
+                    val(&property(m, "prop"), 575),
+                    color_value(m, "accent"),
+                    string_value(m, "label")
+                )
+            });
+            eprintln!("copies values | {shape} | {label} | A {a} | B {b}");
+        };
+        let frames = [0.0, 0.25, 0.5, 0.75, 1.0];
+
+        let mut s = Scene::from_bytes(&fixture::two_version_values_fixture());
+        let models = [vm(&child(&s.s).unwrap()), vm(&child(&s.d).unwrap())];
+        read("slots", "rest", [&models[0], &models[1]]);
+        s.begin();
+        read("slots", "take-off", [&models[0], &models[1]]);
+        for p in frames {
+            flight_progress(&mut s, p);
+            read("slots", &format!("{p}"), [&models[0], &models[1]]);
+        }
+        s.end();
+        s.advance(0.0);
+        read("slots", "landed", [&models[0], &models[1]]);
+
+        let mut s = Page::new(InPlaceCarry::CopiesValues);
+        let models = [vm(&child(&s.pa).unwrap()), vm(&child(&s.pb).unwrap())];
+        read("in place", "rest", [&models[0], &models[1]]);
+        s.begin("B", "t1");
+        read("in place", "take-off", [&models[0], &models[1]]);
+        for p in frames {
+            s.fly(p);
+            read("in place", &format!("{p}"), [&models[0], &models[1]]);
+        }
+        s.end("B", "t1");
+        read("in place", "landed", [&models[0], &models[1]]);
     }
 
     /// Row 11: with no frame between them, take-off and landing give the

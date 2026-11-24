@@ -7194,9 +7194,9 @@ impl PaintArt<'_> {
             );
         }
     }
-    /// A resting slot of a unit that transfers, in place: a paintless box with
-    /// the slot's name, record, own properties and origin, and `key` as its
-    /// flight key, holding one placement of the unit that fills it, with the
+    /// A resting component, a unit that transfers or a cached one: a paintless
+    /// box with the slot's name, record, own properties and origin, and `key`
+    /// as its flight key unless 0, holding one placement of the unit that fills it, with the
     /// slot's model and machine (`PaintShape::InPlaceCarry`).
     fn boxed_unit(&mut self, el: &PaintEl, parent: u64, unit: &str, key: u64) {
         use V::*;
@@ -7217,7 +7217,9 @@ impl PaintArt<'_> {
         self.binds(&el.binds);
         self.add("LayoutComponentStyle", &[("parentId", U(id))]);
         let mut css = el.css.clone();
-        css.push(("flightKey", U(key)));
+        if key != 0 {
+            css.push(("flightKey", U(key)));
+        }
         self.record(el, id, &css);
         self.origin(el, id);
         let name = format!("{} unit", el.name);
@@ -7268,9 +7270,6 @@ impl PaintArt<'_> {
             }
             assert!(el.css_binds.is_empty(), "an element's record is not bound");
             return;
-        }
-        if u.cached {
-            self.unexpressible = Some("a bitmap cache is an artboard's");
         }
         if matches!(u.keyed, Some(UnitKey::RowHeight(_))) {
             self.unexpressible = Some("a list row is a hosted artboard");
@@ -7493,7 +7492,10 @@ impl PaintArt<'_> {
                     self.emit(kid, id);
                 }
             }
-            PaintKind::Slot { unit, key } if self.carried.contains(&key) => {
+            // A bitmap cache is an artboard's, so a cached unit stays one.
+            PaintKind::Slot { unit, key }
+                if self.carried.contains(&key) || self.unit(unit).1.cached =>
+            {
                 self.boxed_unit(el, parent, unit, key)
             }
             PaintKind::Slot { unit, key } => self.inline_unit(el, parent, unit, key),
@@ -8703,8 +8705,7 @@ pub enum PaintShape {
 }
 
 /// The page for one paint case in `shape`, or why the case has no such
-/// page: a plain or native host, a list row and a bitmap-cached unit are
-/// hosted artboards, which have no in-place shape.
+/// page: a list row is a hosted artboard, which has no in-place shape.
 pub fn css_paint_fixture_shaped(
     case: PaintCase,
     shape: PaintShape,

@@ -6244,9 +6244,8 @@ mod paint_order {
             MaskedGroup,
             // `Cancel`'s steps are its own (go2, back2), driven by
             // `paint_order_19b_*` and its in-place twin.
-            // `CanvasAfterFlight { mask: false }` caches its unit's bitmap,
-            // which only an artboard does: no in-place page.
             CanvasAfterFlight { mask: true },
+            CanvasAfterFlight { mask: false },
             AboveBar { badge: false },
             AboveBar { badge: true },
             MarkedVideos,
@@ -7825,11 +7824,6 @@ mod drawn {
         fn row(&self, name: &str) -> RuntimeArtboardInstanceHandle {
             screens(&self.root).unwrap()[name].clone()
         }
-        fn slot(&self, row: &str, name: &str) -> CoreHandle {
-            self.row(row)
-                .with_artboard(|r| r.find_handle::<NestedArtboard>(name))
-                .unwrap_or_else(|| panic!("no slot {name} on {row}"))
-        }
         fn layout(&self, row: &str, name: &str) -> CoreHandle {
             self.row(row)
                 .with_artboard(|r| r.find_handle::<source::layout_component::LayoutComponent>(name))
@@ -8543,7 +8537,6 @@ mod drawn {
     /// R1h. A hosted frame with a fit inside the unit, read on its content.
     #[test]
     fn the_reader_is_the_draw_hosted_fit() {
-        use source::nested_artboard_leaf::NestedArtboardLeaf;
         let (_, rest) = reader_is_the_draw_of(fixture::ReaderKind::HostedFit, "inner", |frame| {
             let leaf = leaf_under(frame).expect("E holds a leaf");
             child(&leaf).expect("the leaf hosts inner").core_handle()

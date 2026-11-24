@@ -7140,13 +7140,14 @@ impl PaintUnit {
         self
     }
 }
-/// A number "hits", which a pointer down on object `target` sets to 9.
-fn hit_listener(b: &mut Vec<u8>, target: u64) {
+/// The machine's number at `input`, `name`, which a pointer down on object
+/// `target` sets to 9.
+fn hit_listener(b: &mut Vec<u8>, target: u64, name: &str, input: u64) {
     use V::*;
     obj(
         b,
         "StateMachineNumber",
-        &[("name", S("hits")), ("value", F(0.0))],
+        &[("name", S(name)), ("value", F(0.0))],
     );
     obj(
         b,
@@ -7156,7 +7157,7 @@ fn hit_listener(b: &mut Vec<u8>, target: u64) {
     obj(
         b,
         "ListenerNumberChange",
-        &[("inputId", U(0)), ("value", F(9.0))],
+        &[("inputId", U(input)), ("value", F(9.0))],
     );
 }
 /// A text of `words` at object `id`, a child of `parent`: the Text, its
@@ -7369,7 +7370,7 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit, inner: u64) {
             ],
         );
         machine(b, false);
-        hit_listener(b, 5);
+        hit_listener(b, 5, "hits", 0);
     }
     if let Some(keyed) = u.keyed {
         let mut art = PaintArt {
@@ -7484,8 +7485,9 @@ struct PaintSpec {
     zoom: [u64; 2],
     /// B's model numbers.
     numbers: Vec<(&'static str, f32)>,
-    /// The B box whose pointer down sets B's "hits" to 9.
-    listener: Option<&'static str>,
+    /// The objects on B whose pointer down sets the number of B's machine
+    /// each names to 9.
+    listeners: Vec<(&'static str, &'static str)>,
     steps: Vec<PaintStep>,
     /// B's root as a CSS grid with these column tracks, in points, named
     /// "root.track0" on.
@@ -7518,7 +7520,7 @@ impl PaintSpec {
             a_tracks: Vec::new(),
             zoom: [0, 0],
             numbers: Vec::new(),
-            listener: None,
+            listeners: Vec::new(),
             steps: Vec::new(),
             root_grid: Vec::new(),
             list: false,
@@ -8008,6 +8010,7 @@ impl PaintArt<'_> {
                     ("drawableFlags", U(PAINT_OPAQUE)),
                 ],
             );
+            self.names.insert(format!("{} target", el.name), shape);
             self.add(
                 "Rectangle",
                 &[
@@ -8541,8 +8544,10 @@ fn paint_screen(
         paint_entrance(b, &tracks, &names);
     }
     machine(b, animated);
-    if let (true, Some(target)) = (upper, spec.listener) {
-        hit_listener(b, names[target]);
+    if upper {
+        for (input, &(target, number)) in spec.listeners.iter().enumerate() {
+            hit_listener(b, names[target], number, input as u64);
+        }
     }
     Ok(())
 }
@@ -9526,7 +9531,7 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
             )
             .one_version(&[(1, 11), (2, 12), (3, 13)])
             .tracks(vec![track("panel", 14, &[(0, 150.0), (60, 0.0)])]);
-            spec.listener = Some("panel");
+            spec.listeners = vec![("panel", "hits"), ("red target", "red hits")];
             spec
         }
         // `#lake` and `#scrim` absolute, a relative flex header holding the

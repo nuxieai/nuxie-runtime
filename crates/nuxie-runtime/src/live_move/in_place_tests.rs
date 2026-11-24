@@ -4,9 +4,8 @@ use crate::source::nested_artboard_layout::NestedArtboardLayout;
 use crate::{File, RuntimeFactoryHandle};
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 
-/// MixedModes' slot page, played to its first frame, with A's placement
-/// "v": the file, its factory and machine kept alive with it.
-struct SlotPage {
+/// A page played to its first frame, with one of A's placements: the file, its factory and machine kept alive with it.
+struct Played {
     _factory: PersistentFactory<RecordingFactory>,
     _file: crate::RuntimeFileHandle,
     _root: crate::RuntimeArtboardInstanceHandle,
@@ -15,18 +14,13 @@ struct SlotPage {
     placement: crate::CoreHandle,
 }
 
-fn slot_page() -> SlotPage {
-    let bytes = css_paint_fixture_shaped(PaintCase::MixedModes, PaintShape::SlotCopies).unwrap();
-    page(&bytes, "v")
-}
-
 /// `bytes`' page, played to its first frame, with A's placement `name`.
-fn page(bytes: &[u8], name: &str) -> SlotPage {
+fn page(bytes: &[u8], name: &str) -> Played {
     page_of::<NestedArtboardLayout>(bytes, name)
 }
 
 /// `bytes`' page, played to its first frame, with A's `T` named `name`.
-fn page_of<T: crate::source::core::CoreType>(bytes: &[u8], name: &str) -> SlotPage {
+fn page_of<T: crate::source::core::CoreType>(bytes: &[u8], name: &str) -> Played {
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let file = File::import(
         bytes,
@@ -45,7 +39,7 @@ fn page_of<T: crate::source::core::CoreType>(bytes: &[u8], name: &str) -> SlotPa
     machine.advance_and_apply(0.0);
     let screen = crate::live_move::screens(&root).unwrap()["A"].clone();
     let placement = screen.with_artboard(|b| b.find_handle::<T>(name)).unwrap();
-    SlotPage {
+    Played {
         _factory: factory,
         _file: file,
         _root: root,
@@ -56,18 +50,24 @@ fn page_of<T: crate::source::core::CoreType>(bytes: &[u8], name: &str) -> SlotPa
 }
 
 /// A component placement's end is where layout put it, not its authored x
-/// and y. MixedModes' slot page rests a's unit on A in a placement "v",
-/// absolute at (20, 36), its x and y authored at 0. Layout moves the
+/// and y. `ElementCase::Layout`'s page rests placement "a" on A, absolute at
+/// (36, 20), its x and y authored at 0. Layout moves the
 /// placement's world, not its local matrix, so a place read from that
-/// matrix would put "v" at its parent's origin. The placement draws no
+/// matrix would put "a" at its parent's origin. The placement draws no
 /// own transform, so its end is its page matrix, and 80 by 60.
 #[test]
 fn a_component_placements_end_is_where_layout_put_it() {
-    let SlotPage {
+    use crate::live_move_fixture::{ElementCase, ElementKind};
+    let bytes = css_paint_fixture_shaped(
+        PaintCase::Element(ElementKind::Placement, ElementCase::Layout),
+        PaintShape::InPlace,
+    )
+    .unwrap();
+    let Played {
         screen, placement, ..
-    } = slot_page();
-    let end = super::end(&super::Flying::of(&placement).unwrap()).unwrap();
-    let (page, _, _) = super::draw_pose(&placement).unwrap();
+    } = &page(&bytes, "a");
+    let end = super::end(&super::Flying::of(placement).unwrap()).unwrap();
+    let (page, _, _) = super::draw_pose(placement).unwrap();
     let (screen_page, _, _) = super::draw_pose(&screen.core_handle()).unwrap();
     let at = |m: crate::source::math::mat2d::Mat2D| (m.values()[4], m.values()[5]);
     let near = |a: (f32, f32), b: (f32, f32)| (a.0 - b.0).abs() < 1e-3 && (a.1 - b.1).abs() < 1e-3;
@@ -82,8 +82,8 @@ fn a_component_placements_end_is_where_layout_put_it() {
         at(page).1 - at(screen_page).1,
     );
     assert!(
-        near(from_screen, (20.0, 36.0)),
-        "at (20, 36) on A: {from_screen:?}"
+        near(from_screen, (36.0, 20.0)),
+        "at (36, 20) on A: {from_screen:?}"
     );
     assert_eq!((end.size.x, end.size.y), (80.0, 60.0));
 }
@@ -150,9 +150,7 @@ fn a_held_placements_cover_anchor_is_where_it_rests() {
 }
 
 /// A placement of an artboard without its own CSS record is not admitted:
-/// its root is laid out by its own layout, and its in-place page does not
-/// draw as its slot page even at rest (`ElementCase::NativeRoot`: the slot
-/// page draws a's root at (36, 20), the in-place page at (0, 0)).
+/// its root is laid out by its own layout (`ElementCase::NativeRoot`).
 #[test]
 fn a_placement_of_a_native_layout_artboard_is_refused() {
     use crate::live_move_fixture::{ElementCase, ElementKind};

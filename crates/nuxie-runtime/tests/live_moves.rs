@@ -6083,15 +6083,15 @@ mod paint_order {
         s.end("B", "go");
     }
 
-    /// Test 18 (c), round 5 F1: E's frame rests at opacity 0.5, so its slot
-    /// is a stacking context and paints after a later in-flow C. E flies in
-    /// a native layout flight slot, and again in a CSS one. Mid-flight the
-    /// test writes the flying frame's opacity to 1. Before the write the
-    /// flight is drawn after C, as E is at rest; in the first frame drawn
-    /// after the write, before C. In the CSS flight slot the order is
-    /// sorted again in that frame and in no other mid-flight frame.
-    fn fade_at_rest(native: bool) {
-        let mut s = PaintScene::new(PaintCase::FadeAtRest { native });
+    /// Test 18 (c), round 5 F1: E rests at opacity 0.5, so it is a stacking
+    /// context and paints after a later in-flow C. Mid-flight the test
+    /// writes the flying frame's opacity to 1. Before the write the flight
+    /// is drawn after C, as E is at rest; in the first frame drawn after the
+    /// write, before C. The order is sorted again in that frame and in no
+    /// other mid-flight frame.
+    #[test]
+    fn paint_order_18c_opacity_at_rest() {
+        let mut s = PaintScene::new(PaintCase::FadeAtRest);
         let rest = s.painted("B", "at rest");
         rest.meets("E", "C");
         rest.under("C", "E");
@@ -6110,23 +6110,17 @@ mod paint_order {
             } else {
                 f.under("E", "C");
             }
-            if !native {
-                let now = s.sorts("B");
-                if let Some(before) = sorts {
-                    if p == 0.5 {
-                        assert_ne!(now, before, "the write sorts B again");
-                    } else {
-                        assert_eq!(now, before, "no sort at {p}");
-                    }
+            let now = s.sorts("B");
+            if let Some(before) = sorts {
+                if p == 0.5 {
+                    assert_ne!(now, before, "the write sorts B again");
+                } else {
+                    assert_eq!(now, before, "no sort at {p}");
                 }
-                sorts = Some(now);
             }
+            sorts = Some(now);
         }
         s.end("B", "go");
-    }
-    #[test]
-    fn paint_order_18c_opacity_at_rest_css_flight_slot() {
-        fade_at_rest(false);
     }
 
     /// Test 19 (b), cancel with no home: two versions of E, turned at rest,
@@ -6246,7 +6240,7 @@ mod paint_order {
             StyleSwitch,
             TurnedFrame,
             FadeWrite,
-            FadeAtRest { native: false },
+            FadeAtRest,
             MaskedGroup,
             // `Cancel`'s steps are its own (go2, back2), driven by
             // `paint_order_19b_*` and its in-place twin.
@@ -6532,7 +6526,7 @@ mod paint_order {
             &[
                 (PaintCase::TurnedFrame, "go at 0", [c, e], [e, c]),
                 (
-                    PaintCase::FadeAtRest { native: false },
+                    PaintCase::FadeAtRest,
                     "go at 0",
                     [c, e],
                     [e, c],

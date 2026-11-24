@@ -5482,12 +5482,9 @@ pub enum PaintCase {
     /// E holding a flex row "row" of two boxes; E's own timeline switches
     /// the row to a column at half a second, mid-step.
     StyleSwitch,
-    PlainAnchor,
     TurnedFrame,
     FadeWrite,
-    FadeAtRest {
-        native: bool,
-    },
+    FadeAtRest,
     MaskedGroup,
     Cancel,
     /// Match's red and panel with the design's colors, for a fading Screen's
@@ -5856,24 +5853,10 @@ fn css_z(css: Css, z: f32) -> Css {
 enum PaintKind {
     /// A CSS box.
     Box,
-    /// A CSS slot for a unit, with a LiveSlot of this unit key unless 0.
+    /// A resting unit, keyed with this unit key unless 0.
     Slot { unit: &'static str, key: u64 },
-    /// A plain NestedArtboard at (x, y), with an empty record.
-    Plain {
-        unit: &'static str,
-        key: u64,
-        x: f32,
-        y: f32,
-    },
-    /// A CSS flight slot, sized to its unit.
+    /// A flight's record on the Screen.
     Flight {
-        unit: &'static str,
-        key: u64,
-        flight: u64,
-        mode: u64,
-    },
-    /// A native layout flight slot, in an absolute Rive layout box.
-    Native {
         unit: &'static str,
         key: u64,
         flight: u64,
@@ -5989,9 +5972,6 @@ fn rest_as(name: &str, unit: &'static str, key: u64, css: Css) -> PaintEl {
 fn at_rest(unit: &'static str, key: u64, left: f32, top: f32, width: f32, height: f32) -> PaintEl {
     rest(unit, key, css_at(left, top, width, height))
 }
-fn plain(unit: &'static str, key: u64, x: f32, y: f32) -> PaintEl {
-    PaintEl::new(unit, PaintKind::Plain { unit, key, x, y }, Vec::new())
-}
 fn flight_slot(name: &str, unit: &'static str, key: u64, flight: u64, mode: u64) -> PaintEl {
     PaintEl::new(
         name,
@@ -6008,19 +5988,6 @@ fn flight_slot(name: &str, unit: &'static str, key: u64, flight: u64, mode: u64)
 fn fly(unit: &'static str, key: u64, flight: u64) -> PaintEl {
     flight_slot(&format!("{unit} flight"), unit, key, flight, 1)
 }
-fn native_slot(name: &str, unit: &'static str, key: u64, flight: u64, mode: u64) -> PaintEl {
-    PaintEl::new(
-        name,
-        PaintKind::Native {
-            unit,
-            key,
-            flight,
-            mode,
-        },
-        Vec::new(),
-    )
-}
-
 /// A unit: a CSS artboard filled with its own color. A turned or scaled
 /// unit pivots about its center. A scaled unit binds its scale to the Unit
 /// model's "scale", `scale` in every resting slot that holds it. A tappable unit
@@ -6838,7 +6805,6 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit, inner: u64) {
             next: 5,
             names: [("frame".to_owned(), 0), ("frame.css".to_owned(), 1)].into(),
             masks: Vec::new(),
-            in_place: false,
             unit_tracks: Vec::new(),
             carried: Default::default(),
             unexpressible: None,
@@ -7059,17 +7025,6 @@ impl PaintSpec {
                         flight: flight + COPY_FLIGHT,
                         mode,
                     }),
-                    PaintKind::Native {
-                        unit,
-                        key,
-                        flight,
-                        mode,
-                    } if moved.contains(&flight) => Some(PaintKind::Native {
-                        unit,
-                        key,
-                        flight: flight + COPY_FLIGHT,
-                        mode,
-                    }),
                     _ => None,
                 };
                 let twin = arriving.map(|kind| {
@@ -7106,22 +7061,18 @@ impl PaintSpec {
             if !self
                 .tracks
                 .iter()
-                .any(|t| t.target == live && t.key == 62014)
+                .any(|t| t.target == live && t.key == 62036)
             {
-                self.tracks.push(hold(&live, 62014, &[(0, 0.0)]));
+                self.tracks.push(hold(&live, 62036, &[(0, 0.0)]));
             }
         }
         self
     }
-    /// Each track on a flight slot's values keys the same control of a
-    /// flight record, as an in-place page carries it.
     /// The page without what a step needs: no steps, no flight slots and
     /// no unit keys, so in place no flight keys or records.
     fn stripped(mut self) -> Self {
         fn strip(els: &mut Vec<PaintEl>) {
-            els.retain(|el| {
-                !matches!(el.kind, PaintKind::Flight { .. } | PaintKind::Native { .. })
-            });
+            els.retain(|el| !matches!(el.kind, PaintKind::Flight { .. }));
             for el in els.iter_mut() {
                 if let PaintKind::Slot { key, .. } = &mut el.kind {
                     *key = 0;
@@ -7139,18 +7090,6 @@ impl PaintSpec {
         strip(&mut self.b);
         self
     }
-    fn record_keys(mut self) -> Self {
-        for t in self.tracks.iter_mut().chain(self.a_tracks.iter_mut()) {
-            if t.target.ends_with(".live") {
-                t.key = match t.key {
-                    62003..=62005 => t.key + 30,
-                    62014..=62025 => t.key + 22,
-                    other => other,
-                };
-            }
-        }
-        self
-    }
 }
 
 /// How much a transferring unit's arriving flight key is above its own, in
@@ -7164,10 +7103,6 @@ struct PaintArt<'a> {
     next: u64,
     names: std::collections::HashMap<String, u64>,
     masks: Vec<(u64, &'static str)>,
-    /// Writes the in-place shape: each resting slot's unit inline as a box
-    /// with the slot's unit key as its flight key, and each flight slot as
-    /// a `LiveFlight` record.
-    in_place: bool,
     /// The keyed units' own tracks, on their inline boxes, for the Screen's
     /// timeline (in place).
     unit_tracks: Vec<PaintTrack>,
@@ -7552,13 +7487,11 @@ impl PaintArt<'_> {
                     self.emit(kid, id);
                 }
             }
-            PaintKind::Slot { unit, key } if self.in_place && self.carried.contains(&key) => {
+            PaintKind::Slot { unit, key } if self.carried.contains(&key) => {
                 self.boxed_unit(el, parent, unit, key)
             }
-            PaintKind::Slot { unit, key } if self.in_place => {
-                self.inline_unit(el, parent, unit, key)
-            }
-            PaintKind::Flight { flight, mode, .. } if self.in_place => {
+            PaintKind::Slot { unit, key } => self.inline_unit(el, parent, unit, key),
+            PaintKind::Flight { flight, mode, .. } => {
                 self.add(
                     "LiveFlight",
                     &[
@@ -7568,117 +7501,6 @@ impl PaintArt<'_> {
                     ],
                 );
                 self.names.insert(format!("{}.live", el.name), id);
-            }
-            PaintKind::Plain { .. } | PaintKind::Native { .. } if self.in_place => {
-                self.unexpressible = Some("a plain or native host has no in-place shape");
-            }
-            PaintKind::Slot { unit, key } | PaintKind::Plain { unit, key, .. } => {
-                let (artboard, u) = self.unit(unit);
-                let mut props = vec![
-                    ("name", S(&el.name)),
-                    ("parentId", U(parent)),
-                    ("artboardId", U(artboard)),
-                ];
-                let host = if let PaintKind::Plain { x, y, .. } = el.kind {
-                    props.extend([("x", F(x)), ("y", F(y))]);
-                    "NestedArtboard"
-                } else {
-                    "NestedArtboardLayout"
-                };
-                props.extend_from_slice(&el.props);
-                self.add(host, &props);
-                self.binds(&el.binds);
-                self.record(el, id, &el.css);
-                if key != 0 {
-                    self.add("LiveSlot", &[("parentId", U(id)), ("unitKey", U(key))]);
-                }
-                if u.modeled() {
-                    self.scale_model(id, u.scale);
-                }
-                self.unit_machine(u, id);
-                self.origin(el, id);
-            }
-            PaintKind::Flight {
-                unit,
-                key,
-                flight,
-                mode,
-            } => {
-                let (artboard, u) = self.unit(unit);
-                self.add(
-                    "NestedArtboardLayout",
-                    &[
-                        ("name", S(&el.name)),
-                        ("parentId", U(parent)),
-                        ("artboardId", U(artboard)),
-                    ],
-                );
-                let css = if el.css.is_empty() {
-                    css_size(u.size.0, u.size.1)
-                } else {
-                    el.css.clone()
-                };
-                self.record(el, id, &css);
-                let live = self.add(
-                    "LiveSlot",
-                    &[
-                        ("parentId", U(id)),
-                        ("unitKey", U(key)),
-                        ("role", U(1)),
-                        ("flightKey", U(flight)),
-                        ("sizeMode", U(mode)),
-                    ],
-                );
-                self.names.insert(format!("{}.live", el.name), live);
-                self.unit_machine(u, id);
-                self.origin(el, id);
-            }
-            PaintKind::Native {
-                unit,
-                key,
-                flight,
-                mode,
-            } => {
-                let (artboard, u) = self.unit(unit);
-                let wrapper = format!("{} box", el.name);
-                self.add(
-                    "LayoutComponent",
-                    &[
-                        ("name", S(&wrapper)),
-                        ("parentId", U(parent)),
-                        ("styleId", U(id + 1)),
-                    ],
-                );
-                self.add(
-                    "LayoutComponentStyle",
-                    &[
-                        ("parentId", U(id)),
-                        ("positionTypeValue", U(2)),
-                        ("layoutWidthScaleType", U(2)),
-                        ("layoutHeightScaleType", U(2)),
-                    ],
-                );
-                let slot = self.add(
-                    "NestedArtboardLayout",
-                    &[
-                        ("name", S(&el.name)),
-                        ("parentId", U(id)),
-                        ("artboardId", U(artboard)),
-                        ("instanceWidth", F(u.size.0)),
-                        ("instanceHeight", F(u.size.1)),
-                    ],
-                );
-                self.names.insert(el.name.clone(), slot);
-                self.add(
-                    "LiveSlot",
-                    &[
-                        ("parentId", U(slot)),
-                        ("unitKey", U(key)),
-                        ("role", U(1)),
-                        ("flightKey", U(flight)),
-                        ("sizeMode", U(mode)),
-                    ],
-                );
             }
             PaintKind::Group => {
                 self.add("Node", &[("name", S(&el.name)), ("parentId", U(parent))]);
@@ -7901,7 +7723,6 @@ fn paint_screen(
     b: &mut Vec<u8>,
     spec: &PaintSpec,
     upper: bool,
-    in_place: bool,
 ) -> Result<(), &'static str> {
     use V::*;
     let (name, model, els) = if upper {
@@ -7919,7 +7740,7 @@ fn paint_screen(
     ];
     let tracks = if upper { &spec.tracks } else { &spec.a_tracks };
     // In place a keyed unit's own tracks play on its Screen's timeline.
-    let keyed_inline = in_place && keys_a_unit(els, &spec.units);
+    let keyed_inline = keys_a_unit(els, &spec.units);
     if upper || !tracks.is_empty() || keyed_inline {
         props.push(("defaultStateMachineId", U(0)));
     }
@@ -7943,7 +7764,6 @@ fn paint_screen(
         next: 3,
         names: [("root".to_owned(), 0)].into(),
         masks: Vec::new(),
-        in_place,
         unit_tracks: Vec::new(),
         carried: spec
             .transferring()
@@ -8426,7 +8246,7 @@ fn zoom_spec(case: ZoomCase) -> PaintSpec {
         .a_tracks(scale("card a", &[(0, 0.9), (60, 1.0)])),
         FadeHeld => {
             let fades = ["a go.live", "b go.live", "b back.live", "a back.live"]
-                .map(|target| hold(target, 62014, &[(0, 0.5)]));
+                .map(|target| hold(target, 62036, &[(0, 0.5)]));
             plain(unit_a(), unit_b()).tracks(fades.into())
         }
         AncestorFades { a_keyed } => {
@@ -8600,13 +8420,8 @@ pub(crate) fn paint_header() -> Vec<u8> {
     b
 }
 
-fn paint_file(spec: &PaintSpec) -> Vec<u8> {
-    paint_file_shaped(spec, false).expect("a slot page")
-}
-
-/// The page of `spec` in the slot shape, or in place: there, each track on
-/// a flight slot's values keys its flight record's control instead.
-fn paint_file_shaped(spec: &PaintSpec, in_place: bool) -> Result<Vec<u8>, &'static str> {
+/// The page of `spec`.
+fn paint_file(spec: &PaintSpec) -> Result<Vec<u8>, &'static str> {
     use V::*;
     let mut b = paint_header();
     obj(&mut b, "Backboard", &[]);
@@ -8781,8 +8596,8 @@ fn paint_file_shaped(spec: &PaintSpec, in_place: bool) -> Result<Vec<u8>, &'stat
             &[("viewModelId", U(model)), ("viewModelInstanceId", U(0))],
         );
     }
-    paint_screen(&mut b, spec, false, in_place)?;
-    paint_screen(&mut b, spec, true, in_place)?;
+    paint_screen(&mut b, spec, false)?;
+    paint_screen(&mut b, spec, true)?;
     for u in &spec.units {
         if u.element.is_some() {
             element_unit(&mut b, u, inner_artboard(&spec.units, u.name));
@@ -8856,31 +8671,19 @@ fn paint_file_shaped(spec: &PaintSpec, in_place: bool) -> Result<Vec<u8>, &'stat
     Ok(b)
 }
 
-/// The page for one paint order case (UNIV-5635). The geometry of each is
-/// stated where the test reads it, in `tests/live_moves.rs`.
-pub fn css_paint_fixture(case: PaintCase) -> Vec<u8> {
-    paint_file(&paint_spec(case))
-}
-
 /// The shapes a paint case's page is written in (docs/live-moves.md,
 /// Flying in place).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PaintShape {
-    /// Slots, as `css_paint_fixture` writes it.
-    Slots,
-    /// Slots, with each unit that transfers flying as two copies instead
-    /// (`PaintSpec::two_copies`), the page an in-place one is compared with.
-    SlotCopies,
-    /// In place: `SlotCopies`' page with each resting slot's unit written
-    /// inline as a box keyed with the slot's unit key, no flight slots, and
-    /// a `LiveFlight` record on the Screen for each, in the flight slots'
-    /// order. Tracks on a flight slot's values key its record.
+    /// Each unit that transfers flies as two copies instead
+    /// (`PaintSpec::two_copies`). Each resting unit is written inline as a
+    /// box keyed with its unit key, with a `LiveFlight` record on the Screen
+    /// for each flight, in the flights' order.
     InPlace,
     /// `InPlace`'s page without flight keys, flight records or steps: the
     /// same Screens, which the records must cost nothing beside.
     Stripped,
-    /// In place with each unit that transfers flying as one instance, the
-    /// page `Slots` is compared with: each of its resting slots written as
+    /// Each unit that transfers flies as one instance: each of its resting slots written as
     /// a paintless box with the slot's name, record and own properties and
     /// the slot's unit key as its flight key, holding one placement of the
     /// unit, "`name` unit", that fills it, as the compiler places a
@@ -8902,16 +8705,14 @@ pub fn css_paint_fixture_shaped(
 ) -> Result<Vec<u8>, &'static str> {
     let spec = paint_spec(case);
     match shape {
-        PaintShape::Slots => Ok(paint_file(&spec)),
-        PaintShape::SlotCopies => Ok(paint_file(&spec.two_copies())),
-        PaintShape::InPlace => paint_file_shaped(&spec.two_copies().record_keys(), true),
-        PaintShape::Stripped => paint_file_shaped(&spec.two_copies().stripped(), true),
-        PaintShape::InPlaceCarry => paint_file_shaped(&spec.record_keys(), true),
+        PaintShape::InPlace => paint_file(&spec.two_copies()),
+        PaintShape::Stripped => paint_file(&spec.two_copies().stripped()),
+        PaintShape::InPlaceCarry => paint_file(&spec),
         PaintShape::InPlaceBoxedCopies => {
             let boxed = spec.transferring();
-            let mut spec = spec.two_copies().record_keys();
+            let mut spec = spec.two_copies();
             spec.boxed = boxed;
-            paint_file_shaped(&spec, true)
+            paint_file(&spec)
         }
     }
 }
@@ -9766,7 +9567,7 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
             if let PaintCase::Corners { keys } = case {
                 for flight in ["a go.live", "b go.live"] {
                     for corner in 0..u64::from(keys) {
-                        tracks.push(track(flight, 62015 + corner, &[(0, 4.0), (60, 8.0)]));
+                        tracks.push(track(flight, 62037 + corner, &[(0, 4.0), (60, 8.0)]));
                     }
                 }
             }
@@ -9785,7 +9586,7 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                     tracks.push(hold("b go.live", SHADOW_CONTROLS[0].1, &[(0, 0.0)]));
                     if keyed == ShadowCase::Faded {
                         for flight in ["a go.live", "b go.live"] {
-                            tracks.push(hold(flight, 62014, &[(0, 0.5)]));
+                            tracks.push(hold(flight, 62036, &[(0, 0.5)]));
                         }
                     }
                 }
@@ -9793,8 +9594,8 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
             spec.tracks(tracks)
         }
         PaintCase::PathOffsets => paint_spec(PaintCase::FadeWrite).tracks(vec![
-            track("E flight.live", 62004, &[(0, 0.0), (60, 40.0)]),
-            track("E flight.live", 62005, &[(0, 0.0), (60, -30.0)]),
+            track("E flight.live", 62034, &[(0, 0.0), (60, 40.0)]),
+            track("E flight.live", 62035, &[(0, 0.0), (60, -30.0)]),
         ]),
         // N1 and N2 are 40 wide; E is `a` by 100 on A and 300 by 100 on
         // B, in its Screen's 400 wide flex row, so B's row fits with 20 to
@@ -9838,32 +9639,14 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
             vec![at_rest("E", 1, 120.0, 60.0, 160.0, 100.0), fly("E", 1, 11)],
         )
         .one_version(&[(1, 11)]),
-        // A static plain host at (50, 40) holding E's CSS frame, turned at
-        // rest, and a later in-flow C over it.
-        PaintCase::PlainAnchor => PaintSpec::new(
-            vec![unit("E", 100.0, 60.0).turned(0.35)],
-            vec![plain("E", 1, 50.0, 40.0)],
-            vec![
-                plain("E", 1, 50.0, 40.0),
-                bx("C", css_size(200.0, 100.0)),
-                fly("E", 1, 11),
-            ],
-        )
-        .one_version(&[(1, 11)]),
         // E in flow at (36, 20), then C 30 up into it, as in
         // `css_two_screen_stacking_fixture`. E's frame is turned at rest,
-        // plain, or at opacity 0.5; in the last it may fly in a native
-        // layout flight slot.
-        PaintCase::TurnedFrame | PaintCase::FadeWrite | PaintCase::FadeAtRest { .. } => {
+        // plain, or at opacity 0.5.
+        PaintCase::TurnedFrame | PaintCase::FadeWrite | PaintCase::FadeAtRest => {
             let e = match case {
                 PaintCase::TurnedFrame => unit("E", 100.0, 60.0).turned(0.35),
                 PaintCase::FadeWrite => unit("E", 100.0, 60.0),
                 _ => unit("E", 100.0, 60.0).faded(0.5),
-            };
-            let flight = if case == (PaintCase::FadeAtRest { native: true }) {
-                native_slot("E flight", "E", 1, 11, 1)
-            } else {
-                fly("E", 1, 11)
             };
             PaintSpec::new(
                 vec![e],
@@ -9871,7 +9654,7 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                 vec![
                     rest("E", 1, css_flow(100.0, 60.0, 20.0, 36.0)),
                     bx("C", css_flow(200.0, 100.0, -30.0, 0.0)),
-                    flight,
+                    fly("E", 1, 11),
                 ],
             )
             .one_version(&[(1, 11)])
@@ -9917,7 +9700,7 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
             ],
         )
         .one_version(&[(1, 11)])
-        .tracks(vec![hold("E flight.live", 62014, &[(0, 0.5)])]),
+        .tracks(vec![hold("E flight.live", 62036, &[(0, 0.5)])]),
         PaintCase::BoundBesideKey => PaintSpec::new(
             vec![
                 unit("held", 50.0, 30.0),

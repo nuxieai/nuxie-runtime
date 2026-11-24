@@ -113,41 +113,6 @@ impl Scene {
         self.moves.step_end(&self.root, "B", Some("t1")).unwrap();
     }
 }
-#[test]
-fn continuity_identity_and_once_only() {
-    let mut s = Scene::new();
-    let original = child(&s.s).unwrap();
-    let m = machine(&s.s);
-    let objects = original.with_artboard(|b| b.objects().to_vec());
-    assert_eq!(objects.iter().flatten().count(), 12);
-    let keyed = original
-        .with_artboard(|b| b.find_handle::<Node>("keyed"))
-        .unwrap();
-    s.advance(0.3);
-    close(val(&keyed, 13), 30.0);
-    close(val(&keyed, 14), 30.0);
-    s.begin();
-    assert!(child(&s.s).is_none());
-    assert!(child(&s.f).unwrap().core_handle() == original.core_handle());
-    for _ in 0..10 {
-        s.advance(0.02);
-    }
-    close(val(&keyed, 13), 50.0);
-    close(val(&keyed, 14), 50.0);
-    s.end();
-    assert_eq!(child(&s.d).unwrap().core_handle(), original.core_handle());
-    assert!(m.downgrade().ptr_eq(&machine(&s.d).downgrade()));
-    assert_eq!(
-        m.with_instance(|m| m.parent_nested_artboard()),
-        Some(s.d.clone())
-    );
-    assert_eq!(objects, original.with_artboard(|b| b.objects().to_vec()));
-    s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
-    s.advance(0.1);
-    s.moves.step_end(&s.root, "A", Some("back")).unwrap();
-    close(val(&keyed, 13), 60.0);
-    close(val(&keyed, 14), 60.0);
-}
 /// The flight follows the current frame. After it lands, cuts between the
 /// two Screens move nothing: each shows its own copy (decision 297).
 #[test]
@@ -183,15 +148,6 @@ fn follows_current_frame_and_each_screen_keeps_its_copy() {
     assert_eq!(child(&s.s).unwrap().core_handle(), own);
     s.moves.step_end(&s.root, "B", None).unwrap();
 }
-#[test]
-fn rejected_moves_do_not_mutate_slots() {
-    let s = Scene::new();
-    let id = child(&s.s).unwrap().core_handle();
-    assert!(move_live(&s.s, &s.s).is_err());
-    assert_eq!(child(&s.s).unwrap().core_handle(), id);
-    assert!(move_live(&s.f, &s.d).is_err());
-    assert!(child(&s.f).is_none());
-}
 
 fn vm(board: &RuntimeArtboardInstanceHandle) -> CoreHandle {
     board
@@ -211,192 +167,6 @@ fn property(vm: &CoreHandle, name: &str) -> CoreHandle {
             CoreRegistry::get_uint_handle(vm, 566)
         )
     })
-}
-#[test]
-fn private_values_text_and_destination_prop_survive() {
-    let mut s = Scene::new();
-    let original = child(&s.s).unwrap();
-    let model = vm(&original);
-    let count = property(&model, "count");
-    set(&count, 575, 7.0);
-    let text = original
-        .with_artboard(|b| b.find_handle::<source::text::text_input::TextInput>("edit"))
-        .unwrap();
-    assert!(
-        text.with_downcast_mut::<source::text::text_input::TextInput, _>(
-            |t| t.text_input("hello mascot")
-        )
-        .unwrap()
-    );
-    let context = original.data_context().unwrap();
-    s.begin();
-    close(val(&property(&model, "prop"), 575), 10.0);
-    s.advance(0.2);
-    s.end();
-    s.advance(0.0);
-    assert_eq!(vm(&child(&s.d).unwrap()), model);
-    close(val(&count, 575), 7.0);
-    assert_eq!(
-        text.with_downcast::<source::text::text_input::TextInput, _>(|t| t.text().to_owned())
-            .unwrap(),
-        "hello mascot"
-    );
-    assert!(context.ptr_eq(&original.data_context().unwrap()));
-    assert!(
-        context
-            .with_context(|c| c.parent())
-            .unwrap()
-            .ptr_eq(&s.b.data_context().unwrap())
-    );
-    close(val(&property(&model, "prop"), 575), 200.0);
-    let offset = property(&vm(&s.b), "offset");
-    set(&offset, 575, 321.0);
-    s.advance(0.0);
-    close(val(&property(&model, "prop"), 575), 321.0);
-    set(&property(&vm(&s.a), "offset"), 575, 999.0);
-    s.advance(0.0);
-    close(val(&property(&model, "prop"), 575), 321.0);
-    close(val(&count, 575), 7.0);
-}
-#[test]
-fn a_target_first_two_way_prop_keeps_its_order_through_a_move_the_refill_and_back() {
-    use source::data_bind::{
-        data_bind::{DataBind, SOURCE_TO_TARGET_FIRST, TWO_WAY},
-        data_bind_context::DataBindContext,
-    };
-
-    let mut s = Scene::from_bytes(&fixture::live_page_fixture());
-    // Author the prop binds in the Screen containers, as for slot replacement.
-    // Both endpoints matter: arrival discards the destination's original unit
-    // and retains its authored bind before deriving the moved unit's bind.
-    for (row, slot, path) in [(&s.a, &s.s, 1), (&s.b, &s.d, 2)] {
-        let prop = property(&vm(&child(slot).unwrap()), "prop");
-        let container = row.core_handle().data_bind_container().unwrap();
-        // Drop the list's Ref before removal; a for-scrutinee temporary would
-        // otherwise keep the container borrowed throughout the loop.
-        let binds = container.data_binds().to_vec();
-        for bind in binds {
-            if bind
-                .with(|o| o.as_data_bind().and_then(DataBind::target))
-                .flatten()
-                == Some(prop.clone())
-            {
-                container.remove_and_delete_data_bind(&bind);
-            }
-        }
-        let mut bind = DataBindContext::default();
-        bind.base.base = DataBind::new(TWO_WAY, 575, 0);
-        bind.decode_source_path_ids(&[path, 0]);
-        let bind = slot.insert_sibling(bind).unwrap();
-        bind.with_mut(|o| o.as_data_bind_mut().unwrap().set_target(Some(prop)));
-        container.add_data_bind(bind);
-    }
-
-    let original = child(&s.s).unwrap();
-    let prop = property(&vm(&original), "prop");
-    // The unit in `slot`, the flown one where `flown`, carries one derived,
-    // two-way, target-first bind to its own prop.
-    let assert_order = |slot: &CoreHandle, flown: bool| {
-        let unit = child(slot).unwrap();
-        assert_eq!(unit.core_handle() == original.core_handle(), flown);
-        let prop = property(&vm(&unit), "prop");
-        let binds: Vec<_> = unit
-            .core_handle()
-            .data_bind_container()
-            .unwrap()
-            .data_binds()
-            .to_vec()
-            .into_iter()
-            .filter(|bind| {
-                bind.with(|o| {
-                    o.as_data_bind().is_some_and(|b| {
-                        b.is_instance_value_bind() && b.target() == Some(prop.clone())
-                    })
-                }) == Some(true)
-            })
-            .collect();
-        assert_eq!(binds.len(), 1, "one derived prop binding on the moved unit");
-        binds[0].with(|o| {
-            let bind = o.as_data_bind().unwrap();
-            assert_ne!(bind.base.flags() & TWO_WAY, 0, "prop remains two-way");
-            assert_eq!(
-                bind.base.flags() & SOURCE_TO_TARGET_FIRST,
-                0,
-                "prop remains target-first"
-            );
-        });
-    };
-
-    s.begin();
-    s.advance(0.1);
-    s.end();
-    s.advance(0.0);
-    assert_order(&s.d, true);
-    // The Screen the unit left holds its own copy with the same bind.
-    assert_order(&s.s, false);
-    set(&prop, 575, 321.0);
-    s.advance(0.0);
-    close(val(&property(&vm(&s.b), "offset"), 575), 321.0);
-
-    s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
-    s.advance(0.1);
-    s.moves.step_end(&s.root, "A", Some("back")).unwrap();
-    s.advance(0.0);
-    assert_order(&s.s, true);
-    assert_order(&s.d, false);
-}
-
-#[test]
-fn hits_follow_the_new_host() {
-    let mut s = Scene::new();
-    let moved = machine(&s.s);
-    s.begin();
-    s.advance(0.0);
-    s.end();
-    s.advance(0.0);
-    let p = slot_pose(&s.d).unwrap().transform * source::math::vec2d::Vec2D::new(20.0, 20.0);
-    s.machine.with_instance_mut(|m| {
-        m.pointer_down(p, 0, source::pointer_button::PointerButton::Primary)
-    });
-    close(
-        moved.with_instance(|m| m.get_number("hits").unwrap().value()),
-        9.0,
-    );
-    moved.set_number("hits", 0.0);
-    let p = slot_pose(&s.s).unwrap().transform * source::math::vec2d::Vec2D::new(20.0, 20.0);
-    s.machine.with_instance_mut(|m| {
-        m.pointer_down(p, 1, source::pointer_button::PointerButton::Primary)
-    });
-    close(
-        moved.with_instance(|m| m.get_number("hits").unwrap().value()),
-        0.0,
-    );
-}
-#[test]
-fn empty_source_draws_no_geometry() {
-    let mut s = Scene::new();
-    s.factory.borrow_mut().clear();
-    let mut renderer = s.factory.borrow().make_renderer();
-    s.a.draw(&mut renderer);
-    let before = s
-        .factory
-        .borrow()
-        .stream()
-        .lines()
-        .filter(|l| l.starts_with("drawPath "))
-        .count();
-    assert_eq!(before, 1);
-    s.begin();
-    s.factory.borrow_mut().clear();
-    s.a.draw(&mut renderer);
-    let after = s
-        .factory
-        .borrow()
-        .stream()
-        .lines()
-        .filter(|l| l.starts_with("drawPath "))
-        .count();
-    assert_eq!(after, 0);
 }
 
 #[test]
@@ -493,40 +263,6 @@ fn collapsed_rows_cost_one_row_and_wake_with_data() {
     assert!(collapsed.as_secs_f64() < expanded.as_secs_f64() * 0.5);
 }
 
-#[test]
-fn focus_scope_moves_without_blurring_the_field() {
-    let mut s = Scene::new();
-    let unit = child(&s.s).unwrap();
-    let data =
-        unit.with_artboard(|b| b.find_all_handles::<source::focus_data::FocusData>())[0].clone();
-    let node = data
-        .with_downcast::<source::focus_data::FocusData, _>(|f| f.existing_focus_node())
-        .flatten()
-        .unwrap();
-    let manager = unit.with_artboard(|b| b.focus_manager()).unwrap();
-    manager.with_focus_manager_mut(|m| m.set_focus(node.clone()));
-    assert!(manager.with_focus_manager(|m| m.has_primary_focus(&node)));
-    s.begin();
-    assert!(manager.with_focus_manager(|m| m.has_primary_focus(&node)));
-    s.advance(0.1);
-    s.end();
-    assert!(manager.with_focus_manager(|m| m.has_primary_focus(&node)));
-    let text = unit
-        .with_artboard(|b| b.find_handle::<source::text::text_input::TextInput>("edit"))
-        .unwrap();
-    assert!(
-        text.with_downcast::<source::text::text_input::TextInput, _>(|t| t.is_focused())
-            .unwrap()
-    );
-    let list = s
-        .root
-        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-        .unwrap();
-    set_row_collapsed(&list, 0, true).unwrap();
-    s.advance(0.1);
-    assert!(manager.with_focus_manager(|m| m.has_primary_focus(&node)));
-}
-
 fn mount_layout_page(
     file: &RuntimeFileHandle,
 ) -> (
@@ -543,52 +279,6 @@ fn mount_layout_page(
     machine.advance_and_apply(0.0);
     let screen = screens(&root).unwrap()["LayoutScreen"].clone();
     (root, screen, machine)
-}
-
-#[test]
-fn empty_layout_slot_preserves_the_siblings_position() {
-    let mut factory = PersistentFactory::new(RecordingFactory::new());
-    let file = File::import(
-        &fixture::layout_fixture(),
-        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    let (_root, screen, machine) = mount_layout_page(&file);
-    machine.advance_and_apply(0.0);
-    let source = screen
-        .with_artboard(|b| {
-            b.find_handle::<source::nested_artboard_layout::NestedArtboardLayout>("source")
-        })
-        .unwrap();
-    let destination = screen
-        .with_artboard(|b| b.find_handle::<NestedArtboard>("destination"))
-        .unwrap();
-    let sibling = screen
-        .with_artboard(|b| b.find_handle::<source::layout_component::LayoutComponent>("sibling"))
-        .unwrap();
-    let position = || {
-        sibling
-            .with_downcast::<source::layout_component::LayoutComponent, _>(|b| b.layout_x())
-            .unwrap()
-    };
-    let before = position();
-    assert!(before >= 149.9, "sibling before={before}");
-    move_live(&source, &destination).unwrap();
-    machine.advance_and_apply(0.0);
-    close(position(), before);
-    let bounds = source
-        .with_downcast::<source::nested_artboard_layout::NestedArtboardLayout, _>(|s| {
-            s.layout_bounds()
-        })
-        .unwrap();
-    close(bounds.width(), 150.0);
-    close(bounds.height(), 80.0);
-    move_live(&destination, &source).unwrap();
-    machine.advance_and_apply(0.0);
-    close(position(), before);
 }
 
 #[test]
@@ -710,212 +400,6 @@ fn timeline_controls_progress_and_path_offset() {
     let f = slot_pose(&s.f).unwrap();
     close(f.transform[4], b.transform[4] + 7.0);
     close(f.transform[5], b.transform[5] + 11.0);
-}
-
-#[test]
-fn moved_vm_survives_removing_its_original_row() {
-    let mut s = Scene::new();
-    let unit = child(&s.s).unwrap();
-    let model = vm(&unit);
-    let count = property(&model, "count");
-    set(&count, 575, 7.0);
-    s.begin();
-    s.end();
-    let list = s
-        .root
-        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-        .unwrap();
-    let item_b = list
-        .with_downcast::<ArtboardComponentList, _>(|l| l.list_item(1))
-        .flatten()
-        .unwrap();
-    s.a = s.b.clone();
-    ArtboardComponentList::update_list_occurrence(&list, &[item_b]);
-    set(&count, 575, 8.0);
-    s.advance(0.1);
-    assert_eq!(vm(&child(&s.d).unwrap()), model);
-    close(val(&count, 575), 8.0);
-    assert!(
-        validate_move(&s.d, &s.s).is_err(),
-        "an arena lease does not make a removed row mounted"
-    );
-}
-
-#[test]
-fn semantic_subtree_has_one_stable_occurrence_at_every_move_boundary() {
-    use source::{
-        focus_data::FocusData, semantic::semantic_data::SemanticData, text::text_input::TextInput,
-    };
-    use std::collections::HashSet;
-    for focused in [false, true] {
-        let mut s = Scene::from_bytes(&fixture::semantic_fixture());
-        s.machine.with_instance_mut(|m| m.enable_semantics());
-        let manager = s.machine.with_instance(|m| m.semantic_manager()).unwrap();
-        let unit = child(&s.s).unwrap();
-        let boundary = unit.with_artboard(|b| b.semantic_boundary_node()).unwrap();
-        let nodes = unit.with_artboard(|b| b.find_all_handles::<SemanticData>());
-        let ids: HashSet<_> = nodes
-            .iter()
-            .map(|h| {
-                h.with_downcast::<SemanticData, _>(|d| {
-                    d.existing_semantic_node().unwrap().borrow().id()
-                })
-                .unwrap()
-            })
-            .collect();
-        assert_eq!(ids.len(), 3);
-        let field = nodes
-            .iter()
-            .find_map(|h| {
-                h.with_downcast::<SemanticData, _>(|d| d.existing_semantic_node())
-                    .flatten()
-                    .filter(|n| n.borrow().role == 6)
-            })
-            .unwrap();
-        let group_id = nodes
-            .iter()
-            .find_map(|h| {
-                h.with_downcast::<SemanticData, _>(|d| d.existing_semantic_node())
-                    .flatten()
-                    .filter(|n| n.borrow().role == 9)
-            })
-            .unwrap()
-            .borrow()
-            .id();
-        let field_id = field.borrow().id();
-        let text = unit
-            .with_artboard(|b| b.find_handle::<TextInput>("edit"))
-            .unwrap();
-        text.with_downcast_mut::<TextInput, _>(|t| t.text_input("hello mascot"));
-        let focus_node = unit.with_artboard(|b| b.find_all_handles::<FocusData>())[0]
-            .with_downcast::<FocusData, _>(|f| f.existing_focus_node())
-            .flatten()
-            .unwrap();
-        let focus_manager = unit.with_artboard(|b| b.focus_manager()).unwrap();
-        if focused {
-            focus_manager.with_focus_manager_mut(|m| m.set_focus(focus_node.clone()));
-        }
-        let check = |host: &CoreHandle| {
-            let snapshot = manager.with_semantic_manager_mut(|m| m.snapshot().to_vec());
-            let unique: HashSet<_> = snapshot.iter().map(|n| n.id).collect();
-            assert_eq!(
-                unique.len(),
-                snapshot.len(),
-                "duplicate semantic ids: {snapshot:?}"
-            );
-            let parent =
-                SemanticData::find_closest_semantic_node_handle(Some(host.clone())).unwrap();
-            assert_eq!(
-                boundary.borrow().parent().unwrap().borrow().id(),
-                parent.borrow().id()
-            );
-            for id in &ids {
-                assert_eq!(snapshot.iter().filter(|n| n.id == *id).count(), 1);
-            }
-            assert_eq!(
-                snapshot
-                    .iter()
-                    .find(|n| n.id == group_id)
-                    .unwrap()
-                    .parent_id,
-                parent.borrow().id() as i32
-            );
-            let mut descendants = HashSet::from([group_id]);
-            loop {
-                let old_len = descendants.len();
-                for node in &snapshot {
-                    if descendants.contains(&(node.parent_id as u32)) {
-                        descendants.insert(node.id);
-                    }
-                }
-                if descendants.len() == old_len {
-                    break;
-                }
-            }
-            assert_eq!(descendants, ids);
-            assert_eq!(field.borrow().id(), field_id);
-            assert_eq!(
-                snapshot
-                    .iter()
-                    .find(|n| n.id == field_id)
-                    .unwrap()
-                    .state_flags
-                    & (1 << 7)
-                    != 0,
-                focused
-            );
-            assert_eq!(
-                snapshot.iter().find(|n| n.id == field_id).unwrap().label,
-                "mascot field"
-            );
-            assert_eq!(
-                text.with_downcast::<TextInput, _>(|t| t.text().to_owned())
-                    .unwrap(),
-                "hello mascot"
-            );
-            assert_eq!(
-                text.with_downcast::<TextInput, _>(|t| t.is_focused())
-                    .unwrap(),
-                focused
-            );
-            assert_eq!(
-                focus_manager.with_focus_manager(|m| m.has_primary_focus(&focus_node)),
-                focused
-            );
-        };
-        check(&s.s);
-        s.begin();
-        check(&s.f);
-        let list = s
-            .root
-            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-            .unwrap();
-        let keyed = unit
-            .with_artboard(|b| b.find_handle::<Node>("keyed"))
-            .unwrap();
-        let before_sleep = val(&keyed, 13);
-        set_row_collapsed(&list, 1, true).unwrap();
-        s.advance(0.1);
-        close(val(&keyed, 13), before_sleep);
-        let asleep = manager.with_semantic_manager_mut(|m| m.snapshot().to_vec());
-        assert!(asleep.iter().all(|node| !ids.contains(&node.id)));
-        assert!(!focus_manager.with_focus_manager(|m| m.has_primary_focus(&focus_node)));
-        set_row_collapsed(&list, 1, false).unwrap();
-        let same_node = unit.with_artboard(|b| b.find_all_handles::<FocusData>())[0]
-            .with_downcast::<FocusData, _>(|f| f.existing_focus_node())
-            .flatten()
-            .unwrap();
-        assert!(std::rc::Rc::ptr_eq(&focus_node, &same_node));
-        // Native collapse blurs hidden fields. Wake retains the node, and the
-        // application can focus that same field again without rebuilding it.
-        if focused {
-            focus_manager.with_focus_manager_mut(|m| m.set_focus(same_node));
-        }
-        check(&s.f);
-        s.advance(0.1);
-        check(&s.f);
-        s.end();
-        check(&s.d);
-        // A cut moves nothing: the unit stays on B (decision 297).
-        s.moves.step_begin(&s.root, "A", None).unwrap();
-        check(&s.d);
-        s.moves.step_end(&s.root, "A", None).unwrap();
-        check(&s.d);
-        // A return flight, to catch links retained across several moves.
-        s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
-        check(&s.f);
-        s.moves.step_end(&s.root, "A", Some("back")).unwrap();
-        check(&s.s);
-        let list = s
-            .root
-            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-            .unwrap();
-        set_row_collapsed(&list, 0, true).unwrap();
-        let asleep = manager.with_semantic_manager_mut(|m| m.snapshot().to_vec());
-        assert!(asleep.iter().all(|node| !ids.contains(&node.id)));
-        set_row_collapsed(&list, 0, false).unwrap();
-        check(&s.s);
-    }
 }
 
 #[test]
@@ -1219,139 +703,6 @@ fn native_keyframes_drive_live_slot_fade() {
     );
 }
 
-/// After a transfer, removing the Screen that holds the flown instance takes
-/// that instance with it; the Screen it left keeps its own copy, untouched
-/// (decision 297).
-#[test]
-fn removing_the_holder_leaves_the_other_screen_its_own_copy() {
-    let mut s = Scene::new();
-    let unit = child(&s.s).unwrap().core_handle();
-    s.begin();
-    s.end();
-    let own = child(&s.s).unwrap().core_handle();
-    assert_ne!(own, unit);
-    let list = s
-        .root
-        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-        .unwrap();
-    let a = list
-        .with_downcast::<ArtboardComponentList, _>(|l| l.list_item(0))
-        .flatten()
-        .unwrap();
-    ArtboardComponentList::update_list_occurrence(&list, &[a]);
-    s.advance(0.0);
-    assert_eq!(child(&s.s).unwrap().core_handle(), own);
-}
-
-#[test]
-fn lua_private_state_survives_flight_landing_and_a_back_step() {
-    use nuxie_scripting::vm::ScriptVm;
-    use source::{
-        assets::script_asset::ScriptAsset, scripted::scripted_drawable::ScriptedDrawable,
-    };
-    let mut s = Scene::from_bytes(&fixture::scripted_fixture());
-    let source = r#"
-local elapsed=0
-local inits=0
-function init(self, context) inits+=1 return true end
-function advance(self, seconds) elapsed+=seconds return true end
-function getElapsed() return math.floor(elapsed*1000+0.5) end
-function getInits() return inits end
-return function() return {init=init,advance=advance} end
-"#;
-    luaur_common::set_all_flags(true);
-    let mut len = 0;
-    let pointer = luaur_compiler::functions::luau_compile::luau_compile(
-        source.as_ptr().cast(),
-        source.len(),
-        std::ptr::null_mut(),
-        &mut len,
-    );
-    assert!(!pointer.is_null() && len > 0);
-    let bytecode = unsafe { std::slice::from_raw_parts(pointer.cast::<u8>(), len) }.to_vec();
-    unsafe extern "C" {
-        fn free(p: *mut std::ffi::c_void);
-    }
-    unsafe { free(pointer.cast()) };
-    assert_ne!(
-        bytecode[0],
-        0,
-        "{}",
-        String::from_utf8_lossy(&bytecode[1..])
-    );
-    let payload = [vec![0], bytecode].concat();
-    let vm = ScriptVm::new();
-    let program = vm
-        .register_protocol_script_with_factory("live-unit", &payload, &mut s.factory)
-        .unwrap();
-    let mut instance = vm
-        .instantiate_registered_script_with_context(&program, None, Vec::new())
-        .unwrap();
-    assert!(instance.call_init(&mut NoopScriptHost).unwrap());
-    let vm = RuntimeScriptingVmHandle::new(Box::new(vm));
-    let unit = child(&s.s).unwrap();
-    let drawable = unit
-        .with_artboard(|b| b.find_handle::<ScriptedDrawable>("script"))
-        .unwrap();
-    let asset = drawable.insert_sibling(ScriptAsset::default()).unwrap();
-    drawable
-        .with_downcast_mut::<ScriptedDrawable, _>(|d| {
-            d.scripted.set_asset(drawable.clone(), Some(asset));
-            d.scripted.install_script_instance(instance, vm);
-            d.scripted
-                .set_implemented_methods(source::scripted::scripted_object::ADVANCES_BIT);
-        })
-        .unwrap();
-    s.advance(0.1);
-    assert_eq!(
-        program
-            .upstream_test_module_i32_getter("getElapsed")
-            .unwrap(),
-        100
-    );
-    s.begin();
-    s.advance(0.2);
-    s.end();
-    s.advance(0.1);
-    s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
-    s.advance(0.1);
-    s.moves.step_end(&s.root, "A", Some("back")).unwrap();
-    assert_eq!(
-        program
-            .upstream_test_module_i32_getter("getElapsed")
-            .unwrap(),
-        500
-    );
-    assert_eq!(
-        program.upstream_test_module_i32_getter("getInits").unwrap(),
-        1
-    );
-    assert_eq!(
-        child(&s.s)
-            .unwrap()
-            .with_artboard(|b| b.find_handle::<ScriptedDrawable>("script"))
-            .unwrap(),
-        drawable
-    );
-}
-
-#[test]
-fn invalid_slot_parent_is_dropped_during_import() {
-    let mut factory = PersistentFactory::new(RecordingFactory::new());
-    let file = File::import(
-        &fixture::invalid_parent_fixture(),
-        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    let root = file.with_file(|f| f.artboard_default()).unwrap();
-    assert!(
-        root.with_artboard(|b| b.find_all_handles::<live_move::records::LiveSlot>())
-            .is_empty()
-    );
-}
 #[test]
 fn a_file_without_records_keeps_the_upstream_playback_and_mounted_slots() {
     let mut s = Scene::from_bytes(&fixture::ordinary_fixture(2));
@@ -1412,29 +763,6 @@ fn r2_holds(s: &Scene, unit: &CoreHandle) -> bool {
         .any(|slot| child(slot).is_some_and(|i| &i.core_handle() == unit))
 }
 
-/// A transfer A to B, then B to a third Screen: each Screen the unit left
-/// holds a copy of its own, and cuts back to them move nothing (decision 297).
-#[test]
-fn cutting_back_after_a_third_screen_shows_each_screens_own_copy() {
-    let mut s = Scene::from_bytes(&fixture::fixture(3));
-    let original = child(&s.s).unwrap().core_handle();
-    s.begin();
-    s.end();
-    s.moves.step_begin(&s.root, "R2", Some("third")).unwrap();
-    s.advance(0.1);
-    s.moves.step_end(&s.root, "R2", Some("third")).unwrap();
-    let a = child(&s.s).unwrap().core_handle();
-    let b = child(&s.d).unwrap().core_handle();
-    assert!(a != original && b != original && a != b);
-    assert!(r2_holds(&s, &original));
-    s.moves.step_begin(&s.root, "B", None).unwrap();
-    s.moves.step_end(&s.root, "B", None).unwrap();
-    assert_eq!(child(&s.d).unwrap().core_handle(), b);
-    s.moves.step_begin(&s.root, "A", None).unwrap();
-    s.moves.step_end(&s.root, "A", None).unwrap();
-    assert_eq!(child(&s.s).unwrap().core_handle(), a);
-    assert!(r2_holds(&s, &original));
-}
 #[test]
 fn another_players_membership_edits_do_not_rebuild_this_players_index() {
     let mut s = Scene::new();
@@ -1448,36 +776,6 @@ fn another_players_membership_edits_do_not_rebuild_this_players_index() {
     hosted_scene::measure_walks(true);
     s.advance(0.01);
     assert_eq!(hosted_scene::measure_walks(false).index_build, 0);
-}
-
-/// Removing the third Screen, which holds the twice-flown instance, takes it
-/// with the row; the kept Screens keep their own copies (decision 297).
-#[test]
-fn removing_a_third_holder_leaves_the_kept_screens_their_own_copies() {
-    let mut s = Scene::from_bytes(&fixture::fixture(3));
-    let original = child(&s.s).unwrap().core_handle();
-    s.begin();
-    s.end();
-    s.moves.step_begin(&s.root, "R2", Some("third")).unwrap();
-    s.moves.step_end(&s.root, "R2", Some("third")).unwrap();
-    let a = child(&s.s).unwrap().core_handle();
-    let b = child(&s.d).unwrap().core_handle();
-    assert!(a != original && b != original);
-    let list = s
-        .root
-        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-        .unwrap();
-    let keep = list
-        .with_downcast::<ArtboardComponentList, _>(|l| {
-            vec![l.list_item(0).unwrap(), l.list_item(1).unwrap()]
-        })
-        .unwrap();
-    ArtboardComponentList::update_list_occurrence(&list, &keep);
-    assert_eq!(child(&s.s).unwrap().core_handle(), a);
-    s.moves.step_begin(&s.root, "B", None).unwrap();
-    s.moves.step_end(&s.root, "B", None).unwrap();
-    assert_eq!(child(&s.d).unwrap().core_handle(), b);
-    assert_eq!(child(&s.s).unwrap().core_handle(), a);
 }
 
 #[path = "../src/test_support/paint_artboard.rs"]
@@ -1495,94 +793,6 @@ fn hosted_index_includes_existing_paint_artboard_occurrences_without_live_record
     let active = index.active(&root);
     assert_eq!(active.len(), 2);
     assert!(active.contains(&nested.core_handle()));
-}
-
-#[test]
-fn takeoff_discards_the_fresh_single_version_destination() {
-    let mut s = Scene::new();
-    let fresh = child(&s.d).unwrap().downgrade();
-    s.begin();
-    assert!(child(&s.s).is_none());
-    assert!(
-        child(&s.d).is_none(),
-        "incoming fresh unit must leave at take-off"
-    );
-    assert!(fresh.upgrade().is_none(), "fresh playback must be released");
-    let mut renderer = s.factory.borrow().make_renderer();
-    s.factory.borrow_mut().clear();
-    s.root.draw(&mut renderer);
-    assert_eq!(
-        s.factory
-            .borrow()
-            .stream()
-            .lines()
-            .filter(|line| line.starts_with("drawPath "))
-            .count(),
-        1
-    );
-}
-
-#[test]
-fn removing_a_flight_holder_puts_its_instance_back_and_ends_the_step() {
-    let mut s = Scene::new();
-    let original = child(&s.s).unwrap().core_handle();
-    s.begin();
-    let list = s
-        .root
-        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-        .unwrap();
-    let a = list
-        .with_downcast::<ArtboardComponentList, _>(|l| l.list_item(0))
-        .flatten()
-        .unwrap();
-    ArtboardComponentList::update_list_occurrence(&list, &[a]);
-    s.advance(0.0);
-    assert_eq!(child(&s.s).unwrap().core_handle(), original);
-    assert!(
-        s.moves.flights(&s.root).is_empty(),
-        "removed flight slots must leave the controller"
-    );
-    s.moves.step_begin(&s.root, "A", None).unwrap();
-    s.moves.step_end(&s.root, "A", None).unwrap();
-}
-
-#[test]
-fn following_two_flights_settles_their_shared_row_once_without_playback() {
-    let mut s = Scene::from_bytes(&fixture::two_version_fixture());
-    s.begin();
-    s.advance(0.0);
-    nuxie_runtime::hosted_scene::measure_walks(true);
-    s.moves.after_advance(&s.root).unwrap();
-    let visits = nuxie_runtime::hosted_scene::measure_walks(false);
-    assert_eq!(visits.advance, 0);
-    assert_eq!(
-        visits.layout, 3,
-        "one row pass updates its two moving units"
-    );
-}
-
-#[test]
-fn removing_the_incoming_screen_during_a_back_flight_puts_the_instance_back_in_its_slot() {
-    let mut s = Scene::new();
-    let original = child(&s.s).unwrap().core_handle();
-    s.begin();
-    s.end();
-    s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
-    let list = s
-        .root
-        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-        .unwrap();
-    let b = list
-        .with_downcast::<ArtboardComponentList, _>(|l| l.list_item(1))
-        .flatten()
-        .unwrap();
-    ArtboardComponentList::update_list_occurrence(&list, &[b]);
-    s.advance(0.0);
-    assert_eq!(child(&s.d).unwrap().core_handle(), original);
-    assert!(child(&s.f).is_none());
-    assert!(s.moves.flights(&s.root).is_empty());
-    s.moves.step_begin(&s.root, "B", None).unwrap();
-    s.moves.step_end(&s.root, "B", None).unwrap();
 }
 
 #[test]
@@ -1883,64 +1093,6 @@ fn projected_vm_lists_refresh_before_hosted_membership_changes() {
 }
 
 #[test]
-fn a_layout_flight_with_nonzero_placement_matches_both_endpoints() {
-    use source::nested_artboard_layout::NestedArtboardLayout;
-    let mut factory = PersistentFactory::new(RecordingFactory::new());
-    let file = File::import(
-        &fixture::layout_flight_fixture(),
-        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    let (root, screen, machine) = mount_layout_page(&file);
-    machine.advance_and_apply(0.0);
-    let source = screen
-        .with_artboard(|a| a.find_handle::<NestedArtboardLayout>("source"))
-        .unwrap();
-    let destination = screen
-        .with_artboard(|a| a.find_handle::<NestedArtboard>("destination"))
-        .unwrap();
-    let flight = screen
-        .with_artboard(|a| a.find_handle::<NestedArtboardLayout>("flight"))
-        .unwrap();
-    set(&destination, 13, 260.0);
-    set(&destination, 14, 25.0);
-    machine.advance_and_apply(0.0);
-    close(slot_pose(&flight).unwrap().transform[4], 170.0);
-    let original = child(&source).unwrap().core_handle();
-    empty_slot(&flight).unwrap();
-    move_live(&source, &flight).unwrap();
-    let follower = Flight::new(
-        flight.clone(),
-        source.clone(),
-        destination.clone(),
-        SizeMode::Layout,
-    )
-    .unwrap();
-    let mut moves = LiveMoves::default();
-    moves.with_flights(&root, |flights| flights.push(Entry::One(follower)));
-    for (progress, endpoint) in [(0.0, &source), (1.0, &destination)] {
-        set(&moves.flights(&root)[0].controls(), 62003, progress);
-        machine.advance_and_apply(0.0);
-        moves.after_advance(&root).unwrap();
-        let actual = slot_pose(&flight).unwrap();
-        let expected = slot_pose(endpoint).unwrap();
-        for i in 0..6 {
-            close(actual.transform[i], expected.transform[i]);
-        }
-        assert_eq!(child(&flight).unwrap().core_handle(), original);
-    }
-    moves.with_flights(&root, |flights| flights.clear());
-    move_live(&flight, &destination).unwrap();
-    machine.advance_and_apply(0.0);
-    close(slot_pose(&destination).unwrap().transform[4], 260.0);
-    close(slot_pose(&destination).unwrap().transform[5], 25.0);
-    assert_eq!(child(&destination).unwrap().core_handle(), original);
-}
-
-#[test]
 fn overlapping_step_units_are_rejected_before_any_slot_changes() {
     use live_move::records::{LiveStep, LiveStepUnit};
     let mut valid = Scene::load(&fixture::overlapping_plan_fixture(0), false);
@@ -2035,8 +1187,7 @@ fn holds(slot: &CoreHandle) -> Option<CoreHandle> {
 
 /// The step says what transfers (decisions 298 and 311), and two copies each
 /// land back in their own slot, as Hero puts each view back in its own
-/// superview (Hero `HeroContext.swift:324-331`). The zoom row is
-/// `drawn::zoom::a_zoom_on_one_key_without_transfers_flies_the_zoomed_pair`.
+/// superview (Hero `HeroContext.swift:324-331`).
 #[test]
 fn a_step_unit_flies_one_instance_only_where_it_transfers() {
     // `transfers` and one flight key: the leaving slot's instance flies and
@@ -2069,51 +1220,6 @@ fn a_step_unit_flies_one_instance_only_where_it_transfers() {
     s.end();
     assert_eq!(holds(&s.s), Some(a), "A's copy lands back on A");
     assert_eq!(holds(&s.d), Some(b), "B's copy lands back on B");
-}
-
-/// A file says what transfers or is refused, and a refused step never plays
-/// as something else (decisions 298, 309, 311 and 316; a malformed step is
-/// refused before any change of ownership).
-#[test]
-fn a_file_says_what_transfers_or_is_refused() {
-    let import = |bytes: &[u8]| {
-        let mut factory = PersistentFactory::new(RecordingFactory::new());
-        File::import(
-            bytes,
-            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
-            None,
-            None,
-            None,
-        )
-        .is_some()
-    };
-    // Absent with two flight keys: loads and flies two copies.
-    let mut s = Scene::from_bytes(&fixture::two_version_fixture());
-    s.begin();
-    assert_eq!(s.moves.flights(&s.root).len(), 2, "absent flies two copies");
-    s.end();
-    // Absent with one flight key, and set with two: refused at import.
-    assert!(
-        !import(&fixture::transfers_plan_fixture(1)),
-        "one flight key without transfers is refused at import"
-    );
-    assert!(
-        !import(&fixture::transfers_plan_fixture(2)),
-        "transfers with two flight keys is refused at import"
-    );
-    // Set, keys differ, one flight key: loads, then prepare refuses it
-    // before anything moves.
-    assert!(import(&fixture::transfers_plan_fixture(3)));
-    let mut s = Scene::load(&fixture::transfers_plan_fixture(3), false);
-    let (a, b) = (holds(&s.s), holds(&s.d));
-    let error = s.moves.prepare(&s.root).unwrap_err().to_string();
-    assert!(
-        error.contains("flightKey references a different unit"),
-        "{error}"
-    );
-    assert!(s.moves.step_begin(&s.root, "B", Some("t1")).is_err());
-    assert_eq!((holds(&s.s), holds(&s.d)), (a, b), "nothing moved");
-    assert!(s.moves.flights(&s.root).is_empty());
 }
 
 /// Two copies of one key each play their own Screen's half of the step: the
@@ -2185,32 +1291,6 @@ fn each_copy_of_a_text_field_keeps_its_own_text() {
     assert_eq!(offsets(), before, "no Screen value changed");
 }
 
-/// A transferred mascot keeps its loop's phase through take-off and landing,
-/// to one advance: its only break is at the tap
-/// (`references/duolingo-duo/ours-idle-bob/README.md:11`).
-#[test]
-fn a_transferred_mascot_keeps_its_bob() {
-    let mut s = Scene::new();
-    let mascot = child(&s.s).unwrap();
-    let keyed = mascot
-        .with_artboard(|b| b.find_handle::<Node>("keyed"))
-        .unwrap();
-    // "bob" keys y from 0 to 100 over a one-second loop.
-    s.advance(0.3);
-    close(val(&keyed, 14), 30.0);
-    s.begin();
-    close(val(&keyed, 14), 30.0);
-    for step in 1..=5 {
-        s.advance(0.1);
-        close(val(&keyed, 14), 30.0 + 10.0 * step as f32);
-    }
-    s.end();
-    close(val(&keyed, 14), 80.0);
-    s.advance(0.1);
-    close(val(&keyed, 14), 90.0);
-    assert_eq!(holds(&s.d), Some(mascot.core_handle()));
-}
-
 /// The instances a Screen row's slots hold.
 fn held_on(row: &RuntimeArtboardInstanceHandle) -> Vec<CoreHandle> {
     row.with_artboard(|b| b.find_all_handles::<NestedArtboard>())
@@ -2230,87 +1310,6 @@ fn screens_item(s: &Scene, index: i32) -> (CoreHandle, CoreHandle) {
         .flatten()
         .unwrap();
     (list, item)
-}
-
-/// Decision 297: when a transferred instance lands, the Screen it left gets a
-/// copy of its own at once, a fresh instance of the same definition at its
-/// entry state, reading its own Screen's props, reached by its own listeners
-/// and in its Screen's focus and accessibility trees.
-#[test]
-fn a_transferred_landing_refills_the_screen_it_left() {
-    use source::{
-        focus_data::FocusData, math::vec2d::Vec2D, pointer_button::PointerButton,
-        semantic::semantic_data::SemanticData,
-    };
-    let mut s = Scene::from_bytes(&fixture::semantic_fixture());
-    s.machine.with_instance_mut(|m| m.enable_semantics());
-    let manager = s.machine.with_instance(|m| m.semantic_manager()).unwrap();
-    let flown = child(&s.s).unwrap();
-    let definition = flown.with_artboard(|b| b.artboard_source_handle());
-    let listeners = machine(&s.s).with_instance(|m| m.nested_event_listeners());
-    s.advance(0.3);
-    s.begin();
-    s.advance(0.1);
-    s.end();
-    assert_eq!(holds(&s.d), Some(flown.core_handle()));
-    let own = child(&s.s).expect("the Screen left holds a copy of its own");
-    assert_ne!(own.core_handle(), flown.core_handle());
-    assert_eq!(own.with_artboard(|b| b.artboard_source_handle()), definition);
-    // The first frame after landing: its entry state and its own Screen's
-    // props (A's offset is 10, B's 200).
-    s.advance(0.0);
-    let keyed = |unit: &RuntimeArtboardInstanceHandle| {
-        unit.with_artboard(|b| b.find_handle::<Node>("keyed"))
-            .unwrap()
-    };
-    close(val(&keyed(&own), 14), 0.0);
-    close(val(&keyed(&flown), 14), 40.0);
-    let model = vm(&own);
-    close(val(&property(&model, "prop"), 575), 10.0);
-    close(val(&property(&vm(&flown), "prop"), 575), 200.0);
-    // One more advance: no pending bind replaced its context.
-    set(&property(&vm(&s.a), "offset"), 575, 55.0);
-    s.advance(0.1);
-    assert_eq!(vm(&own), model);
-    close(val(&property(&model, "prop"), 575), 55.0);
-    close(val(&property(&vm(&flown), "prop"), 575), 200.0);
-    // Its listeners are the slot's own, restored on its new machine.
-    let restored = machine(&s.s);
-    let actual = restored.with_instance(|m| m.nested_event_listeners());
-    assert_eq!(actual.len(), listeners.len());
-    assert!(actual.iter().zip(&listeners).all(|(a, b)| a.ptr_eq(b)));
-    let parent = restored
-        .with_instance(|m| m.parent_state_machine_instance())
-        .unwrap();
-    assert!(parent.downgrade().ptr_eq(&listeners[0]));
-    // A tap on A reaches it.
-    let p = slot_pose(&s.s).unwrap().transform * Vec2D::new(20.0, 20.0);
-    s.machine
-        .with_instance_mut(|m| m.pointer_down(p, 0, PointerButton::Primary));
-    close(
-        restored.with_instance(|m| m.get_number("hits").unwrap().value()),
-        9.0,
-    );
-    // It is in A's focus tree.
-    let focus = own.with_artboard(|b| b.focus_manager()).unwrap();
-    let screen_focus = s.a.with_artboard(|b| b.focus_manager()).unwrap();
-    assert!(focus.ptr_eq(&screen_focus));
-    let node = own.with_artboard(|b| b.find_all_handles::<FocusData>())[0]
-        .with_downcast::<FocusData, _>(|f| f.existing_focus_node())
-        .flatten()
-        .unwrap();
-    focus.with_focus_manager_mut(|m| m.set_focus(node.clone()));
-    assert!(focus.with_focus_manager(|m| m.has_primary_focus(&node)));
-    // And in the accessibility tree, under its own slot.
-    let boundary = own.with_artboard(|b| b.semantic_boundary_node()).unwrap();
-    let slot_node = SemanticData::find_closest_semantic_node_handle(Some(s.s.clone())).unwrap();
-    assert_eq!(
-        boundary.borrow().parent().unwrap().borrow().id(),
-        slot_node.borrow().id()
-    );
-    let field = semantic_field_id(&own);
-    assert_ne!(field, semantic_field_id(&flown));
-    assert!(manager.with_semantic_manager_mut(|m| m.snapshot().iter().any(|n| n.id == field)));
 }
 
 /// Decision 297, at load's entry state: the Screen left gets the model its
@@ -2347,50 +1346,6 @@ fn a_refill_takes_its_slots_authored_model_and_frees_it_with_its_instance() {
     // B's refill is its own slot's authored model again.
     let b_own = child(&s.d).expect("B holds a copy of its own");
     close(val(&property(&vm(&b_own), "count"), 575), 0.0);
-}
-
-/// Decision 297: after a transfer, a fade or cut back moves nothing. The
-/// Screen returned to shows its own copy from the first frame, and the
-/// Screen left keeps the transferred instance, still running. There is
-/// never a hole.
-#[test]
-fn a_fade_back_after_a_transfer_shows_each_screens_own_copy() {
-    let mut s = Scene::new();
-    let flown = child(&s.s).unwrap().core_handle();
-    let running = machine(&s.s);
-    s.begin();
-    s.advance(0.1);
-    s.end();
-    let own = holds(&s.s).expect("A has its own copy");
-    s.moves.step_begin(&s.root, "A", None).unwrap();
-    assert_eq!(holds(&s.s), Some(own.clone()), "A's own copy, at once");
-    assert_eq!(holds(&s.d), Some(flown.clone()), "nothing comes home");
-    s.moves.step_end(&s.root, "A", None).unwrap();
-    s.advance(0.1);
-    assert_eq!(holds(&s.s), Some(own));
-    assert_eq!(holds(&s.d), Some(flown.clone()));
-    assert!(machine(&s.d).downgrade().ptr_eq(&running.downgrade()));
-
-    // The same after A's row is removed and added again.
-    let mut s = Scene::new();
-    let flown = child(&s.s).unwrap().core_handle();
-    s.begin();
-    s.end();
-    let (list, a) = screens_item(&s, 0);
-    let (_, b) = screens_item(&s, 1);
-    ArtboardComponentList::update_list_occurrence(&list, std::slice::from_ref(&b));
-    s.advance(0.0);
-    ArtboardComponentList::update_list_occurrence(&list, &[a, b]);
-    s.advance(0.0);
-    let home = screens(&s.root).unwrap()["A"]
-        .with_artboard(|b| b.find_all_handles::<NestedArtboard>())[0]
-        .clone();
-    let own = holds(&home).expect("the new A row has its own copy");
-    s.moves.step_begin(&s.root, "A", None).unwrap();
-    s.moves.step_end(&s.root, "A", None).unwrap();
-    s.advance(0.0);
-    assert_eq!(holds(&home), Some(own));
-    assert_eq!(holds(&s.d), Some(flown));
 }
 
 /// A cancelled step puts every instance back before anything is drawn, as
@@ -2555,39 +1510,6 @@ fn semantic_field_id(unit: &RuntimeArtboardInstanceHandle) -> u32 {
                 .map(|n| n.borrow().id())
         })
         .unwrap()
-}
-#[test]
-fn sleeping_row_cut_restores_semantics_round4() {
-    let mut s = Scene::from_bytes(&fixture::semantic_fixture());
-    s.machine.with_instance_mut(|m| m.enable_semantics());
-    let manager = s.machine.with_instance(|m| m.semantic_manager()).unwrap();
-    let unit = child(&s.s).unwrap();
-    let id = semantic_field_id(&unit);
-    let shows = |id| manager.with_semantic_manager_mut(|m| m.snapshot().iter().any(|n| n.id == id));
-    assert!(shows(id));
-    s.begin();
-    s.end();
-    // A keeps a copy of its own, with a field of its own (decision 297).
-    let own = child(&s.s).unwrap();
-    let own_id = semantic_field_id(&own);
-    assert_ne!(own_id, id);
-    let list = s
-        .root
-        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-        .unwrap();
-    set_row_collapsed(&list, 1, true).unwrap();
-    assert!(!shows(id));
-    s.moves.step_begin(&s.root, "A", None).unwrap();
-    s.moves.step_end(&s.root, "A", None).unwrap();
-    assert_eq!(child(&s.s).unwrap().core_handle(), own.core_handle());
-    assert!(
-        shows(own_id),
-        "a cut out of a sleeping row shows the field of A's own copy"
-    );
-    assert!(!shows(id), "the flown copy sleeps with its row");
-    set_row_collapsed(&list, 1, false).unwrap();
-    assert_eq!(semantic_field_id(&unit), id);
-    assert!(shows(id), "waking the row restores the flown copy's field");
 }
 #[test]
 fn wake_under_a_collapsed_list_keeps_semantics_hidden_round4() {
@@ -2846,60 +1768,6 @@ fn one_wake_in_forty_rows_reports_native_dirt() {
 }
 
 #[test]
-fn nested_list_descendants_follow_the_same_native_collapse_path() {
-    let s = Scene::from_bytes(&fixture::semantic_nested_list_fixture());
-    let unit = child(&s.s).unwrap();
-    let inner = unit
-        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("inner"))
-        .unwrap();
-    let list = s
-        .root
-        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-        .unwrap();
-    let item = list
-        .with_downcast::<ArtboardComponentList, _>(|l| l.list_item(1))
-        .flatten()
-        .unwrap();
-    ArtboardComponentList::update_list_occurrence(&inner, &[item]);
-    let row = inner
-        .with_downcast::<ArtboardComponentList, _>(|l| l.artboard_instance(0))
-        .flatten()
-        .unwrap();
-    let hosts = row.with_artboard(|b| b.nested_artboards().to_vec());
-    let nested_unit = child(&hosts[0]).unwrap();
-    s.machine.with_instance_mut(|m| m.enable_semantics());
-    let manager = s.machine.with_instance(|m| m.semantic_manager()).unwrap();
-    let id = semantic_field_id(&nested_unit);
-    let visible = || manager.with_semantic_manager_mut(|m| m.snapshot().iter().any(|n| n.id == id));
-    assert!(visible());
-    let list = s
-        .root
-        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-        .unwrap();
-    set_row_collapsed(&list, 0, true).unwrap();
-    assert!(!visible());
-    set_row_collapsed(&list, 0, false).unwrap();
-    assert!(
-        visible(),
-        "wake must restore a unit's nested list descendants"
-    );
-    // Ordinary nested content participates in its enclosing Screen's native
-    // collapse. Only Page.screens supports live row sleep or unit transport.
-    assert!(set_row_collapsed(&inner, 0, true).is_err());
-    assert!(empty_slot(&hosts[1]).is_err());
-    set_row_collapsed(&list, 0, true).unwrap();
-    set_row_collapsed(&list, 0, false).unwrap();
-    assert!(visible());
-    empty_slot(&s.d).unwrap();
-    move_live(&s.s, &s.d).unwrap();
-    set_row_collapsed(&list, 1, true).unwrap();
-    assert!(!visible());
-    move_live(&s.d, &s.s).unwrap();
-    assert!(visible());
-    assert_eq!(semantic_field_id(&nested_unit), id);
-}
-
-#[test]
 fn ordinary_nested_row_cannot_wake_a_sleeping_screen_round9() {
     let s = Scene::from_bytes(&fixture::semantic_nested_list_fixture());
     let unit = child(&s.s).unwrap();
@@ -3074,45 +1942,6 @@ fn record_free_create_and_free_has_no_bookkeeping_round6() {
     drop(file);
     assert_eq!(hosted_scene::bookkeeping_counts(), before);
 }
-#[test]
-fn live_occurrence_builds_and_reclaims_bookkeeping_round6() {
-    let before = hosted_scene::bookkeeping_counts();
-    for _ in 0..8 {
-        let s = Scene::new();
-        assert!(hosted_scene::bookkeeping_counts().revisions > before.revisions);
-        assert!(hosted_scene::bookkeeping_counts().indexed_handles > before.indexed_handles);
-        drop(s);
-        assert_eq!(hosted_scene::bookkeeping_counts(), before);
-    }
-}
-#[test]
-fn dropping_an_in_flight_occurrence_reclaims_all_bookkeeping_round6() {
-    let before = hosted_scene::bookkeeping_counts();
-    let mut s = Scene::new();
-    s.begin();
-    let list = s
-        .root
-        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-        .unwrap();
-    set_row_collapsed(&list, 0, true).unwrap();
-    let model = RuntimeOwnedViewModelHandle::from_native(s._file.clone(), vm(&s.root)).unwrap();
-    let scope = s
-        .moves
-        .frame_scope(&s.root, std::slice::from_ref(&model))
-        .unwrap()
-        .unwrap();
-    let during = hosted_scene::bookkeeping_counts();
-    assert!(during.loan_lists > before.loan_lists);
-    assert!(during.projections > before.projections);
-    assert!(during.row_indices > before.row_indices);
-    assert!(during.slot_states > before.slot_states);
-    assert_eq!(during.active_frames, 1);
-    let weak = s.root.downgrade();
-    drop(s);
-    assert!(weak.upgrade().is_none());
-    assert_eq!(hosted_scene::bookkeeping_counts(), before);
-    drop((scope, model));
-}
 
 #[test]
 fn child_dispatch_cannot_retarget_its_owning_scene_plan_round6() {
@@ -3206,35 +2035,6 @@ fn checkpoint_rollback_retains_and_restores_replaced_rows_round7() {
         drop(retained);
         assert!(weak.upgrade().is_none());
     }
-}
-
-#[test]
-fn import_validation_misplaced_page_slot_is_preserved_and_ignored() {
-    let before = hosted_scene::bookkeeping_counts();
-    let s = Scene::from_bytes(&fixture::root_owned_vm_fixture());
-    let source = s
-        .root
-        .with_artboard(|b| b.find_handle::<NestedArtboard>("root unit"))
-        .unwrap();
-    assert!(
-        source
-            .with(|o| o
-                .as_nested_artboard()
-                .unwrap()
-                .children()
-                .iter()
-                .any(|h| h.is_type_of(records::LiveSlot::TYPE_KEY) && h.is_alive()))
-            .unwrap()
-    );
-    let unit = child(&source).unwrap();
-    let weak = s.root.downgrade();
-    assert!(move_live(&source, &s.f).is_err());
-    assert_eq!(child(&source).unwrap().core_handle(), unit.core_handle());
-    assert!(child(&s.f).is_none());
-    drop(unit);
-    drop(s);
-    assert!(weak.upgrade().is_none());
-    assert_eq!(hosted_scene::bookkeeping_counts(), before);
 }
 
 #[test]
@@ -3473,39 +2273,6 @@ fn mutable_list_collapse_reconciles_after_its_borrow_round9() {
     }
 }
 
-#[test]
-fn import_validation_preserves_slots_regardless_of_default_rows() {
-    for empty in [true, false] {
-        let mut factory = PersistentFactory::new(RecordingFactory::new());
-        let file = File::import(
-            &fixture::endpoint_shape_fixture(empty),
-            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
-            None,
-            None,
-            None,
-        )
-        .unwrap();
-        for name in ["A", "B", "R2", "R3", "R4"] {
-            let board = file.with_file(|f| f.artboard_named(name)).unwrap();
-            let has_slots =
-                board.with_artboard(|b| !b.find_all_handles::<records::LiveSlot>().is_empty());
-            assert!(has_slots, "{name}, empty defaults: {empty}");
-        }
-        if !empty {
-            let root = fresh_page(&file);
-            let rows = screens(&root).unwrap();
-            let slots = rows["R4"].with_artboard(|b| b.find_all_handles::<NestedArtboard>());
-            let unit = child(&slots[0]).unwrap().core_handle();
-            let flight = child(&slots[1]).unwrap().core_handle();
-            LiveMoves::default().prepare(&root).unwrap();
-            assert!(move_live(&slots[0], &slots[1]).is_err());
-            assert!(empty_slot(&slots[1]).is_err());
-            assert_eq!(child(&slots[0]).unwrap().core_handle(), unit);
-            assert_eq!(child(&slots[1]).unwrap().core_handle(), flight);
-        }
-    }
-}
-
 // Patch only known encoded declaration properties in the extracted Page run.
 #[cfg(feature = "artboard-replace")]
 fn replacement_page(s: &Scene, rejected: bool) -> Vec<u8> {
@@ -3621,40 +2388,6 @@ fn import_validation_rejected_replacement_preserves_existing_definitions() {
     assert_eq!(child(&destination).unwrap().core_handle(), unit);
 }
 
-#[cfg(feature = "artboard-replace")]
-#[test]
-fn import_validation_successful_replacement_ignores_former_screen_slots() {
-    let mut s = Scene::new();
-    let bytes = replacement_page(&s, false);
-    assert_eq!(
-        s._file.with_file_mut(|f| f.replace_artboard(0, &bytes)),
-        ImportResult::Success
-    );
-    let root = fresh_page(&s._file);
-    let rows = screens(&root).unwrap();
-    let a = &rows["A"];
-    assert!(
-        !a.with_artboard(|b| b.find_all_handles::<records::LiveSlot>())
-            .is_empty()
-    );
-    let slots = a.with_artboard(|b| b.find_all_handles::<NestedArtboard>());
-    let unit = child(&slots[0]).unwrap().core_handle();
-    let flight = child(&slots[1]).unwrap().core_handle();
-    let mut moves = LiveMoves::default();
-    moves.prepare(&root).unwrap();
-    assert_eq!(
-        child(&slots[1]).unwrap().core_handle(),
-        flight,
-        "ignored flight was emptied"
-    );
-    assert!(move_live(&slots[0], &slots[1]).is_err());
-    assert!(empty_slot(&slots[1]).is_err());
-    assert_eq!(child(&slots[0]).unwrap().core_handle(), unit);
-    // The retained old occurrence still has its original A/B classification.
-    s.begin();
-    s.end();
-}
-
 #[test]
 fn import_validation_preserves_and_ignores_steps_without_screens() {
     let mut bytes = fixture::fixture(2);
@@ -3729,26 +2462,6 @@ fn page_model(s: &Scene) -> RuntimeOwnedViewModelHandle {
         .with_context(|c| c.main_view_model_instance())
         .unwrap();
     RuntimeOwnedViewModelHandle::from_native(s._file.clone(), model).unwrap()
-}
-
-#[test]
-fn pending_insert_is_applied_before_takeoff() {
-    let mut s = Scene::new();
-    let page = page_model(&s);
-    let incoming = page.list_item_by_property_name_path("screens", 1).unwrap();
-    assert!(page.remove_list_item_by_property_name_path("screens", 1));
-    s.advance(0.0);
-    assert!(!screens(&s.root).unwrap().contains_key("B"));
-    assert!(page.insert_list_item_by_property_name_path("screens", 1, &incoming));
-    // No advance or draw is allowed between insertion and take-off.
-    s.moves.step_begin(&s.root, "B", Some("t1")).unwrap();
-    let b = screens(&s.root).unwrap()["B"].clone();
-    let slots = b.with_artboard(|b| b.find_all_handles::<NestedArtboard>());
-    assert!(
-        child(&slots[0]).is_none(),
-        "fresh incoming unit must not draw before take-off"
-    );
-    assert_eq!(drawn_bounds(&mut s).len(), 1);
 }
 
 #[test]
@@ -3927,36 +2640,6 @@ fn flight_progress(s: &mut Scene, progress: f32) {
     s.advance(0.0);
 }
 
-#[test]
-fn incoming_number_and_color_blend_then_bindings_drive_after_landing() {
-    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
-    let unit = child(&s.s).unwrap();
-    let model = vm(&unit);
-    // The start is the current instance value, rather than its old source.
-    set(&property(&model, "prop"), 575, 30.0);
-    s.begin();
-    for (progress, number, color) in [
-        (0.0, 30.0, 0x20406080),
-        (0.5, 115.0, 0x80b09880),
-        (1.0, 200.0, 0xe0c0a080),
-    ] {
-        flight_progress(&mut s, progress);
-        close(val(&property(&model, "prop"), 575), number);
-        assert_eq!(color_value(&model, "accent"), color);
-    }
-    s.end();
-    assert_eq!(child(&s.d).unwrap().core_handle(), unit.core_handle());
-    set(&property(&vm(&s.b), "offset"), 575, 321.0);
-    assert!(CoreRegistry::set_color_handle(
-        &property(&vm(&s.b), "accent"),
-        555,
-        0x12345678
-    ));
-    s.advance(0.0);
-    close(val(&property(&model, "prop"), 575), 321.0);
-    assert_eq!(color_value(&model, "accent"), 0x12345678);
-}
-
 /// Flies the unit's `accent` from `from`, its current value, to `to`, the
 /// landing Screen's value, and reads it at each progress. The reads are hex so
 /// a failed comparison shows every step.
@@ -3985,58 +2668,6 @@ fn accent_blend(from: u32, to: u32, progresses: &[f32]) -> Vec<String> {
     reads
 }
 
-#[test]
-fn a_clear_end_keeps_the_other_ends_color() {
-    let (purple, clear) = (0xffa67dc1, 0x00000000);
-    let at = [0.25, 0.5, 0.75];
-    assert_eq!(
-        [
-            accent_blend(purple, clear, &at),
-            accent_blend(clear, purple, &at)
-        ],
-        [
-            ["0xbfa67dc1", "0x80a67dc1", "0x40a67dc1"],
-            ["0x40a67dc1", "0x80a67dc1", "0xbfa67dc1"]
-        ]
-    );
-}
-
-#[test]
-fn a_clear_end_keeps_the_other_ends_color_on_the_last_steps() {
-    // So near the end that alpha rounds to 0 and nothing draws, but the
-    // channels stay the color's own.
-    assert_eq!(
-        accent_blend(0x82ffffff, 0x00000000, &[1.0 - f32::EPSILON]),
-        ["0x00ffffff"]
-    );
-}
-
-#[test]
-fn a_faint_end_counts_by_its_strength() {
-    assert_eq!(accent_blend(0x0f000000, 0xffffffff, &[0.5]), ["0x87f1f1f1"]);
-}
-
-#[test]
-fn clear_to_clear_stays_clear() {
-    let halfway = accent_blend(0x00a67dc1, 0x00000000, &[0.5]);
-    assert!(halfway[0].starts_with("0x00"), "{halfway:?}");
-    for (from, to) in [
-        (0xffa67dc1u32, 0x00000000u32),
-        (0x00000000, 0xffa67dc1),
-        (0x0f000000, 0xffffffff),
-    ] {
-        assert_eq!(
-            accent_blend(from, to, &[0.0, 1.0]),
-            [format!("{from:#010x}"), format!("{to:#010x}")]
-        );
-    }
-}
-
-#[test]
-fn equal_strength_colors_blend_as_before() {
-    assert_eq!(accent_blend(0xff204060, 0xff60a0c0, &[0.5]), ["0xff407090"]);
-}
-
 /// Removes row B and inserts its Screen model again, as a host adds the
 /// incoming row for a step. The page has not advanced since the insert.
 fn add_row_b_for_the_step(s: &mut Scene) {
@@ -4051,61 +2682,6 @@ fn row_b_and_its_home_slot(s: &Scene) -> (RuntimeArtboardInstanceHandle, CoreHan
     let row = screens(&s.root).unwrap()["B"].clone();
     let home = row.with_artboard(|b| b.find_all_handles::<NestedArtboard>())[0].clone();
     (row, home)
-}
-
-#[test]
-fn a_unit_flying_into_a_row_added_for_the_step_blends_its_number_and_color() {
-    for settle in [false, true] {
-        let mut s = Scene::from_bytes(&fixture::values_fixture(false));
-        let unit = child(&s.s).unwrap();
-        let model = vm(&unit);
-        let context = unit.data_context().unwrap();
-        add_row_b_for_the_step(&mut s);
-        let list = s
-            .root
-            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-            .unwrap();
-        // Waking the row flushes the insert and empties its fresh flight slot
-        // before any advance, as the SDK does; it may then settle one frame.
-        set_row_collapsed(&list, 1, false).unwrap();
-        if settle {
-            s.advance(0.0);
-        }
-        s.begin();
-        flight_progress(&mut s, 0.5);
-        let at_half = val(&property(&model, "prop"), 575);
-        assert!(
-            (at_half - 105.0).abs() < 0.002,
-            "settle {settle}: expected 105 halfway, got {at_half}"
-        );
-        assert_eq!(color_value(&model, "accent"), 0x80b09880, "settle {settle}");
-        s.end();
-        s.advance(0.0);
-        let (row, home) = row_b_and_its_home_slot(&s);
-        assert_eq!(child(&home).unwrap().core_handle(), unit.core_handle());
-        assert!(context.ptr_eq(&unit.data_context().unwrap()));
-        assert!(
-            context
-                .with_context(|c| c.parent())
-                .unwrap()
-                .ptr_eq(&row.data_context().unwrap())
-        );
-        close(val(&property(&model, "prop"), 575), 200.0);
-        assert_eq!(color_value(&model, "accent"), 0xe0c0a080);
-        set(&property(&vm(&row), "offset"), 575, 321.0);
-        assert!(CoreRegistry::set_color_handle(
-            &property(&vm(&row), "accent"),
-            555,
-            0x12345678
-        ));
-        s.advance(0.0);
-        let followed = val(&property(&model, "prop"), 575);
-        assert!(
-            (followed - 321.0).abs() < 0.002,
-            "settle {settle}: expected 321 after landing, got {followed}"
-        );
-        assert_eq!(color_value(&model, "accent"), 0x12345678, "settle {settle}");
-    }
 }
 
 #[test]
@@ -4125,127 +2701,6 @@ fn a_never_advanced_incoming_version_departs_bound_and_follows_its_screen() {
 }
 
 #[test]
-fn incoming_values_follow_live_destination_changes_during_flight() {
-    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
-    let model = vm(&child(&s.s).unwrap());
-    s.begin();
-    flight_progress(&mut s, 0.5);
-    close(val(&property(&model, "prop"), 575), 105.0);
-    set(&property(&vm(&s.b), "offset"), 575, 310.0);
-    assert!(CoreRegistry::set_color_handle(
-        &property(&vm(&s.b), "accent"),
-        555,
-        0x6080a0c0
-    ));
-    s.advance(0.0);
-    close(val(&property(&model, "prop"), 575), 160.0);
-    assert_eq!(color_value(&model, "accent"), 0x407090b0);
-    flight_progress(&mut s, 1.0);
-    close(val(&property(&model, "prop"), 575), 310.0);
-    assert_eq!(color_value(&model, "accent"), 0x6080a0c0);
-    // Landing samples the latest destination even without another follow.
-    set(&property(&vm(&s.b), "offset"), 575, 410.0);
-    s.end();
-    close(val(&property(&model, "prop"), 575), 410.0);
-}
-
-#[test]
-fn incoming_string_switches_at_takeoff_and_private_values_stay() {
-    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
-    let model = vm(&child(&s.s).unwrap());
-    assert_eq!(string_value(&model, "label"), "outgoing");
-    set(&property(&model, "count"), 575, 7.0);
-    s.begin();
-    assert_eq!(string_value(&model, "label"), "incoming");
-    close(val(&property(&model, "prop"), 575), 10.0);
-    close(val(&property(&model, "count"), 575), 7.0);
-    flight_progress(&mut s, 0.5);
-    s.end();
-    close(val(&property(&model, "count"), 575), 7.0);
-}
-
-#[test]
-fn unbound_typed_text_writes_the_incoming_prop_source_in_both_directions() {
-    for (two_way, settle) in [(false, false), (true, false), (false, true), (true, true)] {
-        let mut s = Scene::from_bytes(&fixture::values_fixture(two_way));
-        let unit = child(&s.s).unwrap();
-        let model = vm(&unit);
-        let field = unit
-            .with_artboard(|b| b.find_handle::<source::text::text_input::TextInput>("edit"))
-            .unwrap();
-        assert!(
-            field
-                .with_downcast_mut::<source::text::text_input::TextInput, _>(
-                    |f| f.text_input("typed locally")
-                )
-                .unwrap()
-        );
-        if settle {
-            s.advance(0.0);
-            assert_eq!(string_value(&model, "text"), "typed locally");
-        }
-        s.begin();
-        assert_eq!(string_value(&vm(&s.b), "text"), "typed locally");
-        s.end();
-        assert_eq!(string_value(&vm(&s.b), "text"), "typed locally");
-        assert_eq!(string_value(&model, "text"), "typed locally");
-        assert_eq!(
-            CoreRegistry::get_string_handle(&field, 817).as_deref(),
-            Some("typed locally")
-        );
-        // From landing on, the incoming prop drives the same input normally.
-        assert!(CoreRegistry::set_string_handle(
-            &property(&vm(&s.b), "text"),
-            561,
-            "later".into()
-        ));
-        s.advance(0.0);
-        assert_eq!(
-            CoreRegistry::get_string_handle(&field, 817).as_deref(),
-            Some("later")
-        );
-    }
-}
-
-#[test]
-fn authored_unbound_text_does_not_override_the_incoming_prop() {
-    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
-    let unit = child(&s.s).unwrap();
-    let model = vm(&unit);
-    assert!(CoreRegistry::set_string_handle(
-        &property(&model, "text"),
-        561,
-        "authored".into()
-    ));
-    s.advance(0.0);
-    s.begin();
-    s.end();
-    assert_eq!(string_value(&vm(&s.b), "text"), "destination text");
-    assert_eq!(string_value(&model, "text"), "destination text");
-}
-
-#[test]
-/// With no advance, the landed unit reads B's values and the copy A gets
-/// reads A's (decision 297); a cut back to A moves nothing.
-fn takeoff_landing_and_refill_without_an_advance_adopt_their_slots_values_at_once() {
-    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
-    let model = vm(&child(&s.s).unwrap());
-    s.begin();
-    s.end();
-    close(val(&property(&model, "prop"), 575), 200.0);
-    assert_eq!(color_value(&model, "accent"), 0xe0c0a080);
-    assert!(s.moves.flights(&s.root).is_empty());
-    let own = vm(&child(&s.s).unwrap());
-    assert_ne!(own, model);
-    close(val(&property(&own, "prop"), 575), 10.0);
-    assert_eq!(color_value(&own, "accent"), 0x20406080);
-    s.moves.step_begin(&s.root, "A", None).unwrap();
-    close(val(&property(&own, "prop"), 575), 10.0);
-    close(val(&property(&model, "prop"), 575), 200.0);
-    s.moves.step_end(&s.root, "A", None).unwrap();
-}
-
-#[test]
 fn two_versions_blend_against_their_own_landing_slot_values() {
     let mut s = Scene::from_bytes(&fixture::two_version_values_fixture());
     let outgoing = vm(&child(&s.s).unwrap());
@@ -4261,140 +2716,6 @@ fn two_versions_blend_against_their_own_landing_slot_values() {
     s.end();
     close(val(&property(&outgoing, "prop"), 575), 110.0);
     close(val(&property(&incoming, "prop"), 575), 400.0);
-}
-
-#[test]
-fn values_follow_the_same_native_keyed_progress_as_the_pose() {
-    let mut s = Scene::from_bytes(&fixture::keyed_fixture());
-    let model = vm(&child(&s.s).unwrap());
-    s.begin();
-    s.advance(0.5);
-    let progress = val(&s.moves.flights(&s.root)[0].controls(), 62003);
-    close(progress, 0.5);
-    close(val(&property(&model, "prop"), 575), 105.0);
-}
-
-/// A key that runs past 1 leaves the flight's progress at 1.25. The
-/// follower clamps it once and hands that one number to the values and to
-/// the pose, so both land: raw progress would give `prop` 247.5 and
-/// elapsed time 105, where the clamped 1 gives 200.
-#[test]
-fn values_follow_the_poses_clamped_progress_when_a_key_overshoots() {
-    let mut s = Scene::from_bytes(&fixture::keyed_overshoot_fixture());
-    let model = vm(&child(&s.s).unwrap());
-    s.begin();
-    let start = val(&property(&model, "prop"), 575);
-    assert!(
-        (start - 200.0).abs() > 1.0,
-        "the source's prop starts away from 200: {start}"
-    );
-    s.advance(0.5);
-    close(val(&s.moves.flights(&s.root)[0].controls(), 62003), 1.25);
-    close(val(&property(&model, "prop"), 575), 200.0);
-    let a = slot_pose(&s.s).unwrap();
-    let b = slot_pose(&s.d).unwrap();
-    let f = slot_pose(&s.f).unwrap();
-    assert!(
-        (a.transform[4] - b.transform[4]).abs() > 1.0,
-        "the slots sit apart in x: {} and {}",
-        a.transform[4],
-        b.transform[4]
-    );
-    close(f.transform[4], b.transform[4] + 7.0);
-    close(f.transform[5], b.transform[5] + 11.0);
-}
-
-#[test]
-fn converted_two_way_numbers_blend_without_writing_back_presentation_values() {
-    use source::data_bind::converters::{
-        data_converter_operation::ArithmeticOperation,
-        data_converter_operation_value::DataConverterOperationValue,
-    };
-    use source::viewmodel::viewmodel_instance::ViewModelInstance;
-    let mut s = Scene::new();
-    let model = vm(&child(&s.s).unwrap());
-    let fresh = child(&s.d).unwrap();
-    let fresh_model = vm(&fresh);
-    let target = property(&fresh_model, "prop");
-    let converter =
-        s.d.insert_sibling(DataConverterOperationValue::new(
-            ArithmeticOperation::Multiply,
-            2.0,
-        ))
-        .unwrap();
-    let mut binds = s.b.with_artboard(|b| b.data_bind_handles());
-    binds.extend(fresh.with_artboard(|b| b.data_bind_handles()));
-    binds.extend(
-        fresh_model
-            .with_downcast::<ViewModelInstance, _>(|v| v.value_data_binds().to_vec())
-            .unwrap(),
-    );
-    let mut configured = 0;
-    for bind in binds {
-        if bind
-            .with(|o| o.as_data_bind().and_then(|b| b.target()))
-            .flatten()
-            .as_ref()
-            == Some(&target)
-        {
-            assert!(CoreRegistry::set_uint_handle(&bind, 587, 2 | 8));
-            bind.with_mut(|o| {
-                o.as_data_bind_mut()
-                    .unwrap()
-                    .set_converter(Some(converter.clone()))
-            });
-            configured += 1;
-        }
-    }
-    assert!(configured > 0);
-    s.begin();
-    flight_progress(&mut s, 0.5);
-    close(val(&property(&model, "prop"), 575), 205.0);
-    close(val(&property(&vm(&s.b), "offset"), 575), 200.0);
-    set(&property(&vm(&s.b), "offset"), 575, 310.0);
-    s.advance(0.0);
-    close(val(&property(&model, "prop"), 575), 315.0);
-    close(val(&property(&vm(&s.b), "offset"), 575), 310.0);
-    s.end();
-    close(val(&property(&model, "prop"), 575), 620.0);
-    close(val(&property(&vm(&s.b), "offset"), 575), 310.0);
-}
-
-#[test]
-fn outgoing_bound_typed_text_does_not_write_the_incoming_source() {
-    use source::data_bind::{data_bind::DataBind, data_bind_context::DataBindContext};
-    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
-    let unit = child(&s.s).unwrap();
-    let model = vm(&unit);
-    let mut bind = DataBindContext::default();
-    bind.base.base = DataBind::new(0, 561, 0);
-    bind.decode_source_path_ids(&[1, 3]);
-    let bind = s.s.insert_sibling(bind).unwrap();
-    bind.with_mut(|o| {
-        o.as_data_bind_mut()
-            .unwrap()
-            .set_target(Some(property(&model, "text")))
-    });
-    s.a.with_artboard_mut(|b| b.add_data_bind(bind));
-    s.advance(0.0);
-    let field = unit
-        .with_artboard(|b| b.find_handle::<source::text::text_input::TextInput>("edit"))
-        .unwrap();
-    assert!(
-        field
-            .with_downcast_mut::<source::text::text_input::TextInput, _>(
-                |f| f.text_input("new edit")
-            )
-            .unwrap()
-    );
-    s.begin();
-    s.end();
-    assert_eq!(string_value(&vm(&s.b), "text"), "destination text");
-    assert_eq!(string_value(&model, "text"), "destination text");
-    assert_eq!(
-        CoreRegistry::get_string_handle(&field, 817).as_deref(),
-        Some("destination text")
-    );
 }
 
 // Inline VM import normally makes two-way props source-first. Explicitly
@@ -4437,114 +2758,6 @@ fn assert_target_first_prop(unit: &RuntimeArtboardInstanceHandle, target: &CoreH
         }) == Some(true)),
         "normal authored two-way ordering must resume"
     );
-}
-
-#[test]
-fn target_first_two_way_midpoint_landing_adopts_source_before_writeback() {
-    for latest in [200.0, 310.0] {
-        let mut s = Scene::from_bytes(&fixture::values_fixture(false));
-        target_first_props(&s.b, &s.d, &["prop", "accent"]);
-        let unit = child(&s.s).unwrap();
-        let model = vm(&unit);
-        let destination = vm(&s.b);
-        s.begin();
-        flight_progress(&mut s, 0.5);
-        close(val(&property(&model, "prop"), 575), 105.0);
-        assert_eq!(color_value(&model, "accent"), 0x80b09880);
-        // No further follow: landing must sample the latest source itself.
-        set(&property(&destination, "offset"), 575, latest);
-        assert!(CoreRegistry::set_color_handle(
-            &property(&destination, "accent"),
-            555,
-            0x6080a0c0
-        ));
-        s.end();
-        close(val(&property(&destination, "offset"), 575), latest);
-        close(val(&property(&model, "prop"), 575), latest);
-        assert_eq!(color_value(&destination, "accent"), 0x6080a0c0);
-        assert_eq!(color_value(&model, "accent"), 0x6080a0c0);
-        assert_target_first_prop(&unit, &property(&model, "prop"));
-        // The handoff is one-time: real edits after landing still write back.
-        set(&property(&model, "prop"), 575, 444.0);
-        assert!(CoreRegistry::set_color_handle(
-            &property(&model, "accent"),
-            555,
-            0x12345678
-        ));
-        s.advance(0.0);
-        close(val(&property(&destination, "offset"), 575), 444.0);
-        assert_eq!(color_value(&destination, "accent"), 0x12345678);
-    }
-}
-
-#[test]
-fn target_first_two_way_cancel_after_midflight_row_removal_adopts_its_slots_source() {
-    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
-    target_first_props(&s.a, &s.s, &["prop", "accent"]);
-    target_first_props(&s.b, &s.d, &["prop", "accent"]);
-    let unit = child(&s.s).unwrap();
-    let model = vm(&unit);
-    let home = vm(&s.a);
-    let destination = vm(&s.b);
-    s.begin();
-    flight_progress(&mut s, 0.5);
-    close(val(&property(&model, "prop"), 575), 105.0);
-    let list = s
-        .root
-        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-        .unwrap();
-    let a = list
-        .with_downcast::<ArtboardComponentList, _>(|l| l.list_item(0))
-        .flatten()
-        .unwrap();
-    ArtboardComponentList::update_list_occurrence(&list, &[a]);
-    s.advance(0.0);
-    assert_eq!(child(&s.s).unwrap().core_handle(), unit.core_handle());
-    assert!(s.moves.flights(&s.root).is_empty());
-    close(val(&property(&home, "offset"), 575), 10.0);
-    close(val(&property(&destination, "offset"), 575), 200.0);
-    close(val(&property(&model, "prop"), 575), 10.0);
-    assert_eq!(color_value(&home, "accent"), 0x20406080);
-    assert_eq!(color_value(&destination, "accent"), 0xe0c0a080);
-    assert_eq!(color_value(&model, "accent"), 0x20406080);
-    assert_target_first_prop(&unit, &property(&model, "prop"));
-    set(&property(&model, "prop"), 575, 88.0);
-    s.advance(0.0);
-    close(val(&property(&home, "offset"), 575), 88.0);
-    close(val(&property(&destination, "offset"), 575), 200.0);
-}
-
-#[test]
-fn target_first_two_way_expired_projection_adopts_live_source_before_writeback() {
-    for queued_target in [false, true] {
-        let mut s = Scene::new();
-        target_first_props(&s.b, &s.d, &["prop"]);
-        let unit = child(&s.s).unwrap();
-        let model = vm(&unit);
-        let target = property(&model, "prop");
-        let source = property(&vm(&s.b), "offset");
-        s.begin();
-        flight_progress(&mut s, 0.5);
-        close(val(&target, 575), 105.0);
-        if queued_target {
-            // Leave target dirt queued at the synthesized value, as well as
-            // a newer source; neither ordering may write the blend back.
-            set(&target, 575, 104.0);
-            set(&target, 575, 105.0);
-            set(&source, 575, 310.0);
-        }
-        // Cancellation can drop only the projection and retain the mounted
-        // binding. Even a clean binding must settle its source-only handoff.
-        s.moves.with_flights(&s.root, |flights| flights.clear());
-        unit.update_data_binds(true);
-        let expected = if queued_target { 310.0 } else { 200.0 };
-        close(val(&source, 575), expected);
-        close(val(&target, 575), expected);
-        assert_target_first_prop(&unit, &target);
-        set(&target, 575, 444.0);
-        unit.update_data_binds(true);
-        close(val(&source, 575), 444.0);
-    }
 }
 
 // A landed unit keeps its home model, the model its home slot lends it, and
@@ -4785,265 +2998,6 @@ fn a_unit_carried_from_a_sleeping_screen_does_not_hear_what_it_missed() {
         s.advance(0.0);
         assert_eq!(plays(), heard, "{what}: the unit hears its go");
     }
-}
-
-#[test]
-fn a_landed_unit_follows_its_new_screen_while_its_home_sleeps() {
-    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
-    let list = screens_list(&s);
-    let unit = child(&s.s).unwrap();
-    let model = vm(&unit);
-    // The start is the current instance value, rather than its old source.
-    set(&property(&model, "prop"), 575, 30.0);
-    s.begin();
-    for (progress, number, color) in [
-        (0.0, 30.0, 0x20406080),
-        (0.5, 115.0, 0x80b09880),
-        (1.0, 200.0, 0xe0c0a080),
-    ] {
-        flight_progress(&mut s, progress);
-        close(val(&property(&model, "prop"), 575), number);
-        assert_eq!(color_value(&model, "accent"), color);
-    }
-    s.end();
-    // The SDK retires the Screen the unit came from right after End.
-    set_row_collapsed(&list, 0, true).unwrap();
-    assert_eq!(child(&s.d).unwrap().core_handle(), unit.core_handle());
-    set(&property(&vm(&s.b), "offset"), 575, 321.0);
-    assert!(CoreRegistry::set_color_handle(
-        &property(&vm(&s.b), "accent"),
-        555,
-        0x12345678
-    ));
-    s.advance(0.0);
-    close(val(&property(&model, "prop"), 575), 321.0);
-    assert_eq!(color_value(&model, "accent"), 0x12345678);
-}
-
-#[test]
-fn a_landed_units_own_writes_reach_its_new_screen_while_its_home_sleeps() {
-    for latest in [200.0, 310.0] {
-        let mut s = Scene::from_bytes(&fixture::values_fixture(false));
-        let list = screens_list(&s);
-        target_first_props(&s.b, &s.d, &["prop", "accent"]);
-        let unit = child(&s.s).unwrap();
-        let model = vm(&unit);
-        let destination = vm(&s.b);
-        s.begin();
-        flight_progress(&mut s, 0.5);
-        close(val(&property(&model, "prop"), 575), 105.0);
-        assert_eq!(color_value(&model, "accent"), 0x80b09880);
-        // No further follow: landing must sample the latest source itself.
-        set(&property(&destination, "offset"), 575, latest);
-        assert!(CoreRegistry::set_color_handle(
-            &property(&destination, "accent"),
-            555,
-            0x6080a0c0
-        ));
-        s.end();
-        // The SDK retires the Screen the unit came from right after End.
-        set_row_collapsed(&list, 0, true).unwrap();
-        close(val(&property(&destination, "offset"), 575), latest);
-        close(val(&property(&model, "prop"), 575), latest);
-        assert_eq!(color_value(&destination, "accent"), 0x6080a0c0);
-        assert_eq!(color_value(&model, "accent"), 0x6080a0c0);
-        assert_target_first_prop(&unit, &property(&model, "prop"));
-        // The unit's own writes travel back to the Screen it landed on, the
-        // way a tap's trigger does.
-        set(&property(&model, "prop"), 575, 444.0);
-        assert!(CoreRegistry::set_color_handle(
-            &property(&model, "accent"),
-            555,
-            0x12345678
-        ));
-        s.advance(0.0);
-        close(val(&property(&destination, "offset"), 575), 444.0);
-        assert_eq!(color_value(&destination, "accent"), 0x12345678);
-    }
-}
-
-#[test]
-fn a_landed_unit_sleeps_and_wakes_with_the_screen_that_shows_it() {
-    // The home awake is the guard; the home asleep is the case.
-    for home_awake in [true, false] {
-        let what = if home_awake {
-            "home awake"
-        } else {
-            "home asleep"
-        };
-        let mut s = Scene::from_bytes(&fixture::values_fixture(false));
-        let list = screens_list(&s);
-        let model = vm(&child(&s.s).unwrap());
-        land_in_b(&mut s);
-        close_in(what, val(&property(&model, "prop"), 575), 200.0);
-        if !home_awake {
-            set_row_collapsed(&list, 0, true).unwrap();
-        }
-        set_row_collapsed(&list, 1, true).unwrap();
-        set(&property(&vm(&s.b), "offset"), 575, 555.0);
-        s.advance(0.0);
-        // A change written while the showing Screen sleeps waits for its wake.
-        close_in(
-            &format!("{what}, showing Screen asleep"),
-            val(&property(&model, "prop"), 575),
-            200.0,
-        );
-        set_row_collapsed(&list, 1, false).unwrap();
-        s.advance(0.0);
-        close_in(
-            &format!("{what}, showing Screen woken"),
-            val(&property(&model, "prop"), 575),
-            555.0,
-        );
-    }
-}
-
-#[test]
-fn waking_the_home_later_changes_nothing_for_a_landed_unit() {
-    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
-    let list = screens_list(&s);
-    let model = vm(&child(&s.s).unwrap());
-    set(&property(&model, "prop"), 575, 30.0);
-    land_in_b(&mut s);
-    set_row_collapsed(&list, 0, true).unwrap();
-    set(&property(&vm(&s.b), "offset"), 575, 321.0);
-    assert!(CoreRegistry::set_color_handle(
-        &property(&vm(&s.b), "accent"),
-        555,
-        0x12345678
-    ));
-    s.advance(0.0);
-    set_row_collapsed(&list, 0, false).unwrap();
-    s.advance(0.0);
-    close(val(&property(&model, "prop"), 575), 321.0);
-    assert_eq!(color_value(&model, "accent"), 0x12345678);
-    // The home's own bindings no longer drive the unit it lent out.
-    set(&property(&vm(&s.a), "offset"), 575, 999.0);
-    s.advance(0.0);
-    close(val(&property(&model, "prop"), 575), 321.0);
-}
-
-#[test]
-fn back_after_the_home_slept_returns_the_unit_with_its_own_bindings() {
-    use source::data_bind::data_bind::DataBind;
-    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
-    let list = screens_list(&s);
-    let unit = child(&s.s).unwrap();
-    let model = vm(&unit);
-    land_in_b(&mut s);
-    set_row_collapsed(&list, 0, true).unwrap();
-    // Back in the SDK's order: wake the home, Begin, fly, End, sleep B.
-    set_row_collapsed(&list, 0, false).unwrap();
-    s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
-    flight_progress(&mut s, 1.0);
-    s.moves.step_end(&s.root, "A", Some("back")).unwrap();
-    set_row_collapsed(&list, 1, true).unwrap();
-    assert_eq!(child(&s.s).unwrap().core_handle(), unit.core_handle());
-    set(&property(&vm(&s.a), "offset"), 575, 77.0);
-    s.advance(0.0);
-    close(val(&property(&model, "prop"), 575), 77.0);
-    set(&property(&vm(&s.b), "offset"), 575, 88.0);
-    s.advance(0.0);
-    close(val(&property(&model, "prop"), 575), 77.0);
-    set_row_collapsed(&list, 1, false).unwrap();
-    s.advance(0.0);
-    close(val(&property(&model, "prop"), 575), 77.0);
-    // One instance-value binding per home prop: prop, accent and label. A's
-    // text has no Screen binding.
-    let mut ids: Vec<u32> = unit
-        .core_handle()
-        .data_bind_container()
-        .unwrap()
-        .data_binds()
-        .to_vec()
-        .into_iter()
-        .filter_map(|bind| {
-            bind.with(|o| {
-                o.as_data_bind()
-                    .filter(|b| b.is_instance_value_bind())
-                    .and_then(DataBind::target)
-            })
-            .flatten()
-        })
-        .map(|target| {
-            target
-                .with(|o| {
-                    o.as_view_model_instance_value()
-                        .map(|v| v.view_model_property_id())
-                })
-                .flatten()
-                .unwrap()
-        })
-        .collect();
-    ids.sort_unstable();
-    assert_eq!(ids, [1, 2, 3]);
-}
-
-#[test]
-fn a_landed_units_model_reference_writes_back_while_its_home_sleeps() {
-    use source::viewmodel::{
-        viewmodel_instance::ViewModelInstance,
-        viewmodel_instance_viewmodel::ViewModelInstanceViewModel,
-    };
-    fn referenced(model: &CoreHandle) -> Option<CoreHandle> {
-        property(model, "ref")
-            .with_downcast::<ViewModelInstanceViewModel, _>(|v| v.reference_view_model_instance())
-            .flatten()
-    }
-    // Lands the unit in B, then points the unit's reference at Ref's second
-    // instance. The copied reference binding can't push, so it is polled.
-    let land_and_repoint = |sleep: &[i32]| {
-        let mut s = Scene::from_bytes(&fixture::values_reference_fixture());
-        let list = screens_list(&s);
-        let model = vm(&child(&s.s).unwrap());
-        let second = s
-            ._file
-            .with_file(|f| f.create_view_model_instance_named("Ref", "second"))
-            .unwrap();
-        land_in_b(&mut s);
-        let landing = referenced(&vm(&s.b));
-        assert!(landing.is_some());
-        assert_ne!(landing, Some(second.clone()));
-        for &row in sleep {
-            set_row_collapsed(&list, row, true).unwrap();
-        }
-        assert!(ViewModelInstance::replace_view_model_by_name(
-            &model,
-            "ref",
-            second.clone()
-        ));
-        s.advance(0.0);
-        (s, list, landing, second)
-    };
-    // Control: with the home awake, B hears the unit's reference.
-    let (s, _, _, second) = land_and_repoint(&[]);
-    assert_eq!(
-        referenced(&vm(&s.b)),
-        Some(second),
-        "home awake: B takes the unit's reference"
-    );
-    // The SDK retires the home right after End.
-    let (s, _, _, second) = land_and_repoint(&[0]);
-    assert_eq!(
-        referenced(&vm(&s.b)),
-        Some(second),
-        "home asleep: B takes the unit's reference"
-    );
-    // Guard: while B sleeps it keeps its reference, and takes the unit's
-    // once it wakes, whether or not the home sleeps.
-    let (mut s, list, landing, second) = land_and_repoint(&[0, 1]);
-    assert_eq!(
-        referenced(&vm(&s.b)),
-        landing,
-        "B asleep keeps its reference"
-    );
-    set_row_collapsed(&list, 1, false).unwrap();
-    s.advance(0.0);
-    assert_eq!(
-        referenced(&vm(&s.b)),
-        Some(second),
-        "B woken with the home asleep: B takes the unit's reference"
-    );
 }
 
 mod page_player_event_context {
@@ -5423,103 +3377,6 @@ fn hosted_css_item_rehomes_into_flight_destination_and_home_in_one_advance() {
     }
 }
 
-#[test]
-fn a_plain_slot_to_native_layout_flight_reflows_at_interpolated_sizes() {
-    use source::{
-        generated::nested_artboard_layout_base::NestedArtboardLayoutBase,
-        layout_component::LayoutComponent,
-    };
-    let mut factory = PersistentFactory::new(RecordingFactory::new());
-    let file = File::import(
-        &fixture::native_layout_flight_reflow_fixture(),
-        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    let (root, screen, machine) = mount_layout_page(&file);
-    let slot = |name| {
-        screen
-            .with_artboard(|b| b.find_handle::<NestedArtboard>(name))
-            .unwrap()
-    };
-    // This fixture's destination is a plain host; its source is a native layout
-    // host. Fly from the plain 100 x 80 unit towards the 200 x 120 layout box.
-    let from = slot("destination");
-    let to = slot("source");
-    let flight = slot("flight");
-    for (slot, width, height) in [(&to, 200.0, 120.0), (&flight, 60.0, 40.0)] {
-        set(
-            slot,
-            NestedArtboardLayoutBase::INSTANCE_WIDTH_PROPERTY_KEY.into(),
-            width,
-        );
-        set(
-            slot,
-            NestedArtboardLayoutBase::INSTANCE_HEIGHT_PROPERTY_KEY.into(),
-            height,
-        );
-    }
-    machine.advance_and_apply(0.0);
-    let start = slot_pose(&from).unwrap().size;
-    let end = slot_pose(&to).unwrap().size;
-    close(start.x, 100.0);
-    close(start.y, 80.0);
-    close(end.x, 200.0);
-    close(end.y, 120.0);
-    let original = child(&from).unwrap();
-    let reflow = original
-        .with_artboard(|b| b.find_handle::<LayoutComponent>("reflow"))
-        .unwrap();
-    empty_slot(&flight).unwrap();
-    move_live(&from, &flight).unwrap();
-    let follower = Flight::new(flight.clone(), from.clone(), to.clone(), SizeMode::Layout).unwrap();
-    let mut moves = LiveMoves::default();
-    moves.with_flights(&root, |flights| flights.push(Entry::One(follower)));
-    for progress in [0.5, 0.25, 0.75] {
-        set(&moves.flights(&root)[0].controls(), 62003, progress);
-        machine.advance_and_apply(0.0);
-        moves.after_advance(&root).unwrap();
-        let width = 100.0 + 100.0 * progress;
-        let height = 80.0 + 40.0 * progress;
-        assert_eq!(
-            child(&flight).unwrap().core_handle(),
-            original.core_handle()
-        );
-        // The native route sizes the unit's layout, as upstream's
-        // StyleOverrider does; upstream draws and clips from that layout size.
-        let (layout_width, layout_height) =
-            original.with_artboard(|b| (b.layout_width(), b.layout_height()));
-        let size = reflow
-            .with_downcast::<LayoutComponent, _>(|c| (c.layout_width(), c.layout_height()))
-            .unwrap();
-        for (label, actual, expected) in [
-            ("layout width", layout_width, width),
-            ("layout height", layout_height, height),
-            ("child width", size.0, width),
-            ("child height", size.1, height),
-        ] {
-            assert!(
-                (actual - expected).abs() < 0.002,
-                "progress {progress}, {label}: expected {expected}, got {actual}; layout=({layout_width}, {layout_height}), child={size:?}"
-            );
-        }
-    }
-    moves.with_flights(&root, |flights| flights.clear());
-    move_live(&flight, &to).unwrap();
-    machine.advance_and_apply(0.0);
-    assert_eq!(child(&to).unwrap().core_handle(), original.core_handle());
-    let landed = original.with_artboard(|b| (b.layout_width(), b.layout_height()));
-    close(landed.0, 200.0);
-    close(landed.1, 120.0);
-    let landed_child = reflow
-        .with_downcast::<LayoutComponent, _>(|c| (c.layout_width(), c.layout_height()))
-        .unwrap();
-    close(landed_child.0, 200.0);
-    close(landed_child.1, 120.0);
-}
-
 /// A CSS flight slot authored in flow still never pushes: the runtime takes
 /// each Screen occurrence's flight slot out of flow before its first layout.
 fn in_flow_css_flight_frame(hit_test: bool) {
@@ -5704,16 +3561,6 @@ fn in_flow_css_flight_frame(hit_test: bool) {
             close(drawn_y.unwrap(), y);
         }
     }
-}
-
-#[test]
-fn an_in_flow_css_flight_slot_resizes_without_moving_the_next_rows_drawing() {
-    in_flow_css_flight_frame(false);
-}
-
-#[test]
-fn an_in_flow_css_flight_slot_resizes_without_moving_the_next_rows_hit_testing() {
-    in_flow_css_flight_frame(true);
 }
 
 /// An item record written after the first layout through the ordinary
@@ -5988,21 +3835,6 @@ fn a_flight_aims_at_the_settled_destination(progresses: &[f32], two_flights: boo
     close(original.with_artboard(|b| b.layout_height()), 120.0);
 }
 
-#[test]
-fn a_resizing_flight_reaches_its_settled_destination_without_a_landing_jump() {
-    a_flight_aims_at_the_settled_destination(&[1.0], false);
-}
-
-#[test]
-fn a_resizing_flight_interpolates_between_settled_endpoints_of_the_same_frame() {
-    a_flight_aims_at_the_settled_destination(&[0.25, 0.5, 0.75, 1.0], false);
-}
-
-#[test]
-fn two_resizing_flights_follow_their_own_endpoints_in_the_same_frame() {
-    a_flight_aims_at_the_settled_destination(&[0.25, 0.5, 0.75, 1.0], true);
-}
-
 fn css_follower_owns_box(source_kind: u8, mode: SizeMode) {
     use css_layout::{keys::*, record};
     use source::{
@@ -6229,28 +4061,6 @@ fn css_follower_owns_box(source_kind: u8, mode: SizeMode) {
         b.layout_width()
     }
 }
-#[test]
-fn hosted_css_follower_record_free_source_layout() {
-    css_follower_owns_box(0, SizeMode::Layout);
-}
-#[test]
-fn hosted_css_follower_record_free_source_scale() {
-    css_follower_owns_box(0, SizeMode::Scale);
-}
-#[test]
-fn hosted_css_follower_record_source_layout() {
-    css_follower_owns_box(1, SizeMode::Layout);
-}
-#[test]
-fn hosted_css_follower_record_source_scale() {
-    css_follower_owns_box(1, SizeMode::Scale);
-}
-#[test]
-fn hosted_css_follower_native_overrides_source() {
-    for mode in [SizeMode::Layout, SizeMode::Scale] {
-        css_follower_owns_box(2, mode);
-    }
-}
 
 /// One path `board` drew: its stream line, its final points without a closing
 /// repeat of the first vertex, and the final points of the clip set before it.
@@ -6472,14 +4282,6 @@ fn turned_unit_flies_as_a_css_box(mode: SizeMode) {
         move_live(&to, &from).unwrap();
         player.advance_and_apply(0.0);
     }
-}
-#[test]
-fn a_flight_stretches_under_the_frames_own_slide_and_turn_layout() {
-    turned_unit_flies_as_a_css_box(SizeMode::Layout);
-}
-#[test]
-fn a_flight_stretches_under_the_frames_own_slide_and_turn_scale() {
-    turned_unit_flies_as_a_css_box(SizeMode::Scale);
 }
 
 /// The stand-in that holds a unit's place while it is away places like the
@@ -8995,10 +6797,6 @@ mod paint_order {
     fn paint_order_11_resting_10_unequal_ends_layout_mode() {
         resting(10);
     }
-    #[test]
-    fn paint_order_11_resting_11_slot_origins_differ() {
-        resting(11);
-    }
 
     /// Test 12, keyed layout, E at (100, 100, 100 by 60): C, absolute at
     /// (0, 100), its width keyed 0 to 200; D, relative, pushed down by a
@@ -9351,23 +7149,6 @@ mod paint_order {
         }
     }
 
-    /// Test 17 (a), plain-host anchor: in a live-move page, a static plain
-    /// host at (50, 40) holds E's CSS frame, turned at rest, and a later
-    /// in-flow box C (0, 0, 200 by 100) overlaps E. C's fill is drawn after
-    /// the flight in every frame, both ways, as C is drawn after E at rest.
-    #[test]
-    fn paint_order_17a_plain_host_anchor_flies_under_the_later_box() {
-        let mut s = PaintScene::new(PaintCase::PlainAnchor);
-        let rest = s.painted("B", "at rest");
-        rest.meets("E", "C");
-        rest.under("E", "C");
-        s.both_ways(|s, way, p| {
-            let f = s.frame(way, p);
-            f.meets("E", "C");
-            f.under("E", "C");
-        });
-    }
-
     /// Test 17 (b): after landing, B's stream equals its stream at rest
     /// before the step.
     #[test]
@@ -9531,10 +7312,6 @@ mod paint_order {
             }
         }
         s.end("B", "go");
-    }
-    #[test]
-    fn paint_order_18c_opacity_at_rest_native_flight_slot() {
-        fade_at_rest(true);
     }
     #[test]
     fn paint_order_18c_opacity_at_rest_css_flight_slot() {
@@ -10756,10 +8533,8 @@ mod paint_order {
     /// Inventory row 4, restated for two copies: following them plays
     /// nothing and solves each layout tree that holds a copy once, however
     /// many barriers the frame has; settling the poses solves nothing more,
-    /// and following the same frame again solves nothing. The slot path's
-    /// count of row passes (`following_two_flights_settles_their_shared_row_once_without_playback`)
-    /// is restated as solves, since each copy is laid out in its own
-    /// Screen. E is 100 wide on A and 300 on B, so half way both copies
+    /// and following the same frame again solves nothing. Each copy is
+    /// laid out in its own Screen. E is 100 wide on A and 300 on B, so half way both copies
     /// take a new size and their trees must solve.
     #[test]
     fn in_place_following_two_copies_solves_each_layout_tree_once_without_playback() {
@@ -13627,33 +11402,6 @@ mod drawn {
             assert!(s.moves.flights(&s.root).is_empty(), "the pair goes whole");
         }
 
-        /// The zoom row of `a_step_unit_flies_one_instance_only_where_it_transfers`:
-        /// a zoom on one key with no `transfers` flies the zoomed pair, each
-        /// Screen's own copy (decisions 298 and 311).
-        #[test]
-        fn a_zoom_on_one_key_without_transfers_flies_the_zoomed_pair() {
-            let mut s = DrawnScene::new(PaintCase::Zoom(Case::OneKeyCopies));
-            let (a, b) = (s.slot("A", "a"), s.slot("B", "a"));
-            let copies = [&a, &b].map(|slot| {
-                slot.with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
-                    .flatten()
-                    .unwrap()
-                    .core_handle()
-            });
-            assert_ne!(copies[0], copies[1]);
-            s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
-            assert_eq!(entries(&mut s), (0, 1), "one zoomed pair");
-            assert_eq!(s.moves.flights(&s.root).len(), 2, "two copies");
-            s.moves.step_end(&s.root, "B", Some("go")).unwrap();
-            for (slot, copy) in [&a, &b].into_iter().zip(&copies) {
-                let held = slot
-                    .with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
-                    .flatten()
-                    .map(|unit| unit.core_handle());
-                assert_eq!(held.as_ref(), Some(copy), "each copy lands back home");
-            }
-        }
-
         /// R8's first check on every end: each version is at the rule where it
         /// draws, and neither the takeoff nor any frame returns an error.
         fn rule_holds(run: &Run) {
@@ -13790,33 +11538,6 @@ mod drawn {
                         continue;
                     }
                     let zoom_box = box_at(way, &l, &a, p, run.live(&draws, &rest));
-                    on_box(&draws, way.leaving(), &l, &zoom_box, &label);
-                    on_box(&draws, way.arriving(), &a, &zoom_box, &label);
-                }
-            }
-        }
-        /// R8, a flight parent scaled to 0 at takeoff: nothing draws until it can
-        /// be inverted, and then both versions are on the box.
-        #[test]
-        fn zoom_runs_on_ends_that_arent_plain_rectangles_parent_from_zero() {
-            for way in BOTH {
-                let run = Run::new(Case::LayerFromZero, way);
-                let label = run.label();
-                rule_holds(&run);
-                let rest = run.landed();
-                let mut s = run.scene();
-                let before = s.draws();
-                let (l, a) = run.ends(&before, &rest);
-                run.begin(&mut s);
-                let draws = run.at(&mut s, 0.2, 0.0);
-                for version in ["a", "b"] {
-                    no_ink(&draws, color(version), &label);
-                    no_ink(&draws, child_color(version), &label);
-                }
-                for p in [0.4, 0.6] {
-                    let draws = run.at(&mut s, p, 0.25);
-                    let zoom_box = box_at(way, &l, &a, p, Live::default());
-                    let label = format!("{label} at {p}");
                     on_box(&draws, way.leaving(), &l, &zoom_box, &label);
                     on_box(&draws, way.arriving(), &a, &zoom_box, &label);
                 }
@@ -14430,8 +12151,7 @@ fn in_place_a_duplicate_key_is_refused() {
 /// A file without flight records reads no in-place state: on a record-free
 /// page and on a slot page, a step and its frames begin no hold and mark no
 /// lift, and the bookkeeping counters do not move. Their walks are the
-/// record-free and slot suites' own (`record_free_frames_scan_capability_once_per_occurrence`,
-/// `following_two_flights_settles_their_shared_row_once_without_playback`).
+/// record-free suite's own (`record_free_frames_scan_capability_once_per_occurrence`).
 #[test]
 fn a_file_without_flight_records_reads_no_in_place_state() {
     let holds_begun = nuxie_runtime::in_place_holds_begun;
@@ -14539,8 +12259,7 @@ impl InPlacePage {
     }
 }
 
-/// Inventory row 2, `rejected_moves_do_not_mutate_slots` rewritten: a
-/// refused step marks nothing. A step that names no step of the file and a
+/// Inventory row 2, a refused step marks nothing. A step that names no step of the file and a
 /// second step while one runs are refused; the first leaves no hold, no
 /// lift and the same draw stream, and the second leaves the running step
 /// as it was.
@@ -14756,7 +12475,7 @@ fn in_place_a_step_builds_no_bookkeeping_and_keeps_every_object() {
     );
 }
 
-/// `pending_insert_is_applied_before_takeoff`, in place. B is removed, a
+/// B is removed, a
 /// frame passes, and B is put back with no advance or draw before take-off.
 /// The step begins on the fresh B and holds both copies, and the first draw
 /// after take-off is an untouched page's first draw after take-off: the
@@ -17588,6 +15307,7 @@ return function() return {init=init,advance=advance} end
     /// the Screen that shows it; the copy A keeps has a field of its own.
     #[test]
     fn in_place_sleeping_row_cut_restores_semantics_round4() {
+        use source::focus_data::FocusData;
         let mut s = Page::new(InPlaceCarry::Transfer);
         s.machine.with_instance_mut(|m| m.enable_semantics());
         let manager = s.machine.with_instance(|m| m.semantic_manager()).unwrap();
@@ -17601,8 +15321,32 @@ return function() return {init=init,advance=advance} end
         let own = child(&s.pa).unwrap();
         let own_id = semantic_field_id(&own);
         assert_ne!(own_id, id);
+        let keyed = unit
+            .with_artboard(|b| b.find_handle::<Node>("keyed"))
+            .unwrap();
+        let focus = unit.with_artboard(|b| b.focus_manager()).unwrap();
+        let focus_node = || {
+            unit.with_artboard(|b| b.find_all_handles::<FocusData>())[0]
+                .with_downcast::<FocusData, _>(|f| f.existing_focus_node())
+                .flatten()
+                .unwrap()
+        };
+        let node = focus_node();
+        focus.with_focus_manager_mut(|m| m.set_focus(node.clone()));
+        let before_sleep = val(&keyed, 13);
         set_row_collapsed(&s.list(), 1, true).unwrap();
         assert!(!shows(id));
+        // Collapse blurs the hidden field; wake keeps its node, which the
+        // application can focus again.
+        s.advance(0.1);
+        close(val(&keyed, 13), before_sleep);
+        assert!(!focus.with_focus_manager(|m| m.has_primary_focus(&node)));
+        set_row_collapsed(&s.list(), 1, false).unwrap();
+        assert!(std::rc::Rc::ptr_eq(&node, &focus_node()));
+        focus.with_focus_manager_mut(|m| m.set_focus(node.clone()));
+        assert!(focus.with_focus_manager(|m| m.has_primary_focus(&node)));
+        assert!(shows(id));
+        set_row_collapsed(&s.list(), 1, true).unwrap();
         s.cut("A");
         assert_eq!(holds(&s.pa), Some(own.core_handle()));
         assert!(

@@ -3284,114 +3284,87 @@ fn zoom_at(case: ZoomCase, shape: PaintShape, progress: f32) -> Drawn {
     journey.live.draw(PLAIN)
 }
 
-/// With NUXIE_RECORD_FLIGHTS set, prints what the slot page reads: its
-/// pictures, and every pixel. A row is runs of equal pixels, `count*rgba` (the
-/// count left out for one), and `=` repeats the row above.
-fn record_pixels(drawn: &Drawn, what: &str) {
-    if std::env::var_os("NUXIE_RECORD_FLIGHTS").is_none() {
-        return;
-    }
-    let mut text = format!(
-        "# {what}\n{:?} {} {}\n",
-        drawn.canvases, drawn.composites, drawn.width
-    );
-    let mut above = String::new();
-    for row in drawn.pixels.chunks_exact(drawn.width * 4) {
-        let mut runs: Vec<(usize, &[u8])> = Vec::new();
-        for pixel in row.chunks_exact(4) {
-            match runs.last_mut() {
-                Some((count, last)) if *last == pixel => *count += 1,
-                _ => runs.push((1, pixel)),
-            }
+/// What the pages of `what` read when their units flew through slots, every
+/// pixel and its pictures, recorded at runtime b67da63a5 before that shape was
+/// removed (UNIV-6369). A page's lines: each case it stands for, its pictures,
+/// and its rows, as runs of equal pixels, `count*rgba` (the count left out for
+/// one), `=` for the row above.
+fn recorded(what: &str) -> (String, Vec<u8>) {
+    let mut pages = Vec::new();
+    let mut cases: Vec<&str> = Vec::new();
+    let mut lines = include_str!("recorded_fades.txt").lines().peekable();
+    while lines.peek().is_some() {
+        cases.clear();
+        while let Some(case) = lines.peek().and_then(|line| line.strip_prefix("# ")) {
+            cases.push(case);
+            lines.next();
         }
-        let line = runs
-            .iter()
-            .map(|(count, p)| {
-                let hex = format!("{:02x}{:02x}{:02x}{:02x}", p[0], p[1], p[2], p[3]);
-                if *count == 1 {
-                    hex
-                } else {
-                    format!("{count}*{hex}")
+        let pictures = lines.next().expect("a page's pictures").to_owned();
+        let mut pixels = Vec::new();
+        let mut row = Vec::new();
+        while let Some(line) = lines.next_if(|line| !line.starts_with('#')) {
+            if line != "=" {
+                row.clear();
+                for run in line.split(' ') {
+                    let (count, rgba) = run.split_once('*').unwrap_or(("1", run));
+                    let rgba = u32::from_str_radix(rgba, 16).unwrap().to_be_bytes();
+                    for _ in 0..count.parse::<usize>().unwrap() {
+                        row.extend(rgba);
+                    }
                 }
-            })
-            .collect::<Vec<_>>()
-            .join(" ");
-        text.push_str(if line == above { "=" } else { &line });
-        text.push('\n');
-        above = line;
+            }
+            pixels.extend(&row);
+        }
+        if cases.contains(&what) {
+            pages.push((pictures, pixels));
+        }
     }
-    print!("\n@@REC pixels\n{text}@@END\n");
+    assert_eq!(pages.len(), 1, "{what} was recorded once");
+    pages.remove(0)
 }
 
-/// Both pages read the same at every pixel, within a level, and composite
-/// as many pictures.
-fn same_pixels(slots: &Drawn, in_place: &Drawn, what: &str) {
-    assert_eq!(slots.pixels.len(), in_place.pixels.len(), "{what}: size");
-    let pictures = |drawn: &Drawn| (drawn.canvases.clone(), drawn.composites);
-    let worst = slots
-        .pixels
-        .iter()
-        .zip(&in_place.pixels)
+/// `in_place` reads what was recorded at every pixel, within a level, and
+/// composites as many pictures.
+fn as_recorded(in_place: &Drawn, what: &str) {
+    let (pictures, slots) = recorded(what);
+    assert_eq!(slots.len(), in_place.pixels.len(), "{what}: size");
+    // Where they differ: each pixel, and the box around them.
+    let off = slots
+        .chunks_exact(4)
+        .zip(in_place.pixels.chunks_exact(4))
         .enumerate()
-        .map(|(i, (a, b))| (i, a.abs_diff(*b)))
-        .max_by_key(|(_, d)| *d)
-        .unwrap();
-    let pixel = worst.0 / 4;
-    let (x, y) = (pixel % slots.width, pixel / slots.width);
-    // Where the pages differ: how many pixels, and the box around them.
-    let off = (0..slots.pixels.len() / 4)
-        .filter(|i| {
-            (0..4).any(|c| slots.pixels[i * 4 + c].abs_diff(in_place.pixels[i * 4 + c]) > 1)
-        })
-        .map(|i| (i % slots.width, i / slots.width))
+        .filter(|(_, (a, b))| a.iter().zip(*b).any(|(a, b)| a.abs_diff(*b) > 1))
+        .map(|(i, (a, b))| ((i % in_place.width, i / in_place.width), a, b))
         .collect::<Vec<_>>();
     let around = off.iter().fold(
         (usize::MAX, usize::MAX, 0, 0),
-        |(x0, y0, x1, y1), &(x, y)| (x0.min(x), y0.min(y), x1.max(x), y1.max(y)),
+        |(x0, y0, x1, y1), &((x, y), ..)| (x0.min(x), y0.min(y), x1.max(x), y1.max(y)),
     );
-    let listed = off
-        .iter()
-        .map(|&(x, y)| {
-            let i = (y * slots.width + x) * 4;
-            format!(
-                "({x}, {y}) {:?} {:?}",
-                &slots.pixels[i..i + 3],
-                &in_place.pixels[i..i + 3]
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("; ");
+    let drawn = format!("{:?} {}", in_place.canvases, in_place.composites);
     assert!(
-        worst.1 <= 1,
-        "{what}: {} pixels differ, within {around:?}; at ({x}, {y}) by {}: slots {:?}, in place {:?}; pictures (canvases, composites) slots {:?}, in place {:?}; each (slots, in place): {listed}",
+        off.is_empty(),
+        "{what}: {} pixels differ, within {around:?}; pictures (canvases, composites) recorded {pictures}, drawn {drawn}; each (at, recorded, drawn): {off:?}",
         off.len(),
-        worst.1,
-        &slots.pixels[pixel * 4..pixel * 4 + 4],
-        &in_place.pixels[pixel * 4..pixel * 4 + 4],
-        pictures(slots),
-        pictures(in_place),
     );
-    assert_eq!(pictures(slots), pictures(in_place), "{what}: pictures");
+    assert_eq!(pictures, drawn, "{what}: pictures");
 }
 
 /// docs/CSS_LAYOUT.md 4.4, group opacity, on a lifted copy: a copy whose
 /// flight fades it to 0.5 fades as one picture, as its unit did. Each
 /// version holds its fill and a child box over it, so a fade paint by paint
 /// would show the fill through the child. The page flown in place reads as
-/// the page flown in slots, pixel for pixel, with the same pictures, at
+/// the page flown in slots did, pixel for pixel, with the same pictures, at
 /// take-off, half way and landing.
 #[test]
 fn in_place_a_lift_fades_as_one_picture() {
     for progress in [0.0, 0.5, 1.0] {
         let what = format!("FadeHeld at {progress}");
-        let slots = zoom_at(ZoomCase::FadeHeld, PaintShape::SlotCopies, progress);
+        let in_place = zoom_at(ZoomCase::FadeHeld, PaintShape::InPlace, progress);
         if progress == 0.5 {
             // Half way both versions draw, each at its fade.
-            assert!(slots.composites > 0, "{what}: the units fade as pictures");
+            assert!(in_place.composites > 0, "{what}: the copies fade as pictures");
         }
-        let in_place = zoom_at(ZoomCase::FadeHeld, PaintShape::InPlace, progress);
-        record_pixels(&slots, &what);
-        same_pixels(&slots, &in_place, &what);
+        as_recorded(&in_place, &what);
     }
 }
 
@@ -3407,10 +3380,7 @@ fn in_place_a_fading_ancestor_does_not_fade_the_lift() {
         for progress in [0.0, 0.5, 1.0] {
             let case = ZoomCase::AncestorFades { a_keyed };
             let what = format!("{case:?} at {progress}");
-            let slots = zoom_at(case, PaintShape::SlotCopies, progress);
-            let in_place = zoom_at(case, PaintShape::InPlace, progress);
-            record_pixels(&slots, &what);
-            same_pixels(&slots, &in_place, &what);
+            as_recorded(&zoom_at(case, PaintShape::InPlace, progress), &what);
         }
     }
 }

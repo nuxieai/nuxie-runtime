@@ -908,7 +908,7 @@ fn css_box_paints(
         && opacity > 0.0
         && paints
             .iter()
-            .any(crate::mechanical_port::source::layout_component::css_paint_draws)
+            .any(|paint| layout.css_own_paint_draws(paint))
 }
 
 /// Geometry bounds in root space, optionally clipped from an owner outward.

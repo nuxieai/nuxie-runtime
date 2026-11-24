@@ -18,7 +18,6 @@ struct Scene {
     b: RuntimeArtboardInstanceHandle,
     s: CoreHandle,
     d: CoreHandle,
-    f: CoreHandle,
     moves: LiveMoves,
 }
 fn child(h: &CoreHandle) -> Option<RuntimeArtboardInstanceHandle> {
@@ -43,6 +42,40 @@ fn set(h: &CoreHandle, key: i32, v: f32) {
 }
 fn close(a: f32, b: f32) {
     assert!((a - b).abs() < 0.002, "expected {b}, got {a}");
+}
+/// The fills of `Scene`'s units: the unit, and version B's.
+const UNIT_FILL: u32 = 0xff0000;
+const VERSION_B_FILL: u32 = 0x0000ff;
+/// Left, top, width and height.
+fn bounds_of(points: &[source::math::vec2d::Vec2D]) -> [f32; 4] {
+    let low = |of: fn(&source::math::vec2d::Vec2D) -> f32| {
+        points.iter().map(of).fold(f32::INFINITY, f32::min)
+    };
+    let high = |of: fn(&source::math::vec2d::Vec2D) -> f32| {
+        points.iter().map(of).fold(f32::NEG_INFINITY, f32::max)
+    };
+    let (left, top) = (low(|p| p.x), low(|p| p.y));
+    [left, top, high(|p| p.x) - left, high(|p| p.y) - top]
+}
+/// The keyed box a placement is in.
+fn box_of(placement: &CoreHandle) -> CoreHandle {
+    placement.with(|o| o.component_parent_handle()).flatten().unwrap()
+}
+/// Where each Screen's unit draws at rest, A's then B's: the left, top, width
+/// and height of its fill, and its opacity.
+fn at_rest(s: &Scene) -> [([f32; 4], f32); 2] {
+    let draws = s.drawn(UNIT_FILL);
+    assert_eq!(draws.len(), 2, "both units draw at rest");
+    [0, 1].map(|i| (bounds_of(&draws[i].0), draws[i].1))
+}
+/// Sizes `placement`'s box.
+fn size_box(placement: &CoreHandle, width: f32, height: f32) {
+    let record = box_of(placement)
+        .with(|o| css_layout::record::find_in(o.as_container_component().unwrap().children()))
+        .flatten()
+        .unwrap();
+    set(&record, 61022, width);
+    set(&record, 61025, height);
 }
 impl Scene {
     fn new() -> Self {
@@ -79,12 +112,6 @@ impl Scene {
         let s = a.with_artboard(|b| b.find_all_handles::<NestedArtboard>())[0].clone();
         let hs = b.with_artboard(|b| b.find_all_handles::<NestedArtboard>());
         let d = hs[0].clone();
-        let f = hs[1].clone();
-        if root.with_artboard(|b| !b.find_all_handles::<records::LiveStep>().is_empty()) {
-            empty_slot(&f).unwrap();
-            let af = a.with_artboard(|b| b.find_all_handles::<NestedArtboard>())[1].clone();
-            empty_slot(&af).unwrap();
-        }
         let mut moves = LiveMoves::default();
         if prepare {
             moves.prepare(&root).unwrap();
@@ -98,9 +125,36 @@ impl Scene {
             b,
             s,
             d,
-            f,
             moves,
         }
+    }
+    /// What the page draws of the unit filled with `rgb`, in draw order: its
+    /// 40 by 40 fill's outline on the page, and its opacity.
+    fn drawn(&self, rgb: u32) -> Vec<(Vec<source::math::vec2d::Vec2D>, f32)> {
+        self.factory.borrow_mut().clear();
+        let mut renderer = self.factory.borrow().make_renderer();
+        self.root.draw(&mut renderer);
+        let stream = self.factory.borrow().stream();
+        nuxie_render_stream::frame_draws(&nuxie_render_stream::stream_ops(&stream).unwrap(), &[])
+            .iter()
+            .filter(|draw| draw.rgb() == Some(rgb))
+            .map(|draw| {
+                let points = draw.points.iter();
+                (
+                    points
+                        .map(|p| source::math::vec2d::Vec2D::new(p.x, p.y))
+                        .collect(),
+                    draw.opacity(),
+                )
+            })
+            .collect()
+    }
+    /// The one draw of the unit filled with `rgb`: its box's left, top,
+    /// width and height, and its opacity.
+    fn drawn_once(&self, rgb: u32) -> ([f32; 4], f32) {
+        let draws = self.drawn(rgb);
+        assert_eq!(draws.len(), 1, "one draw of {rgb:06x}");
+        (bounds_of(&draws[0].0), draws[0].1)
     }
     fn advance(&mut self, dt: f32) {
         self.machine.advance_and_apply(dt);
@@ -119,22 +173,18 @@ impl Scene {
 fn follows_current_frame_and_each_screen_keeps_its_copy() {
     let mut s = Scene::new();
     let id = child(&s.s).unwrap().core_handle();
+    let [(a, _), (b, _)] = at_rest(&s);
+    close(a[0], 15.0);
+    close(b[0], 205.0);
     s.begin();
     for (frame, progress) in [0.0, 0.5, 1.0].into_iter().enumerate() {
-        set(&s.moves.flights(&s.root)[0].controls(), 62003, progress);
+        set(&s.moves.flight_controls(&s.root)[0], 62033, progress);
         s.advance(0.1);
-        let a = slot_pose(&s.s).unwrap();
-        let b = slot_pose(&s.d).unwrap();
-        let f = slot_pose(&s.f).unwrap();
-        close(b.transform[4], 205.0 + 10.0 * (frame + 1) as f32);
-        close(
-            f.transform[4],
-            a.transform[4] + (b.transform[4] - a.transform[4]) * progress,
-        );
-        close(
-            f.transform[5],
-            a.transform[5] + (b.transform[5] - a.transform[5]) * progress,
-        );
+        // B's entrance moves it 10 a frame.
+        let end = b[0] + 10.0 * (frame + 1) as f32;
+        let (drawn, _) = s.drawn_once(UNIT_FILL);
+        close(drawn[0], a[0] + (end - a[0]) * progress);
+        close(drawn[1], a[1] + (b[1] - a[1]) * progress);
     }
     s.end();
     let own = child(&s.s).unwrap().core_handle();
@@ -191,10 +241,6 @@ fn collapsed_rows_cost_one_row_and_wake_with_data() {
         .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
         .unwrap();
     let rows = screens(&root).unwrap();
-    for row in rows.values() {
-        let hosts = row.with_artboard(|b| b.nested_artboards().to_vec());
-        empty_slot(&hosts[1]).unwrap();
-    }
     machine.advance_and_apply(0.0);
     measure_advances(true);
     machine.advance_and_apply(0.01);
@@ -282,124 +328,58 @@ fn mount_layout_page(
 }
 
 #[test]
-fn rotation_scale_opacity_layout_size_and_path_are_blended() {
+fn rotation_scale_and_opacity_are_blended() {
     let mut s = Scene::new();
-    let pa =
-        s.a.with_artboard(|b| b.find_handle::<Node>("card"))
-            .unwrap();
-    let pb =
-        s.b.with_artboard(|b| b.find_handle::<Node>("header"))
-            .unwrap();
-    let pf =
-        s.b.with_artboard(|b| b.find_handle::<Node>("flight"))
-            .unwrap();
+    let parents = [(&s.a, "card"), (&s.b, "header")].map(|(row, name)| {
+        row.with_artboard(|b| b.find_handle::<source::layout_component::LayoutComponent>(name))
+            .unwrap()
+    });
     for (h, r, x, y, o) in [
-        (&pa, 170.0_f32.to_radians(), 2.0, 3.0, 0.4),
-        (&pb, (-170.0_f32).to_radians(), 4.0, 5.0, 0.8),
-        (&pf, 0.7, 1.2, 0.8, 0.9),
+        (&parents[0], 170.0_f32.to_radians(), 2.0, 3.0, 0.4),
+        (&parents[1], (-170.0_f32).to_radians(), 4.0, 5.0, 0.8),
     ] {
         set(h, 15, r);
         set(h, 16, x);
         set(h, 17, y);
         set(h, 18, o);
     }
-    child(&s.d).unwrap().set_size(200.0, 120.0);
     s.advance(0.0);
+    let rest: Vec<_> = s.drawn(UNIT_FILL).into_iter().map(|d| d.0[0]).collect();
     s.begin();
-    set(&s.moves.flights(&s.root)[0].controls(), 62003, 0.5);
+    set(&s.moves.flight_controls(&s.root)[0], 62033, 0.5);
     s.advance(0.0);
-    let f = slot_pose(&s.f).unwrap();
-    let a = slot_pose(&s.s).unwrap();
-    let b = slot_pose(&s.d).unwrap();
-    let c = f.transform.decompose();
-    close(c.x(), (a.transform[4] + b.transform[4]) * 0.5);
-    close(c.y(), (a.transform[5] + b.transform[5]) * 0.5);
-    close(c.rotation().abs(), std::f32::consts::PI);
-    close(c.scale_x(), 3.0);
-    close(c.scale_y(), 4.0);
-    close(f.opacity, 0.6);
-    let paint = child(&s.f)
-        .unwrap()
-        .with_artboard(|b| b.find_all_handles::<source::shapes::paint::fill::Fill>())[0]
-        .clone();
-    close(
-        paint
-            .with(|o| o.as_shape_paint().unwrap().render_opacity())
-            .unwrap(),
-        0.6,
-    );
-
-    close(f.size.x, 150.0);
-    close(f.size.y, 100.0);
-    let unit = child(&s.f).unwrap();
-    close(unit.with_artboard(|b| b.layout_width()), 150.0);
-    let reflow = unit
-        .with_artboard(|b| b.find_handle::<source::layout_component::LayoutComponent>("reflow"))
-        .unwrap();
-    close(
-        reflow
-            .with_downcast::<source::layout_component::LayoutComponent, _>(|c| c.layout_width())
-            .unwrap(),
-        150.0,
-    );
-
-    s.end();
-    let d = slot_pose(&s.d).unwrap();
-    close(d.size.x, 200.0);
-    close(d.size.y, 120.0);
-    // Scale mode changes only the flight transform and keeps its departure box.
-    let flight_record =
-        s.b.with_artboard(|b| b.find_all_handles::<live_move::records::LiveSlot>())
-            .into_iter()
-            .find(|h| {
-                h.with_downcast::<live_move::records::LiveSlot, _>(|r| r.values.role == 1)
-                    .unwrap()
-            })
-            .unwrap();
-    flight_record.with_downcast_mut::<live_move::records::LiveSlot, _>(|r| r.values.size_mode = 0);
-    s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
-    s.moves
-        .with_flights(&s.root, |flights| match &mut flights[0] {
-            Entry::One(flight) => flight.size_mode = SizeMode::Scale,
-            Entry::Pair(_) => panic!("this step zooms nothing"),
-        });
-    set(&s.moves.flights(&s.root)[0].controls(), 62003, 0.5);
-    s.advance(0.0);
-    let f = slot_pose(&s.f).unwrap();
-    close(f.size.x, 200.0);
-    close(f.size.y, 120.0);
-    // The slot keeps the blended scale; the stretch is the unit's own,
-    // innermost factor.
-    close(f.transform.decompose().scale_x(), 3.0);
-    close(f.transform.decompose().scale_y(), 4.0);
-    let stretch = child(&s.f).unwrap().with_artboard(|b| b.flight_stretch());
-    close(stretch.x, 150.0 / 200.0);
-    close(stretch.y, 100.0 / 120.0);
+    let draws = s.drawn(UNIT_FILL);
+    assert_eq!(draws.len(), 1, "one draw of the unit");
+    let (points, opacity) = &draws[0];
+    // The fill's corners: its first, then along its width, then its height.
+    let (first, across, down) = (points[0], points[1], points[2]);
+    // It starts half way between its ends, both its corners being its box's
+    // origin.
+    close(first.x, (rest[0].x + rest[1].x) * 0.5);
+    close(first.y, (rest[0].y + rest[1].y) * 0.5);
+    let (along, height) = (across - first, down - across);
+    // The short way from 170 degrees to -170 is through 180.
+    close(along.y.atan2(along.x).abs(), std::f32::consts::PI);
+    close(along.length(), 40.0 * 3.0);
+    close(height.length(), 40.0 * 4.0);
+    close(*opacity, 0.6);
 }
 
 #[test]
 fn timeline_controls_progress_and_path_offset() {
     let mut s = Scene::from_bytes(&fixture::control_fixture());
+    let [(a, _), (b, _)] = at_rest(&s);
     s.begin();
-
     s.advance(0.1);
-    let a = slot_pose(&s.s).unwrap();
-    let b = slot_pose(&s.d).unwrap();
-    let f = slot_pose(&s.f).unwrap();
-    close(
-        f.transform[4],
-        a.transform[4] + (b.transform[4] - a.transform[4]) * 0.25 + 7.0,
-    );
-    close(
-        f.transform[5],
-        a.transform[5] + (b.transform[5] - a.transform[5]) * 0.25 + 11.0,
-    );
-    set(&s.moves.flights(&s.root)[0].controls(), 62003, 1.0);
+    let end = b[0] + 10.0;
+    let (drawn, _) = s.drawn_once(UNIT_FILL);
+    close(drawn[0], a[0] + (end - a[0]) * 0.25 + 7.0);
+    close(drawn[1], a[1] + (b[1] - a[1]) * 0.25 + 11.0);
+    set(&s.moves.flight_controls(&s.root)[0], 62033, 1.0);
     s.advance(0.1);
-    let b = slot_pose(&s.d).unwrap();
-    let f = slot_pose(&s.f).unwrap();
-    close(f.transform[4], b.transform[4] + 7.0);
-    close(f.transform[5], b.transform[5] + 11.0);
+    let (drawn, _) = s.drawn_once(UNIT_FILL);
+    close(drawn[0], b[0] + 20.0 + 7.0);
+    close(drawn[1], b[1] + 11.0);
 }
 
 #[test]
@@ -496,7 +476,7 @@ fn measure_advances(enabled: bool) -> u64 {
 
 #[test]
 fn published_records_have_their_authored_parents() {
-    use live_move::records::{LiveSlot, LiveStep, LiveStepUnit};
+    use live_move::records::{LiveFlight, LiveStep, LiveStepUnit};
     let s = Scene::new();
     let steps = s.root.with_artboard(|b| b.find_all_handles::<LiveStep>());
     let units = s
@@ -518,29 +498,21 @@ fn published_records_have_their_authored_parents() {
         assert!(steps.contains(&parent));
     }
     assert_eq!(
-        s.b.with_artboard(|b| b.find_all_handles::<LiveSlot>().len()),
-        2
+        s.b.with_artboard(|b| b.find_all_handles::<LiveFlight>().len()),
+        1
     );
 }
 
 #[test]
-fn native_keyframes_drive_live_slot_progress() {
+fn native_keyframes_drive_a_flight_records_progress() {
     let mut s = Scene::from_bytes(&fixture::keyed_fixture());
+    let [(a, _), (b, _)] = at_rest(&s);
     s.begin();
     s.advance(0.5);
-    let control = s.moves.flights(&s.root)[0].controls();
-    close(val(&control, 62003), 0.5);
-    let a = slot_pose(&s.s).unwrap();
-    let b = slot_pose(&s.d).unwrap();
-    let f = slot_pose(&s.f).unwrap();
-    close(
-        f.transform[4],
-        (a.transform[4] + b.transform[4]) * 0.5 + 7.0,
-    );
-    close(
-        f.transform[5],
-        (a.transform[5] + b.transform[5]) * 0.5 + 11.0,
-    );
+    close(val(&s.moves.flight_controls(&s.root)[0], 62033), 0.5);
+    let (drawn, _) = s.drawn_once(UNIT_FILL);
+    close(drawn[0], (a[0] + b[0] + 50.0) * 0.5 + 7.0);
+    close(drawn[1], (a[1] + b[1]) * 0.5 + 11.0);
 }
 
 #[test]
@@ -568,29 +540,21 @@ fn two_artboard_versions_keep_identity_and_reverse_authored_draw_order() {
         (
             "A",
             "back",
-            [13, 14],
+            [14, 13],
             ["color=0xff0000ff", "color=0xffff0000"],
         ),
     ] {
         s.moves.step_begin(&s.root, incoming, Some(step)).unwrap();
-        assert!(child(&s.s).is_none() && child(&s.d).is_none());
-        assert_eq!(s.moves.flights(&s.root).len(), 2);
-        for (flight, key) in s.moves.flights(&s.root).iter().zip(keys) {
-            let values = flight
-                .controls()
-                .with_downcast::<live_move::records::LiveSlot, _>(|r| r.values.clone())
-                .unwrap();
-            assert_eq!(values.flight_key, key);
-            assert_eq!(
-                child(&flight.flight).unwrap().core_handle(),
-                if values.unit_key == 1 {
-                    a.clone()
-                } else {
-                    b.clone()
-                }
-            );
-            set(&flight.controls(), 62003, 0.5);
+        let flights = s.moves.lifted_records(&s.root);
+        assert_eq!(flights.len(), 2);
+        // A's copy is the leaving one of t1, and the arriving one of back.
+        for (element, key) in [(box_of(&s.s), keys[0]), (box_of(&s.d), keys[1])] {
+            let record = &flights.iter().find(|f| f.0 == element).unwrap().2;
+            assert_eq!(CoreRegistry::get_uint_handle(record, 62031), Some(key));
+            set(record, 62033, 0.5);
         }
+        assert_eq!(child(&s.s).unwrap().core_handle(), a);
+        assert_eq!(child(&s.d).unwrap().core_handle(), b);
         s.advance(0.0);
         s.factory.borrow_mut().clear();
         let mut renderer = s.factory.borrow().make_renderer();
@@ -613,52 +577,39 @@ fn two_artboard_versions_keep_identity_and_reverse_authored_draw_order() {
 #[test]
 fn two_version_fade_multiplies_blended_opacity_at_each_progress() {
     let mut s = Scene::from_bytes(&fixture::two_version_fixture());
-    set(&s.s, 18, 0.4);
-    set(&s.d, 18, 0.8);
+    set(&box_of(&s.s), 18, 0.4);
+    set(&box_of(&s.d), 18, 0.8);
     s.advance(0.0);
-    close(slot_pose(&s.s).unwrap().opacity, 0.4);
-    close(slot_pose(&s.d).unwrap().opacity, 0.8);
-    for (incoming, step, incoming_key) in [("B", "t1", 2), ("A", "back", 1)] {
+    let (a, a_opacity) = s.drawn_once(UNIT_FILL);
+    let (b, b_opacity) = s.drawn_once(VERSION_B_FILL);
+    close(a_opacity, 0.4);
+    close(b_opacity, 0.8);
+    for (incoming, step, ends) in [("B", "t1", [(a, 0.4), (b, 0.8)]), ("A", "back", [(b, 0.8), (a, 0.4)])]
+    {
         s.moves.step_begin(&s.root, incoming, Some(step)).unwrap();
         for t in [0.0_f32, 0.5, 1.0] {
-            let a = slot_pose(&s.moves.flights(&s.root)[0].from).unwrap();
-            let b = slot_pose(&s.moves.flights(&s.root)[0].to).unwrap();
-            let expected = a.opacity + (b.opacity - a.opacity) * t;
-            for flight in &s.moves.flights(&s.root) {
-                let incoming = flight
-                    .controls()
-                    .with_downcast::<live_move::records::LiveSlot, _>(|r| {
-                        r.values.unit_key == incoming_key
-                    })
-                    .unwrap();
-                let fade = if incoming {
-                    (t * 2.0).min(1.0)
-                } else {
-                    ((1.0 - t) * 2.0).min(1.0)
-                };
-                set(&flight.controls(), 62003, t);
-                set(&flight.controls(), 62014, fade);
+            let fades = [((1.0 - t) * 2.0).min(1.0), (t * 2.0).min(1.0)];
+            for (element, _, record) in s.moves.lifted_records(&s.root) {
+                let arriving = (element == box_of(&s.d)) == (incoming == "B");
+                set(&record, 62033, t);
+                set(&record, 62036, fades[usize::from(arriving)]);
             }
             s.advance(0.0);
-            for flight in &s.moves.flights(&s.root) {
-                let opacity = expected * val(&flight.controls(), 62014);
-                close(slot_pose(&flight.flight).unwrap().opacity, opacity);
-                let paint = child(&flight.flight)
-                    .unwrap()
-                    .with_artboard(|b| b.find_all_handles::<source::shapes::paint::fill::Fill>())
-                    [0]
-                .clone();
-                close(
-                    paint
-                        .with(|o| o.as_shape_paint().unwrap().render_opacity())
-                        .unwrap(),
-                    opacity,
-                );
-                let pose = slot_pose(&flight.flight).unwrap();
-                close(
-                    pose.transform[4],
-                    a.transform[4] + (b.transform[4] - a.transform[4]) * t,
-                );
+            let blended = ends[0].1 + (ends[1].1 - ends[0].1) * t;
+            for (rgb, arriving) in [
+                (UNIT_FILL, incoming == "A"),
+                (VERSION_B_FILL, incoming == "B"),
+            ] {
+                let opacity = blended * fades[usize::from(arriving)];
+                if opacity == 0.0 {
+                    for (_, drawn) in s.drawn(rgb) {
+                        close(drawn, 0.0);
+                    }
+                    continue;
+                }
+                let (drawn, at) = s.drawn_once(rgb);
+                close(at, opacity);
+                close(drawn[0], ends[0].0[0] + (ends[1].0[0] - ends[0].0[0]) * t);
             }
         }
         s.moves.step_end(&s.root, incoming, Some(step)).unwrap();
@@ -667,11 +618,7 @@ fn two_version_fade_multiplies_blended_opacity_at_each_progress() {
 
 #[test]
 fn malformed_flight_plans_are_rejected_before_transport() {
-    for (kind, error) in [
-        (1, "unknown flightKey 999"),
-        (2, "different unit artboards"),
-        (3, "duplicate"),
-    ] {
+    for (kind, error) in [(1, "999"), (3, "duplicate")] {
         let mut s = Scene::load(&fixture::invalid_plan_fixture(kind), false);
         let a = child(&s.s).unwrap().core_handle();
         let b = child(&s.d).unwrap().core_handle();
@@ -684,36 +631,30 @@ fn malformed_flight_plans_are_rejected_before_transport() {
         );
         assert_eq!(child(&s.s).unwrap().core_handle(), a);
         assert_eq!(child(&s.d).unwrap().core_handle(), b);
-        assert!(s.moves.flights(&s.root).is_empty());
+        assert!(s.moves.flight_controls(&s.root).is_empty());
     }
 }
 
 #[test]
-fn native_keyframes_drive_live_slot_fade() {
+fn native_keyframes_drive_a_flight_records_fade() {
     let mut s = Scene::from_bytes(&fixture::keyed_fixture());
     s.begin();
     s.advance(0.5);
-    let flight = &s.moves.flights(&s.root)[0];
-    close(val(&flight.controls(), 62014), 0.5);
-    let a = slot_pose(&s.s).unwrap();
-    let b = slot_pose(&s.d).unwrap();
-    close(
-        slot_pose(&flight.flight).unwrap().opacity,
-        (a.opacity + b.opacity) * 0.25,
-    );
+    close(val(&s.moves.flight_controls(&s.root)[0], 62036), 0.5);
+    close(s.drawn_once(UNIT_FILL).1, 0.5);
 }
 
 #[test]
-fn a_file_without_records_keeps_the_upstream_playback_and_mounted_slots() {
+fn a_file_without_records_keeps_the_upstream_playback_and_mounted_placements() {
     let mut s = Scene::from_bytes(&fixture::ordinary_fixture(2));
-    // Ordinary scenes keep all four mounted instances and running wrappers.
+    // Ordinary scenes keep their mounted instances and running wrappers.
     // The stateless dispatcher must leave the native scene untouched.
     let a = child(&s.s).unwrap().core_handle();
     let b = child(&s.d).unwrap().core_handle();
     s.advance(0.3);
     assert_eq!(child(&s.s).unwrap().core_handle(), a);
     assert_eq!(child(&s.d).unwrap().core_handle(), b);
-    assert!(s.moves.flights(&s.root).is_empty());
+    assert!(s.moves.flight_controls(&s.root).is_empty());
     for slot in [&s.s, &s.d] {
         let keyed = child(slot)
             .unwrap()
@@ -726,42 +667,31 @@ fn a_file_without_records_keeps_the_upstream_playback_and_mounted_slots() {
 #[test]
 fn scale_mode_is_read_from_the_published_flight_record() {
     let mut s = Scene::from_bytes(&fixture::scale_fixture());
-    child(&s.d).unwrap().set_size(200.0, 120.0);
+    size_box(&s.d, 200.0, 120.0);
     s.advance(0.0);
     s.begin();
-    assert_eq!(s.moves.flights(&s.root)[0].size_mode, SizeMode::Scale);
-    set(&s.moves.flights(&s.root)[0].controls(), 62003, 0.5);
+    set(&s.moves.flight_controls(&s.root)[0], 62033, 0.5);
     s.advance(0.0);
-    let f = slot_pose(&s.f).unwrap();
-    close(f.size.x, 100.0);
-    close(f.size.y, 80.0);
-    close(f.transform.decompose().scale_x(), 1.0);
-    close(f.transform.decompose().scale_y(), 1.0);
-    let stretch = child(&s.f).unwrap().with_artboard(|b| b.flight_stretch());
-    close(stretch.x, 1.5);
-    close(stretch.y, 1.25);
+    // The box flies half way from 100 by 80 to 200 by 120, scaled, its 40 by
+    // 40 fill with it: 150 of its landing 200, 100 of its 120.
+    let (drawn, _) = s.drawn_once(UNIT_FILL);
+    close(drawn[2], 40.0 * 150.0 / 200.0);
+    close(drawn[3], 40.0 * 100.0 / 120.0);
 }
 #[test]
 fn incompatible_wrappers_and_cross_player_moves_are_refused_without_taking_the_source() {
     let s = Scene::new();
     let other = Scene::new();
     let source = child(&s.s).unwrap().core_handle();
-    assert!(move_live(&s.s, &other.d).is_err());
+    assert!(carry(&s.s, &other.d, false).is_err());
     let wrapper =
         s.d.with(|o| o.as_nested_artboard().unwrap().nested_animations()[0].clone())
             .unwrap();
     CoreRegistry::set_uint_handle(&wrapper, 198, 1234);
-    assert!(move_live(&s.s, &s.d).is_err());
+    assert!(carry(&s.s, &s.d, false).is_err());
     assert_eq!(child(&s.s).unwrap().core_handle(), source);
 }
 
-/// Whether R2 holds `unit` in one of its slots.
-fn r2_holds(s: &Scene, unit: &CoreHandle) -> bool {
-    screens(&s.root).unwrap()["R2"]
-        .with_artboard(|b| b.find_all_handles::<NestedArtboard>())
-        .iter()
-        .any(|slot| child(slot).is_some_and(|i| &i.core_handle() == unit))
-}
 
 #[test]
 fn another_players_membership_edits_do_not_rebuild_this_players_index() {
@@ -798,44 +728,22 @@ fn hosted_index_includes_existing_paint_artboard_occurrences_without_live_record
 #[test]
 fn two_flights_read_their_own_published_sizing_modes() {
     let mut s = Scene::from_bytes(&fixture::two_version_mixed_size_fixture());
-    child(&s.d).unwrap().set_size(200.0, 120.0);
+    size_box(&s.d, 200.0, 120.0);
     s.advance(0.0);
     s.begin();
-    for flight in &s.moves.flights(&s.root) {
-        let unit_key = flight
-            .controls()
-            .with_downcast::<live_move::records::LiveSlot, _>(|r| r.values.unit_key)
-            .unwrap();
-        assert_eq!(
-            flight.size_mode,
-            if unit_key == 2 {
-                SizeMode::Scale
-            } else {
-                SizeMode::Layout
-            }
-        );
-        set(&flight.controls(), 62003, 0.5);
+    for control in s.moves.flight_controls(&s.root) {
+        set(&control, 62033, 0.5);
     }
     s.advance(0.0);
-    for flight in &s.moves.flights(&s.root) {
-        let pose = slot_pose(&flight.flight).unwrap();
-        let stretch = child(&flight.flight)
-            .unwrap()
-            .with_artboard(|b| b.flight_stretch());
-        if flight.size_mode == SizeMode::Scale {
-            close(pose.size.x, 200.0);
-            close(pose.size.y, 120.0);
-            close(pose.transform.decompose().scale_x(), 1.0);
-            close(pose.transform.decompose().scale_y(), 1.0);
-            close(stretch.x, 0.75);
-            close(stretch.y, 100.0 / 120.0);
-        } else {
-            close(pose.size.x, 150.0);
-            close(pose.size.y, 100.0);
-            close(stretch.x, 1.0);
-            close(stretch.y, 1.0);
-        }
-    }
+    // Version B's copy is scaled from its own 200 by 120 to the 150 by 100
+    // blend, its fill with it; A's is laid out at the blend, its fill as it
+    // was.
+    let (scaled, _) = s.drawn_once(VERSION_B_FILL);
+    close(scaled[2], 40.0 * 0.75);
+    close(scaled[3], 40.0 * 100.0 / 120.0);
+    let (laid_out, _) = s.drawn_once(UNIT_FILL);
+    close(laid_out[2], 40.0);
+    close(laid_out[3], 40.0);
 }
 
 #[test]
@@ -843,7 +751,7 @@ fn removing_a_two_version_landing_screen_settles_survivors_and_allows_the_next_s
     let mut s = Scene::from_bytes(&fixture::two_version_fixture());
     let incoming = child(&s.d).unwrap().core_handle();
     s.begin();
-    assert_eq!(s.moves.flights(&s.root).len(), 2);
+    assert_eq!(s.moves.flight_controls(&s.root).len(), 2);
     let list = s
         .root
         .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
@@ -852,21 +760,13 @@ fn removing_a_two_version_landing_screen_settles_survivors_and_allows_the_next_s
         .with_downcast::<ArtboardComponentList, _>(|l| l.list_item(1))
         .flatten()
         .unwrap();
-    // A has no borrowed instance when removed. Both flight holders are on B,
-    // but the outgoing version's landing slot was on A.
+    // Both copies are drawn on B, but the outgoing version's home is A.
     ArtboardComponentList::update_list_occurrence(&list, &[b]);
     s.advance(0.0);
     assert!(
-        s.moves.flights(&s.root).is_empty(),
+        s.moves.flight_controls(&s.root).is_empty(),
         "a missing landing must cancel the whole active step"
     );
-    // No slot keeps a flight's placement or a link to the flight that
-    // carried its frame (UNIV-5635).
-    for slot in
-        s.b.with_artboard(|b| b.find_all_handles::<NestedArtboard>())
-    {
-        assert_eq!(slot_placement(&slot).unwrap(), (false, false));
-    }
     assert_eq!(child(&s.d).unwrap().core_handle(), incoming);
     s.moves.step_begin(&s.root, "B", None).unwrap();
     s.moves.step_end(&s.root, "B", None).unwrap();
@@ -874,6 +774,7 @@ fn removing_a_two_version_landing_screen_settles_survivors_and_allows_the_next_s
 
 #[test]
 fn flight_drawn_opacity_matches_ends_under_translucent_ancestors_and_hosts() {
+    use source::layout_component::LayoutComponent;
     for (ancestor, hosted) in [(0.5, 1.0), (1.0, 0.5), (0.5, 0.5)] {
         let mut s = Scene::new();
         let list = s
@@ -881,55 +782,39 @@ fn flight_drawn_opacity_matches_ends_under_translucent_ancestors_and_hosts() {
             .with_artboard(|a| a.find_handle::<ArtboardComponentList>("screens"))
             .unwrap();
         let card =
-            s.a.with_artboard(|a| a.find_handle::<Node>("card"))
+            s.a.with_artboard(|a| a.find_handle::<LayoutComponent>("card"))
                 .unwrap();
         let header =
-            s.b.with_artboard(|a| a.find_handle::<Node>("header"))
-                .unwrap();
-        let layer =
-            s.b.with_artboard(|a| a.find_handle::<Node>("flight"))
+            s.b.with_artboard(|a| a.find_handle::<LayoutComponent>("header"))
                 .unwrap();
         set(&list, 18, hosted);
         set(&s.b.core_handle(), 18, ancestor);
         set(&card, 18, 0.4);
         set(&header, 18, 0.6);
-        set(&layer, 18, 0.8);
         s.advance(0.0);
         s.advance(0.0);
-        let paint_opacity = |host: &CoreHandle| {
-            let paint = child(host)
-                .unwrap()
-                .with_artboard(|a| a.find_all_handles::<source::shapes::paint::fill::Fill>())[0]
-                .clone();
-            paint
-                .with(|o| o.as_shape_paint().unwrap().render_opacity())
-                .unwrap()
-        };
-        // The ordinary slots' native paints are the oracle. Artboard host
-        // opacity is supplied by the host, so do not invent a second authored
-        // artboard-opacity product on top of its rendering behavior.
-        let expected = [paint_opacity(&s.s), paint_opacity(&s.d)];
+        // The ends at rest are the oracle.
+        let [(_, a), (_, b)] = at_rest(&s);
         if ancestor == 0.5 && hosted == 1.0 {
-            close(expected[0], 0.4);
-            close(expected[1], 0.3);
+            close(a, 0.4);
+            close(b, 0.3);
         }
         s.begin();
-        for (progress, opacity) in [(0.0, expected[0]), (1.0, expected[1])] {
-            set(&s.moves.flights(&s.root)[0].controls(), 62003, progress);
+        for (progress, opacity) in [(0.0, a), (1.0, b)] {
+            set(&s.moves.flight_controls(&s.root)[0], 62033, progress);
             s.advance(0.0);
-            close(slot_pose(&s.f).unwrap().opacity, opacity);
+            let (_, drawn) = s.drawn_once(UNIT_FILL);
             assert!(
-                (paint_opacity(&s.f) - opacity).abs() < 0.002,
-                "flight at {progress}: ancestor={ancestor}, host={hosted}, paint={}, expected={opacity}",
-                paint_opacity(&s.f)
+                (drawn - opacity).abs() < 0.002,
+                "flight at {progress}: ancestor={ancestor}, host={hosted}, drawn={drawn}, expected={opacity}"
             );
         }
         s.end();
+        s.advance(0.0);
+        let [_, (_, landed)] = at_rest(&s);
         assert!(
-            (paint_opacity(&s.d) - expected[1]).abs() < 0.002,
-            "landing: ancestor={ancestor}, host={hosted}, paint={}, expected={}",
-            paint_opacity(&s.d),
-            expected[1]
+            (landed - b).abs() < 0.002,
+            "landing: ancestor={ancestor}, host={hosted}, drawn={landed}, expected={b}"
         );
     }
 }
@@ -1093,12 +978,12 @@ fn projected_vm_lists_refresh_before_hosted_membership_changes() {
 }
 
 #[test]
-fn overlapping_step_units_are_rejected_before_any_slot_changes() {
+fn overlapping_step_units_are_rejected_before_any_placement_changes() {
     use live_move::records::{LiveStep, LiveStepUnit};
     let mut valid = Scene::load(&fixture::overlapping_plan_fixture(0), false);
     valid.begin();
     assert_eq!(
-        valid.moves.flights(&valid.root).len(),
+        valid.moves.flight_controls(&valid.root).len(),
         4,
         "two independent version pairs are valid"
     );
@@ -1158,7 +1043,7 @@ fn overlapping_step_units_are_rejected_before_any_slot_changes() {
             before,
             "invalid plan {kind} must leave every mounted instance unchanged"
         );
-        assert!(s.moves.flights(&s.root).is_empty());
+        assert!(s.moves.flight_controls(&s.root).is_empty());
     }
 }
 
@@ -1186,36 +1071,40 @@ fn holds(slot: &CoreHandle) -> Option<CoreHandle> {
 }
 
 /// The step says what transfers (decisions 298 and 311), and two copies each
-/// land back in their own slot, as Hero puts each view back in its own
+/// land back in their own placement, as Hero puts each view back in its own
 /// superview (Hero `HeroContext.swift:324-331`).
 #[test]
 fn a_step_unit_flies_one_instance_only_where_it_transfers() {
-    // `transfers` and one flight key: the leaving slot's instance flies and
-    // lands in the arriving slot.
+    // `transfers` and one flight key: the leaving placement's instance flies
+    // and lands in the arriving one.
     let mut s = Scene::new();
     let leaving = holds(&s.s).unwrap();
     s.begin();
-    let flights = s.moves.flights(&s.root);
-    assert_eq!(flights.len(), 1, "one instance flies in one flight");
-    assert_eq!(holds(&flights[0].flight), Some(leaving.clone()));
+    assert_eq!(
+        s.moves.flight_controls(&s.root).len(),
+        1,
+        "one instance flies in one flight"
+    );
+    assert_eq!(holds(&s.d), Some(leaving.clone()));
     s.advance(0.1);
     s.end();
-    assert_eq!(holds(&s.d), Some(leaving), "it lands in the arriving slot");
+    assert_eq!(holds(&s.d), Some(leaving), "it lands in the arriving one");
 
     // Both ends on one key, no `transfers`, two flight keys: each Screen's own
-    // copy flies in its own flight slot and lands back in its own slot.
+    // copy flies in its own flight and stays in its own placement.
     let mut s = Scene::from_bytes(&fixture::same_key_copies_fixture());
     let (a, b) = (holds(&s.s).unwrap(), holds(&s.d).unwrap());
     assert_ne!(a, b, "each Screen has its own copy");
     s.begin();
-    let flights = s.moves.flights(&s.root);
-    assert_eq!(flights.len(), 2, "two copies fly in two flights");
-    let mut flown = flights
-        .iter()
-        .map(|f| holds(&f.flight).unwrap())
-        .collect::<Vec<_>>();
-    flown.sort_by_key(|h| h != &a);
-    assert_eq!(flown, [a.clone(), b.clone()], "each copy in its own flight");
+    let mut flown: Vec<_> = s
+        .moves
+        .lifted_records(&s.root)
+        .into_iter()
+        .map(|(element, ..)| element)
+        .collect();
+    assert_eq!(flown.len(), 2, "two copies fly in two flights");
+    flown.sort_by_key(|element| element != &box_of(&s.s));
+    assert_eq!(flown, [box_of(&s.s), box_of(&s.d)], "each in its own flight");
     s.advance(0.1);
     s.end();
     assert_eq!(holds(&s.s), Some(a), "A's copy lands back on A");
@@ -1230,18 +1119,13 @@ fn two_copies_of_one_key_each_play_their_own_half() {
     let (a, b) = (holds(&s.s).unwrap(), holds(&s.d).unwrap());
     s.begin();
     s.advance(0.25);
-    let flights = s.moves.flights(&s.root);
+    let flights = s.moves.lifted_records(&s.root);
     assert_eq!(flights.len(), 2);
-    for flight in &flights {
-        let unit = holds(&flight.flight).unwrap();
-        let fade = val(&flight.controls(), 62014);
-        if unit == a {
-            close(fade, 0.75);
-        } else {
-            assert_eq!(unit, b);
-            close(fade, 0.25);
-        }
-        close(val(&flight.controls(), 62003), 0.25);
+    for (element, _, record) in &flights {
+        let leaving = element == &box_of(&s.s);
+        assert!(leaving || element == &box_of(&s.d));
+        close(val(record, 62036), if leaving { 0.75 } else { 0.25 });
+        close(val(record, 62033), 0.25);
     }
     s.advance(0.75);
     s.end();
@@ -1351,29 +1235,13 @@ fn a_refill_takes_its_slots_authored_model_and_frees_it_with_its_instance() {
 /// A cancelled step puts every instance back before anything is drawn, as
 /// Hero's cancel puts every view back where it was
 /// (`HeroTransition+Complete.swift:59`, :79; `HeroContext.swift:324-331`).
-/// Flight slots sit on the step's upper Screen (the transitions spec, step
-/// 2): removing that row cancels the step. Decision 297: every Screen keeps
-/// its own copy.
+/// Two copies: a removed upper Screen cancels the step. One instance: removing
+/// the leaving row cancels nothing. `in_place_cancelled` has the rest of one
+/// instance's cancels.
 #[test]
 fn a_cancel_puts_every_instance_back_before_the_next_frame() {
-    // Forward, the arriving Screen upper: removing it mid-flight. A
-    // transferred flight goes back to the slot it took off from as the list
-    // changes, before any plan call.
-    let mut s = Scene::new();
-    let unit = child(&s.s).unwrap().core_handle();
-    s.begin();
-    s.advance(0.1);
-    let (list, a) = screens_item(&s, 0);
-    ArtboardComponentList::update_list_occurrence(&list, &[a]);
-    assert_eq!(holds(&s.s), Some(unit.clone()), "back before any plan call");
-    s.moves.after_advance(&s.root).unwrap();
-    assert_eq!(holds(&s.s), Some(unit));
-    assert!(s.moves.flights(&s.root).is_empty(), "the step has ended");
-    s.moves.step_begin(&s.root, "A", None).unwrap();
-    s.moves.step_end(&s.root, "A", None).unwrap();
-
-    // The same with two copies: the leaving copy goes back to its own slot,
-    // and the arriving copy goes with its row.
+    // Forward, the arriving Screen upper: the leaving copy stays on its own
+    // Screen, and the arriving copy goes with its row.
     let mut s = Scene::from_bytes(&fixture::two_version_fixture());
     let leaving = child(&s.s).unwrap().core_handle();
     let arriving = child(&s.d).unwrap().core_handle();
@@ -1388,36 +1256,12 @@ fn a_cancel_puts_every_instance_back_before_the_next_frame() {
         !held_on(&s.a).contains(&arriving),
         "the arriving copy left with B"
     );
-    assert!(s.moves.flights(&s.root).is_empty());
+    assert!(s.moves.flight_controls(&s.root).is_empty());
     s.moves.step_begin(&s.root, "A", None).unwrap();
     s.moves.step_end(&s.root, "A", None).unwrap();
 
-    // Back, the leaving Screen upper: removing it cancels the step. The
-    // transferred instance in the air goes with its row, and the arriving
-    // slot, whose never-shown copy take-off discarded, holds a fresh one
-    // after the plan's next call.
-    let mut s = Scene::new();
-    s.begin();
-    s.end();
-    let flown = child(&s.d).unwrap().core_handle();
-    s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
-    s.advance(0.1);
-    let (list, a) = screens_item(&s, 0);
-    ArtboardComponentList::update_list_occurrence(&list, &[a]);
-    s.moves.after_advance(&s.root).unwrap();
-    let own = holds(&s.s).expect("A's slot holds an instance before the next frame");
-    assert_ne!(
-        own, flown,
-        "A's copy is a fresh one, not the instance that was in the air"
-    );
-    assert!(
-        !held_on(&s.a).contains(&flown),
-        "the instance in the air left with B"
-    );
-    assert!(s.moves.flights(&s.root).is_empty());
-
-    // Forward, removing the leaving row cancels nothing: the flight lands,
-    // and no refill is tried for the removed slot.
+    // Removing the leaving row cancels nothing: the flight lands, and no
+    // refill is tried for the removed placement.
     let mut s = Scene::new();
     let unit = child(&s.s).unwrap().core_handle();
     s.begin();
@@ -1425,25 +1269,9 @@ fn a_cancel_puts_every_instance_back_before_the_next_frame() {
     let (list, b) = screens_item(&s, 1);
     ArtboardComponentList::update_list_occurrence(&list, &[b]);
     s.advance(0.1);
-    assert_eq!(s.moves.flights(&s.root).len(), 1);
+    assert_eq!(s.moves.flight_controls(&s.root).len(), 1);
     s.end();
     assert_eq!(holds(&s.d), Some(unit));
-
-    // A list change made while the plan is borrowed, as an update pass the
-    // plan runs can make one, completes: the list's hook never borrows the
-    // plan.
-    let mut s = Scene::new();
-    let unit = child(&s.s).unwrap().core_handle();
-    s.begin();
-    s.advance(0.1);
-    let (list, a) = screens_item(&s, 0);
-    s.moves.with_flights(&s.root, |_| {
-        ArtboardComponentList::update_list_occurrence(&list, &[a]);
-    });
-    assert_eq!(holds(&s.s), Some(unit.clone()));
-    s.moves.after_advance(&s.root).unwrap();
-    assert_eq!(holds(&s.s), Some(unit));
-    assert!(s.moves.flights(&s.root).is_empty());
 }
 
 #[test]
@@ -1635,15 +1463,7 @@ fn follow_path_rows_draw_the_same_bounds_at_flight_endpoints_round4() {
     s.advance(0.0);
     s.begin();
     for (progress, expected) in [(0.0, source[0]), (1.0, destination[0])] {
-        let control =
-            s.b.with_artboard(|b| b.find_all_handles::<records::LiveSlot>())
-                .into_iter()
-                .find(|h| {
-                    h.with_downcast::<records::LiveSlot, _>(|r| r.parent().as_ref() == Some(&s.f))
-                        .unwrap()
-                })
-                .unwrap();
-        control.with_downcast_mut::<records::LiveSlot, _>(|r| r.values.progress = progress);
+        set(&s.moves.flight_controls(&s.root)[0], 62033, progress);
         s.moves.after_advance(&s.root).unwrap();
         let flight = drawn_bounds(&mut s);
         assert_eq!(flight.len(), 1);
@@ -1970,20 +1790,8 @@ fn crossed_two_version_flights_release_rows_and_units_round7() {
         child(&s.d).unwrap().downgrade(),
     ];
     s.begin();
-    let flights = s.moves.flights(&s.root);
-    assert_eq!(flights.len(), 2);
-    // A flies in B, and B flies in A. Both units have explicit row-owned VMs.
-    for (flight, expected) in flights.iter().zip([s.b.core_handle(), s.a.core_handle()]) {
-        assert_eq!(
-            flight
-                .flight
-                .with(|o| o.as_component().unwrap().artboard_handle())
-                .flatten()
-                .unwrap(),
-            expected
-        );
-    }
-    drop(flights);
+    // Both units have explicit row-owned VMs.
+    assert_eq!(s.moves.flight_controls(&s.root).len(), 2);
     drop(s);
     for row in rows {
         assert!(row.upgrade().is_none(), "crossed flight retained a row");
@@ -2059,10 +1867,8 @@ fn fresh_page_rebind_releases_retired_flight_rows_round8() {
         s.b = mounted["B"].clone();
         s.s =
             s.a.with_artboard(|b| b.find_all_handles::<NestedArtboard>())[0].clone();
-        let slots =
-            s.b.with_artboard(|b| b.find_all_handles::<NestedArtboard>());
-        s.d = slots[0].clone();
-        s.f = slots[1].clone();
+        s.d =
+            s.b.with_artboard(|b| b.find_all_handles::<NestedArtboard>())[0].clone();
         s.moves.prepare(&s.root).unwrap();
         assert!(
             rows.iter().all(|r| r.upgrade().is_none()),
@@ -2094,8 +1900,8 @@ fn bound_replace(s: &Scene, slot: &CoreHandle, name: &str) {
 #[test]
 fn bound_slot_replacement_rejects_current_incompatible_definition_round8() {
     let s = Scene::new();
-    move_live(&s.s, &s.d).unwrap();
-    move_live(&s.d, &s.s).unwrap();
+    carry(&s.s, &s.d, false).unwrap();
+    carry(&s.d, &s.s, false).unwrap();
     bound_replace(&s, &s.s, "mascot");
     bound_replace(&s, &s.d, "A");
     let original = child(&s.s).unwrap();
@@ -2116,8 +1922,8 @@ fn bound_slot_replacement_rejects_current_incompatible_definition_round8() {
 #[test]
 fn bound_slot_replacement_adopts_fresh_prop_templates_round8() {
     let s = Scene::new();
-    move_live(&s.s, &s.d).unwrap();
-    move_live(&s.d, &s.s).unwrap();
+    carry(&s.s, &s.d, false).unwrap();
+    carry(&s.d, &s.s, false).unwrap();
     bound_replace(&s, &s.s, "mascot");
     bound_replace(&s, &s.d, "mascot");
     let model = vm(&child(&s.d).unwrap());
@@ -2135,7 +1941,7 @@ fn bound_slot_replacement_adopts_fresh_prop_templates_round8() {
     });
     s.b.with_artboard_mut(|b| b.add_data_bind(fresh));
     let original = child(&s.s).unwrap();
-    move_live(&s.s, &s.d).unwrap();
+    carry(&s.s, &s.d, false).unwrap();
     original.update_data_binds(true);
     close(val(&property(&vm(&original), "count"), 575), 200.0);
 }
@@ -2219,8 +2025,8 @@ fn retained_row_binding_count_stays_flat_after_replacement_and_transport_round9(
             });
             row.with_artboard_mut(|b| b.add_data_bind(fresh));
         }
-        move_live(&s.s, &s.d).unwrap();
-        move_live(&s.d, &s.s).unwrap();
+        carry(&s.s, &s.d, false).unwrap();
+        carry(&s.d, &s.s, false).unwrap();
         let unit = child(&s.s).unwrap();
         unit.update_data_binds(true);
         close(val(&property(&vm(&unit), "prop"), 575), 10.0);
@@ -2351,7 +2157,7 @@ fn import_validation_rejected_replacement_preserves_existing_definitions() {
         s._file
             .with_file(|f| f.artboard_named_source(name))
             .unwrap()
-            .with_downcast::<Artboard, _>(|b| b.find_all_handles::<records::LiveSlot>())
+            .with_downcast::<Artboard, _>(|b| b.find_all_handles::<records::LiveFlight>())
             .unwrap()
     });
     let bytes = replacement_page(&s, true);
@@ -2370,7 +2176,7 @@ fn import_validation_rejected_replacement_preserves_existing_definitions() {
             ._file
             .with_file(|f| f.artboard_named_source(name))
             .unwrap()
-            .with_downcast::<Artboard, _>(|b| b.find_all_handles::<records::LiveSlot>())
+            .with_downcast::<Artboard, _>(|b| b.find_all_handles::<records::LiveFlight>())
             .unwrap();
         assert!(!before.is_empty());
         assert_eq!(before, after, "{name} definition records changed");
@@ -2510,7 +2316,7 @@ fn pending_move_preserves_awake_and_sleeping_rows() {
         assert!(page.move_list_item_by_property_name_path("screens", 0, 1));
         let outgoing = child(&s.s).unwrap().core_handle();
         s.moves.step_begin(&s.root, "B", Some("t1")).unwrap();
-        assert_eq!(child(&s.f).unwrap().core_handle(), outgoing);
+        assert_eq!(child(&s.d).unwrap().core_handle(), outgoing);
         s.moves.step_end(&s.root, "B", Some("t1")).unwrap();
     }
 }
@@ -2635,50 +2441,11 @@ fn color_value(model: &CoreHandle, name: &str) -> u32 {
 }
 fn flight_progress(s: &mut Scene, progress: f32) {
     for controls in s.moves.flight_controls(&s.root) {
-        set(&controls, progress_key(&controls), progress);
+        set(&controls, 62033, progress);
     }
     s.advance(0.0);
 }
-/// The progress control of a flight's controls: a flight slot's, or a
-/// flight record's.
-fn progress_key(controls: &CoreHandle) -> i32 {
-    if controls
-        .with_downcast::<live_move::records::LiveFlight, _>(|_| ())
-        .is_some()
-    {
-        62033
-    } else {
-        62003
-    }
-}
 
-/// Flies the unit's `accent` from `from`, its current value, to `to`, the
-/// landing Screen's value, and reads it at each progress. The reads are hex so
-/// a failed comparison shows every step.
-fn accent_blend(from: u32, to: u32, progresses: &[f32]) -> Vec<String> {
-    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
-    let model = vm(&child(&s.s).unwrap());
-    assert!(CoreRegistry::set_color_handle(
-        &property(&model, "accent"),
-        555,
-        from as i32
-    ));
-    assert!(CoreRegistry::set_color_handle(
-        &property(&vm(&s.b), "accent"),
-        555,
-        to as i32
-    ));
-    s.begin();
-    let reads = progresses
-        .iter()
-        .map(|&progress| {
-            flight_progress(&mut s, progress);
-            format!("{:#010x}", color_value(&model, "accent"))
-        })
-        .collect();
-    s.end();
-    reads
-}
 
 /// Removes row B and inserts its Screen model again, as a host adds the
 /// incoming row for a step. The page has not advanced since the insert.
@@ -2761,11 +2528,6 @@ fn screens_list(s: &Scene) -> CoreHandle {
     s.root
         .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
         .unwrap()
-}
-fn land_in_b(s: &mut Scene) {
-    s.begin();
-    flight_progress(s, 1.0);
-    s.end();
 }
 fn close_in(what: &str, a: f32, b: f32) {
     assert!((a - b).abs() < 0.002, "{what}: expected {b}, got {a}");
@@ -2987,8 +2749,7 @@ fn a_unit_carried_from_a_sleeping_screen_does_not_hear_what_it_missed() {
         if woken {
             set_row_collapsed(&list, 0, false).unwrap();
         }
-        empty_slot(&s.d).unwrap();
-        move_live(&s.s, &s.d).unwrap();
+        carry(&s.s, &s.d, false).unwrap();
         s.advance(0.0);
         assert_eq!(plays(), heard, "{what}: the unit hears its go");
     }
@@ -3320,240 +3081,38 @@ mod page_player_event_context {
 }
 
 #[test]
-fn hosted_css_item_rehomes_into_flight_destination_and_home_in_one_advance() {
-    for (destination_css, plain_flight) in [(true, false), (false, false), (true, true)] {
-        let mut factory = PersistentFactory::new(RecordingFactory::new());
-        let file = File::import(
-            &if plain_flight {
-                fixture::hosted_css_plain_flight_fixture()
-            } else {
-                fixture::hosted_css_layout_fixture(destination_css)
-            },
-            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
-            None,
-            None,
-            None,
-        )
-        .unwrap();
-        let (_root, screen, machine) = mount_layout_page(&file);
-        let slot = |name| {
-            screen
-                .with_artboard(|b| b.find_handle::<NestedArtboard>(name))
-                .unwrap()
-        };
-        let source = slot("source");
-        let flight = slot("flight");
-        let destination = slot("destination");
-        let original = child(&source).unwrap();
-        let geometry = |unit: &RuntimeArtboardInstanceHandle| {
-            unit.with_artboard(|b| (b.layout_x(), b.layout_width(), b.layout_height()))
-        };
-        assert_eq!(geometry(&original), (36.0, 260.0, 108.0));
-        let destination_box = geometry(&child(&destination).unwrap());
-        let flight_box = geometry(&child(&flight).unwrap());
-        if destination_css {
-            assert_eq!(destination_box, (56.0, 300.0, 108.0));
-        }
-        for (from, to, expected) in [
-            (&source, &flight, flight_box),
-            (&flight, &destination, destination_box),
-            (&destination, &source, (36.0, 260.0, 108.0)),
-        ] {
-            move_live(from, to).unwrap();
-            machine.advance_and_apply(0.0);
-            assert_eq!(child(to).unwrap().core_handle(), original.core_handle());
-            assert_eq!(
-                geometry(&original),
-                expected,
-                "destination CSS {destination_css}"
-            );
-        }
-    }
-}
-
-/// A CSS flight slot authored in flow still never pushes: the runtime takes
-/// each Screen occurrence's flight slot out of flow before its first layout.
-fn in_flow_css_flight_frame(hit_test: bool) {
-    use css_layout::{keys::POSITION, record};
-    use source::{
-        layout_component::LayoutComponent,
-        math::{mat2d::Mat2D, vec2d::Vec2D},
-        pointer_button::PointerButton,
-    };
+fn hosted_css_item_rehomes_into_destination_and_home_in_one_advance() {
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let file = File::import(
-        &fixture::shared_layout_flight_fixture(),
+        &fixture::hosted_css_layout_fixture(),
         RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
         None,
         None,
         None,
     )
     .unwrap();
-    let root = file.with_file(|f| f.artboard_named("SharedPage")).unwrap();
-    let model = file
-        .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
-        .unwrap();
-    let player = root.default_state_machine_handle().unwrap();
-    player.with_instance_mut(|m| m.bind_view_model_instance(model));
-    player.advance_and_apply(0.0);
-    let list = root
-        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-        .unwrap();
-    let row = |index| {
-        list.with_downcast::<ArtboardComponentList, _>(|l| l.artboard_instance(index))
-            .flatten()
-            .unwrap()
-    };
-    let screen = row(0);
-    let sibling = row(1);
-    let sibling_machine = list
-        .with_downcast::<ArtboardComponentList, _>(|l| l.state_machine_instance(1))
-        .flatten()
-        .unwrap();
-    let slot = |name| {
+    let (_root, screen, machine) = mount_layout_page(&file);
+    let placement = |name| {
         screen
             .with_artboard(|b| b.find_handle::<NestedArtboard>(name))
             .unwrap()
     };
-    let from = slot("source");
-    let to = slot("destination");
-    let flight = slot("flight");
-    let position = |host: &CoreHandle| {
-        let item = host
-            .with(|o| record::find_in(o.as_container_component().unwrap().children()))
-            .flatten()
-            .unwrap();
-        record::with_values(&item, |values| values.choice(POSITION)).unwrap()
+    let (source, destination) = (placement("source"), placement("destination"));
+    let original = child(&source).unwrap();
+    let geometry = |unit: &RuntimeArtboardInstanceHandle| {
+        unit.with_artboard(|b| (b.layout_x(), b.layout_width(), b.layout_height()))
     };
-    assert_eq!(
-        position(&flight),
-        2,
-        "the occurrence's flight slot is absolute"
-    );
-    let definition = file
-        .with_file(|f| f.artboard_named_source("FlightScreen"))
-        .unwrap()
-        .with_downcast::<Artboard, _>(|b| b.find_handle::<NestedArtboard>("flight"))
-        .flatten()
-        .unwrap();
-    assert_eq!(position(&definition), 0, "the definition stays as imported");
-    let spacer = screen
-        .with_artboard(|b| b.find_handle::<LayoutComponent>("spacer"))
-        .unwrap();
-    // The flight is first in the Screen's column; in flow it would push the
-    // spacer down by its height, and the sibling Screen with it.
-    let rows = || {
-        (
-            spacer
-                .with_downcast::<LayoutComponent, _>(|c| c.layout_y())
-                .unwrap(),
-            screen.with_artboard(|b| b.layout_height()),
-            sibling.with_artboard(|b| b.layout_y()),
-        )
-    };
-    let at_rest = rows();
-    close(at_rest.0, 0.0);
-    close(at_rest.1, 30.0);
-    close(at_rest.2, 30.0);
-    child(&to).unwrap().set_size(200.0, 120.0);
-    player.advance_and_apply(0.0);
-    let original = child(&from).unwrap();
-    let unit_machine = machine(&from);
-    empty_slot(&flight).unwrap();
-    move_live(&from, &flight).unwrap();
-    let follower = Flight::new(flight.clone(), from, to, SizeMode::Layout).unwrap();
-    let mut moves = LiveMoves::default();
-    moves.with_flights(&root, |flights| flights.push(Entry::One(follower)));
-    let time = |machine: &RuntimeStateMachineInstanceHandle| {
-        machine
-            .with_instance_mut(|m| m.current_animation_by_index(0))
-            .unwrap()
-            .first_animation(|a| a.time())
-            .unwrap()
-    };
-    let sibling_size = sibling.with_artboard(|b| (b.layout_width(), b.layout_height()));
-    for (frame, progress) in [0.5, 0.25, 0.75].into_iter().enumerate() {
-        set(&moves.flights(&root)[0].controls(), 62003, progress);
-        player.advance_and_apply(0.1);
-        let before = (time(&unit_machine), time(&sibling_machine));
-        moves.after_advance(&root).unwrap();
-        assert_eq!(
-            before,
-            (time(&unit_machine), time(&sibling_machine)),
-            "settlement must not advance either machine"
-        );
-        close(before.0, 0.1 * (frame + 1) as f32);
-        close(before.1, 0.1 * (frame + 1) as f32);
-        let height = 80.0 + 40.0 * progress;
-        close(
-            original.with_artboard(|b| b.layout_width()),
-            100.0 + 100.0 * progress,
-        );
-        close(original.with_artboard(|b| b.layout_height()), height);
-        let (spacer_y, screen_height, y) = rows();
-        close(spacer_y, at_rest.0);
-        close(screen_height, at_rest.1);
-        close(y, at_rest.2);
-        assert_eq!(
-            sibling.with_artboard(|b| (b.layout_width(), b.layout_height())),
-            sibling_size,
-            "the sibling keeps its size"
-        );
-        if hit_test {
-            // In flow, the flight would have pushed the sibling to here.
-            let pushed = y + height;
-            for (pointer, (point, hits)) in [(y + 1.0, 9.0), (pushed + 1.0, 0.0)]
-                .into_iter()
-                .enumerate()
-            {
-                sibling_machine.set_number("hits", 0.0);
-                player.with_instance_mut(|m| {
-                    m.pointer_down(
-                        Vec2D::new(10.0, point),
-                        (frame * 2 + pointer) as i32,
-                        PointerButton::Primary,
-                    )
-                });
-                close(
-                    sibling_machine.with_instance(|m| m.get_number("hits").unwrap().value()),
-                    hits,
-                );
-            }
-        } else {
-            // This is the exact cached transform consumed by list drawing.
-            let transform = list
-                .with_downcast::<ArtboardComponentList, _>(|l| l.draw_transform_for_index(1))
-                .flatten()
-                .unwrap();
-            close(transform[5], y);
-            factory.borrow_mut().clear();
-            let mut renderer = factory.borrow().make_renderer();
-            root.draw(&mut renderer);
-            let stream = factory.borrow().stream();
-            let mut matrix = Mat2D::identity();
-            let mut stack = Vec::new();
-            let mut drawn_y = None;
-            for line in stream.lines() {
-                if line == "save" {
-                    stack.push(matrix);
-                } else if line == "restore" {
-                    matrix = stack.pop().unwrap();
-                } else if let Some(values) = line
-                    .strip_prefix("transform matrix=[")
-                    .and_then(|s| s.strip_suffix(']'))
-                {
-                    let mut local = Mat2D::identity();
-                    for (i, value) in values.split(',').enumerate() {
-                        local[i] = value.parse().unwrap();
-                    }
-                    matrix *= local;
-                } else if line.starts_with("drawPath ") {
-                    assert!(drawn_y.is_none(), "only the sibling paints");
-                    drawn_y = Some((matrix * Vec2D::new(0.0, 0.0)).y);
-                }
-            }
-            close(drawn_y.unwrap(), y);
-        }
+    assert_eq!(geometry(&original), (36.0, 260.0, 108.0));
+    let destination_box = geometry(&child(&destination).unwrap());
+    assert_eq!(destination_box, (56.0, 300.0, 108.0));
+    for (from, to, expected) in [
+        (&source, &destination, destination_box),
+        (&destination, &source, (36.0, 260.0, 108.0)),
+    ] {
+        carry(from, to, false).unwrap();
+        machine.advance_and_apply(0.0);
+        assert_eq!(child(to).unwrap().core_handle(), original.core_handle());
+        assert_eq!(geometry(&original), expected);
     }
 }
 
@@ -3567,7 +3126,7 @@ fn an_item_record_write_moves_a_list_row_screens_siblings() {
     use source::layout_component::LayoutComponent;
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let file = File::import(
-        &fixture::shared_layout_flight_fixture(),
+        &fixture::shared_layout_fixture(),
         RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
         None,
         None,
@@ -3591,7 +3150,7 @@ fn an_item_record_write_moves_a_list_row_screens_siblings() {
     };
     let (screen, sibling) = (row(0), row(1));
     let item = screen
-        .with_artboard(|b| b.find_handle::<NestedArtboard>("flight"))
+        .with_artboard(|b| b.find_handle::<NestedArtboard>("item"))
         .unwrap()
         .with(|o| record::find_in(o.as_container_component().unwrap().children()))
         .flatten()
@@ -3608,452 +3167,26 @@ fn an_item_record_write_moves_a_list_row_screens_siblings() {
             sibling.with_artboard(|b| b.layout_y()),
         )
     };
-    // The runtime took the flight slot out of flow before the first layout.
-    let (spacer_y, height, y) = rows();
-    close(spacer_y, 0.0);
-    close(height, 30.0);
-    close(y, 30.0);
-    assert!(CoreRegistry::set_uint_handle(&item, POSITION as i32, 0));
-    player.advance_and_apply(0.0);
-    // Back in flow, the 40-high slot pushes the spacer down, its Screen grows,
-    // and the next row follows.
+    // In flow, the 40-high placement is above the spacer.
     let (spacer_y, height, y) = rows();
     close(spacer_y, 40.0);
     close(height, 70.0);
     close(y, 70.0);
-    // And out of flow again, everything returns.
     assert!(CoreRegistry::set_uint_handle(&item, POSITION as i32, 2));
     player.advance_and_apply(0.0);
+    // Out of flow, the spacer moves up, its Screen shrinks, and the next row
+    // follows.
     let (spacer_y, height, y) = rows();
     close(spacer_y, 0.0);
     close(height, 30.0);
     close(y, 30.0);
-}
-
-fn a_flight_aims_at_the_settled_destination(progresses: &[f32], two_flights: bool) {
-    use source::{
-        layout_component::LayoutComponent,
-        math::{mat2d::Mat2D, vec2d::Vec2D},
-    };
-    let mut factory = PersistentFactory::new(RecordingFactory::new());
-    let file = File::import(
-        &if two_flights {
-            fixture::shared_layout_two_flight_endpoint_fixture()
-        } else {
-            fixture::shared_layout_endpoint_fixture()
-        },
-        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    let root = file.with_file(|f| f.artboard_named("SharedPage")).unwrap();
-    let model = file
-        .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
-        .unwrap();
-    let player = root.default_state_machine_handle().unwrap();
-    player.with_instance_mut(|m| m.bind_view_model_instance(model));
+    // And back in flow, everything returns.
+    assert!(CoreRegistry::set_uint_handle(&item, POSITION as i32, 0));
     player.advance_and_apply(0.0);
-    let rows = screens(&root).unwrap();
-    let screen = &rows["FlightScreen"];
-    let destination = &rows["Sibling"];
-    let slot = |row: &RuntimeArtboardInstanceHandle, name| {
-        row.with_artboard(|b| b.find_handle::<NestedArtboard>(name))
-            .unwrap()
-    };
-    let from = slot(screen, "source");
-    let to = slot(destination, "landing");
-    let flight = slot(screen, "flight");
-    empty_slot(&slot(screen, "destination")).unwrap();
-    set(&from, 13, 30.0);
-    set(&to, 13, 200.0);
-    set(&to, 14, 20.0);
-    child(&to).unwrap().set_size(200.0, 120.0);
-    if two_flights {
-        let from2 = slot(screen, "source2");
-        let to2 = slot(destination, "landing2");
-        child(&from2).unwrap().set_size(80.0, 40.0);
-        child(&to2).unwrap().set_size(300.0, 160.0);
-        let color = child(&from2)
-            .unwrap()
-            .with_artboard(|b| {
-                b.find_handle::<source::shapes::paint::solid_color::SolidColor>("markerColor")
-            })
-            .unwrap();
-        assert!(CoreRegistry::set_color_handle(
-            &color,
-            37,
-            0xffabcdef_u32 as i32
-        ));
-    }
-    player.advance_and_apply(0.0);
-    let rows_at_rest = (
-        screen.with_artboard(|b| b.layout_height()),
-        destination.with_artboard(|b| b.layout_y()),
-    );
-    let original = child(&from).unwrap();
-    // Its own marker color tells the flown unit from the copy its Screen
-    // gets when it lands (decision 297).
-    assert!(CoreRegistry::set_color_handle(
-        &original
-            .with_artboard(|b| {
-                b.find_handle::<source::shapes::paint::solid_color::SolidColor>("markerColor")
-            })
-            .unwrap(),
-        37,
-        0xff13579b_u32 as i32
-    ));
-    let playback = machine(&from);
-    let reflow = original
-        .with_artboard(|b| b.find_handle::<LayoutComponent>("reflow"))
-        .unwrap();
-    let time = || {
-        playback
-            .with_instance_mut(|m| m.current_animation_by_index(0))
-            .unwrap()
-            .first_animation(|a| a.time())
-            .unwrap()
-    };
-    let draw = || {
-        factory.borrow_mut().clear();
-        let mut renderer = factory.borrow().make_renderer();
-        root.draw(&mut renderer);
-        let stream = factory.borrow().stream();
-        let mut matrix = Mat2D::identity();
-        let mut stack = Vec::new();
-        let mut points = Vec::new();
-        for line in stream.lines() {
-            if line == "save" {
-                stack.push(matrix);
-            } else if line == "restore" {
-                matrix = stack.pop().unwrap();
-            } else if let Some(values) = line
-                .strip_prefix("transform matrix=[")
-                .and_then(|s| s.strip_suffix(']'))
-            {
-                let mut local = Mat2D::identity();
-                for (i, value) in values.split(',').enumerate() {
-                    local[i] = value.parse().unwrap();
-                }
-                matrix *= local;
-            } else if line.starts_with("drawPath ") && line.contains("color=0xff13579b") {
-                assert!(points.is_empty(), "only the live unit's marker paints");
-                for point in line
-                    .split("points=[")
-                    .nth(1)
-                    .unwrap()
-                    .split(']')
-                    .next()
-                    .unwrap()
-                    .split("),(")
-                {
-                    let (x, y) = point.trim_matches(['(', ')']).split_once(',').unwrap();
-                    points.push(matrix * Vec2D::new(x.parse().unwrap(), y.parse().unwrap()));
-                }
-            }
-        }
-        assert!(!points.is_empty());
-        Vec2D::new(
-            points.iter().map(|p| p.x).fold(f32::INFINITY, f32::min),
-            points.iter().map(|p| p.y).fold(f32::INFINITY, f32::min),
-        )
-    };
-    let mut moves = LiveMoves::default();
-    moves.step_begin(&root, "Sibling", Some("shared")).unwrap();
-    for (frame, progress) in progresses.iter().copied().enumerate() {
-        for follower in moves.flights(&root) {
-            set(&follower.controls(), 62003, progress);
-        }
-        player.advance_and_apply(0.1);
-        let before = time();
-        let solves = Artboard::layout_pass_count();
-        hosted_scene::measure_walks(true);
-        moves.after_advance(&root).unwrap();
-        assert_eq!(
-            Artboard::layout_pass_count() - solves,
-            1,
-            "resize solves the shared tree once; pose settlement must not solve again"
-        );
-        let visits = hosted_scene::measure_walks(false);
-        assert_eq!(visits.advance, 0);
-        close(time(), before);
-        close(time(), 0.1 * (frame + 1) as f32);
-        assert_eq!(
-            child(&flight).unwrap().core_handle(),
-            original.core_handle()
-        );
-        let width = 100.0 + 100.0 * progress;
-        let height = 80.0 + 40.0 * progress;
-        close(original.with_artboard(|b| b.layout_width()), width);
-        close(
-            reflow
-                .with_downcast::<LayoutComponent, _>(|b| b.layout_width())
-                .unwrap(),
-            width,
-        );
-        close(
-            reflow
-                .with_downcast::<LayoutComponent, _>(|b| b.layout_height())
-                .unwrap(),
-            height,
-        );
-        // Flight slots are out of flow, so neither row moves.
-        close(screen.with_artboard(|b| b.layout_height()), rows_at_rest.0);
-        close(destination.with_artboard(|b| b.layout_y()), rows_at_rest.1);
-        let a = slot_pose(&from).unwrap().transform;
-        let b = slot_pose(&to).unwrap().transform;
-        let actual = draw();
-        close(actual.x, a[4] + (b[4] - a[4]) * progress);
-        close(actual.y, a[5] + (b[5] - a[5]) * progress);
-        let solves = Artboard::layout_pass_count();
-        moves.after_advance(&root).unwrap();
-        assert_eq!(
-            Artboard::layout_pass_count(),
-            solves,
-            "reprojecting a pose must leave layout clean"
-        );
-        close(draw().y, actual.y);
-        close(time(), before);
-    }
-    assert_eq!(*progresses.last().unwrap(), 1.0);
-    let before_landing = draw();
-    let before_time = time();
-    moves.step_end(&root, "Sibling", Some("shared")).unwrap();
-    let after_landing = draw();
-    close(after_landing.x, before_landing.x);
-    close(after_landing.y, before_landing.y);
-    close(time(), before_time);
-    assert_eq!(child(&to).unwrap().core_handle(), original.core_handle());
-    close(original.with_artboard(|b| b.layout_width()), 200.0);
-    close(original.with_artboard(|b| b.layout_height()), 120.0);
-}
-
-fn css_follower_owns_box(source_kind: u8, mode: SizeMode) {
-    use css_layout::{keys::*, record};
-    use source::{
-        layout_component::LayoutComponent,
-        math::{mat2d::Mat2D, vec2d::Vec2D},
-        shapes::paint::solid_color::SolidColor,
-    };
-    // The follower writes only the flight slot's size; authored placement on
-    // the flight record is replaced by the pose override.
-    for case in ["size", "placement"] {
-        let mut factory = PersistentFactory::new(RecordingFactory::new());
-        let file = File::import(
-            &fixture::css_follower_fixture(source_kind),
-            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
-            None,
-            None,
-            None,
-        )
-        .unwrap();
-        let (root, screen, player) = mount_layout_page(&file);
-        let slot = |name| {
-            screen
-                .with_artboard(|b| b.find_handle::<NestedArtboard>(name))
-                .unwrap()
-        };
-        let from = slot("source");
-        let to = slot("destination");
-        let flight = slot("flight");
-        let css = |slot: &CoreHandle| {
-            slot.with(|o| record::find_in(o.as_container_component().unwrap().children()))
-                .flatten()
-                .unwrap()
-        };
-        let item = css(&flight);
-        let enum_value =
-            |key, value| assert!(CoreRegistry::set_uint_handle(&item, i32::from(key), value));
-        let number = |key, value| set(&item, i32::from(key), value);
-        if case == "placement" {
-            enum_value(WIDTH_KIND, 0);
-            enum_value(HEIGHT_KIND, 0);
-            enum_value(INSET_TOP_KIND, 1);
-            number(INSET_TOP_KIND + 1, 500.0);
-            number(MARGIN_TOP_KIND + 1, 70.0);
-        }
-        player.advance_and_apply(0.0);
-        let original = child(&from).unwrap();
-        let reflow = original
-            .with_artboard(|b| b.find_handle::<LayoutComponent>("reflow"))
-            .unwrap();
-        let ink = original
-            .with_artboard(|b| b.find_handle::<SolidColor>("ink"))
-            .unwrap();
-        assert!(CoreRegistry::set_color_handle(
-            &ink,
-            37,
-            0xff007766_u32 as i32
-        ));
-        player.advance_and_apply(0.0);
-        let style = |unit: &RuntimeArtboardInstanceHandle| {
-            unit.with_artboard(|b| b.base.base.layout_style().clone())
-        };
-        let home_style = style(&original);
-        let destination_style = style(&child(&to).unwrap());
-        close(slot_pose(&from).unwrap().size.x, 100.0);
-        close(slot_pose(&to).unwrap().size.x, 200.0);
-        let follower = Flight::new(flight.clone(), from.clone(), to.clone(), mode).unwrap();
-        empty_slot(&flight).unwrap();
-        move_live(&from, &flight).unwrap();
-        let mut moves = LiveMoves::default();
-        moves.with_flights(&root, |flights| flights.push(Entry::One(follower)));
-        for progress in [0.5, 0.25, 0.75, 1.0] {
-            set(&moves.flights(&root)[0].controls(), 62003, progress);
-            player.advance_and_apply(0.0);
-            moves.after_advance(&root).unwrap();
-            let interpolated = (100.0 + 100.0 * progress, 80.0 + 40.0 * progress);
-            let expected = if mode == SizeMode::Layout {
-                interpolated
-            } else {
-                (100.0, 80.0)
-            };
-            assert_eq!(
-                child(&flight).unwrap().core_handle(),
-                original.core_handle()
-            );
-            let flight_box = record::with_values(&item, |values| {
-                (
-                    values.choice(WIDTH_KIND),
-                    values.number(WIDTH_KIND + 1),
-                    values.choice(HEIGHT_KIND),
-                    values.number(HEIGHT_KIND + 1),
-                    values.choice(POSITION),
-                )
-            })
-            .unwrap();
-            assert_eq!(
-                (flight_box.0, flight_box.2, flight_box.4),
-                (1, 1, 2),
-                "source {source_kind}, {mode:?}, {case}: the flight record holds a length box out of flow"
-            );
-            close(flight_box.1, expected.0);
-            close(flight_box.3, expected.1);
-            for (label, actual, expected) in [
-                (
-                    "width",
-                    original.with_artboard(|b| b.layout_width()),
-                    expected.0,
-                ),
-                (
-                    "height",
-                    original.with_artboard(|b| b.layout_height()),
-                    expected.1,
-                ),
-                (
-                    "child width",
-                    reflow.with_downcast::<LayoutComponent, _>(b_width).unwrap(),
-                    expected.0,
-                ),
-                (
-                    "child height",
-                    reflow
-                        .with_downcast::<LayoutComponent, _>(|b| b.layout_height())
-                        .unwrap(),
-                    expected.1,
-                ),
-            ] {
-                assert!(
-                    (actual - expected).abs() < 0.002,
-                    "source {source_kind}, {mode:?}, {case}, t={progress}: {label} expected {expected}, got {actual}"
-                );
-            }
-            factory.borrow_mut().clear();
-            let mut renderer = factory.borrow().make_renderer();
-            root.draw(&mut renderer);
-            let stream = factory.borrow().stream();
-            let mut matrix = Mat2D::identity();
-            let mut stack = Vec::new();
-            let mut points = Vec::new();
-            for line in stream.lines() {
-                if line == "save" {
-                    stack.push(matrix);
-                } else if line == "restore" {
-                    matrix = stack.pop().unwrap();
-                } else if let Some(values) = line
-                    .strip_prefix("transform matrix=[")
-                    .and_then(|s| s.strip_suffix(']'))
-                {
-                    let mut local = Mat2D::identity();
-                    for (i, v) in values.split(',').enumerate() {
-                        local[i] = v.parse().unwrap();
-                    }
-                    matrix *= local;
-                } else if line.starts_with("drawPath ") && line.contains("color=0xff007766") {
-                    for point in line
-                        .split("points=[")
-                        .nth(1)
-                        .unwrap()
-                        .split(']')
-                        .next()
-                        .unwrap()
-                        .split("),(")
-                    {
-                        let (x, y) = point.trim_matches(['(', ')']).split_once(',').unwrap();
-                        points.push(matrix * Vec2D::new(x.parse().unwrap(), y.parse().unwrap()));
-                    }
-                }
-            }
-            assert!(!points.is_empty());
-            let extent = |x: bool| {
-                let values = points
-                    .iter()
-                    .map(|p| if x { p.x } else { p.y })
-                    .collect::<Vec<_>>();
-                values.iter().copied().fold(f32::NEG_INFINITY, f32::max)
-                    - values.iter().copied().fold(f32::INFINITY, f32::min)
-            };
-            // Scale mode lays out the departure box and scales it, so both
-            // modes draw the interpolated size.
-            close(extent(true), interpolated.0);
-            close(extent(false), interpolated.1);
-        }
-        moves.with_flights(&root, |flights| flights.clear());
-        move_live(&flight, &to).unwrap();
-        player.advance_and_apply(0.0);
-        assert_eq!(child(&to).unwrap().core_handle(), original.core_handle());
-        assert_eq!(
-            style(&original),
-            destination_style,
-            "destination restores its whole style, {case}"
-        );
-        close(original.with_artboard(|b| b.layout_width()), 200.0);
-        close(original.with_artboard(|b| b.layout_height()), 120.0);
-        move_live(&to, &from).unwrap();
-        player.advance_and_apply(0.0);
-        assert_eq!(child(&from).unwrap().core_handle(), original.core_handle());
-        assert_eq!(
-            style(&original),
-            home_style,
-            "home restores its whole style, {case}"
-        );
-        close(original.with_artboard(|b| b.layout_width()), 100.0);
-        close(original.with_artboard(|b| b.layout_height()), 80.0);
-
-        // Cancellation returns directly from a flight, without passing through
-        // the destination's record to accidentally erase transient item fields.
-        let follower = Flight::new(flight.clone(), from.clone(), to.clone(), mode).unwrap();
-        move_live(&from, &flight).unwrap();
-        moves.with_flights(&root, |flights| flights.push(Entry::One(follower)));
-        set(&moves.flights(&root)[0].controls(), 62003, 0.5);
-        player.advance_and_apply(0.0);
-        moves.after_advance(&root).unwrap();
-        moves.with_flights(&root, |flights| flights.clear());
-        move_live(&flight, &from).unwrap();
-        player.advance_and_apply(0.0);
-        assert_eq!(child(&from).unwrap().core_handle(), original.core_handle());
-        assert_eq!(
-            style(&original),
-            home_style,
-            "direct return restores the whole home style, {case}"
-        );
-        close(original.with_artboard(|b| b.layout_width()), 100.0);
-        close(original.with_artboard(|b| b.layout_height()), 80.0);
-    }
-    fn b_width(b: &source::layout_component::LayoutComponent) -> f32 {
-        b.layout_width()
-    }
+    let (spacer_y, height, y) = rows();
+    close(spacer_y, 40.0);
+    close(height, 70.0);
+    close(y, 70.0);
 }
 
 /// One path `board` drew: its stream line, its final points without a closing
@@ -4139,153 +3272,16 @@ fn ink_points(
     draws.pop().map_or_else(Vec::new, |draw| draw.points)
 }
 
-fn assert_corners(
-    drawn: &[source::math::vec2d::Vec2D],
-    expected: &[source::math::vec2d::Vec2D],
-    label: &str,
-) {
-    assert_eq!(drawn.len(), expected.len(), "{label}: {drawn:?}");
-    for corner in expected {
-        assert!(
-            drawn
-                .iter()
-                .any(|p| (p.x - corner.x).abs() < 0.01 && (p.y - corner.y).abs() < 0.01),
-            "{label}: no drawn corner at {corner:?} in {drawn:?}"
-        );
-    }
-}
 
-/// CSS draws a transformed box as translate · rotate · scale about its
-/// origin, and a flight's size change belongs to the box, not to that
-/// transform: the oracle is each frame's blended rectangle (a mix of the two
-/// rest rectangles, measured by drawing the unposed unit in each slot),
-/// slid by its offset and turned about its center.
-fn turned_unit_flies_as_a_css_box(mode: SizeMode) {
-    use source::{math::vec2d::Vec2D, shapes::paint::solid_color::SolidColor};
-    let mut factory = PersistentFactory::new(RecordingFactory::new());
-    let file = File::import(
-        &fixture::css_follower_turned_fixture(),
-        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    let (root, screen, player) = mount_layout_page(&file);
-    let slot = |name| {
-        screen
-            .with_artboard(|b| b.find_handle::<NestedArtboard>(name))
-            .unwrap()
-    };
-    let (from, to, flight) = (slot("source"), slot("destination"), slot("flight"));
-    player.advance_and_apply(0.0);
-    let unit = child(&from).unwrap();
-    let ink = unit
-        .with_artboard(|b| b.find_handle::<SolidColor>("ink"))
-        .unwrap();
-    assert!(CoreRegistry::set_color_handle(
-        &ink,
-        37,
-        0xff007766_u32 as i32
-    ));
-    let draw = || ink_points(&factory, &root, "color=0xff007766");
-    let rect = |points: Vec<Vec2D>| {
-        let x = points.iter().map(|p| p.x);
-        let y = points.iter().map(|p| p.y);
-        (
-            Vec2D::new(
-                x.clone().fold(f32::INFINITY, f32::min),
-                y.clone().fold(f32::INFINITY, f32::min),
-            ),
-            Vec2D::new(
-                x.fold(f32::NEG_INFINITY, f32::max),
-                y.fold(f32::NEG_INFINITY, f32::max),
-            ),
-        )
-    };
-    // The rest rectangles, unposed.
-    set(&unit.core_handle(), 15, 0.0);
-    player.advance_and_apply(0.0);
-    let a = rect(draw());
-    move_live(&from, &to).unwrap();
-    player.advance_and_apply(0.0);
-    let b = rect(draw());
-    move_live(&to, &from).unwrap();
-    player.advance_and_apply(0.0);
-    close(b.1.x - b.0.x, 200.0);
-    close(b.1.y - b.0.y, 120.0);
-    close(a.1.x - a.0.x, 100.0);
-    close(a.1.y - a.0.y, 80.0);
-    let turn = source::math::mat2d::Mat2D::from_rotation(0.35);
-    // Turned by the file's own turn, then also slid by a written offset.
-    set(&unit.core_handle(), 15, 0.35);
-    for slide in [0.0, 10.0] {
-        let label = format!("{mode:?}, slid {slide}");
-        set(&unit.core_handle(), 13, slide);
-        player.advance_and_apply(0.0);
-        let expected = |t: f32| {
-            let lo = a.0 + (b.0 - a.0) * t;
-            let hi = a.1 + (b.1 - a.1) * t;
-            let center = Vec2D::new((lo.x + hi.x) * 0.5, (lo.y + hi.y) * 0.5);
-            [lo, Vec2D::new(hi.x, lo.y), hi, Vec2D::new(lo.x, hi.y)]
-                .map(|corner| center + Vec2D::new(slide, 0.0) + turn * (corner - center))
-        };
-        assert_corners(&draw(), &expected(0.0), &format!("{label}: at rest"));
-        let follower = Flight::new(flight.clone(), from.clone(), to.clone(), mode).unwrap();
-        empty_slot(&flight).unwrap();
-        move_live(&from, &flight).unwrap();
-        let mut moves = LiveMoves::default();
-        moves.with_flights(&root, |flights| flights.push(Entry::One(follower)));
-        let last = [0.25, 0.5, 0.75, 1.0]
-            .map(|progress| {
-                set(&moves.flights(&root)[0].controls(), 62003, progress);
-                player.advance_and_apply(0.0);
-                moves.after_advance(&root).unwrap();
-                let drawn = draw();
-                assert_corners(
-                    &drawn,
-                    &expected(progress),
-                    &format!("{label}, t={progress}"),
-                );
-                drawn
-            })
-            .into_iter()
-            .last()
-            .unwrap();
-        // Land through a step's own landing, with no advance between the last
-        // frame and the draw.
-        moves.land_flights(&root).unwrap();
-        assert_eq!(child(&to).unwrap().core_handle(), unit.core_handle());
-        let landed = draw();
-        assert_corners(
-            &landed,
-            &last,
-            &format!("{label}: landing keeps the last frame"),
-        );
-        assert_corners(
-            &landed,
-            &expected(1.0),
-            &format!("{label}: landed in the destination"),
-        );
-        player.advance_and_apply(0.0);
-        assert_corners(
-            &draw(),
-            &expected(1.0),
-            &format!("{label}: at rest in the destination"),
-        );
-        move_live(&to, &from).unwrap();
-        player.advance_and_apply(0.0);
-    }
-}
 
 /// The stand-in that holds a unit's place while it is away places like the
-/// unit: the slot it leaves keeps its pose at rest, at takeoff and whenever
+/// unit: the placement it leaves keeps its pose at rest, at takeoff and whenever
 /// it is placed again.
 #[test]
-fn a_vacated_slot_keeps_its_pose() {
+fn a_vacated_placement_keeps_its_pose() {
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let file = File::import(
-        &fixture::css_follower_turned_fixture(),
+        &fixture::css_turned_fixture(),
         RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
         None,
         None,
@@ -4301,11 +3297,16 @@ fn a_vacated_slot_keeps_its_pose() {
     let (from, to) = (slot("source"), slot("destination"));
     player.advance_and_apply(0.0);
     let pose = |label: &str| {
-        let pose = slot_pose(&from).unwrap();
-        (label.to_owned(), pose.transform, pose.size, pose.opacity)
+        let size = from
+            .with_downcast::<source::nested_artboard_layout::NestedArtboardLayout, _>(|l| {
+                l.layout_bounds()
+            })
+            .unwrap();
+        let drawn = LiveMoves::default().drawn(&from, When::Live).unwrap();
+        (label.to_owned(), drawn, size)
     };
     let at_rest = pose("at rest");
-    move_live(&from, &to).unwrap();
+    carry(&from, &to, false).unwrap();
     player.advance_and_apply(0.0);
     assert!(child(&from).is_none(), "the unit left");
     let after = pose("just after it leaves");
@@ -4319,8 +3320,8 @@ fn a_vacated_slot_keeps_its_pose() {
     let placed_again = pose("placed again");
     for vacated in [after, placed_again] {
         assert_eq!(
-            (vacated.1, vacated.2, vacated.3),
-            (at_rest.1, at_rest.2, at_rest.3),
+            (vacated.1, vacated.2),
+            (at_rest.1, at_rest.2),
             "{}",
             vacated.0
         );
@@ -4332,7 +3333,7 @@ fn a_vacated_slot_keeps_its_pose() {
 /// unit transported between Screens takes that layer in the Screen it
 /// reaches, and both Screens re-sort.
 #[test]
-fn css_stacking_slot_takes_its_frames_layer_across_screens() {
+fn css_stacking_placement_takes_its_units_layer_across_screens() {
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let file = File::import(
         &fixture::css_two_screen_stacking_fixture(),
@@ -4383,21 +3384,22 @@ fn css_stacking_slot_takes_its_frames_layer_across_screens() {
     };
     let sorts =
         |row: &RuntimeArtboardInstanceHandle| row.with_artboard(|r| r.draw_order_change_counter());
-    empty_slot(&to).unwrap();
-    player.advance_and_apply(0.0);
     assert_eq!(order(&a), [LATER, UNIT], "A at rest");
-    assert_eq!(order(&b), [LATER], "B empty");
+    assert_eq!(order(&b), [LATER, UNIT], "B at rest");
     let (left, reached) = (sorts(&a), sorts(&b));
-    move_live(&from, &to).unwrap();
+    carry(&from, &to, false).unwrap();
     player.advance_and_apply(0.0);
     assert_eq!(order(&a), [LATER], "A after the move");
     assert_eq!(order(&b), [LATER, UNIT], "B after the move");
     assert_ne!(sorts(&a), left, "the Screen the unit left re-sorts");
     assert_ne!(sorts(&b), reached, "the Screen the unit reached re-sorts");
-    move_live(&to, &from).unwrap();
+    let (left, reached) = (sorts(&a), sorts(&b));
+    carry(&to, &from, false).unwrap();
     player.advance_and_apply(0.0);
     assert_eq!(order(&a), [LATER, UNIT], "A after the return");
     assert_eq!(order(&b), [LATER], "B after the return");
+    assert_ne!(sorts(&a), left, "the Screen it returns to re-sorts");
+    assert_ne!(sorts(&b), reached, "the Screen it leaves re-sorts");
 }
 
 /// The colors of `css_two_version_corner_fixture`'s three units.
@@ -4439,7 +3441,6 @@ fn corner_scene(bytes: &[u8]) -> Scene {
         machine,
         s: corner_box(&a, "a"),
         d: corner_box(&b, "b"),
-        f: corner_box(&b, "b"),
         a,
         b,
         moves,
@@ -6016,7 +5017,7 @@ mod paint_order {
         /// advanced by the progress made.
         fn to(&mut self, p: f32) {
             for controls in self.moves.flight_controls(&self.root) {
-                set(&controls, progress_key(&controls), p);
+                set(&controls, 62033, p);
             }
             let dt = p - self.progress;
             self.progress = p;
@@ -7155,7 +6156,7 @@ mod paint_order {
         }
         assert!(page.remove_list_item_by_property_name_path("screens", 0));
         s.advance(0.0);
-        assert!(s.moves.flights(&s.root).is_empty(), "removing A cancels");
+        assert!(s.moves.flight_controls(&s.root).is_empty(), "removing A cancels");
         assert_ne!(s.sorts("B"), flying, "the cancel sorts B");
         assert!(page.insert_list_item_by_property_name_path("screens", 0, &outgoing));
         s.advance(0.0);
@@ -7493,9 +6494,8 @@ mod paint_order {
     fn in_place_a_transfer_draws_what_the_slot_path_drew() {
         let ran = known_differences(
             in_place_cases().into_iter().filter(|&case| {
-                let shaped = |shape| fixture::css_paint_fixture_shaped(case, shape);
-                shaped(PaintShape::Slots) != shaped(PaintShape::SlotCopies)
-                    && shaped(PaintShape::InPlaceCarry).is_ok()
+                                fixture::css_paint_transfers(case)
+                    && fixture::css_paint_fixture_shaped(case, PaintShape::InPlaceCarry).is_ok()
             }),
             PaintShape::InPlaceCarry,
             &[],
@@ -7523,10 +6523,10 @@ mod paint_order {
         );
         let ran = known_differences(
             in_place_cases().into_iter().filter(|&case| {
-                let shaped = |shape| fixture::css_paint_fixture_shaped(case, shape);
-                !matches!(case, PaintCase::Resting(6 | 7 | 9 | 10))
-                    && shaped(PaintShape::Slots) != shaped(PaintShape::SlotCopies)
-                    && shaped(PaintShape::InPlaceBoxedCopies).is_ok()
+                                !matches!(case, PaintCase::Resting(6 | 7 | 9 | 10))
+                    && fixture::css_paint_transfers(case)
+                    && fixture::css_paint_fixture_shaped(case, PaintShape::InPlaceBoxedCopies)
+                        .is_ok()
             }),
             PaintShape::InPlaceBoxedCopies,
             &[
@@ -7648,24 +6648,18 @@ mod paint_order {
         assert_eq!(order(true), [e, c]);
     }
 
-    /// UNIV-6476: a transfer's cover reads the placement it carries as the
-    /// slot path reads a slot whose frame flies: the frame's own keyed
-    /// layout reaches no one at rest. In `Resting(7)` only E's turned
+    /// UNIV-6476: a transfer's cover reads the placement it carries:
+    /// the frame's own keyed layout reaches no one at rest. In `Resting(7)` only E's turned
     /// corner, past its box, touches C. With E's own layout keyed
-    /// (constant, so nothing moves), both paths still measure that corner,
+    /// (constant, so nothing moves), the cover still measures that corner,
     /// and C covers the lift, though the box alone misses C.
     #[test]
     fn in_place_a_transfer_measures_a_frame_that_keys_its_own_layout() {
-        let order = |shape: PaintShape, keyed: bool| {
-            let mut s = PaintScene::shaped(PaintCase::Resting(7), shape);
-            let name = if shape == PaintShape::Slots {
-                "E"
-            } else {
-                "E unit"
-            };
+        let order = |keyed: bool| {
+            let mut s = PaintScene::shaped(PaintCase::Resting(7), PaintShape::InPlaceCarry);
             if keyed {
                 for screen in ["A", "B"] {
-                    let root = child(&s.slot(screen, name)).unwrap().core_handle();
+                    let root = child(&s.slot(screen, "E unit")).unwrap().core_handle();
                     assert!(nuxie_runtime::css_layout::record::mark_layout_keyed(
                         &record_of(&root)
                     ));
@@ -7678,18 +6672,8 @@ mod paint_order {
             e_and_c(&s, Way::Go, 0.5)
         };
         let (e, c) = (rgb("E"), rgb("C"));
-        for shape in [PaintShape::Slots, PaintShape::InPlaceCarry] {
-            assert_eq!(
-                order(shape, false),
-                [e, c],
-                "{shape:?}: C covers the turned corner"
-            );
-            assert_eq!(
-                order(shape, true),
-                [e, c],
-                "{shape:?}: with E's layout keyed"
-            );
-        }
+        assert_eq!(order(false), [e, c], "C covers the turned corner");
+        assert_eq!(order(true), [e, c], "with E's layout keyed");
     }
 
     /// Each of `cases` in `shape` draws what was recorded
@@ -8022,26 +7006,24 @@ mod paint_order {
 
     /// A flight's size is a border box, what its ends measure. A version
     /// that is a content box with 10 of padding a side takes off exactly
-    /// where it rests, flown in slots and in place: sized by its CSS size,
+    /// where it rests: sized by its CSS size,
     /// its padding would count twice and it would grow by 20 at take-off.
     #[test]
     fn a_padded_content_box_version_takes_off_where_it_rests() {
-        for shape in [PaintShape::SlotCopies, PaintShape::InPlace] {
-            let mut s = PaintScene::shaped(PaintCase::Padded, shape);
-            let rest = color_draws(&s, "a");
-            assert_eq!(rest.len(), 1, "{shape:?}: a draws once at rest");
-            s.begin("B", "go");
-            s.to(0.0);
-            let off = color_draws(&s, "a");
-            assert_eq!(off.len(), 1, "{shape:?}: a draws once at take-off");
-            assert!(
-                near_rect(rest[0].0, off[0].0),
-                "{shape:?}: a at rest {:?}, at take-off {:?}",
-                rest[0].0,
-                off[0].0
-            );
-            s.end("B", "go");
-        }
+        let mut s = PaintScene::shaped(PaintCase::Padded, PaintShape::InPlace);
+        let rest = color_draws(&s, "a");
+        assert_eq!(rest.len(), 1, "a draws once at rest");
+        s.begin("B", "go");
+        s.to(0.0);
+        let off = color_draws(&s, "a");
+        assert_eq!(off.len(), 1, "a draws once at take-off");
+        assert!(
+            near_rect(rest[0].0, off[0].0),
+            "a at rest {:?}, at take-off {:?}",
+            rest[0].0,
+            off[0].0
+        );
+        s.end("B", "go");
     }
 
     /// A Scale-mode copy stretches from its laid-out size now. MixedModes
@@ -8357,7 +7339,7 @@ mod paint_order {
         s.begin("B", "go");
         s.advance(0.0);
         for controls in s.moves.flight_controls(&s.root) {
-            set(&controls, progress_key(&controls), 0.5);
+            set(&controls, 62033, 0.5);
         }
         s.machine.advance_and_apply(0.5);
         let solves = Artboard::layout_pass_count();
@@ -8497,39 +7479,36 @@ mod paint_order {
         assert_eq!(e_draws(&s), e_draws(&fresh), "woken, as if it never slept");
     }
 
-    /// The upper Screen draws every lift, as it holds every flight slot, so
-    /// B put to sleep half way stops both copies with it, in both shapes:
+    /// The upper Screen draws every lift, so B put to sleep half way stops both copies with it:
     /// nothing of E draws while it sleeps. Landed and woken, the page draws
     /// as one that never slept.
     #[test]
-    fn in_place_a_screen_slept_mid_step_upper_sleeps_both_copies_as_its_slots_do() {
+    fn in_place_a_screen_slept_mid_step_upper_sleeps_both_copies() {
         let case = PaintCase::TextRefill { a: 200 };
-        for shape in [PaintShape::Slots, PaintShape::InPlace] {
-            let mut s = PaintScene::shaped(case, shape);
-            let list = s
-                .root
-                .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-                .unwrap();
-            s.begin("B", "go");
-            s.to(0.5);
-            assert_eq!(e_draws(&s).len(), 2, "{shape:?}: both copies fly");
-            set_row_collapsed(&list, 1, true).unwrap();
-            s.advance(0.0);
-            assert_eq!(e_draws(&s), Vec::new(), "{shape:?}: B sleeps with both");
-            s.to(0.75);
-            assert_eq!(e_draws(&s), Vec::new(), "{shape:?}: still asleep");
-            s.to(1.0);
-            s.end("B", "go");
-            set_row_collapsed(&list, 1, false).unwrap();
-            s.advance(0.0);
-            let mut fresh = PaintScene::shaped(case, shape);
-            fresh.fly(Way::Go, |_, _| {});
-            assert_eq!(
-                e_draws(&s),
-                e_draws(&fresh),
-                "{shape:?}: woken, as if it never slept"
-            );
-        }
+        let mut s = PaintScene::shaped(case, PaintShape::InPlace);
+        let list = s
+            .root
+            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+            .unwrap();
+        s.begin("B", "go");
+        s.to(0.5);
+        assert_eq!(e_draws(&s).len(), 2, "both copies fly");
+        set_row_collapsed(&list, 1, true).unwrap();
+        s.advance(0.0);
+        assert_eq!(e_draws(&s), Vec::new(), "B sleeps with both");
+        s.to(0.75);
+        assert_eq!(e_draws(&s), Vec::new(), "still asleep");
+        s.to(1.0);
+        s.end("B", "go");
+        set_row_collapsed(&list, 1, false).unwrap();
+        s.advance(0.0);
+        let mut fresh = PaintScene::shaped(case, PaintShape::InPlace);
+        fresh.fly(Way::Go, |_, _| {});
+        assert_eq!(
+            e_draws(&s),
+            e_draws(&fresh),
+            "woken, as if it never slept"
+        );
     }
 
     /// 4.5 (7): a flying frame of a pair whose two ends are the same size,
@@ -8687,32 +7666,29 @@ mod paint_order {
     }
 
     /// The bench's step with one transfer (9) loads and steps, both ways,
-    /// on both shapes it times: through slots, and in place with the unit
-    /// as one instance. The bench itself runs only by hand.
+    /// the unit flying as one instance. The bench itself runs only by hand.
     #[test]
-    fn the_bench_step_with_one_transfer_runs_on_both_shapes() {
-        for shape in [PaintShape::Slots, PaintShape::InPlaceCarry] {
-            let mut s = PaintScene::shaped(PaintCase::LargeTransfer, shape);
-            for (screen, step) in [("B", "go"), ("A", "back")] {
-                s.begin(screen, step);
-                s.to(0.5);
-                s.end(screen, step);
-            }
+    fn the_bench_step_with_one_transfer_runs() {
+        let mut s = PaintScene::shaped(PaintCase::LargeTransfer, PaintShape::InPlaceCarry);
+        for (screen, step) in [("B", "go"), ("A", "back")] {
+            s.begin(screen, step);
+            s.to(0.5);
+            s.end(screen, step);
         }
     }
 
-    /// 4.5's bench: in place against slots on a Screen pair the size of the
-    /// largest paired reference Screen, release, 200 frames a timing,
-    /// medians in microseconds. Each shape runs five times, the shapes in
-    /// turn, so drift between runs reaches every shape alike. The bar,
-    /// asserted: no in-place timing above the slots' median by more than the
-    /// noise, the spread of the five slot runs; (1), (6) and (8) equal to the
-    /// stripped page's within the wider of the two shapes' spreads, so the
-    /// records cost nothing when no step runs; and a flying frame whose ends
-    /// are the same size (7) lays out as often as a frame at rest.
+    /// 4.5's bench: in place on a Screen pair the size of the largest paired
+    /// reference Screen, release, 200 frames a timing, medians in
+    /// microseconds. Each shape runs five times, the shapes in turn, so drift
+    /// between runs reaches every shape alike. The bar, asserted: (1), (6)
+    /// and (8) equal to the stripped page's within the wider of the two
+    /// shapes' spreads, so the records cost nothing when no step runs; and a
+    /// flying frame whose ends are the same size (7) lays out as often as a
+    /// frame at rest. The timings of both shapes as last measured side by
+    /// side, when slots still flew, are in UNIV-6369's pull request.
     #[test]
     #[ignore = "a timing run: only for the in-place bench, in a release build"]
-    fn bench_in_place_against_slots_on_a_large_screen() {
+    fn bench_in_place_on_a_large_screen() {
         const NAMES: [&str; 9] = [
             "(1) rest frame",
             "(2) step begin",
@@ -8725,9 +7701,8 @@ mod paint_order {
             "(9) a step with one transfer",
         ];
         const RUNS: usize = 5;
-        let (mut slots, mut in_place, mut stripped) = (Vec::new(), Vec::new(), Vec::new());
+        let (mut in_place, mut stripped) = (Vec::new(), Vec::new());
         for _ in 0..RUNS {
-            slots.push(large_timings(PaintShape::Slots));
             in_place.push(large_timings(PaintShape::InPlace));
             stripped.push(large_timings(PaintShape::Stripped));
         }
@@ -8742,35 +7717,27 @@ mod paint_order {
             Some((times[times.len() / 2], times[times.len() - 1] - times[0]))
         };
         println!(
-            "layout passes a frame: in place at rest {:?}, flying with ends the same size {:?}, stripped at rest {:?}; slots at rest {:?}, flying with ends the same size {:?}",
+            "layout passes a frame: in place at rest {:?}, flying with ends the same size {:?}, stripped at rest {:?}",
             in_place.iter().map(|run| run.1).collect::<Vec<_>>(),
             in_place
                 .iter()
                 .map(|run| run.2.unwrap())
                 .collect::<Vec<_>>(),
             stripped.iter().map(|run| run.1).collect::<Vec<_>>(),
-            slots.iter().map(|run| run.1).collect::<Vec<_>>(),
-            slots.iter().map(|run| run.2.unwrap()).collect::<Vec<_>>(),
         );
         println!(
-            "timing | slot median of 5 | slot spread | in place median of 5 | in place spread | stripped median of 5 | stripped spread"
+            "timing | in place median of 5 | in place spread | stripped median of 5 | stripped spread"
         );
         let mut misses = Vec::new();
         for (line, name) in NAMES.iter().enumerate() {
-            let (slot, noise) = stats(&slots, line).expect("slots time every line");
             let (place, place_spread) = stats(&in_place, line).expect("in place times every line");
             let bare = stats(&stripped, line);
             println!(
-                "{name} | {slot:.1} | {noise:.1} | {place:.1} | {place_spread:.1} | {}",
+                "{name} | {place:.1} | {place_spread:.1} | {}",
                 bare.map_or(" | ".to_owned(), |(t, spread)| format!(
                     "{t:.1} | {spread:.1}"
                 ))
             );
-            if place > slot + noise {
-                misses.push(format!(
-                    "{name}: in place {place:.1} is above slots {slot:.1} by more than their spread {noise:.1}"
-                ));
-            }
             if let Some((bare, bare_spread)) = bare {
                 let noise = place_spread.max(bare_spread);
                 if (place - bare).abs() > noise {
@@ -8810,24 +7777,10 @@ mod drawn {
     use nuxie_render_api as render;
     use nuxie_render_stream::{DrawnClip, FrameDraw, RoundedRect, frame_draws, stream_ops};
 
-    /// Writes a flight value on every flight of the step, named by its key
-    /// on a flight slot's controls: a flight record carries the same value
-    /// 30 keys on for progress and path, and 22 on for the rest.
-    fn set_flights(s: &DrawnScene, slot_key: i32, value: f32) {
+    /// Writes a flight record's value on every flight of the step.
+    fn set_flights(s: &DrawnScene, key: i32, value: f32) {
         for controls in s.moves.flight_controls(&s.root) {
-            set(&controls, key_on(&controls, slot_key), value);
-        }
-    }
-    /// A flight slot's key on `controls`: itself on a slot's values, and on
-    /// a flight record the record's own key for the same control.
-    fn key_on(controls: &CoreHandle, slot_key: i32) -> i32 {
-        let record = controls
-            .with_downcast::<live_move::records::LiveFlight, _>(|_| ())
-            .is_some();
-        match (record, slot_key) {
-            (false, key) => key,
-            (true, key @ 62003..=62005) => key + 30,
-            (true, key) => key + 22,
+            set(&controls, key, value);
         }
     }
 
@@ -9039,7 +7992,7 @@ mod drawn {
             at_takeoff[5],
             one_line[5]
         );
-        set_flights(&s, 62003, 1.0);
+        set_flights(&s, 62033, 1.0);
         s.advance(0.1);
         s.moves.step_end(&s.root, "B", Some("go")).unwrap();
         s.advance(0.0);
@@ -9059,24 +8012,22 @@ mod drawn {
     /// applies its first key before it (upstream `keyed_property.cpp:174-177`).
     /// So a crossfade starts as Hero's pair does (`MatchPreprocessor.swift:
     /// 58-71`), the leaving copy at its own opacity and the arriving one at 0,
-    /// whatever an earlier run left on their flight slots, and only the
+    /// whatever an earlier run left on their flight records, and only the
     /// leaving copy is drawn (decision 198).
     #[test]
     fn take_off_starts_every_flight_at_its_tracks_first_frame() {
         use fixture::FlightWindow;
-        const PROGRESS: i32 = 62003;
-        const PATH_X: i32 = 62004;
-        const FADE: i32 = 62014;
+        const PROGRESS: i32 = 62033;
+        const PATH_X: i32 = 62034;
+        const FADE: i32 = 62036;
         let record = |s: &Scene, key: u32| {
-            s.b.with_artboard(|b| b.find_all_handles::<records::LiveSlot>())
+            s.b.with_artboard(|b| b.find_all_handles::<records::LiveFlight>())
                 .into_iter()
                 .find(|h| {
-                    h.with_downcast::<records::LiveSlot, _>(|r| {
-                        r.values.role == 1 && r.values.flight_key == key
-                    })
-                    .unwrap_or(false)
+                    h.with_downcast::<records::LiveFlight, _>(|r| r.values.key == key)
+                        .unwrap_or(false)
                 })
-                .unwrap_or_else(|| panic!("no flight slot {key} on B"))
+                .unwrap_or_else(|| panic!("no flight record {key} on B"))
         };
         let reads = |r: &CoreHandle, what: &str, expected: &[(i32, f32)]| {
             for &(key, want) in expected {
@@ -9094,12 +8045,12 @@ mod drawn {
         };
 
         // A crossfade begun after an earlier run of the same step left its
-        // flight slots at that run's end: landed, the path offset, the
+        // flight records at that run's end: landed, the path offset, the
         // leaving copy faded out and the arriving one in.
         let mut s = Scene::from_bytes(&fixture::flight_animation_fixture(FlightWindow::Whole));
         let header = s
             .b
-            .with_artboard(|b| b.find_handle::<Node>("header"))
+            .with_artboard(|b| b.find_handle::<source::layout_component::LayoutComponent>("header"))
             .unwrap();
         set(&header, 13, 250.0);
         let (leaving, arriving) = (record(&s, 11), record(&s, 12));
@@ -9185,7 +8136,7 @@ mod drawn {
         let mut s = Scene::from_bytes(&fixture::missing_flight_animation_fixture());
         let (a, b) = (holds(&s.s).unwrap(), holds(&s.d).unwrap());
         assert!(s.moves.step_begin(&s.root, "B", Some("t1")).is_err());
-        assert!(s.moves.flights(&s.root).is_empty(), "nothing flies");
+        assert!(s.moves.flight_controls(&s.root).is_empty(), "nothing flies");
         assert_eq!(holds(&s.s), Some(a));
         assert_eq!(holds(&s.d), Some(b));
     }
@@ -9222,10 +8173,10 @@ mod drawn {
             let mut s = DrawnScene::new(PaintCase::OwnOpacity(own));
             s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
             s.flight_frame("B", "E");
-            set_flights(&s, 62003, 0.5);
+            set_flights(&s, 62033, 0.5);
             s.advance(0.1);
             let controls = s.shown_controls("B");
-            close(val(&controls, key_on(&controls, 62014)), 0.5);
+            close(val(&controls, 62036), 0.5);
             s.draws()
         };
         let draws = halfway(0.5);
@@ -9476,7 +8427,7 @@ mod drawn {
         s.advance(0.25);
         s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
         let frame = s.flight_frame("B", "E");
-        set_flights(&s, 62003, 0.5);
+        set_flights(&s, 62033, 0.5);
         s.advance(0.0);
         let read = s.drawn_now(&content(&frame));
         let draws = s.draws();
@@ -9484,7 +8435,7 @@ mod drawn {
         assert_reads(read, draw, "in flight");
         let in_flight = draw.matrix;
 
-        set_flights(&s, 62003, 1.0);
+        set_flights(&s, 62033, 1.0);
         s.advance(0.0);
         s.moves.step_end(&s.root, "B", Some("go")).unwrap();
         s.retire_a();
@@ -9633,19 +8584,19 @@ mod drawn {
         set_row_collapsed(&list, 1, false).unwrap();
         s.advance(0.0);
         s.begin();
-        for flight in s.moves.flights(&s.root) {
-            set(&flight.controls(), 62003, 0.5);
+        for flight in s.moves.flight_controls(&s.root) {
+            set(&flight, 62033, 0.5);
         }
         s.moves.after_advance(&s.root).unwrap();
         let read = s
             .moves
-            .drawn(&child(&s.f).unwrap().core_handle(), When::Live)
+            .drawn_now(&s.root, &child(&s.d).unwrap().core_handle())
             .unwrap();
         let draws = page_draws(&s.factory, &s.root);
         assert_eq!(draws.len(), 1, "the flight draws");
         assert_reads(read, &draws[0], "in flight");
-        for flight in s.moves.flights(&s.root) {
-            set(&flight.controls(), 62003, 1.0);
+        for flight in s.moves.flight_controls(&s.root) {
+            set(&flight, 62033, 1.0);
         }
         s.moves.after_advance(&s.root).unwrap();
         s.end();
@@ -9816,7 +8767,7 @@ mod drawn {
         let mut s = DrawnScene::new(PaintCase::TurnedInClippingHolder);
         s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
         let frame = s.flight_frame("B", "E");
-        set_flights(&s, 62003, 0.5);
+        set_flights(&s, 62033, 0.5);
         s.advance(0.0);
         let clip = FlightClip {
             width: CLIP_SIZE.0,
@@ -9828,7 +8779,7 @@ mod drawn {
         s
     }
     fn land_flight(s: &mut DrawnScene) {
-        set_flights(&s, 62003, 1.0);
+        set_flights(&s, 62033, 1.0);
         s.advance(0.0);
         s.moves.step_end(&s.root, "B", Some("go")).unwrap();
         s.retire_a();
@@ -10347,7 +9298,7 @@ mod drawn {
             (p / 0.65).min(1.0)
         }
         fn set_progress(s: &DrawnScene, p: f32) {
-            set_flights(s, 62003, p);
+            set_flights(s, 62033, p);
         }
         fn draws_under(s: &DrawnScene, fit: Mat2D) -> Vec<FrameDraw> {
             s.factory.borrow_mut().clear();
@@ -11046,7 +9997,7 @@ mod drawn {
         /// No copy in `color` is clipped half way.
         fn no_clip(s: &mut DrawnScene, version: &str) {
             let draws = Run::new(Case::Plain, Way::Forward).at(s, 0.5, 0.0);
-            let drawn: Vec<_> = draws.iter().filter(|d| d.rgb == color(version)).collect();
+            let drawn = of_rgb(&draws, color(version));
             assert!(!drawn.is_empty(), "{version} draws");
             for draw in drawn {
                 assert!(draw.clips.is_empty(), "{version}: {:?}", draw.clips);
@@ -11394,7 +10345,7 @@ impl InPlacePage {
 
 /// An in-place file imports and draws at rest as the same file without
 /// keys or flight records. Its step flies the two copies in place, one
-/// flight record each and no slot flight, and landing leaves the page as it
+/// flight record each, and landing leaves the page as it
 /// was.
 #[test]
 fn in_place_a_file_imports_and_draws_as_without_keys() {
@@ -11408,7 +10359,6 @@ fn in_place_a_file_imports_and_draws_as_without_keys() {
     let mut moves = LiveMoves::default();
     moves.prepare(&page.root).unwrap();
     moves.step_begin(&page.root, "B", Some("t1")).unwrap();
-    assert!(moves.flights(&page.root).is_empty(), "no slot flight");
     assert_eq!(moves.flight_controls(&page.root).len(), 2, "two copies fly");
     assert_eq!(
         nuxie_runtime::in_place_holds_begun(),
@@ -11524,26 +10474,13 @@ fn in_place_a_duplicate_key_is_refused() {
 }
 
 /// A file without flight records reads no in-place state: on a record-free
-/// page and on a slot page, a step and its frames begin no hold and mark no
-/// lift, and the bookkeeping counters do not move. Their walks are the
+/// page, its frames begin no hold and mark no lift, and the bookkeeping counters do not move. Their walks are the
 /// record-free suite's own (`record_free_frames_scan_capability_once_per_occurrence`).
 #[test]
 fn a_file_without_flight_records_reads_no_in_place_state() {
     let holds_begun = nuxie_runtime::in_place_holds_begun;
     let lift_marks = nuxie_runtime::in_place_lift_marks;
     let (holds, marks) = (holds_begun(), lift_marks());
-    // A slot page: a whole step. Its own bookkeeping is the slot path's.
-    let mut s = Scene::new();
-    s.begin();
-    for _ in 0..10 {
-        s.advance(0.02);
-    }
-    s.end();
-    s.advance(0.0);
-    assert_eq!(holds_begun(), holds, "a slot step holds nothing");
-    assert_eq!(lift_marks(), marks, "a slot step lifts nothing");
-    drop(s);
-    // A record-free page: its frames.
     let before = hosted_scene::bookkeeping_counts();
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let file = File::import(
@@ -11902,7 +10839,7 @@ fn in_place_a_pending_insert_is_applied_before_takeoff() {
 /// The carry between two component placements of an in-place page, shaped
 /// as the compiler publishes one (`fixture::in_place_carry_fixture`): each
 /// Screen's keyed box "card" holds one placement "unit". Driven directly
-/// through `carry`, `empty_slot` and `refill_slot`, as the slot path's
+/// through `carry` and `refill_slot`, as the slot path's
 /// transport is tested above; no step flies here.
 mod in_place_carry {
     use super::*;
@@ -12002,7 +10939,6 @@ mod in_place_carry {
         let (a, b, unkeyed) = (holds(&s.pa), holds(&s.pb), holds(&spare));
         assert!(carry(&spare, &s.pb, false).is_err());
         assert!(carry(&s.pa, &spare, false).is_err());
-        assert!(empty_slot(&spare).is_err());
         assert_eq!((holds(&s.pa), holds(&s.pb), holds(&spare)), (a, b, unkeyed));
 
         let s = Page::new(InPlaceCarry::TwoInCard);
@@ -12022,11 +10958,10 @@ mod in_place_carry {
         let s = Page::new(InPlaceCarry::Duo);
         let (a, b) = (holds(&s.pa), holds(&s.pb));
         assert!(carry(&s.pa, &s.pa, false).is_err());
-        assert!(move_live(&s.pa, &s.pa).is_err());
-        assert_eq!((holds(&s.pa), holds(&s.pb)), (a.clone(), b.clone()));
-        empty_slot(&s.pa).unwrap();
+        assert_eq!((holds(&s.pa), holds(&s.pb)), (a.clone(), b));
+        carry(&s.pa, &s.pb, false).unwrap();
         assert!(carry(&s.pa, &s.pb, false).is_err(), "an empty placement");
-        assert_eq!(holds(&s.pb), b);
+        assert_eq!(holds(&s.pb), a);
     }
 
     /// Row 4: the carry discards the arriving placement's own instance and
@@ -12047,15 +10982,6 @@ mod in_place_carry {
             "the arriving placement's instance is released"
         );
         assert_eq!((s.paths(&s.a), s.paths(&s.b)), (1, 2));
-    }
-
-    #[test]
-    fn in_place_empty_source_draws_no_geometry() {
-        let mut s = Page::new(InPlaceCarry::Duo);
-        assert_eq!(s.paths(&s.a), 2);
-        empty_slot(&s.pa).unwrap();
-        s.advance(0.0);
-        assert_eq!(s.paths(&s.a), 1, "only A's note");
     }
 
     /// Row 6: the emptied placement keeps its box through its frozen
@@ -12162,7 +11088,7 @@ mod in_place_carry {
         // A tap on B's button reaches the carried instance, and one on A's
         // reaches A's own copy.
         let tap = |s: &Page, host: &CoreHandle, id| {
-            let p = slot_pose(host).unwrap().transform * Vec2D::new(20.0, 20.0);
+            let p = s.moves.drawn(host, When::Live).unwrap() * Vec2D::new(20.0, 20.0);
             s.machine
                 .with_instance_mut(|m| m.pointer_down(p, id, PointerButton::Primary));
         };
@@ -12285,7 +11211,6 @@ mod in_place_carry {
         check(&mut s, &pb);
         refill_slot(&pa).unwrap();
         check(&mut s, &pb);
-        empty_slot(&pa).unwrap();
         carry(&pb, &pa, false).unwrap();
         check(&mut s, &pa);
     }
@@ -14727,11 +13652,10 @@ return function() return {init=init,advance=advance} end
         // Ordinary nested content follows its Screen's collapse. Only
         // Page.screens rows sleep live or carry.
         assert!(set_row_collapsed(&inner, 0, true).is_err());
-        assert!(empty_slot(&hosts[0]).is_err());
+        assert!(carry(&hosts[0], &s.pb, false).is_err());
         set_row_collapsed(&s.list(), 0, true).unwrap();
         set_row_collapsed(&s.list(), 0, false).unwrap();
         assert!(visible());
-        empty_slot(&s.pb).unwrap();
         carry(&s.pa, &s.pb, false).unwrap();
         set_row_collapsed(&s.list(), 1, true).unwrap();
         assert!(!visible());

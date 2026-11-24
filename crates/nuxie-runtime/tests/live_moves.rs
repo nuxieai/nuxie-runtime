@@ -5801,12 +5801,6 @@ mod paint_order {
 
     const PROGRESS: [f32; 5] = [0.0, 0.25, 0.5, 0.75, 1.0];
 
-    thread_local! {
-        /// The shape every `PaintScene::new` of this thread writes its page
-        /// in: an in-place twin runs a slot test's own assertions in place.
-        static SHAPE: std::cell::Cell<PaintShape> = const { std::cell::Cell::new(PaintShape::Slots) };
-    }
-
     /// The progress control of a flight's controls: a flight slot's, or a
     /// flight record's.
     fn progress_key(controls: &CoreHandle) -> i32 {
@@ -6078,7 +6072,7 @@ mod paint_order {
         /// The page mounted as a host mounts a published page. Preparing
         /// empties the fresh flight slots.
         fn new(case: PaintCase) -> Self {
-            Self::shaped(case, SHAPE.get())
+            Self::shaped(case, PaintShape::InPlace)
         }
         fn shaped(case: PaintCase, shape: PaintShape) -> Self {
             let mut factory = PersistentFactory::new(RecordingFactory::new());
@@ -8990,96 +8984,6 @@ mod paint_order {
             misses.join("\n")
         );
     }
-
-    /// 4.2 of the in-place plan: each test above, run again on its page's
-    /// in-place shape, with its own assertions. Not twinned:
-    /// - nothing in place has the thing they test: a plain host anchor
-    ///   (`paint_order_17a_plain_host_anchor_flies_under_the_later_box`), a
-    ///   native flight slot (`paint_order_18c_opacity_at_rest_native_flight_slot`)
-    ///   and an emptied slot (`an_emptied_slot_never_places_a_flight`);
-    /// - no in-place page (`css_paint_fixture_shaped` says why): a slot and
-    ///   its unit with two origins (`paint_order_11_resting_11_slot_origins_differ`)
-    ///   and a list's hosted rows (`paint_order_12_keyed_layout_l_pushed_by_a_list_row`);
-    /// - hits, which fly in place in A3
-    ///   (`paint_order_02_hit_control_the_red_above_the_panel_takes_the_tap`,
-    ///   `paint_order_02_hit_the_panel_over_the_flight_takes_the_tap`).
-    macro_rules! in_place_twins {
-        ($($name:ident),* $(,)?) => {
-            mod in_place_twins {
-                $(
-                    #[test]
-                    fn $name() {
-                        super::SHAPE.with(|shape| shape.set(super::PaintShape::InPlace));
-                        super::$name();
-                    }
-                )*
-            }
-        };
-    }
-    in_place_twins!(
-        paint_order_01_app_store_card_back_flies_under_the_blur,
-        paint_order_02_match_red_flies_under_the_panel,
-        paint_order_03_calmly_lake_flies_under_the_scrim,
-        paint_order_04_list_to_grid_pictures_fly_on_top,
-        paint_order_05_catzy_flights_keep_the_dims_place,
-        paint_order_05b_escaping_box_child_flies_under_the_dim,
-        paint_order_05b_bare_box_with_an_escaping_shape_flies_under_the_dim,
-        paint_order_05b_escaping_shape_child_flies_under_the_dim,
-        paint_order_05b_escaping_text_child_flies_under_the_dim,
-        paint_order_05b_escaping_image_child_flies_under_the_dim,
-        paint_order_05b_escaping_component_child_flies_under_the_dim,
-        paint_order_05b_viewport_child_stays_under_the_dim,
-        paint_order_06_clipping_holder_flight_flies_under_the_badge_outside_the_clip,
-        paint_order_07_badge_in_a_plain_card_covers_the_flight,
-        paint_order_08_overlay_in_an_auto_z_wrapper_covers_the_flight,
-        paint_order_09_a_display_write_lifts_the_child_over_the_flight,
-        paint_order_10_flights_follow_their_anchors_paint_order,
-        paint_order_11_resting_01_insets,
-        paint_order_11_resting_02_unkeyed_translate,
-        paint_order_11_resting_03_keyed_translate_that_starts_away,
-        paint_order_11_resting_04_bound_rotation,
-        paint_order_11_resting_05_keyed_rotation_is_motion_at_rest,
-        paint_order_11_resting_06_frame_scaled_by_a_binding,
-        paint_order_11_resting_07_frame_turned_at_rest,
-        paint_order_11_resting_08_scaled_slot_after_e,
-        paint_order_11_resting_09_unequal_ends_scale_mode,
-        paint_order_11_resting_10_unequal_ends_layout_mode,
-        paint_order_12_keyed_layout_c_width,
-        paint_order_12_keyed_layout_d_pushed_by_a_sibling,
-        paint_order_12_keyed_layout_g_grid_track,
-        paint_order_12_keyed_layout_p_grid_placement,
-        paint_order_12_keyed_layout_r_root_grid_track,
-        paint_order_12_keyed_layout_w_pushed_through_a_wrapper,
-        paint_order_12_keyed_layout_f_wrapper_fill,
-        paint_order_12_keyed_layout_k_absolute_at_a_wrapper_edge,
-        paint_order_12_keyed_layout_l_pushed_by_a_list_row,
-        paint_order_12_keyed_layout_v_placement_in_an_auto_high_grid,
-        paint_order_12_keyed_layout_t_static_position,
-        paint_order_12_keyed_layout_h_pushed_through_a_hosted_frame,
-        paint_order_12_keyed_layout_n_padding_on_a_frames_own_record,
-        paint_order_12_keyed_layout_o_pushed_through_a_plain_node,
-        paint_order_12_keyed_layout_x_pushed_through_a_translated_box,
-        paint_order_12_keyed_layout_m_insets_on_both_axes_stay_measured,
-        paint_order_12_keyed_layout_q_absolute_keyed_child_leaves_its_parent_measured,
-        paint_order_12_keyed_layout_u_a_flown_frames_key_leaves_what_follows_measured,
-        paint_order_12_keyed_layout_y_an_absolute_translated_box_pushes_nothing,
-        paint_order_13_a_bound_z_index_drop_uncovers_the_flight,
-        paint_order_14_hinge_block,
-        paint_order_14_hinge_flex,
-        paint_order_15_sizes_200_by_150,
-        paint_order_15_sizes_200_by_300,
-        paint_order_15_sizes_400_by_150,
-        paint_order_15_sizes_400_by_300,
-        paint_order_16_two_versions_fly_under_the_coverer,
-        paint_order_17a_a_file_without_flights_keeps_its_order,
-        paint_order_17b_the_stream_after_landing_matches_rest,
-        paint_order_17c_the_order_sorts_only_at_take_off_and_landing,
-        paint_order_17d_the_flight_stays_out_of_the_mask_run,
-        paint_order_18a_a_turned_frame_keeps_its_layer_in_flight,
-        paint_order_18b_an_opacity_write_lifts_the_flight_over_c,
-        paint_order_18c_opacity_at_rest_css_flight_slot,
-        paint_order_19b_a_cancelled_step_leaves_no_placement,
-    );
 }
 
 /// What the one reader of an element as drawn rests on (UNIV-5653). Every
@@ -9089,12 +8993,6 @@ mod drawn {
     use fixture::{PaintCase, PaintShape};
     use nuxie_render_api as render;
     use nuxie_render_stream::{DrawnClip, FrameDraw, RoundedRect, frame_draws, stream_ops};
-
-    thread_local! {
-        /// The shape every `DrawnScene::new` of this thread writes its page
-        /// in: an in-place twin runs a test's own assertions in place.
-        static SHAPE: std::cell::Cell<PaintShape> = const { std::cell::Cell::new(PaintShape::Slots) };
-    }
 
     /// Writes a flight value on every flight of the step, named by its key
     /// on a flight slot's controls: a flight record carries the same value
@@ -9129,8 +9027,8 @@ mod drawn {
         fn new(case: PaintCase) -> Self {
             let mut factory = PersistentFactory::new(RecordingFactory::new());
             let file = File::import(
-                &fixture::css_paint_fixture_shaped(case, SHAPE.get())
-                    .unwrap_or_else(|why| panic!("{case:?} has no {:?} page: {why}", SHAPE.get())),
+                &fixture::css_paint_fixture_shaped(case, PaintShape::InPlace)
+                    .unwrap_or_else(|why| panic!("{case:?} has no in-place page: {why}")),
                 RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
                 None,
                 None,
@@ -9174,75 +9072,47 @@ mod drawn {
         /// The frame `name` rests as on `row`: its slot's unit, or in place
         /// the element itself.
         fn home_frame(&self, row: &str, name: &str) -> CoreHandle {
-            match SHAPE.get() {
-                PaintShape::InPlace => self.layout(row, name),
-                _ => child(&self.slot(row, name))
-                    .unwrap_or_else(|| panic!("{name} is home on {row}"))
-                    .core_handle(),
-            }
+            self.layout(row, name)
         }
         /// Where `name`'s slot rests on `row`, or in place where the element
         /// draws on its own Screen, which a flight never moves.
         fn resting_place(&self, row: &str, name: &str) -> [f32; 6] {
-            match SHAPE.get() {
-                PaintShape::InPlace => *self
-                    .moves
-                    .drawn(&self.layout(row, name), When::Live)
-                    .unwrap()
-                    .values(),
-                _ => *slot_pose(&self.slot(row, name)).unwrap().transform.values(),
-            }
+            *self
+                .moves
+                .drawn(&self.layout(row, name), When::Live)
+                .unwrap()
+                .values()
         }
         /// The step's one flight, showing `name` on its way to `to`: the frame
         /// in its flight slot, or in place `to`'s own copy, which flies beside
         /// the leaving copy held at fade 0.
         fn flight_frame(&self, to: &str, name: &str) -> CoreHandle {
-            match SHAPE.get() {
-                PaintShape::InPlace => {
-                    let copies = self.moves.lifted_records(&self.root);
-                    assert_eq!(copies.len(), 2, "{name} flies alone, as two copies");
-                    self.layout(to, name)
-                }
-                _ => {
-                    let flights = self.moves.flights(&self.root);
-                    assert_eq!(flights.len(), 1, "{name} flies alone");
-                    child(&flights[0].flight)
-                        .unwrap_or_else(|| panic!("{name} is in its flight slot"))
-                        .core_handle()
-                }
-            }
+                let copies = self.moves.lifted_records(&self.root);
+                assert_eq!(copies.len(), 2, "{name} flies alone, as two copies");
+                self.layout(to, name)
+            
         }
         /// The controls of the flight that shows on `to`: the one flight's,
         /// or in place `to`'s copy's record.
         fn shown_controls(&self, to: &str) -> CoreHandle {
-            match SHAPE.get() {
-                PaintShape::InPlace => {
-                    let row = self.row(to).core_handle();
-                    self.moves
-                        .lifted_records(&self.root)
-                        .into_iter()
-                        .find(|(_, on, _)| *on == row)
-                        .map(|(.., record)| record)
-                        .unwrap_or_else(|| panic!("a copy flies on {to}"))
-                }
-                _ => self.moves.flights(&self.root)[0].controls(),
-            }
+                let row = self.row(to).core_handle();
+                self.moves
+                    .lifted_records(&self.root)
+                    .into_iter()
+                    .find(|(_, on, _)| *on == row)
+                    .map(|(.., record)| record)
+                    .unwrap_or_else(|| panic!("a copy flies on {to}"))
+            
         }
         /// What placement reads `name`'s resting place from on `row`: its
         /// slot, or in place the element.
         fn resting_item(&self, row: &str, name: &str) -> CoreHandle {
-            match SHAPE.get() {
-                PaintShape::InPlace => self.layout(row, name),
-                _ => self.slot(row, name),
-            }
+            self.layout(row, name)
         }
         /// The matrix placement's resting boxes give `item` from
         /// `resting_item`.
         fn resting_matrix(&self, item: &CoreHandle) -> Option<source::math::mat2d::Mat2D> {
-            match SHAPE.get() {
-                PaintShape::InPlace => self.moves.resting_box(item),
-                _ => self.moves.resting_slot(item),
-            }
+            self.moves.resting_box(item)
         }
         /// Where `content` draws now: through its lift when it flies in
         /// place.
@@ -9255,15 +9125,7 @@ mod drawn {
             frame: &CoreHandle,
             clip: Option<source::artboard::FlightClip>,
         ) {
-            match SHAPE.get() {
-                PaintShape::InPlace => self.moves.set_lift_clip(&self.root, frame, clip),
-                _ => {
-                    let flights = self.moves.flights(&self.root);
-                    let unit = child(&flights[0].flight).unwrap();
-                    assert!(unit.core_handle() == *frame, "the frame in the flight slot");
-                    self.moves.set_flight_clip(&unit, clip);
-                }
-            }
+            self.moves.set_lift_clip(&self.root, frame, clip)
         }
         fn advance(&mut self, dt: f32) {
             self.machine.advance_and_apply(dt);
@@ -9549,10 +9411,7 @@ mod drawn {
         };
         let draws = halfway(0.5);
         // In place E flies as two copies, and both carry the fade.
-        let copies = match SHAPE.get() {
-            PaintShape::InPlace => 2,
-            _ => 1,
-        };
+        let copies = 2;
         let drawn = of_rgb(&draws, rgb);
         assert_eq!(drawn.len(), copies, "own opacity 0.5: E's draws");
         for draw in drawn {
@@ -11529,8 +11388,7 @@ mod drawn {
                     // a copy flying in place draws nothing, as CSS draws
                     // nothing inside `scale(0)` (the fourth known difference,
                     // docs/live-moves.md, Flying in place).
-                    let in_place = super::SHAPE.get() == PaintShape::InPlace;
-                    if (way == Way::Back || in_place) && p == 0.5 {
+                    if p == 0.5 {
                         for version in ["a", "b"] {
                             no_ink(&draws, color(version), &label);
                             no_ink(&draws, child_color(version), &label);
@@ -11657,303 +11515,6 @@ mod drawn {
                     }
                 }
             }
-        }
-
-        /// 4.2 of the in-place plan: each test above, run again on its page's
-        /// in-place shape, with its own assertions. Not twinned:
-        /// `the_zoom_lives_only_in_a_pair` and
-        /// `a_zoom_on_one_key_without_transfers_flies_the_zoomed_pair` read
-        /// the slot plan's entries and its units landing back in their slots,
-        /// which in place has neither (no copy leaves its Screen); their
-        /// cases, `OneUnit`, `ZoomOutOfRange` and `OneKeyCopies`, are cases of
-        /// `in_place_draws_what_the_slot_path_drew`. `LayerFromZero` keys the
-        /// compiler's flight layer, which no file can (see `in_place_cases`).
-        mod in_place_twins {
-            #[test]
-            fn zoom_draws_both_versions_on_one_box_a_keyed_scale_above() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_draws_both_versions_on_one_box_a_keyed_scale_above();
-            }
-            #[test]
-            fn zoom_draws_both_versions_on_one_box_the_slots_turn() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_draws_both_versions_on_one_box_the_slots_turn();
-            }
-            #[test]
-            fn zoom_draws_both_versions_on_one_box_the_frames_keyed_scale() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_draws_both_versions_on_one_box_the_frames_keyed_scale();
-            }
-            #[test]
-            fn zoom_draws_both_versions_on_one_box_the_frames_bound_scale() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_draws_both_versions_on_one_box_the_frames_bound_scale();
-            }
-            #[test]
-            fn zoom_draws_both_versions_on_one_box_the_frames_turn() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_draws_both_versions_on_one_box_the_frames_turn();
-            }
-            #[test]
-            fn zoom_draws_both_versions_on_one_box_a_css_slot_offset() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_draws_both_versions_on_one_box_a_css_slot_offset();
-            }
-            #[test]
-            fn zoom_draws_both_versions_on_one_box_a_turned_screen() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_draws_both_versions_on_one_box_a_turned_screen();
-            }
-            #[test]
-            fn zoom_draws_both_versions_on_one_box_the_hosts_fit() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_draws_both_versions_on_one_box_the_hosts_fit();
-            }
-            #[test]
-            fn zoom_draws_both_versions_on_one_box_a_scale_about_the_screens_center() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_draws_both_versions_on_one_box_a_scale_about_the_screens_center();
-            }
-            #[test]
-            fn zoom_draws_both_versions_on_one_box_shares_on_the_height() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_draws_both_versions_on_one_box_shares_on_the_height();
-            }
-            #[test]
-            fn zoom_draws_both_versions_on_one_box_unequal_axis_scales() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_draws_both_versions_on_one_box_unequal_axis_scales();
-            }
-            #[test]
-            fn zoom_draws_both_versions_on_one_box_a_scale_off_center() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_draws_both_versions_on_one_box_a_scale_off_center();
-            }
-            #[test]
-            fn zoom_draws_both_versions_on_one_box_a_card_in_the_screen() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_draws_both_versions_on_one_box_a_card_in_the_screen();
-            }
-            #[test]
-            fn zoom_meets_each_version_at_its_own_end() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_meets_each_version_at_its_own_end();
-            }
-            #[test]
-            fn zoom_lands_with_a_jump_under_a_key_that_ends_off_identity() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_lands_with_a_jump_under_a_key_that_ends_off_identity();
-            }
-            #[test]
-            fn zoom_lands_on_the_resting_place_while_the_element_animates() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_lands_on_the_resting_place_while_the_element_animates();
-            }
-            #[test]
-            fn zoom_reads_the_arriving_screen_laid_out_at_takeoff() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_reads_the_arriving_screen_laid_out_at_takeoff();
-            }
-            #[test]
-            fn zoom_hands_over_by_the_rule() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_hands_over_by_the_rule();
-            }
-            #[test]
-            fn zoom_hands_over_by_the_rule_under_a_faded_ancestor() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_hands_over_by_the_rule_under_a_faded_ancestor();
-            }
-            #[test]
-            fn zoom_hands_over_by_the_rule_on_a_frame_with_its_own_opacity() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_hands_over_by_the_rule_on_a_frame_with_its_own_opacity();
-            }
-            #[test]
-            fn zoom_runs_on_ends_that_arent_plain_rectangles_skewed() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_runs_on_ends_that_arent_plain_rectangles_skewed();
-            }
-            #[test]
-            fn zoom_runs_on_ends_that_arent_plain_rectangles_mirrored() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_runs_on_ends_that_arent_plain_rectangles_mirrored();
-            }
-            #[test]
-            fn zoom_runs_on_ends_that_arent_plain_rectangles_zero_height_laid_out() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_runs_on_ends_that_arent_plain_rectangles_zero_height_laid_out();
-            }
-            #[test]
-            fn zoom_runs_on_ends_that_arent_plain_rectangles_zero_height_scaled() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_runs_on_ends_that_arent_plain_rectangles_zero_height_scaled();
-            }
-            #[test]
-            fn zoom_runs_on_ends_that_arent_plain_rectangles_empty_laid_out() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_runs_on_ends_that_arent_plain_rectangles_empty_laid_out();
-            }
-            #[test]
-            fn zoom_runs_on_ends_that_arent_plain_rectangles_empty_scaled() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_runs_on_ends_that_arent_plain_rectangles_empty_scaled();
-            }
-            #[test]
-            fn zoom_runs_on_ends_that_arent_plain_rectangles_scale_through_zero() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_runs_on_ends_that_arent_plain_rectangles_scale_through_zero();
-            }
-            #[test]
-            fn zoom_runs_on_ends_that_arent_plain_rectangles_scale_from_zero() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_runs_on_ends_that_arent_plain_rectangles_scale_from_zero();
-            }
-            #[test]
-            fn zoom_versions_keep_their_strength_under_a_fading_screen() {
-                super::super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-                super::zoom_versions_keep_their_strength_under_a_fading_screen();
-            }
-        }
-    }
-
-    /// 4.2 of the in-place plan: each test above, run again on its page's
-    /// in-place shape, with its own assertions.
-    mod in_place_twins {
-        #[test]
-        fn a_cubic_easing_keys_past_its_end() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::a_cubic_easing_keys_past_its_end();
-        }
-        #[test]
-        fn the_arriving_screen_is_laid_out_when_a_step_begins() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::the_arriving_screen_is_laid_out_when_a_step_begins();
-        }
-        #[test]
-        fn take_off_starts_every_flight_at_its_tracks_first_frame() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::take_off_starts_every_flight_at_its_tracks_first_frame();
-        }
-        #[test]
-        fn a_layout_flight_lays_out_at_the_blend() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::a_layout_flight_lays_out_at_the_blend();
-        }
-        #[test]
-        fn a_frames_own_opacity_multiplies_its_slots_fade() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::a_frames_own_opacity_multiplies_its_slots_fade();
-        }
-        #[test]
-        fn the_runtime_harness_fades_a_picture_by_scope() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::the_runtime_harness_fades_a_picture_by_scope();
-        }
-        #[test]
-        fn frame_draws_sees_a_wrong_turn_and_a_wrong_corner() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::frame_draws_sees_a_wrong_turn_and_a_wrong_corner();
-        }
-        #[test]
-        fn resting_boxes_keep_a_bound_value_beside_a_key() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::resting_boxes_keep_a_bound_value_beside_a_key();
-        }
-        #[test]
-        fn the_reader_is_the_draw_placement() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::the_reader_is_the_draw_placement();
-        }
-        #[test]
-        fn the_reader_is_the_draw_ancestor_scale() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::the_reader_is_the_draw_ancestor_scale();
-        }
-        #[test]
-        fn the_reader_is_the_draw_slot_turn() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::the_reader_is_the_draw_slot_turn();
-        }
-        #[test]
-        fn the_reader_is_the_draw_frame_keyed_scale() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::the_reader_is_the_draw_frame_keyed_scale();
-        }
-        #[test]
-        fn the_reader_is_the_draw_frame_bound_scale() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::the_reader_is_the_draw_frame_bound_scale();
-        }
-        #[test]
-        fn the_reader_is_the_draw_frame_turn() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::the_reader_is_the_draw_frame_turn();
-        }
-        #[test]
-        fn the_reader_is_the_draw_css_slot_offset() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::the_reader_is_the_draw_css_slot_offset();
-        }
-        #[test]
-        fn the_reader_is_the_draw_hosted_fit() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::the_reader_is_the_draw_hosted_fit();
-        }
-        #[test]
-        fn the_reader_is_the_draw_turned_screen_on_a_row() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::the_reader_is_the_draw_turned_screen_on_a_row();
-        }
-        #[test]
-        fn rest_is_the_draw_once_the_keys_end_ancestor_scale() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::rest_is_the_draw_once_the_keys_end_ancestor_scale();
-        }
-        #[test]
-        fn rest_is_the_draw_once_the_keys_end_ancestor_turn() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::rest_is_the_draw_once_the_keys_end_ancestor_turn();
-        }
-        #[test]
-        fn rest_is_the_draw_once_the_keys_end_frame_scale() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::rest_is_the_draw_once_the_keys_end_frame_scale();
-        }
-        #[test]
-        fn rest_is_the_draw_once_the_keys_end_ancestor_translate() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::rest_is_the_draw_once_the_keys_end_ancestor_translate();
-        }
-        #[test]
-        fn rest_is_the_draw_once_the_keys_end_layout_width() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::rest_is_the_draw_once_the_keys_end_layout_width();
-        }
-        #[test]
-        fn rest_takes_a_key_that_ends_off_identity_at_identity() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::rest_takes_a_key_that_ends_off_identity_at_identity();
-        }
-        #[test]
-        fn rest_keeps_a_bound_value_beside_a_key() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::rest_keeps_a_bound_value_beside_a_key();
-        }
-        #[test]
-        fn rest_is_the_draw_of_a_css_slot_frames_own_keys() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::rest_is_the_draw_of_a_css_slot_frames_own_keys();
-        }
-        #[test]
-        fn a_flight_clip_bounds_the_frames_ink() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::a_flight_clip_bounds_the_frames_ink();
-        }
-        #[test]
-        fn landing_clears_a_flight_clip() {
-            super::SHAPE.with(|shape| shape.set(crate::fixture::PaintShape::InPlace));
-            super::landing_clears_a_flight_clip();
         }
     }
 }

@@ -267,6 +267,195 @@ fn css_nested_copy_uses_its_record_for_item_properties() {
     assert_eq!(row.with_artboard(|row| row.layout_y()), 10.0);
 }
 
+/// How `carrying_box_scene`'s box and the copy it hosts are sized.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Carrying {
+    /// A 200 by 180 box, and a 172 by 172 instance size with no record, as
+    /// the compiler publishes a component placement.
+    Instance,
+    /// A 200 by 180 box, and a record of 172 by 172 on the placement.
+    Record,
+    /// A 200 by 180 box, and a record of 100% by 100%.
+    Fills,
+    /// A box with no size of its own around a 172 by 172 instance size.
+    SizesItsBox,
+    /// `Instance`, with a layout animation on the component's root.
+    Animated,
+}
+
+/// A flex row of a box hosting a copy of a CSS component and a 50 by 50
+/// sibling.
+fn carrying_box_scene(kind: Carrying) -> Scene {
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    let has_record = matches!(kind, Carrying::Record | Carrying::Fills);
+    // Board 0, record 1, box 2, record 3, host 4, its record, the sibling,
+    // its record, then the three styles.
+    let sibling = 5 + u64::from(has_record);
+    let styles = sibling + 2;
+    board(&mut riv, 600.0, 300.0, styles);
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .uint(DISPLAY, 1)
+        .end();
+    let record = |riv: &mut Riv, parent: u64, size: Option<(f32, f32)>| {
+        riv.object(LAYOUT_CSS_STYLE)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent)
+            .float(FLEX_SHRINK, 0.0);
+        if let Some((width, height)) = size {
+            riv.uint(WIDTH_KIND, 1)
+                .float(WIDTH, width)
+                .uint(HEIGHT_KIND, 1)
+                .float(HEIGHT, height);
+        }
+        riv.end();
+    };
+    let layout = |riv: &mut Riv, style: u64| {
+        riv.object(LayoutComponentBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, style)
+            .end();
+    };
+    layout(&mut riv, styles + 1);
+    record(
+        &mut riv,
+        2,
+        (kind != Carrying::SizesItsBox).then_some((200.0, 180.0)),
+    );
+    riv.object(NestedArtboardLayoutBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+        .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1)
+        .float(NestedArtboardLayoutBase::INSTANCE_WIDTH_PROPERTY_KEY, 172.0)
+        .float(
+            NestedArtboardLayoutBase::INSTANCE_HEIGHT_PROPERTY_KEY,
+            172.0,
+        )
+        .end();
+    if kind == Carrying::Fills {
+        riv.object(LAYOUT_CSS_STYLE)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 4)
+            .uint(WIDTH_KIND, 1)
+            .float(WIDTH_PERCENT, 100.0)
+            .uint(HEIGHT_KIND, 1)
+            .float(HEIGHT + 1, 100.0)
+            .end();
+    } else if has_record {
+        record(&mut riv, 4, Some((172.0, 172.0)));
+    }
+    layout(&mut riv, styles + 2);
+    record(&mut riv, sibling, Some((50.0, 50.0)));
+    for parent in [0, 2, sibling] {
+        style(&mut riv, parent);
+    }
+    board(&mut riv, 160.0, 160.0, 2);
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .end();
+    if kind == Carrying::Animated {
+        use LayoutComponentStyleBase as Style;
+        riv.object(Style::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .uint(Style::ANIMATION_STYLE_TYPE_PROPERTY_KEY, 2)
+            .uint(Style::INTERPOLATION_TYPE_PROPERTY_KEY, 1)
+            .float(Style::INTERPOLATION_TIME_PROPERTY_KEY, 10.0)
+            .end();
+    } else {
+        style(&mut riv, 0);
+    }
+    let scene = Scene::import(riv);
+    scene.advance();
+    scene
+}
+
+/// A held box lays the root it carries out with it, at the box's flight
+/// size plus the blend of what the root's size adds to its box's at each
+/// end (css_layout/flight_hold.rs). Here it left a 132 by 132 root in a 160
+/// by 150 box. The box rests where it rested, so its sibling stays, also
+/// when the root sizes it; the root's style in the layout tree is the same
+/// after each frame; and after the hold ends all is at rest again.
+#[test]
+fn css_hosted_root_flies_with_the_held_box_that_carries_it() {
+    use crate::css_layout::flight_hold::{begin, carry, end, set_progress, set_size};
+    for kind in [
+        Carrying::Instance,
+        Carrying::Record,
+        Carrying::Fills,
+        Carrying::SizesItsBox,
+        Carrying::Animated,
+    ] {
+        let scene = carrying_box_scene(kind);
+        let board = scene.artboard.core_handle();
+        let boxes = scene
+            .artboard
+            .with_artboard(|board| board.find_all_handles::<LayoutComponent>());
+        let rect = |handle: &CoreHandle| {
+            handle
+                .with_downcast::<LayoutComponent, _>(|layout| {
+                    let bounds = layout.layout_bounds();
+                    (layout.layout_x(), bounds.width(), bounds.height())
+                })
+                .unwrap()
+        };
+        let [element, sibling] = boxes
+            .iter()
+            .filter(|handle| **handle != board)
+            .cloned()
+            .collect::<Vec<_>>()
+            .try_into()
+            .expect("the box and its sibling");
+        let unit = scene
+            .artboard
+            .with_artboard(|board| board.find_all_handles::<NestedArtboardLayout>()[0].clone())
+            .with_downcast::<NestedArtboardLayout, _>(|host| {
+                host.base.base.artboard_instance_handle(0)
+            })
+            .flatten()
+            .unwrap();
+        let root = unit.core_handle();
+        let size = || unit.with_artboard(|b| (b.layout_width(), b.layout_height()));
+        let own = || LayoutComponent::layout_tree_style(&board, &root).expect("its node");
+        let rest = (rect(&element), rect(&sibling), size());
+        let (rest_box, rest_root) = ((rest.0.1, rest.0.2), rest.2);
+        let style = own();
+        let left = if kind == Carrying::Fills {
+            (0.0, 0.0)
+        } else {
+            (-28.0, -18.0)
+        };
+        let mismatches = crate::source::layout_component::capture_layout_verify(|| {
+            assert!(begin(&element, (160.0, 150.0)));
+            carry(&element, &root, left);
+            for p in [0.0, 0.25, 0.5, 0.75, 1.0, 0.5] {
+                let mix = |a: f32, b: f32| a + (b - a) * p;
+                let flying = (mix(160.0, rest_box.0), mix(150.0, rest_box.1));
+                set_size(&element, flying);
+                set_progress(&element, p);
+                scene.advance();
+                assert_eq!(rect(&element), (0.0, flying.0, flying.1), "{kind:?} at {p}");
+                assert_eq!(
+                    size(),
+                    (
+                        mix(160.0 + left.0, rest_root.0),
+                        mix(150.0 + left.1, rest_root.1)
+                    ),
+                    "{kind:?} at {p}"
+                );
+                assert_eq!(rect(&sibling), rest.1, "{kind:?}: its sibling stays");
+                assert_eq!(own(), style, "{kind:?}: its own style is back");
+            }
+            end(&element);
+            scene.advance();
+            assert_eq!((rect(&element), rect(&sibling), size()), rest, "{kind:?}");
+            assert_eq!(own(), style, "{kind:?}");
+        });
+        assert_eq!(
+            mismatches,
+            Vec::<String>::new(),
+            "{kind:?}: the fresh-solve checker"
+        );
+    }
+}
+
 #[test]
 fn css_nested_copy_without_either_record_keeps_instance_sizing() {
     for (host_css, root_css) in [(false, true), (true, false), (false, false)] {

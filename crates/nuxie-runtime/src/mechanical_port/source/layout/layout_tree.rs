@@ -10,6 +10,7 @@
 //! The queue lives outside the tree, so a measure callback that runs script
 //! mid-solve (and dirties layout) only appends to it; the next solve picks
 //! the change up.
+use crate::css_layout::flight_hold::Flying;
 use crate::mechanical_port::source::{
     core::CoreHandle, layout::layout_measure_mode::LayoutMeasureMode, math::vec2d::Vec2D,
 };
@@ -86,9 +87,9 @@ pub(crate) struct LayoutTree {
     /// Available size of the last root style resolution (NaN: unbounded).
     pub(crate) root_available: (f32, f32),
     pub(crate) intrinsic_height: Option<(NodeId, u32, f32)>,
-    /// Elements flying in place (css_layout/flight_hold.rs) and their flight
-    /// sizes: each solve lays their insides out again at that size.
-    pub(crate) held: Vec<(NodeId, (f32, f32))>,
+    /// Elements flying in place (css_layout/flight_hold.rs) and how each
+    /// flies: each solve lays their insides out again so.
+    pub(crate) held: Vec<(NodeId, Flying)>,
 }
 
 impl LayoutTree {
@@ -122,15 +123,15 @@ impl LayoutTree {
         }
     }
 
-    /// Record whether `id` is held and at which flight size.
-    pub(crate) fn set_held(&mut self, id: NodeId, size: Option<(f32, f32)>) {
+    /// Record whether `id` is held and how it flies.
+    pub(crate) fn set_held(&mut self, id: NodeId, flying: Option<Flying>) {
         let at = self.held.iter().position(|(node, _)| *node == id);
-        match (at, size) {
-            (Some(at), Some(size)) => self.held[at].1 = size,
+        match (at, flying) {
+            (Some(at), Some(flying)) => self.held[at].1 = flying,
             (Some(at), None) => {
                 self.held.swap_remove(at);
             }
-            (None, Some(size)) => self.held.push((id, size)),
+            (None, Some(flying)) => self.held.push((id, flying)),
             (None, None) => {}
         }
     }

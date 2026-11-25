@@ -180,14 +180,27 @@ pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
     true
 }
 
-/// Whether every part of `component` is cut away by the rendered clips
-/// around it. Scroll regions read it too (semantic_scroll_regions.rs).
-pub(crate) fn semantic_is_fully_clipped(component: &CoreHandle) -> bool {
+fn semantic_is_fully_clipped(component: &CoreHandle) -> bool {
     let geometry = semantic_geometry(component);
     !geometry.is_empty()
         && geometry
             .into_iter()
             .all(|(owner, polygon)| clip_to_rendered_ancestors(&owner, polygon.to_vec()).is_empty())
+}
+
+/// Whether every part of `component` is cut away by the rendered clips
+/// around it, for scroll regions (semantic_scroll_regions.rs). A clip past
+/// the geometry budget fails with its error, as `validate_semantic_geometry`
+/// fails a node's, rather than reading as cut away; every part is checked.
+pub(crate) fn semantic_clipped_away(component: &CoreHandle) -> Result<bool, SemanticGeometryError> {
+    let geometry = semantic_geometry(component);
+    let mut clipped = !geometry.is_empty();
+    for (owner, polygon) in geometry {
+        let region = clip_to_rendered_ancestors(&owner, polygon.to_vec());
+        region.status()?;
+        clipped &= region.is_empty();
+    }
+    Ok(clipped)
 }
 
 fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> SemanticClipRegion {

@@ -9,7 +9,7 @@ use crate::source::generated::constraints::scrolling::scroll_constraint_base::Sc
 use crate::source::generated::core_registry::CoreRegistry;
 use crate::source::semantic::semantic_provider::semantic_source_is_visible;
 use crate::source::semantic::semantic_scroll_regions::{
-    MAX_SCROLL_REGIONS, ScrollRegion, ScrollRegions, TooManyScrollRegions, can_scroll,
+    MAX_SCROLL_REGIONS, ScrollRegion, ScrollRegions, ScrollRegionsError, can_scroll,
 };
 
 const VERTICAL: u64 = 1;
@@ -351,6 +351,89 @@ fn turned_and_mirrored_hosts_name_screen_directions() {
     }
 }
 
+/// A host far from the page's origin, or scaled very small, still names
+/// the way its scroller can move, and a drag that way moves it. Mapped one
+/// point apart, two points 1e8 out, or 4e-6 apart near 150, round to one
+/// place, so the directions are carried by the transforms' linear part.
+/// (At 1e-6 a pointer can no longer hit the box, so 4e-6 it is.)
+#[test]
+fn far_and_tiny_hosts_name_screen_directions() {
+    use crate::source::generated::{
+        layout_component_base::LayoutComponentBase, node_base::NodeBase,
+        transform_component_base::TransformComponentBase,
+    };
+    // The page does not clip, so a host moved past its edge is still shown.
+    fn unclipped(host: &CoreHandle) {
+        let page = host
+            .with(|host| host.component_artboard_handle())
+            .flatten()
+            .expect("the page");
+        assert!(CoreRegistry::set_bool_handle(
+            &page,
+            LayoutComponentBase::CLIP_PROPERTY_KEY.into(),
+            false
+        ));
+    }
+    let cases: [(&str, fn(&CoreHandle), f32); 2] = [
+        (
+            "far",
+            |host| {
+                unclipped(host);
+                assert!(CoreRegistry::set_double_handle(
+                    host,
+                    NodeBase::X_PROPERTY_KEY.into(),
+                    1.0e8
+                ));
+            },
+            1.0,
+        ),
+        (
+            "tiny",
+            |host| {
+                for key in [
+                    TransformComponentBase::SCALE_X_PROPERTY_KEY,
+                    TransformComponentBase::SCALE_Y_PROPERTY_KEY,
+                ] {
+                    assert!(CoreRegistry::set_double_handle(host, key.into(), 4.0e-6));
+                }
+            },
+            4.0e-6,
+        ),
+    ];
+    for (name, edit, scale) in cases {
+        let f = hosted_scroller_with(edit);
+        let found = regions(&f);
+        assert_eq!(found.regions().len(), 1, "{name}");
+        let [left, top, right, bottom] = region_box(&found.regions()[0]);
+        let size = (200.0 * scale, 40.0 * scale);
+        assert!(
+            (right - left - size.0).abs() <= size.0 * 0.1
+                && (bottom - top - size.1).abs() <= size.1 * 0.2
+                && (name != "far" || left > 9.0e7),
+            "{name}: {:?}",
+            [left, top, right, bottom]
+        );
+        assert_eq!(
+            found.regions()[0].can_scroll,
+            can_scroll::RIGHT,
+            "{name}: {:?}",
+            region_box(&found.regions()[0])
+        );
+        let f = hosted_scroller_with(edit);
+        drag_region(&f, -40.0 * scale, 0.0);
+        assert!(
+            f.nested_scroll_offset().0 < 0.0,
+            "{name}: a drag the way the bit names moves the content: {:?}",
+            f.nested_scroll_offset()
+        );
+        assert_eq!(
+            regions(&f).regions()[0].can_scroll,
+            can_scroll::RIGHT | can_scroll::LEFT,
+            "{name}"
+        );
+    }
+}
+
 /// A host the pointer path turns away lists no region, and a drag where
 /// its scroller would be moves nothing: hidden, paused, or scaled to 0 on
 /// one axis (its transform cannot be inverted). Unchanged, the same drag
@@ -564,7 +647,7 @@ fn regions_past_the_limit_fail_the_collection() {
     let root = f.artboard.core_handle();
     assert!(matches!(
         ScrollRegions::collect_at_most(&root, 1),
-        Err(TooManyScrollRegions)
+        Err(ScrollRegionsError::TooMany)
     ));
     assert_eq!(
         ScrollRegions::collect_at_most(&root, 2)

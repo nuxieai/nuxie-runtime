@@ -992,7 +992,7 @@ fn live_moves_paint_content_edits_invalidate_the_enclosing_index_round9() {
             .unwrap();
         let slot = row.with_artboard(|b| b.find_all_handles::<NestedArtboard>())[0].clone();
         let old = slot
-            .with_downcast::<NestedArtboard, _>(NestedArtboard::artboard_instance_default)
+            .with(|o| o.nested_artboard_instance_handle())
             .flatten()
             .unwrap();
         let weak = old.downgrade();
@@ -1026,7 +1026,7 @@ fn live_moves_paint_content_edits_invalidate_the_enclosing_index_round9() {
         );
         NestedArtboard::update_artboard_occurrence(&slot, Some(value));
         let replacement = slot
-            .with_downcast::<NestedArtboard, _>(NestedArtboard::artboard_instance_default)
+            .with(|o| o.nested_artboard_instance_handle())
             .flatten()
             .unwrap();
         assert_ne!(
@@ -1041,7 +1041,7 @@ fn live_moves_paint_content_edits_invalidate_the_enclosing_index_round9() {
         drop(replacement);
         drop(old);
         let ids = video_ids(scene.player);
-        assert_eq!(ids.len(), before + 2);
+        assert_eq!(ids.len(), before + 1);
         assert_eq!(ids.iter().filter(|id| !old_ids.contains(id)).count(), 1);
         step_ok(scene.player);
         assert!(

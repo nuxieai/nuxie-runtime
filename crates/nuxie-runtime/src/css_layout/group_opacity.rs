@@ -626,7 +626,7 @@ pub(crate) enum ScreenLayer {
     /// Mark 0 after the first flight: outside the picture, under a scope at
     /// the Screen's fade. Hidden at its zero.
     Scope,
-    /// A slot holding a flight and all it hosts, mark 1 at or above the first
+    /// A flight and all it draws, mark 1 at or above the first
     /// flight, and mark 2: outside the picture, at its own strength. Visible
     /// at the Screen's zero.
     OwnStrength,
@@ -753,7 +753,7 @@ fn own_mark(object: &dyn CoreObject) -> (Mark, f32) {
 }
 
 /// Where each entry of a Screen's sorted draw list draws, from one read of
-/// the list in draw order: a slot holding a flight at its own strength, and
+/// the list in draw order: a flight at its own strength, and
 /// anything else by its mark and whether the first flight is past
 /// (`Mark::layer`). With no flight, everything is before the first. A mask
 /// run stays whole, since a mask keeps one content canvas: everything in it

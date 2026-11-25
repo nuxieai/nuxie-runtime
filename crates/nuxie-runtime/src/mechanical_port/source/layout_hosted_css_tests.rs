@@ -459,7 +459,8 @@ fn css_hosted_root_flies_with_the_held_box_that_carries_it() {
 /// A root that adds the same to its box's size at both ends asks for no
 /// layout as its flight progresses. Whatever changes that asks for one, at
 /// the progress it has reached: its arriving end resized, alone or with its
-/// box, the flight's box resized, and the root itself gone.
+/// box, the flight's box resized, and another
+/// root in its place.
 #[test]
 fn css_hosted_root_of_one_size_is_not_laid_out_again_as_it_flies() {
     use crate::css_layout::flight_hold::{begin, carry, passes, set_progress, set_size};
@@ -468,14 +469,14 @@ fn css_hosted_root_of_one_size_is_not_laid_out_again_as_it_flies() {
         Root,
         Box,
         Flight,
-        Gone,
+        Replaced,
     }
     // Its width at .5, and at .75.
     for (change, half, later) in [
         (Change::Root, 146.0, 133.0),
         (Change::Box, 152.0, 142.0),
         (Change::Flight, 152.0, 152.0),
-        (Change::Gone, 0.0, 0.0),
+        (Change::Replaced, 0.0, 0.0),
     ] {
         let scene = carrying_box_scene(Carrying::Instance);
         let board = scene.artboard.core_handle();
@@ -527,12 +528,21 @@ fn css_hosted_root_of_one_size_is_not_laid_out_again_as_it_flies() {
                 ));
             }
             Change::Flight => set_size(&element, (180.0, 180.0)),
-            Change::Gone => NestedArtboardLayout::update_artboard_occurrence(&host, None),
+            Change::Replaced => {
+                let source = scene
+                    .file
+                    .with_file(|file| file.artboard_at_source(1))
+                    .expect("the component");
+                crate::source::nested_artboard::NestedArtboard::live_move_refill_occurrence(
+                    &host, &source,
+                )
+                .expect("another root in its place");
+            }
         }
         scene.advance();
         let changed = passes();
         assert!(changed > laid_out, "{change:?} is laid out");
-        if change != Change::Gone {
+        if change != Change::Replaced {
             assert_eq!(size(), (half, 172.0), "{change:?} at .5");
         }
         set_progress(&element, 0.75);
@@ -543,7 +553,7 @@ fn css_hosted_root_of_one_size_is_not_laid_out_again_as_it_flies() {
             change != Change::Flight,
             "{change:?}: progress asks for a layout"
         );
-        if change != Change::Gone {
+        if change != Change::Replaced {
             assert_eq!(size(), (later, 172.0), "{change:?} at .75");
         }
     }

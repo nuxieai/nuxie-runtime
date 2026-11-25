@@ -59,7 +59,10 @@ fn bounds_of(points: &[source::math::vec2d::Vec2D]) -> [f32; 4] {
 }
 /// The keyed box a placement is in.
 fn box_of(placement: &CoreHandle) -> CoreHandle {
-    placement.with(|o| o.component_parent_handle()).flatten().unwrap()
+    placement
+        .with(|o| o.component_parent_handle())
+        .flatten()
+        .unwrap()
 }
 /// Where each Screen's unit draws at rest, A's then B's: the left, top, width
 /// and height of its fill, and its opacity.
@@ -711,7 +714,6 @@ fn incompatible_wrappers_and_cross_player_moves_are_refused_without_taking_the_s
     assert_eq!(child(&s.s).unwrap().core_handle(), source);
 }
 
-
 #[test]
 fn another_players_membership_edits_do_not_rebuild_this_players_index() {
     let mut s = Scene::new();
@@ -1123,7 +1125,11 @@ fn a_step_unit_flies_one_instance_only_where_it_transfers() {
         .collect();
     assert_eq!(flown.len(), 2, "two copies fly in two flights");
     flown.sort_by_key(|element| element != &box_of(&s.s));
-    assert_eq!(flown, [box_of(&s.s), box_of(&s.d)], "each in its own flight");
+    assert_eq!(
+        flown,
+        [box_of(&s.s), box_of(&s.d)],
+        "each in its own flight"
+    );
     s.advance(0.1);
     s.end();
     assert_eq!(holds(&s.s), Some(a), "A's copy lands back on A");
@@ -2491,7 +2497,6 @@ fn flight_progress(s: &mut Scene, progress: f32) {
     s.advance(0.0);
 }
 
-
 /// Removes row B and inserts its Screen model again, as a host adds the
 /// incoming row for a step. The page has not advanced since the insert.
 fn add_row_b_for_the_step(s: &mut Scene) {
@@ -3317,8 +3322,6 @@ fn ink_points(
     draws.pop().map_or_else(Vec::new, |draw| draw.points)
 }
 
-
-
 /// The stand-in that holds a unit's place while it is away places like the
 /// unit: the placement it leaves keeps its pose at rest, at takeoff and whenever
 /// it is placed again.
@@ -4080,10 +4083,9 @@ fn pair_controls(s: &Scene) -> (CoreHandle, CoreHandle) {
 /// binding writes it.
 fn show_b_shadow(s: &mut Scene) {
     use source::shapes::paint::solid_color::SolidColor;
-    let shadow = s
-        .b
-        .with_artboard(|b| b.find_handle::<SolidColor>("shadow"))
-        .unwrap();
+    let shadow =
+        s.b.with_artboard(|b| b.find_handle::<SolidColor>("shadow"))
+            .unwrap();
     assert!(CoreRegistry::set_color_handle(
         &shadow,
         37,
@@ -6223,7 +6225,10 @@ mod paint_order {
         }
         assert!(page.remove_list_item_by_property_name_path("screens", 0));
         s.advance(0.0);
-        assert!(s.moves.flight_controls(&s.root).is_empty(), "removing A cancels");
+        assert!(
+            s.moves.flight_controls(&s.root).is_empty(),
+            "removing A cancels"
+        );
         assert_ne!(s.sorts("B"), flying, "the cancel sorts B");
         assert!(page.insert_list_item_by_property_name_path("screens", 0, &outgoing));
         s.advance(0.0);
@@ -6529,7 +6534,8 @@ mod paint_order {
         let frames: Vec<f32> = (0..=20).map(|n| n as f32 * 0.05).collect();
         let mut failed = Vec::new();
         for case in in_place_cases() {
-            let run = std::panic::catch_unwind(|| flies_as_recorded(case, PaintShape::InPlace, &frames));
+            let run =
+                std::panic::catch_unwind(|| flies_as_recorded(case, PaintShape::InPlace, &frames));
             if let Err(err) = run {
                 let why = err
                     .downcast_ref::<String>()
@@ -6559,7 +6565,7 @@ mod paint_order {
     fn in_place_a_transfer_draws_what_the_slot_path_drew() {
         let ran = known_differences(
             in_place_cases().into_iter().filter(|&case| {
-                                fixture::css_paint_transfers(case)
+                fixture::css_paint_transfers(case)
                     && fixture::css_paint_fixture_shaped(case, PaintShape::InPlaceCarry).is_ok()
             }),
             PaintShape::InPlaceCarry,
@@ -6588,7 +6594,7 @@ mod paint_order {
         );
         let ran = known_differences(
             in_place_cases().into_iter().filter(|&case| {
-                                !matches!(case, PaintCase::Resting(6 | 7 | 9 | 10))
+                !matches!(case, PaintCase::Resting(6 | 7 | 9 | 10))
                     && fixture::css_paint_transfers(case)
                     && fixture::css_paint_fixture_shaped(case, PaintShape::InPlaceBoxedCopies)
                         .is_ok()
@@ -6596,12 +6602,7 @@ mod paint_order {
             PaintShape::InPlaceBoxedCopies,
             &[
                 (PaintCase::TurnedFrame, "go at 0", [c, e], [e, c]),
-                (
-                    PaintCase::FadeAtRest,
-                    "go at 0",
-                    [c, e],
-                    [e, c],
-                ),
+                (PaintCase::FadeAtRest, "go at 0", [c, e], [e, c]),
             ],
         );
         assert!(
@@ -7047,7 +7048,10 @@ mod paint_order {
             s.advance(0.0);
             check(&s, &format!("after {step} cancelled"));
         }
-        assert!(recording.0.is_empty(), "{case:?}: every recorded frame drew");
+        assert!(
+            recording.0.is_empty(),
+            "{case:?}: every recorded frame drew"
+        );
     }
 
     /// What `shape`'s pages are compared with.
@@ -7569,11 +7573,7 @@ mod paint_order {
         s.advance(0.0);
         let mut fresh = PaintScene::shaped(case, PaintShape::InPlace);
         fresh.fly(Way::Go, |_, _| {});
-        assert_eq!(
-            e_draws(&s),
-            e_draws(&fresh),
-            "woken, as if it never slept"
-        );
+        assert_eq!(e_draws(&s), e_draws(&fresh), "woken, as if it never slept");
     }
 
     /// 4.5 (7): a flying frame of a pair whose two ends are the same size,
@@ -7901,13 +7901,12 @@ mod drawn {
                 .with_artboard(|r| r.find_handle::<source::layout_component::LayoutComponent>(name))
                 .unwrap_or_else(|| panic!("no box {name} on {row}"))
         }
-        /// The frame `name` rests as on `row`: its slot's unit, or in place
-        /// the element itself.
+        /// The frame `name` rests as on `row`: the element itself.
         fn home_frame(&self, row: &str, name: &str) -> CoreHandle {
             self.layout(row, name)
         }
-        /// Where `name`'s slot rests on `row`, or in place where the element
-        /// draws on its own Screen, which a flight never moves.
+        /// Where the element `name` draws on its own Screen, `row`, which a
+        /// flight never moves.
         fn resting_place(&self, row: &str, name: &str) -> [f32; 6] {
             *self
                 .moves
@@ -7915,29 +7914,24 @@ mod drawn {
                 .unwrap()
                 .values()
         }
-        /// The step's one flight, showing `name` on its way to `to`: the frame
-        /// in its flight slot, or in place `to`'s own copy, which flies beside
-        /// the leaving copy held at fade 0.
+        /// The step's one flight, showing `name` on its way to `to`: `to`'s
+        /// own copy, which flies beside the leaving copy held at fade 0.
         fn flight_frame(&self, to: &str, name: &str) -> CoreHandle {
-                let copies = self.moves.lifted_records(&self.root);
-                assert_eq!(copies.len(), 2, "{name} flies alone, as two copies");
-                self.layout(to, name)
-            
+            let copies = self.moves.lifted_records(&self.root);
+            assert_eq!(copies.len(), 2, "{name} flies alone, as two copies");
+            self.layout(to, name)
         }
-        /// The controls of the flight that shows on `to`: the one flight's,
-        /// or in place `to`'s copy's record.
+        /// The controls of the flight that shows on `to`: `to`'s copy's record.
         fn shown_controls(&self, to: &str) -> CoreHandle {
-                let row = self.row(to).core_handle();
-                self.moves
-                    .lifted_records(&self.root)
-                    .into_iter()
-                    .find(|(_, on, _)| *on == row)
-                    .map(|(.., record)| record)
-                    .unwrap_or_else(|| panic!("a copy flies on {to}"))
-            
+            let row = self.row(to).core_handle();
+            self.moves
+                .lifted_records(&self.root)
+                .into_iter()
+                .find(|(_, on, _)| *on == row)
+                .map(|(.., record)| record)
+                .unwrap_or_else(|| panic!("a copy flies on {to}"))
         }
-        /// What placement reads `name`'s resting place from on `row`: its
-        /// slot, or in place the element.
+        /// What placement reads `name`'s resting place from on `row`: the element.
         fn resting_item(&self, row: &str, name: &str) -> CoreHandle {
             self.layout(row, name)
         }
@@ -10069,7 +10063,8 @@ mod drawn {
         /// holds one pair of two copies.
         #[test]
         fn the_zoom_lives_only_in_a_pair() {
-            let mut s = DrawnScene::shaped(PaintCase::Zoom(Case::OneUnit), PaintShape::InPlaceCarry);
+            let mut s =
+                DrawnScene::shaped(PaintCase::Zoom(Case::OneUnit), PaintShape::InPlaceCarry);
             s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
             assert_eq!(flying(&s), (0, 1), "one unit flies one flight");
             no_clip(&mut s, "a");
@@ -12840,7 +12835,10 @@ return function() return {init=init,advance=advance} end
             (10.0, 0x2040_6080, "outgoing"),
             (200.0, 0xe0c0_a080, "incoming"),
         ];
-        let changed = [(110.0, 0xff00_0000, "changed a"), (400.0, 0xffff_ffff, "changed b")];
+        let changed = [
+            (110.0, 0xff00_0000, "changed a"),
+            (400.0, 0xffff_ffff, "changed b"),
+        ];
         read("at rest", own);
         s.begin("B", "t1");
         for p in [0.0, 0.25] {

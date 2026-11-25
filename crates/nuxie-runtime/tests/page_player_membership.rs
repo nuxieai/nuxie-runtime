@@ -8,8 +8,7 @@ use nuxie_runtime::page_player::{self, Output, Playback, Step};
 use nuxie_runtime::{
     source::{
         generated::core_registry::CoreRegistry, layout_component::LayoutComponent,
-        nested_artboard::NestedArtboard,
-        viewmodel::viewmodel_instance::ViewModelInstance,
+        nested_artboard::NestedArtboard, viewmodel::viewmodel_instance::ViewModelInstance,
     },
     *,
 };

@@ -3314,7 +3314,10 @@ fn a_lift_fades_as_one_picture() {
         let in_place = zoom_at(ZoomCase::FadeHeld, progress);
         if progress == 0.5 {
             // Half way both versions draw, each at its fade.
-            assert!(in_place.composites > 0, "{what}: the copies fade as pictures");
+            assert!(
+                in_place.composites > 0,
+                "{what}: the copies fade as pictures"
+            );
         }
         as_recorded(&in_place, &what);
     }

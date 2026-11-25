@@ -906,9 +906,7 @@ fn css_box_paints(
         .map_or(0.0, |drawable| drawable.render_opacity());
     opacity.is_finite()
         && opacity > 0.0
-        && paints
-            .iter()
-            .any(|paint| layout.css_own_paint_draws(paint))
+        && paints.iter().any(|paint| layout.css_own_paint_draws(paint))
 }
 
 /// Geometry bounds in root space, optionally clipped from an owner outward.

@@ -138,14 +138,7 @@ pub(crate) fn bind(b: &mut Vec<u8>, property: u64, path: &[u8]) {
 }
 /// A box at `id` in `parent`, `size` and `left` of it, whose CSS record
 /// carries `flight_key` unless it is 0 (`id` to `id + 2`).
-fn keyed_box(
-    b: &mut Vec<u8>,
-    parent: u64,
-    id: u64,
-    name: &str,
-    left: f32,
-    flight_key: u64,
-) {
+fn keyed_box(b: &mut Vec<u8>, parent: u64, id: u64, name: &str, left: f32, flight_key: u64) {
     use V::*;
     obj(
         b,
@@ -3732,10 +3725,7 @@ fn build_layout_fixture(turned: bool) -> Vec<u8> {
             ("name", S("LayoutScreen")),
             ("viewModelId", U(0)),
             ("width", F(800.0)),
-            (
-                "height",
-                F(600.0),
-            ),
+            ("height", F(600.0)),
             ("styleId", U(1)),
             ("clip", B(false)),
         ],
@@ -4477,7 +4467,11 @@ fn version_box(
         obj(
             b,
             "SemanticData",
-            &[("parentId", U(at)), ("role", U(1)), ("label", S("c button"))],
+            &[
+                ("parentId", U(at)),
+                ("role", U(1)),
+                ("label", S("c button")),
+            ],
         );
         next += 2;
     }
@@ -7853,11 +7847,7 @@ fn paint_entrance(
 
 /// A Screen artboard: its root (0), root record (1) and style (2), then its
 /// elements. The upper Screen also gets its timeline, machine and listener.
-fn paint_screen(
-    b: &mut Vec<u8>,
-    spec: &PaintSpec,
-    upper: bool,
-) -> Result<(), &'static str> {
+fn paint_screen(b: &mut Vec<u8>, spec: &PaintSpec, upper: bool) -> Result<(), &'static str> {
     use V::*;
     let (name, model, els) = if upper {
         ("B", PAINT_B_VM, &spec.b)

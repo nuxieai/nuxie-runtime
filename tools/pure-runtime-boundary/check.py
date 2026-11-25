@@ -349,6 +349,10 @@ PORTABLE_ABI_FACADE_FILE_SYMBOLS = {
         "RenderCanvas",
         "RenderCanvasError",
     },
+    # Scroll region tests: a row's artboard, to read its viewport and offset.
+    "crates/nux-capi/src/scroll_region_tests.rs": {
+        "RuntimeArtboardInstanceHandle",
+    },
 }
 PORTABLE_ABI_FACADE_PRODUCT_METHOD = re.compile(
     r"\b(?:prepare_flow_[A-Za-z0-9_]*|import_with_(?:trusted_scripts|"

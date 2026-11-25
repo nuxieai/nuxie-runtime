@@ -930,6 +930,8 @@ pub enum CarrySize {
     Centered,
     /// A record of 100% by 100% on both, so it fills its card.
     Fill,
+    /// `Instance`, with a layout animation on the component's root.
+    Animated,
     /// The component has no CSS record, as a Rive-made one has none: 60 by
     /// 40 and 100 by 80 through the instance size.
     Native,
@@ -1584,7 +1586,15 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
         "LayoutCssStyle"
     };
     obj(&mut b, record, &[("parentId", U(0))]); // 1
-    obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+    let mut style = vec![("parentId", U(0))];
+    if sized == Some(CarrySize::Animated) {
+        style.extend([
+            ("animationStyleType", U(2)),
+            ("interpolationType", U(1)),
+            ("interpolationTime", F(1.0)),
+        ]);
+    }
+    obj(&mut b, "LayoutComponentStyle", &style); // 2
     obj(&mut b, "Node", &[("name", S("keyed")), ("parentId", U(0))]); // 3
     obj(
         &mut b,

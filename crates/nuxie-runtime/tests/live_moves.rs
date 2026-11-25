@@ -15349,6 +15349,53 @@ mod in_place_carry {
         assert!(wrong.is_empty(), "{wrong:#?}");
     }
 
+    /// A carried root with its own layout animation doesn't ease through a
+    /// flight, and is where it rests in the frame the flight ends: landing,
+    /// carried home as the Screen it flies to goes, or staying as the one it
+    /// left goes. A size written after that animates, as with no flight.
+    #[test]
+    fn in_place_a_transferred_root_animates_its_own_sizes_again_after_its_flight() {
+        for gone in [None, Some(1), Some(0)] {
+            let mut s = Page::new(InPlaceCarry::TransferSized(fixture::CarrySize::Animated));
+            let unit = child(&s.pa).unwrap();
+            let width = |unit: &RuntimeArtboardInstanceHandle| root_box(unit)[2];
+            s.begin("B", "t1");
+            for p in [0.0, 0.5, 1.0] {
+                s.fly(p);
+                assert_eq!(width(&unit), 60.0 + 40.0 * p, "{gone:?} at {p}");
+            }
+            let (placement, rest) = match gone {
+                Some(gone) => {
+                    s.fly(0.5);
+                    remove_screen(&s, gone);
+                    s.advance(0.0);
+                    if gone == 1 {
+                        (s.pa.clone(), 60.0)
+                    } else {
+                        (s.pb.clone(), 100.0)
+                    }
+                }
+                None => {
+                    s.end("B", "t1");
+                    (s.pb.clone(), 100.0)
+                }
+            };
+            assert_eq!(width(&unit), rest, "{gone:?}: at rest at once");
+            s.advance(0.25);
+            assert_eq!(width(&unit), rest, "{gone:?}: it stays");
+            // `instanceWidth`.
+            set(&placement, 663, rest + 80.0);
+            s.advance(0.0);
+            s.advance(0.5);
+            s.advance(0.0);
+            let eased = width(&unit);
+            assert!(
+                rest < eased && eased < rest + 80.0,
+                "{gone:?}: a later size animates: {eased}"
+            );
+        }
+    }
+
     /// A component without its own CSS record, as a Rive-made one, keeps its
     /// arriving size in flight: its own layout sizes it.
     #[test]

@@ -22,8 +22,9 @@
 //! takes a child's size from its style, so the pass gives the root's Taffy
 //! style that size, with no minimum or maximum to floor it, lets the box
 //! place it by its own rules, and puts the style back. No Rive object sees
-//! it, and the root itself is not held: when the box's hold ends nothing is
-//! left on it, wherever it has gone.
+//! it, and the root itself is not held, so it is nowhere held on once its
+//! box's hold ends. While it is carried, and in the solve after, it takes its
+//! layout at once, as its box does: the flight drives it.
 //!
 //! The element is a layout node's owner: a box, or a participant (a text,
 //! an image or a video). Its rest follows its parent through the step: a
@@ -68,8 +69,8 @@ pub(crate) struct FlightHold {
 }
 
 impl Flying {
-    fn root(&self) -> Option<CoreHandle> {
-        self.carried.as_ref().map(|carried| carried.root.clone())
+    pub(crate) fn carried_root(&self) -> Option<&CoreHandle> {
+        self.carried.as_ref().map(|carried| &carried.root)
     }
 }
 
@@ -288,33 +289,18 @@ pub(crate) fn set_progress(element: &CoreHandle, progress: f32) {
 /// Changes how a held `element` flies, and asks for a solve when that says
 /// it did.
 fn change(element: &CoreHandle, change: impl FnOnce(&mut Flying) -> bool) {
-    let carried = element
+    let changed = element
         .with_mut(|object| {
             let data = LayoutComponent::layout_data_of(object)?;
-            let flying = &mut data.flight_hold.as_mut()?.flying;
-            if !change(flying) {
+            if !change(&mut data.flight_hold.as_mut()?.flying) {
                 return None;
             }
-            let carried = flying.root();
             data.request_solve();
-            Some(carried)
+            Some(())
         })
         .flatten();
-    if let Some(carried) = carried {
-        snap(carried);
+    if changed.is_some() {
         LayoutComponent::request_layout_solve(element);
-    }
-}
-
-/// A carried root takes its next layout at once, as its held box does: the
-/// flight drives it, not its own interpolation.
-fn snap(root: Option<CoreHandle>) {
-    if let Some(root) = root {
-        root.with_mut(|object| {
-            if let Some(data) = LayoutComponent::layout_data_of(object) {
-                data.snap_bounds_once();
-            }
-        });
     }
 }
 
@@ -325,15 +311,22 @@ pub(crate) fn end(element: &CoreHandle) {
     let ended = element
         .with_mut(|object| {
             let data = LayoutComponent::layout_data_of(object)?;
-            let carried = data.flight_hold.take()?.flying.root();
-            data.snap_bounds_once();
-            data.mark_dirty();
-            Some(carried)
+            let hold = data.flight_hold.take()?;
+            data.land();
+            Some(hold.flying)
         })
         .flatten();
-    if let Some(carried) = ended {
-        snap(carried);
-        LayoutComponent::request_layout_solve(element);
+    let Some(flying) = ended else {
+        return;
+    };
+    LayoutComponent::request_layout_solve(element);
+    if let Some(root) = flying.carried_root() {
+        root.with_mut(|object| {
+            if let Some(data) = LayoutComponent::layout_data_of(object) {
+                data.land();
+            }
+        });
+        LayoutComponent::request_layout_solve(root);
     }
 }
 

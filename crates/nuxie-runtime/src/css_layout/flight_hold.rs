@@ -17,8 +17,9 @@
 //! content). No Rive object and no Taffy node is added: Taffy is driven
 //! differently only in the flight pass of a held element.
 //!
-//! A held box that carries a component (`carry`) lays that component's root
-//! out in the same pass, at the blend of its sizes at the two ends. Taffy
+//! A held box that carries a component (`carry`), one instance flying from
+//! Screen to Screen or a Screen's own copy, lays that component's root out
+//! in the same pass, at the blend of the sizes at the two ends. Taffy
 //! takes a child's size from its style, so the pass gives the root's Taffy
 //! style that size, with no minimum or maximum to floor it, lets the box
 //! place it by its own rules, and puts the style back. No Rive object sees
@@ -54,18 +55,20 @@ pub(crate) struct Flying {
 #[derive(Clone, Debug)]
 struct CarriedRoot {
     root: CoreHandle,
-    /// Its border box less its box's at the end it left, as it took off. At
-    /// the arriving end both rest in the tree, where each solve reads them.
-    left: (f32, f32),
+    /// What the root's border box adds to its box's at the other end, as it
+    /// took off. At its own end both rest in the tree, where each solve
+    /// reads them.
+    other: (f32, f32),
+    /// 0 at the other end, 1 at its own.
     progress: f32,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct FlightHold {
     flying: Flying,
-    /// What the carried root's border box adds to its box's at the arriving
-    /// end, as the last solve read it.
-    arriving: Option<(f32, f32)>,
+    /// What the carried root's border box adds to its box's at its own end,
+    /// as the last solve read it.
+    own: Option<(f32, f32)>,
     /// The element's resting slot, relative to its layout parent, as the
     /// last solve published it: its own published layout, were it at rest.
     pub(crate) rest: Layout,
@@ -75,7 +78,7 @@ pub(crate) struct FlightHold {
 pub(crate) struct Flown {
     pub(crate) output: LayoutOutput,
     /// What the carried root's border box adds to its box's at rest.
-    arriving: Option<(f32, f32)>,
+    own: Option<(f32, f32)>,
 }
 
 impl Flying {
@@ -90,7 +93,7 @@ impl FlightHold {
     }
     /// Keeps what a solve's flight pass read.
     pub(crate) fn flown(&mut self, flown: &Flown) {
-        self.arriving = flown.arriving;
+        self.own = flown.own;
     }
 }
 
@@ -137,25 +140,25 @@ where
         })?;
         // The parent pass has just laid both out at rest.
         let rest = resting_slot(taffy, root)?.size;
-        let arriving = (rest.width - slot.size.width, rest.height - slot.size.height);
-        let blend = |box_size: f32, left: f32, arriving: f32| {
-            (box_size + left + (arriving - left) * carried.progress).max(0.0)
+        let own = (rest.width - slot.size.width, rest.height - slot.size.height);
+        let blend = |box_size: f32, other: f32, own: f32| {
+            (box_size + other + (own - other) * carried.progress).max(0.0)
         };
         let root_size = Size {
-            width: blend(width, carried.left.0, arriving.0),
-            height: blend(height, carried.left.1, arriving.1),
+            width: blend(width, carried.other.0, own.0),
+            height: blend(height, carried.other.1, own.1),
         };
-        Some((root, root_size, arriving))
+        Some((root, root_size, own))
     });
     let size = Size { width, height };
-    let arriving = root.map(|(.., arriving)| arriving);
+    let own = root.map(|(.., own)| own);
     let output = match root {
         Some((root, root_size, _)) => Resized::new(taffy, node, root, root_size)
             .taffy
             .relayout_at_size(node, size, measure),
         None => taffy.relayout_at_size(node, size, measure),
     }?;
-    Some(Flown { output, arriving })
+    Some(Flown { output, own })
 }
 
 /// A carried root's Taffy style, sized for the flight pass of the box it is
@@ -248,7 +251,7 @@ pub(crate) fn begin(element: &CoreHandle, size: (f32, f32)) -> bool {
                     size,
                     carried: None,
                 },
-                arriving: None,
+                own: None,
                 rest,
             }));
             data.request_solve();
@@ -279,22 +282,23 @@ pub(crate) fn set_size(element: &CoreHandle, size: (f32, f32)) {
 
 /// From the next solve, the held box `element` lays `root`, the root of the
 /// component it holds, out with it: at the box's flight size plus the blend,
-/// at the flight's progress (`set_progress`), of the root's border box less
-/// its box's at each end, `left` at the end it left. Nothing when it isn't
-/// held.
-pub(crate) fn carry(element: &CoreHandle, root: &CoreHandle, left: (f32, f32)) {
+/// as far as the flight has come (`set_progress`), of the root's border box
+/// less its box's at each end, `other` at the end it doesn't rest at.
+/// Nothing when it isn't held.
+pub(crate) fn carry(element: &CoreHandle, root: &CoreHandle, other: (f32, f32)) {
     change(element, |flying| {
         flying.carried = Some(CarriedRoot {
             root: root.clone(),
-            left,
+            other,
             progress: 0.0,
         });
         true
     });
 }
 
-/// How far along a carried root's blend is (`carry`). It asks for a solve
-/// unless the blend's two ends are the same; the next one takes it then.
+/// How far a carried root's blend is from the other end, 0, to its own, 1
+/// (`carry`): an arriving root's is the flight's progress, a leaving one's
+/// what is left of it. It asks for a solve unless the blend's two ends are the same; the next one takes it then.
 pub(crate) fn set_progress(element: &CoreHandle, progress: f32) {
     let moves = element
         .with_mut(|object| {
@@ -305,7 +309,7 @@ pub(crate) fn set_progress(element: &CoreHandle, progress: f32) {
                 return None;
             }
             carried.progress = progress;
-            let moves = hold.arriving != Some(carried.left);
+            let moves = hold.own != Some(carried.other);
             data.request_solve();
             Some(moves)
         })

@@ -9,13 +9,46 @@
 //! its box mapped to root space as node bounds are (`semantic_bounds`), and
 //! its moves are the constraint's own clamp test. CSS and translated
 //! scrollers are both upstream's `ScrollConstraint`, so both are listed.
+//!
+//! A region is listed only where the runtime would take a drag on it. A
+//! drag reaches a scroller through the root state machine's hit components:
+//! a nested artboard's or list's hit component forwards it into the hosted
+//! artboard's own state machine, and there the constraint's listener group
+//! (`DraggableConstraint::listener_groups`) hit-tests the viewport's proxy
+//! and hands the drag to `ViewportDraggableProxy`. Each gate on that path,
+//! where the pointer path checks it, and where collection does:
+//!
+//! | Gate | Pointer path | Collection |
+//! |---|---|---|
+//! | Host collapsed, hidden or paused | `HitNestedArtboard` (`nested_refuses_pointers`), `HitComponentList` (`list_refuses_pointers`) | the same predicates, through `pointer_hosted_instances` |
+//! | Host transform cannot be inverted (scaled to 0) | `nested_mapping`, `component_list_world_to_local` | the same, through `pointer_hosted_instances` |
+//! | Hosted artboard has no state machine | `nested_state_machine`, `component_list_state_machine` | the same, through `pointer_hosted_instances` |
+//! | Rows and their order | `component_list_indices` | the same, through `pointer_hosted_instances` |
+//! | Host that forwards no pointers (a picture painted from an artboard) | no hit component | `pointer_hosted_instances` returns none |
+//! | Component collapsed (a `display: none` box and what it holds) | `Drawable::is_hidden` (collapsed dirt) | the walk does not enter it (`component_is_collapsed`) |
+//! | Viewport hidden | `RuntimeDrawableOccurrence::hit_test_point` refuses a hidden proxy | `RuntimeDrawableOccurrence::is_hidden` on the same proxy |
+//! | Viewport transform cannot be inverted | `LayoutComponent::hit_test_point_with_origin` | restated: the viewport's world transform must invert |
+//! | Viewport clipped away by the clips around it | the hit walks the same rendered clips (docs/CSS_LAYOUT.md, padding-box clip) | `semantic_is_fully_clipped`, the semantic layer's walk of those clips |
+//! | Constraint not interactive | `ViewportDraggableProxy::takes_drag`, `drag`, `start_drag` (`interactive`) | restated: `interactive()` |
+//! | Viewport not a layout box with a layout parent | `ScrollConstraint::draggables` needs the viewport's proxy | restated: `has_layout_parent`, a layout viewport |
+//! | Box empty on screen | nothing to hit | rechecked on the final root-space box |
+//! | Root artboard has no state machine | no hit components at all | not checked: a capture exists only for a player with a state machine |
+//!
+//! The constraint's own `wants_scroll` and `can_consume` answer for wheel
+//! scrolls; a drag reads `can_move_content`'s test instead, which is what
+//! `can_scroll` reports.
 use std::collections::{HashMap, HashSet};
 
+use crate::mechanical_port::source::animation::state_machine_instance::pointer_hosted_instances;
 use crate::mechanical_port::source::{
     artboard::Artboard,
     core::CoreHandle,
+    math::mat2d::Mat2D,
     math::vec2d::Vec2D,
-    semantic::{semantic_provider::root_transform_aabb, semantic_snapshot::Bounds},
+    semantic::{
+        semantic_provider::{root_transform_aabb, semantic_is_fully_clipped},
+        semantic_snapshot::Bounds,
+    },
 };
 
 /// At most this many regions in one capture; more fail it as a whole.
@@ -64,9 +97,9 @@ pub struct ScrollRegions {
 }
 
 impl ScrollRegions {
-    /// The regions under `root`, an artboard, its nested artboards and the
-    /// rows its lists show included. A region is listed when its constraint
-    /// is interactive and its viewport is neither collapsed nor empty.
+    /// The regions under `root`, an artboard played by a state machine, its
+    /// nested artboards and the rows its lists show included: each scroller
+    /// a drag can reach, by the gates in the module's table.
     pub fn collect(root: &CoreHandle) -> Result<Self, TooManyScrollRegions> {
         Self::collect_at_most(root, MAX_SCROLL_REGIONS)
     }
@@ -82,27 +115,29 @@ impl ScrollRegions {
             if !visited.insert(handle.clone()) {
                 continue;
             }
-            let Some(children) = handle
+            let Some(mut children) = handle
                 .with(|object| {
                     if object.component_is_collapsed() {
                         return None;
                     }
-                    let mut children = object
-                        .as_container_component()
-                        .map(|container| container.children().to_vec())
-                        .unwrap_or_default();
-                    // A host's artboards, with the same row membership as
-                    // advancing, layout and hits use.
-                    children.extend(
-                        crate::hosted_scene::active_instances(object)
-                            .map(|instance| instance.core_handle()),
-                    );
-                    Some(children)
+                    Some(
+                        object
+                            .as_container_component()
+                            .map(|container| container.children().to_vec())
+                            .unwrap_or_default(),
+                    )
                 })
                 .flatten()
             else {
                 continue;
             };
+            // A host's artboards that its hit component would pass a drag
+            // into, by the pointer path's own gates.
+            children.extend(
+                pointer_hosted_instances(&handle)
+                    .into_iter()
+                    .map(|instance| instance.core_handle()),
+            );
             // A content box's scroll constraints are its children. Listing
             // them before walking into the box puts every region after the
             // region it is inside, so its parent is already known.
@@ -206,6 +241,18 @@ fn measure(constraint: &CoreHandle) -> Option<(CoreHandle, Bounds, u32)> {
             Some((viewport, local, world, artboard, moves))
         })
         .flatten()?;
+    // The drag's target is the viewport's proxy: hidden, it is not hit.
+    let hidden = viewport
+        .with_mut(|viewport| {
+            viewport
+                .as_layout_component_mut()
+                .and_then(|layout| layout.proxy())
+        })
+        .flatten()
+        .is_none_or(|proxy| proxy.is_hidden());
+    if hidden || !world.invert(&mut Mat2D::default()) {
+        return None;
+    }
     let world_box = world.map_bounding_box(local);
     let bounds = Bounds {
         min_x: world_box.min_x,
@@ -219,6 +266,11 @@ fn measure(constraint: &CoreHandle) -> Option<(CoreHandle, Bounds, u32)> {
     let bounds = artboard
         .as_ref()
         .map_or(bounds, |artboard| root_transform_aabb(artboard, bounds));
+    // Empty on screen once mapped through every host, or clipped away by
+    // the clips around it: no point of it can be hit.
+    if bounds.is_empty_or_nan() || semantic_is_fully_clipped(&viewport) {
+        return None;
+    }
     // Each move the scroller allows, carried to the screen through the same
     // transforms as its box, so a scroller in a turned or mirrored host
     // names the way its content moves on screen.

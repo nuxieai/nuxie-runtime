@@ -180,7 +180,9 @@ pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
     true
 }
 
-fn semantic_is_fully_clipped(component: &CoreHandle) -> bool {
+/// Whether every part of `component` is cut away by the rendered clips
+/// around it. Scroll regions read it too (semantic_scroll_regions.rs).
+pub(crate) fn semantic_is_fully_clipped(component: &CoreHandle) -> bool {
     let geometry = semantic_geometry(component);
     !geometry.is_empty()
         && geometry

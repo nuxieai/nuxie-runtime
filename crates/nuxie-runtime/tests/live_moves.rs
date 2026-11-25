@@ -15355,6 +15355,12 @@ mod in_place_carry {
     /// left goes. A size written after that animates, as with no flight.
     #[test]
     fn in_place_a_transferred_root_animates_its_own_sizes_again_after_its_flight() {
+        let mut wrong = Vec::new();
+        let mut check = |at: String, right: bool, width: f32| {
+            if !right {
+                wrong.push(format!("{at}: its width is {width}"));
+            }
+        };
         for gone in [None, Some(1), Some(0)] {
             let mut s = Page::new(InPlaceCarry::TransferSized(fixture::CarrySize::Animated));
             let unit = child(&s.pa).unwrap();
@@ -15362,7 +15368,8 @@ mod in_place_carry {
             s.begin("B", "t1");
             for p in [0.0, 0.5, 1.0] {
                 s.fly(p);
-                assert_eq!(width(&unit), 60.0 + 40.0 * p, "{gone:?} at {p}");
+                let now = width(&unit);
+                check(format!("{gone:?} at {p}"), now == 60.0 + 40.0 * p, now);
             }
             let (placement, rest) = match gone {
                 Some(gone) => {
@@ -15380,20 +15387,24 @@ mod in_place_carry {
                     (s.pb.clone(), 100.0)
                 }
             };
-            assert_eq!(width(&unit), rest, "{gone:?}: at rest at once");
+            let now = width(&unit);
+            check(format!("{gone:?}: at rest at once"), now == rest, now);
             s.advance(0.25);
-            assert_eq!(width(&unit), rest, "{gone:?}: it stays");
+            let now = width(&unit);
+            check(format!("{gone:?}: it stays"), now == rest, now);
             // `instanceWidth`.
             set(&placement, 663, rest + 80.0);
             s.advance(0.0);
             s.advance(0.5);
             s.advance(0.0);
             let eased = width(&unit);
-            assert!(
+            check(
+                format!("{gone:?}: a later size animates"),
                 rest < eased && eased < rest + 80.0,
-                "{gone:?}: a later size animates: {eased}"
+                eased,
             );
         }
+        assert!(wrong.is_empty(), "{wrong:#?}");
     }
 
     /// A component without its own CSS record, as a Rive-made one, keeps its

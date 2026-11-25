@@ -915,6 +915,13 @@ pub enum InPlaceCarry {
     TransferSemantics,
     /// `Transfer`, with the component's size written on each placement.
     TransferSized(CarrySize),
+    /// `TransferSized`'s page without painted cards or a script, its unit
+    /// flying as two copies both ways: step t1 through records 11 (A's copy)
+    /// and 12, step back through 12 (B's copy) and 11.
+    CopiesSized(CarrySize),
+    /// `CopiesSized(Fitted)`, with the steps pairing A's card with B's note, a
+    /// box of 60 by 40 holding no placement.
+    CopiesToBox,
 }
 
 /// How `InPlaceCarry::TransferSized`'s placements size the component.
@@ -935,6 +942,13 @@ pub enum CarrySize {
     /// The component has no CSS record, as a Rive-made one has none: 60 by
     /// 40 and 100 by 80 through the instance size.
     Native,
+    /// `Instance`, in cards padded 10 that fit it: 80 by 60 on A and 120 by
+    /// 100 on B.
+    Fitted,
+    /// `Instance`, with B's card alone padded, by 20.
+    PaddedOnB,
+    /// `Instance`, with a box of 10 by 10 after the placement in each card.
+    Beside,
 }
 
 impl CarrySize {
@@ -1001,7 +1015,8 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
     };
     let video = kind == InPlaceCarry::TransferVideo;
     let sized = match kind {
-        InPlaceCarry::TransferSized(sized) => Some(sized),
+        InPlaceCarry::TransferSized(sized) | InPlaceCarry::CopiesSized(sized) => Some(sized),
+        InPlaceCarry::CopiesToBox => Some(CarrySize::Fitted),
         _ => None,
     };
     let mut b = b"RIVE".to_vec();
@@ -1392,6 +1407,22 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
                     ("justifyContent", U(5)),
                 ]);
             }
+            let padding = match sized {
+                Some(CarrySize::Fitted) if name == "card" => 10.0,
+                // B's card.
+                Some(CarrySize::PaddedOnB) if name == "card" && key == 2 => 20.0,
+                _ => 0.0,
+            };
+            if padding != 0.0 {
+                record.extend([
+                    // Its size is its border box's.
+                    ("boxSizing", U(1)),
+                    ("paddingTop", F(padding)),
+                    ("paddingRight", F(padding)),
+                    ("paddingBottom", F(padding)),
+                    ("paddingLeft", F(padding)),
+                ]);
+            }
             obj(b, "LayoutCssStyle", &record);
             if let Some(color) = paint {
                 obj(b, "Fill", &[("parentId", U(id))]);
@@ -1422,7 +1453,12 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             | TransferSized(_)
     );
     let third = three.then_some(("R2", (160.0, 100.0), 3));
-    for (screen, card, key) in [("A", (120.0, 90.0), 1), ("B", (200.0, 140.0), 2)]
+    let copies = matches!(kind, CopiesSized(_) | CopiesToBox);
+    let (card_a, card_b) = match sized {
+        Some(CarrySize::Fitted) => ((80.0, 60.0), (120.0, 100.0)),
+        _ => ((120.0, 90.0), (200.0, 140.0)),
+    };
+    for (screen, card, key) in [("A", card_a, 1), ("B", card_b, 2)]
         .into_iter()
         .chain(third)
     {
@@ -1481,7 +1517,7 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             + if values { 2 + u64::from(reference) } else { 0 };
         let note_key = match (kind, screen) {
             (TransferMixed | TransferBox, "A") => 3,
-            (TransferMixed | TransferBox, _) => 4,
+            (TransferMixed | TransferBox, _) | (CopiesToBox, "B") => 4,
             _ => 0,
         };
         boxed(
@@ -1500,7 +1536,31 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
             );
         }
         // The first object after the note and the card's semantics.
-        let after = note + 5 + u64::from(kind == TransferSemantics);
+        let mut after = note + 5 + u64::from(kind == TransferSemantics);
+        if sized == Some(CarrySize::Beside) {
+            obj(
+                &mut b,
+                "LayoutComponent",
+                &[
+                    ("name", S("beside")),
+                    ("parentId", U(3)),
+                    ("styleId", U(after + 1)),
+                ],
+            );
+            obj(&mut b, "LayoutComponentStyle", &[("parentId", U(after))]);
+            obj(
+                &mut b,
+                "LayoutCssStyle",
+                &[
+                    ("parentId", U(after)),
+                    ("widthKind", U(1)),
+                    ("width", F(10.0)),
+                    ("heightKind", U(1)),
+                    ("height", F(10.0)),
+                ],
+            );
+            after += 3;
+        }
         if screen == "B" {
             let records: &[u64] = match kind {
                 TransferMixed => &[11, 12, 13, 14],
@@ -1703,7 +1763,8 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
     bind(&mut b, 800, &[2, 0]);
     // (outgoing, incoming, outgoing flight, incoming flight, transfers)
     let t1: &[(u64, u64, u64, u64, bool)] = match kind {
-        Duo | Unkeyed | TwoInCard => &[(1, 2, 11, 12, false)],
+        Duo | Unkeyed | TwoInCard | CopiesSized(_) => &[(1, 2, 11, 12, false)],
+        CopiesToBox => &[(1, 4, 11, 12, false)],
         Transfer
         | TransferElsewhere
         | TransferZoom
@@ -1724,6 +1785,12 @@ pub fn in_place_carry_fixture(kind: InPlaceCarry) -> Vec<u8> {
     };
     let back: &[(u64, u64, u64, u64, bool)] = if transfers && kind != TransferBox {
         &[(2, 1, 12, 12, true)]
+    } else if copies {
+        if kind == CopiesToBox {
+            &[(4, 1, 12, 11, false)]
+        } else {
+            &[(2, 1, 12, 11, false)]
+        }
     } else {
         &[]
     };

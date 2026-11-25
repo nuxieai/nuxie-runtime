@@ -15426,17 +15426,18 @@ mod in_place_carry {
 
     /// Resizes `screen`'s card mid-step to `width`.
     fn widen_card(screen: &RuntimeArtboardInstanceHandle, width: f32) {
-        let card = screen
-            .with_artboard(|b| b.find_handle::<source::layout_component::LayoutComponent>("card"))
-            .unwrap();
-        let record = card
+        set(&css_record(screen, "card"), 61022, width);
+    }
+    fn css_record(screen: &RuntimeArtboardInstanceHandle, name: &str) -> CoreHandle {
+        screen
+            .with_artboard(|b| b.find_handle::<source::layout_component::LayoutComponent>(name))
+            .unwrap()
             .with(|o| o.as_container_component().map(|c| c.children().to_vec()))
             .flatten()
             .unwrap()
             .into_iter()
             .find(|c| c.is_type_of(nuxie_runtime::css_layout::keys::LAYOUT_CSS_STYLE))
-            .unwrap();
-        set(&record, 61022, width);
+            .unwrap()
     }
 
     /// The arriving box grows by 40 mid-step. A root of a fixed size still
@@ -15482,6 +15483,254 @@ mod in_place_carry {
         s.end("B", "t1");
         root_off(&unit, [0.0, 0.0, 100.0, 80.0], "landed".into(), &mut wrong);
         assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
+    /// The outline of each draw of `BUTTON`, the component's button, on the
+    /// page, in order.
+    fn buttons(s: &Page) -> Vec<Vec<(f32, f32)>> {
+        s.factory.borrow_mut().clear();
+        let mut renderer = s.factory.borrow().make_renderer();
+        s.root.draw(&mut renderer);
+        let stream = s.factory.borrow().stream();
+        nuxie_render_stream::frame_draws(&nuxie_render_stream::stream_ops(&stream).unwrap(), &[])
+            .iter()
+            .filter(|draw| draw.rgb() == Some(BUTTON))
+            .map(|draw| draw.points.iter().map(|p| (p.x, p.y)).collect())
+            .collect()
+    }
+    fn one_place(s: &Page, at: &str, wrong: &mut Vec<String>) {
+        let drawn = buttons(s);
+        let same = matches!(drawn.as_slice(), [a, b] if a.len() == b.len() && a
+            .iter()
+            .zip(b)
+            .all(|(p, q)| (p.0 - q.0).abs() < 0.01 && (p.1 - q.1).abs() < 0.01));
+        if !same {
+            wrong.push(format!("{at}: the two copies draw at {drawn:?}"));
+        }
+    }
+
+    /// UNIV-7009: the two copies of a component that doesn't transfer are
+    /// laid out at one size on every frame, the blend of their two resting
+    /// sizes, and draw in one place, both ways. Each copy's box places its
+    /// root as at rest. Landing lays both out at rest the next frame, and a
+    /// cancel the copy that is left.
+    #[test]
+    fn in_place_the_two_copies_of_a_component_fly_at_one_size() {
+        use fixture::CarrySize::{Centered, Fill, Fitted, Fixed, Instance};
+        let mut wrong = Vec::new();
+        // The cards are 120 by 90 and 200 by 140.
+        for (kind, a, b) in [
+            (Instance, [0.0, 0.0, 60.0, 40.0], [0.0, 0.0, 100.0, 80.0]),
+            (Fixed, [0.0, 0.0, 60.0, 40.0], [0.0, 0.0, 100.0, 80.0]),
+            (
+                Centered,
+                [30.0, 25.0, 60.0, 40.0],
+                [50.0, 30.0, 100.0, 80.0],
+            ),
+            (Fill, [0.0, 0.0, 120.0, 90.0], [0.0, 0.0, 200.0, 140.0]),
+            (Fitted, [10.0, 10.0, 60.0, 40.0], [10.0, 10.0, 100.0, 80.0]),
+        ] {
+            let mut s = Page::new(InPlaceCarry::CopiesSized(kind));
+            let (ua, ub) = (child(&s.pa).unwrap(), child(&s.pb).unwrap());
+            root_off(&ua, a, format!("{kind:?} rests on A"), &mut wrong);
+            root_off(&ub, b, format!("{kind:?} rests on B"), &mut wrong);
+            for (to, step, from, rest) in [("B", "t1", a, b), ("A", "back", b, a)] {
+                let holds = nuxie_runtime::in_place_holds_begun();
+                s.begin(to, step);
+                assert_eq!(
+                    nuxie_runtime::in_place_holds_begun(),
+                    holds + 2,
+                    "only the two boxes are held"
+                );
+                for p in [0.0, 0.25, 0.5, 0.75, 1.0, 0.5] {
+                    s.fly(p);
+                    let at = format!("{kind:?} to {to} at {p}");
+                    let want = std::array::from_fn(|n| from[n] + (rest[n] - from[n]) * p);
+                    root_off(&ua, want, format!("{at}, A's"), &mut wrong);
+                    root_off(&ub, want, format!("{at}, B's"), &mut wrong);
+                    one_place(&s, &at, &mut wrong);
+                }
+                s.end(to, step);
+                root_off(&ua, a, format!("{kind:?} landed on {to}, A's"), &mut wrong);
+                root_off(&ub, b, format!("{kind:?} landed on {to}, B's"), &mut wrong);
+            }
+            // The Screen it flies to goes, then the one it left.
+            for (gone, want) in [(1, a), (0, b)] {
+                let mut s = Page::new(InPlaceCarry::CopiesSized(kind));
+                let left = child(if gone == 1 { &s.pa } else { &s.pb }).unwrap();
+                s.begin("B", "t1");
+                s.fly(0.5);
+                remove_screen(&s, gone);
+                s.advance(0.0);
+                root_off(
+                    &left,
+                    want,
+                    format!("{kind:?}, Screen {gone} gone"),
+                    &mut wrong,
+                );
+            }
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
+    /// Two copies' roots with their own layout animation don't ease through
+    /// the flight, are at rest in the frame it ends, and animate a size
+    /// written after it.
+    #[test]
+    fn in_place_two_copies_roots_animate_their_own_sizes_again_after_their_flight() {
+        let mut s = Page::new(InPlaceCarry::CopiesSized(fixture::CarrySize::Animated));
+        let units = [child(&s.pa).unwrap(), child(&s.pb).unwrap()];
+        let widths = || units.clone().map(|unit| root_box(&unit)[2]);
+        let mut wrong = Vec::new();
+        s.begin("B", "t1");
+        for p in [0.0, 0.5, 1.0] {
+            s.fly(p);
+            let want = 60.0 + 40.0 * p;
+            if widths() != [want, want] {
+                wrong.push(format!("at {p}: {:?}, not {want}", widths()));
+            }
+        }
+        s.end("B", "t1");
+        if widths() != [60.0, 100.0] {
+            wrong.push(format!("landed: {:?}", widths()));
+        }
+        s.advance(0.25);
+        if widths() != [60.0, 100.0] {
+            wrong.push(format!("stays: {:?}", widths()));
+        }
+        // `instanceWidth`.
+        set(&s.pa, 663, 140.0);
+        set(&s.pb, 663, 180.0);
+        s.advance(0.0);
+        s.advance(0.5);
+        s.advance(0.0);
+        for (now, (from, to)) in widths().into_iter().zip([(60.0, 140.0), (100.0, 180.0)]) {
+            if !(from < now && now < to) {
+                wrong.push(format!("a later size animates from {from} to {to}: {now}"));
+            }
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
+    /// A component paired with a plain box of 60 by 40: there is no other
+    /// root to blend with, so it keeps its inset, 10 on each side, and
+    /// follows its box.
+    #[test]
+    fn in_place_a_component_flying_with_a_plain_box_follows_its_box() {
+        let mut s = Page::new(InPlaceCarry::CopiesToBox);
+        let unit = child(&s.pa).unwrap();
+        let rest = [10.0, 10.0, 60.0, 40.0];
+        let mut wrong = Vec::new();
+        for (to, step) in [("B", "t1"), ("A", "back")] {
+            s.begin(to, step);
+            for p in [0.0, 0.25, 0.5, 0.75, 1.0] {
+                s.fly(p);
+                // The box goes from 80 by 60 to 60 by 40.
+                let away = if to == "B" { p } else { 1.0 - p };
+                let want = [10.0, 10.0, 60.0 - 20.0 * away, 40.0 - 20.0 * away];
+                root_off(&unit, want, format!("to {to} at {p}"), &mut wrong);
+            }
+            s.end(to, step);
+            root_off(&unit, rest, format!("landed on {to}"), &mut wrong);
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
+    /// The limit: the plain box, 10 by 10, is smaller than the component's
+    /// inset. The root keeps its inset until it has no size left, which is
+    /// before the box lands, and never goes below zero.
+    #[test]
+    fn in_place_a_component_flying_with_a_plain_box_inside_its_inset_shrinks_to_nothing() {
+        let mut s = Page::new(InPlaceCarry::CopiesToBox);
+        let unit = child(&s.pa).unwrap();
+        let note = css_record(&s.b, "note");
+        set(&note, 61022, 10.0);
+        set(&note, 61025, 10.0);
+        s.advance(0.0);
+        let rest = [10.0, 10.0, 60.0, 40.0];
+        let mut wrong = Vec::new();
+        for (to, step) in [("B", "t1"), ("A", "back")] {
+            s.begin(to, step);
+            for p in [0.0, 0.5, 0.75, 0.9, 1.0] {
+                s.fly(p);
+                // The box goes from 80 by 60 to 10 by 10.
+                let away = if to == "B" { p } else { 1.0 - p };
+                let want = [
+                    10.0,
+                    10.0,
+                    (60.0 - 70.0 * away).max(0.0),
+                    (40.0 - 50.0 * away).max(0.0),
+                ];
+                root_off(&unit, want, format!("to {to} at {p}"), &mut wrong);
+            }
+            s.end(to, step);
+            root_off(&unit, rest, format!("landed on {to}"), &mut wrong);
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
+    /// A component keeps its own size where nothing lays its root out with
+    /// its box: one without its own CSS record, as a Rive-made one, and one
+    /// beside something else in its box, which is not the box of a component.
+    #[test]
+    fn in_place_two_copies_leave_a_native_root_and_one_beside_another_box_alone() {
+        use fixture::CarrySize::{Beside, Native};
+        for kind in [Native, Beside] {
+            let mut s = Page::new(InPlaceCarry::CopiesSized(kind));
+            let (ua, ub) = (child(&s.pa).unwrap(), child(&s.pb).unwrap());
+            let sizes = || [root_box(&ua), root_box(&ub)].map(|r| [r[2], r[3]]);
+            let rest = [[60.0, 40.0], [100.0, 80.0]];
+            for (to, step) in [("B", "t1"), ("A", "back")] {
+                s.begin(to, step);
+                for p in [0.25, 0.5, 0.75] {
+                    s.fly(p);
+                    assert_eq!(sizes(), rest, "{kind:?} to {to} at {p}");
+                }
+                s.end(to, step);
+                assert_eq!(sizes(), rest, "{kind:?} lands on {to}");
+            }
+        }
+    }
+
+    /// The limit (UNIV-7018): B's card is padded by 20 and A's is not. The
+    /// two copies have one size, but each root is placed by its own Screen's
+    /// box, so they sit 20 apart all the way.
+    #[test]
+    fn in_place_two_copies_padded_differently_have_one_size_and_two_places() {
+        let mut s = Page::new(InPlaceCarry::CopiesSized(fixture::CarrySize::PaddedOnB));
+        let (ua, ub) = (child(&s.pa).unwrap(), child(&s.pb).unwrap());
+        let mut wrong = Vec::new();
+        s.begin("B", "t1");
+        for p in [0.0, 0.25, 0.5, 0.75, 1.0] {
+            s.fly(p);
+            let size = [60.0 + 40.0 * p, 40.0 + 40.0 * p];
+            for (unit, at) in [(&ua, 0.0), (&ub, 20.0)] {
+                root_off(
+                    unit,
+                    [at, at, size[0], size[1]],
+                    format!("{at} at {p}"),
+                    &mut wrong,
+                );
+            }
+        }
+        s.end("B", "t1");
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
+    /// The limit (UNIV-6991): A's card grows by 40 mid-step. B's copy reads
+    /// what A's root added to its box at take-off, so the two copies' sizes
+    /// differ by its share of those 40 until they land.
+    #[test]
+    fn in_place_two_copies_differ_when_one_box_is_resized_mid_step() {
+        let mut s = Page::new(InPlaceCarry::CopiesSized(fixture::CarrySize::Instance));
+        let (ua, ub) = (child(&s.pa).unwrap(), child(&s.pb).unwrap());
+        s.begin("B", "t1");
+        s.fly(0.5);
+        widen_card(&s.a, 160.0);
+        s.fly(0.5);
+        assert_eq!([root_box(&ua)[2], root_box(&ub)[2]], [80.0, 100.0]);
+        s.end("B", "t1");
+        assert_eq!([root_box(&ua)[2], root_box(&ub)[2]], [60.0, 100.0]);
     }
 
     /// Pick (a) of B1-read: while the instance flies, the box it left is

@@ -466,8 +466,8 @@ pub enum FlightWindow {
 /// arriving copy's (key 12) from 0 to 1, both progressing from 0 to 1 and
 /// with a path x from 0 to 12, keyed where `window` says. The entrance also
 /// keys B's own "header" x from 200 to 300. Back names B's second animation,
-/// "back flight": its leaving copy's flight (key 13) fades from 1 to 0, and
-/// its arriving copy's (key 14), the held one, is keyed at 1 throughout;
+/// "back flight": its leaving copy's flight (key 14) fades from 1 to 0, and
+/// its arriving copy's (key 13), the held one, is keyed at 1 throughout;
 /// both progress from 0 to 1.
 pub fn flight_animation_fixture(window: FlightWindow) -> Vec<u8> {
     build(
@@ -2257,9 +2257,9 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
     // One instance flies unless the fixture asks for two versions.
     let transfers = options.mark.unwrap_or(!options.two_versions);
     let (t1_arriving_flight, back_arriving_flight) = if options.one_flight_key {
-        (11, 13)
+        (11, 14)
     } else {
-        (12, 14)
+        (12, 13)
     };
     // Screen models' `entered` number, after `offset`.
     let entered = 1;
@@ -2630,7 +2630,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             ),
             (
                 "outgoingFlightKey",
-                U(if options.two_versions { 13 } else { 2 }),
+                U(if options.two_versions { 14 } else { 2 }),
             ),
         ];
         if transfers {
@@ -2830,14 +2830,16 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             + u64::from(options.reference_prop)
             + u64::from(options.row_trigger);
         let mut next = host_id + slot_width;
-        // Step t1's flight records on this Screen: its arriving copy's (key
-        // 12), then its leaving copy's (key 11).
+        // As the compiler writes them, in key order: each step's lower copy,
+        // then its upper one, Screen B's own both ways. Step t1's flight
+        // records: its leaving copy's (key 11), then its arriving copy's (key
+        // 12).
         let mut flight_records = Vec::new();
-        // Step back's: its arriving copy's (key 14), then its leaving
-        // copy's (key 13).
+        // Step back's: its arriving copy's (key 13), then its leaving
+        // copy's (key 14).
         let mut back_records = Vec::new();
         if options.two_versions {
-            for (j, version) in [2, 1, 1, 2].into_iter().enumerate() {
+            for (j, version) in [1, 2, 1, 2].into_iter().enumerate() {
                 obj(
                     &mut b,
                     "LiveFlight",
@@ -2846,10 +2848,10 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                         (
                             "key",
                             U(i as u64 * 10
-                                + if options.invalid_plan == 3 && j == 1 {
+                                + if options.invalid_plan == 3 && j == 0 {
                                     2
                                 } else {
-                                    [2, 1, 4, 3][j]
+                                    [1, 2, 3, 4][j]
                                 }),
                         ),
                         (
@@ -2922,10 +2924,10 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
         if i == 1 {
             timeline(&mut b, "entrance", 3, 13, 200.0, 300.0);
             if options.keyed && options.two_versions {
-                // Step t1's crossfade: the arriving copy's flight (key 12)
-                // fades in from 0 to 1 and the leaving copy's (key 11) out
-                // from 1 to 0, both progressing from 0 to 1.
-                for (record, fade) in flight_records.iter().zip([(0.0, 1.0), (1.0, 0.0)]) {
+                // Step t1's crossfade: the leaving copy's flight (key 11)
+                // fades out from 1 to 0 and the arriving copy's (key 12) in
+                // from 0 to 1, both progressing from 0 to 1.
+                for (record, fade) in flight_records.iter().zip([(1.0, 0.0), (0.0, 1.0)]) {
                     obj(&mut b, "KeyedObject", &[("objectId", U(*record))]);
                     match options.flight_animation {
                         // With a path x from 0 to 12, all in the window.

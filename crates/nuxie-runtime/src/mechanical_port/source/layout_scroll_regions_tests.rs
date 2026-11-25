@@ -232,6 +232,117 @@ fn nested_translated_scroller_is_listed_in_root_space() {
     );
 }
 
+/// The nested artboard's horizontal scroller (200 by 40 over a 400 point
+/// list) inside a page padded by 150, its host turned by `rotation` and
+/// scaled by `scale_x`.
+fn hosted_scroller(rotation: f32, scale_x: f32) -> Scene {
+    use crate::source::generated::transform_component_base::TransformComponentBase;
+    use crate::source::nested_artboard::NestedArtboard;
+    let f = scene(
+        (500.0, 500.0),
+        css(
+            "Page",
+            [padding(150.0).as_slice(), &width(500.0), &height(500.0)].concat(),
+            vec![B {
+                nested_scroller: true,
+                ..css("Holder", [width(200.0), height(40.0)].concat(), vec![])
+            }],
+        ),
+    );
+    let host = f
+        .artboard
+        .with_artboard(|artboard| artboard.find_handle::<NestedArtboard>("Nested"))
+        .expect("the nested host");
+    for (key, value) in [
+        (TransformComponentBase::ROTATION_PROPERTY_KEY, rotation),
+        (TransformComponentBase::SCALE_X_PROPERTY_KEY, scale_x),
+    ] {
+        assert!(CoreRegistry::set_double_handle(&host, key.into(), value));
+    }
+    f.machine();
+    f.advance(1);
+    f
+}
+
+/// A press at the region's center moved by `(dx, dy)` in four steps, held.
+fn drag_region(f: &Scene, dx: f32, dy: f32) {
+    let [left, top, right, bottom] = region_box(&regions(f).regions()[0]);
+    let (x, y) = ((left + right) / 2.0, (top + bottom) / 2.0);
+    let moves: Vec<_> = (1..=4)
+        .map(|step| {
+            let step = step as f32 / 4.0;
+            (x + dx * step, y + dy * step)
+        })
+        .collect();
+    press_and_hold(&f.machine(), (x, y), &moves);
+    f.advance(1);
+}
+
+/// A host that turns or mirrors a scroller: its bits name the way its
+/// content moves on screen, and a drag that way moves it. Unturned, the
+/// horizontal scroller at its start can show content to its right; a
+/// quarter turn makes that its bottom, and mirroring it on x its left.
+#[test]
+fn turned_and_mirrored_hosts_name_screen_directions() {
+    use std::f32::consts::FRAC_PI_2;
+    for (name, rotation, scale_x, size, at_start, drag) in [
+        (
+            "plain",
+            0.0,
+            1.0,
+            (200.0, 40.0),
+            can_scroll::RIGHT,
+            (-40.0, 0.0),
+        ),
+        (
+            "quarter turn",
+            FRAC_PI_2,
+            1.0,
+            (40.0, 200.0),
+            can_scroll::BOTTOM,
+            (0.0, -40.0),
+        ),
+        (
+            "mirrored",
+            0.0,
+            -1.0,
+            (200.0, 40.0),
+            can_scroll::LEFT,
+            (40.0, 0.0),
+        ),
+    ] {
+        let f = hosted_scroller(rotation, scale_x);
+        let found = regions(&f);
+        assert_eq!(found.regions().len(), 1, "{name}");
+        let [left, top, right, bottom] = region_box(&found.regions()[0]);
+        assert!(
+            ((right - left) - size.0).abs() < 0.01 && ((bottom - top) - size.1).abs() < 0.01,
+            "{name}: {:?}",
+            [left, top, right, bottom]
+        );
+        assert_eq!(found.regions()[0].can_scroll, at_start, "{name}");
+
+        let f = hosted_scroller(rotation, scale_x);
+        drag_region(&f, drag.0, drag.1);
+        assert!(
+            f.nested_scroll_offset().0 < 0.0,
+            "{name}: a drag the way the bit names moves the content: {:?}",
+            f.nested_scroll_offset()
+        );
+        let opposite = match at_start {
+            can_scroll::RIGHT => can_scroll::LEFT,
+            can_scroll::LEFT => can_scroll::RIGHT,
+            can_scroll::BOTTOM => can_scroll::TOP,
+            _ => can_scroll::BOTTOM,
+        };
+        assert_eq!(
+            regions(&f).regions()[0].can_scroll,
+            at_start | opposite,
+            "{name}"
+        );
+    }
+}
+
 /// A translated scroll view on its own: one region, its viewport's box.
 #[test]
 fn translated_scroll_view_is_listed() {

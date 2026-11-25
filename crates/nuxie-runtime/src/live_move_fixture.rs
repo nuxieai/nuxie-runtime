@@ -923,11 +923,20 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
             ("defaultStateMachineId", U(0)),
         ],
     ); // 0
+    // A published page holds its list in a plain node.
+    let list_parent = u64::from(slot);
+    if slot {
+        obj(
+            &mut b,
+            "Node",
+            &[("name", S("content")), ("parentId", U(0))],
+        ); // 1
+    }
     obj(
         &mut b,
         "ArtboardComponentList",
-        &[("name", S("screens")), ("parentId", U(0))],
-    ); // 1
+        &[("name", S("screens")), ("parentId", U(list_parent))],
+    ); // 1, or 2 in a node
     bind(&mut b, 800, &[2, 0]);
     if slot {
         obj(
@@ -940,18 +949,18 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
                 ("toArtboard", S("B")),
                 ("flightAnimationId", U(0)),
             ],
-        ); // 2
+        ); // 3
         obj(
             &mut b,
             "LiveStepUnit",
             &[
-                ("parentId", U(2)),
+                ("parentId", U(3)),
                 ("outgoingUnitKey", U(5)),
                 ("incomingUnitKey", U(6)),
                 ("outgoingFlightKey", U(11)),
                 ("incomingFlightKey", U(12)),
             ],
-        ); // 3
+        ); // 4
     }
     if keyed {
         obj(

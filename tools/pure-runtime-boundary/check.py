@@ -318,6 +318,19 @@ PORTABLE_ABI_FACADE_FILE_MODULE_SYMBOLS = {
             "StrokeParams",
         },
     },
+    # Scroll region tests mount the keyed rows test fixture through the C
+    # driver.
+    "crates/nux-capi/src/scroll_region_tests.rs": {
+        "keyed_rows_fixture": {
+            "BUTTON_LABEL",
+            "Cards",
+            "LINE_LABEL",
+            "RUN_TEXT",
+            "card",
+            "keyed_plans_fixture",
+            "page",
+        },
+    },
     "crates/nux-capi/src/asset_hooks.rs": {
         # The deferred host's image-mesh factory hook returns this handle.
         "render_api": {
@@ -403,11 +416,20 @@ PORTABLE_ABI_FACADE_FILE_PATHS = {
         "runtime::semantic::semantic_state::SemanticState",
         "runtime::semantic::semantic_provider::SemanticGeometryError",
         "runtime::semantic::semantic_provider::validate_semantic_geometry",
+        # The capture's scroll regions, collected by the runtime.
+        "runtime::semantic::semantic_scroll_regions::ScrollRegion",
+        "runtime::semantic::semantic_scroll_regions::ScrollRegions",
         "runtime::text::text_value_run::TextValueRun",
         "runtime::generated::core_registry::CoreRegistry",
         "runtime::generated::component_base::ComponentBase",
         "runtime::generated::layout_component_base::LayoutComponentBase",
         "runtime::math::path_types::PathDirection",
+    },
+    # Scroll region tests: each row's list and viewport box, the oracle for
+    # the regions read through the C edge.
+    "crates/nux-capi/src/scroll_region_tests.rs": {
+        "runtime::artboard_component_list::ArtboardComponentList",
+        "runtime::layout_component::LayoutComponent",
     },
     "crates/nux-capi/src/text_geometry.rs": {
         "runtime::core::CoreHandle",

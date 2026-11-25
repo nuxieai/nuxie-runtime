@@ -6,12 +6,13 @@ and the progress bar, both marked transferable, and flies the Continue
 button's two copies. `live_moves_carried_binds.rs` plays it through the C API
 in the iOS SDK's order.
 
-SHA-256: `f2b3e65202d1e3c47ae05fa99f77cbbfedf9862d5e69301ca322d55e194acc23`
-(95426 bytes).
+SHA-256: `bd638be8ae67fe001705edc8588126d86323dc038d4224413e47913a3b762361`
+(75244 bytes).
 
-It was published at nuxie-dev `a4f1df8cfdafab515ad45ba216fbf2f3050d24e3`,
-whose compiler writes each step unit's `transfers`; a file published before
-it says nothing about transfers and the runtime refuses it. The source folder
+It was published at nuxie-dev `4859f66572da4ad8954549d65b9f195d0730ca0e` with
+this repository at `42f21c6fe437a4a8f863f247928ebf478f97a0c1`. That compiler
+flies elements in place: it writes each step unit's `transfers`, flight records
+and no slot records. The source folder
 is the Magic Move handoff's
 `references/duolingo-duo/ours-levi-read/take-1/variants/twobindrel/experience`
 with `"transferable": true` in `components/duo-mascot/frame.json` and

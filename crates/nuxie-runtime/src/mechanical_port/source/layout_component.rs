@@ -4836,8 +4836,15 @@ impl LayoutComponent {
                 |context| &context.owner,
                 Self::measure_tree_node,
             ) {
+                if let Some(context) = tree.taffy.get_node_context(id) {
+                    context.owner.with_mut(|object| {
+                        let hold = Self::layout_data_of(object)?.flight_hold.as_mut()?;
+                        hold.flown(&flight);
+                        Some(())
+                    });
+                }
                 touched.push(id);
-                flights.push((id, flight));
+                flights.push((id, flight.output));
             }
         }
         flights
@@ -5196,7 +5203,7 @@ impl LayoutComponent {
                     measure,
                 )
             {
-                flights.push((*id, flight));
+                flights.push((*id, flight.output));
             }
         }
         for (node_owner, id) in nodes {

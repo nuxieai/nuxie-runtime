@@ -537,6 +537,9 @@ fn css_hosted_root_of_one_size_is_not_laid_out_again_as_it_flies() {
                     &host, &source,
                 )
                 .expect("another root in its place");
+                // As each caller of it does.
+                LayoutComponent::sync_layout_children_occurrence(&element);
+                LayoutComponent::mark_layout_style_dirty_occurrence(&element);
             }
         }
         scene.advance();

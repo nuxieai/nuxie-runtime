@@ -27,7 +27,7 @@ use crate::{
     source::{
         artboard::FlightClip,
         component_dirt::ComponentDirt,
-        layout_component::FlightShadow,
+        layout_component::{FlightShadow, LayoutComponent},
         math::{mat2d::Mat2D, vec2d::Vec2D},
     },
 };
@@ -539,6 +539,66 @@ pub struct InPlaceFlight {
     last: Cell<Mat2D>,
     /// A unit that transfers: the one instance it carries.
     pub(super) carried: Option<Carried>,
+    /// One of two copies of a component: the root its held box lays out with
+    /// it.
+    copied: Option<BoxedRoot>,
+}
+
+/// The root of the component a box is the box of, and what its border box
+/// adds to that box's at rest.
+#[derive(Clone)]
+struct BoxedRoot {
+    root: CoreHandle,
+    over_box: Vec2D,
+}
+
+impl BoxedRoot {
+    /// The root of the component `flying` is the box of, as the compiler
+    /// writes one: the box lays out one component placement and nothing
+    /// else.
+    fn read(flying: &Flying) -> Option<Self> {
+        let Shape::Css = flying.shape else {
+            return None;
+        };
+        let placement = crate::hosted_scene::boxed_placement(&flying.element)?;
+        match LayoutComponent::layout_providers_occurrence(&flying.element).as_slice() {
+            [(only, _)] if *only == placement => {}
+            _ => return None,
+        }
+        let root = super::transport::child(&placement).ok()??.core_handle();
+        let over_box = over_box(&root, flying);
+        Some(Self { root, over_box })
+    }
+
+    /// The root one of two copies flies, and the other end's `over_box`: its
+    /// own when the other end is no component's box, so it keeps its inset
+    /// and follows its box.
+    fn copied(flying: &Flying, other: &Flying) -> Option<Self> {
+        let own = Self::read(flying)?;
+        let over_box = Self::read(other).map_or(own.over_box, |other| other.over_box);
+        Some(Self { over_box, ..own })
+    }
+}
+
+/// What a component root's border box adds to the box it is in, at rest.
+fn over_box(root: &CoreHandle, flying: &Flying) -> Vec2D {
+    let size = flight_hold::resting_box(root).map_or_else(Vec2D::default, |rest| {
+        Vec2D::new(rest.width(), rest.height())
+    });
+    size - flying.resting_size()
+}
+
+/// Has the held box `element` lay `root` out with it, `over_box` at the other
+/// end. A root without its own CSS record, as a Rive-made component's, is
+/// left to its own layout.
+fn fly_root_in(element: &CoreHandle, root: &CoreHandle, over_box: Vec2D) {
+    let css = root
+        .with(|o| o.as_layout_component().map(|l| l.is_css_mode()))
+        .flatten()
+        .unwrap_or(false);
+    if css {
+        flight_hold::carry(element, root, (over_box.x, over_box.y));
+    }
 }
 
 /// The one instance a transferring unit flies in place
@@ -576,19 +636,10 @@ pub(super) struct Carried {
 }
 
 impl Carried {
-    /// Has its held box `element` lay its root out with it. A root without
-    /// its own CSS record, as a Rive-made component's, is left to its own
-    /// layout.
+    /// Has its held box `element` lay its root out with it.
     fn fly_in(&self, element: &CoreHandle) {
-        let Some(root) = self.instance.upgrade().map(|unit| unit.core_handle()) else {
-            return;
-        };
-        let css = root
-            .with(|o| o.as_layout_component().map(|l| l.is_css_mode()))
-            .flatten()
-            .unwrap_or(false);
-        if css {
-            flight_hold::carry(element, &root, (self.over_box.x, self.over_box.y));
+        if let Some(unit) = self.instance.upgrade() {
+            fly_root_in(element, &unit.core_handle(), self.over_box);
         }
     }
 
@@ -653,11 +704,7 @@ impl Carried {
             .ok_or_else(|| anyhow::anyhow!("leaving copy has no instance"))?;
         super::transport::validate_move(&from_placement, &to_placement)?;
         let written = super::transport::written_values(&from_placement, &to_placement)?;
-        let root = flight_hold::resting_box(&instance.core_handle())
-            .map_or_else(Vec2D::default, |rest| {
-                Vec2D::new(rest.width(), rest.height())
-            });
-        let over_box = root - Flying::of(from)?.resting_size();
+        let over_box = over_box(&instance.core_handle(), &Flying::of(from)?);
         Ok(Self {
             from: from_placement,
             to: to_placement,
@@ -705,6 +752,10 @@ impl InPlaceFlight {
                 "a held flight needs an element laid out by a parent"
             );
         }
+        // A zoomed version's inside stays as it rests.
+        let copied = (size_mode == SizeMode::Layout && !zoomed)
+            .then(|| BoxedRoot::copied(&flying, if element == to { &from_box } else { &to_box }))
+            .flatten();
         Ok(Self {
             lift: Lift::new(row.clone(), element.clone(), anchor),
             record,
@@ -726,6 +777,7 @@ impl InPlaceFlight {
             to_end: Cell::new(None),
             last: Cell::new(Mat2D::identity()),
             carried: None,
+            copied,
         })
     }
 
@@ -745,6 +797,8 @@ impl InPlaceFlight {
             super::follow::PlacedAtRest::record(&anchor, &placed_as, carried.instance.clone());
         self.lift.0.borrow_mut().placed_as = Some(placed_as);
         self.carried = Some(carried);
+        // It flies the instance it carries, not the one it found here.
+        self.copied = None;
         self
     }
 
@@ -798,7 +852,13 @@ impl InPlaceFlight {
         if let Some(node) = &self.held {
             let size = frame.blended_size();
             flight_hold::set_size(node, (size.x.max(0.0), size.y.max(0.0)));
-            flight_hold::set_progress(node, frame.progress);
+            // A carried root's own end is where its copy rests.
+            let to_own = if self.element == self.to {
+                frame.progress
+            } else {
+                1.0 - frame.progress
+            };
+            flight_hold::set_progress(node, to_own);
         }
         self.flying.set_paint(frame.corners, frame.shadow);
     }
@@ -921,6 +981,9 @@ impl InPlaceFlight {
             // A zoomed version's inside stays as it rests.
             if let Some(carried) = self.carried.as_ref().filter(|_| !self.zoomed) {
                 carried.fly_in(node);
+            }
+            if let Some(copied) = &self.copied {
+                fly_root_in(node, &copied.root, copied.over_box);
             }
         }
         set_opacity_root(&self.element, opacity_root);

@@ -13,7 +13,6 @@ use std::collections::{HashMap, HashSet};
 
 use crate::mechanical_port::source::{
     artboard::Artboard,
-    constraints::scrolling::scroll_constraint::ScrollConstraint,
     core::CoreHandle,
     math::vec2d::Vec2D,
     semantic::{semantic_provider::root_transform_aabb, semantic_snapshot::Bounds},
@@ -22,8 +21,9 @@ use crate::mechanical_port::source::{
 /// At most this many regions in one capture; more fail it as a whole.
 pub const MAX_SCROLL_REGIONS: usize = 256;
 
-/// `ScrollRegion::can_scroll` bits. Directions are on screen, also in a
-/// right-to-left viewport, whose start is its right edge.
+/// `ScrollRegion::can_scroll` bits. Directions are on screen: in a
+/// right-to-left viewport, whose start is its right edge, and in a host
+/// that turns or mirrors the scroller too.
 pub mod can_scroll {
     /// The region can move toward its top, showing content above.
     pub const TOP: u32 = 1 << 0;
@@ -42,7 +42,8 @@ pub struct ScrollRegion {
     /// in. Not clipped by the regions around it; `parent` names them.
     pub bounds: Bounds,
     /// `can_scroll` bits, each the constraint's clamp test for a one point
-    /// move that way, so it agrees with what a drag would do.
+    /// move, so it agrees with what a drag would do, named for the way the
+    /// move points once mapped to root space.
     pub can_scroll: u32,
     /// The region this one is inside, an index before this one's, or -1.
     pub parent: i32,
@@ -165,10 +166,19 @@ fn parent_of(component: &CoreHandle) -> Option<CoreHandle> {
         .flatten()
 }
 
+/// The content moves a scroller is asked about: one point each way in its
+/// viewport's own space, down, up, right and left.
+const LOCAL_MOVES: [Vec2D; 4] = [
+    Vec2D { x: 0.0, y: 1.0 },
+    Vec2D { x: 0.0, y: -1.0 },
+    Vec2D { x: 1.0, y: 0.0 },
+    Vec2D { x: -1.0, y: 0.0 },
+];
+
 /// A listed constraint's viewport, its box in root space and its
 /// `can_scroll` bits.
 fn measure(constraint: &CoreHandle) -> Option<(CoreHandle, Bounds, u32)> {
-    let (viewport, local, world, artboard, bits) = constraint
+    let (viewport, local, world, artboard, moves) = constraint
         .with(|object| {
             let scroll = object.as_scroll_constraint()?;
             if !scroll.interactive() || !scroll.has_layout_parent() {
@@ -192,31 +202,84 @@ fn measure(constraint: &CoreHandle) -> Option<(CoreHandle, Bounds, u32)> {
             // A CSS viewport scrolls inside its padding box; a translated
             // one has no border, so its box is its padding box.
             let local = scroll.css_scrollport().unwrap_or(box_bounds);
-            Some((viewport, local, world, artboard, can_scroll_bits(scroll)))
+            let moves = LOCAL_MOVES.map(|movement| scroll.can_move_content(movement));
+            Some((viewport, local, world, artboard, moves))
         })
         .flatten()?;
-    let world = world.map_bounding_box(local);
+    let world_box = world.map_bounding_box(local);
     let bounds = Bounds {
-        min_x: world.min_x,
-        min_y: world.min_y,
-        max_x: world.max_x,
-        max_y: world.max_y,
+        min_x: world_box.min_x,
+        min_y: world_box.min_y,
+        max_x: world_box.max_x,
+        max_y: world_box.max_y,
     };
     if bounds.is_empty_or_nan() {
         return None;
     }
-    let bounds = artboard.map_or(bounds, |artboard| root_transform_aabb(&artboard, bounds));
+    let bounds = artboard
+        .as_ref()
+        .map_or(bounds, |artboard| root_transform_aabb(artboard, bounds));
+    // Each move the scroller allows, carried to the screen through the same
+    // transforms as its box, so a scroller in a turned or mirrored host
+    // names the way its content moves on screen.
+    let to_root = |point: Vec2D| {
+        artboard
+            .as_ref()
+            .and_then(|artboard| {
+                artboard.with_downcast_mut::<Artboard, _>(|artboard| artboard.root_transform(point))
+            })
+            .unwrap_or(point)
+    };
+    let start = to_root(world * Vec2D::new(0.0, 0.0));
+    let bits = LOCAL_MOVES
+        .into_iter()
+        .zip(moves)
+        .filter(|&(_, can)| can)
+        .fold(0, |bits, (movement, _)| {
+            bits | screen_bit(to_root(world * movement) - start)
+        });
     Some((viewport, bounds, bits))
 }
 
-fn can_scroll_bits(scroll: &ScrollConstraint) -> u32 {
-    [
-        (Vec2D::new(0.0, 1.0), can_scroll::TOP),
-        (Vec2D::new(0.0, -1.0), can_scroll::BOTTOM),
-        (Vec2D::new(1.0, 0.0), can_scroll::LEFT),
-        (Vec2D::new(-1.0, 0.0), can_scroll::RIGHT),
-    ]
-    .into_iter()
-    .filter(|&(movement, _)| scroll.can_move_content(movement))
-    .fold(0, |bits, (_, bit)| bits | bit)
+/// The bit for content moving by `movement` on screen. Content moving down
+/// shows what is above it, so a move down is TOP, up is BOTTOM, right is
+/// LEFT and left is RIGHT. A move along a diagonal counts for the axis it
+/// mostly points along, and an exact diagonal counts as vertical. A move
+/// that vanishes or is not finite names no way.
+fn screen_bit(movement: Vec2D) -> u32 {
+    let (x, y) = (movement.x, movement.y);
+    if !(x.is_finite() && y.is_finite()) || (x == 0.0 && y == 0.0) {
+        0
+    } else if y.abs() >= x.abs() {
+        if y > 0.0 {
+            can_scroll::TOP
+        } else {
+            can_scroll::BOTTOM
+        }
+    } else if x > 0.0 {
+        can_scroll::LEFT
+    } else {
+        can_scroll::RIGHT
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Each axis, a diagonal leaning either way, an exact diagonal, and
+    /// moves that name nothing.
+    #[test]
+    fn a_move_names_the_axis_it_mostly_points_along() {
+        let bit = |x, y| screen_bit(Vec2D::new(x, y));
+        assert_eq!(bit(0.0, 1.0), can_scroll::TOP);
+        assert_eq!(bit(0.0, -1.0), can_scroll::BOTTOM);
+        assert_eq!(bit(1.0, 0.0), can_scroll::LEFT);
+        assert_eq!(bit(-1.0, 0.0), can_scroll::RIGHT);
+        assert_eq!(bit(0.9, -0.3), can_scroll::LEFT);
+        assert_eq!(bit(-0.3, -0.9), can_scroll::BOTTOM);
+        assert_eq!(bit(-0.7, 0.7), can_scroll::TOP);
+        assert_eq!(bit(0.0, 0.0), 0);
+        assert_eq!(bit(f32::NAN, 1.0), 0);
+    }
 }

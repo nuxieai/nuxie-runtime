@@ -456,6 +456,50 @@ fn css_hosted_root_flies_with_the_held_box_that_carries_it() {
     }
 }
 
+/// A root that adds the same to its box's size at both ends asks for no
+/// layout as its flight progresses; once its arriving end is resized, it
+/// flies at the progress it has reached.
+#[test]
+fn css_hosted_root_of_one_size_is_not_laid_out_again_as_it_flies() {
+    use crate::css_layout::flight_hold::{begin, carry, passes, set_progress};
+    let scene = carrying_box_scene(Carrying::Instance);
+    let board = scene.artboard.core_handle();
+    let element = scene.artboard.with_artboard(|page| {
+        page.find_all_handles::<LayoutComponent>()
+            .into_iter()
+            .find(|handle| *handle != board)
+            .expect("the box")
+    });
+    let host = scene
+        .artboard
+        .with_artboard(|page| page.find_all_handles::<NestedArtboardLayout>()[0].clone());
+    let unit = host
+        .with_downcast::<NestedArtboardLayout, _>(|host| {
+            host.base.base.artboard_instance_handle(0)
+        })
+        .flatten()
+        .unwrap();
+    let size = || unit.with_artboard(|unit| (unit.layout_width(), unit.layout_height()));
+    assert!(begin(&element, (200.0, 180.0)));
+    carry(&element, &unit.core_handle(), (-28.0, -8.0));
+    scene.advance();
+    assert_eq!(size(), (172.0, 172.0));
+    let laid_out = passes();
+    for p in [0.25, 0.5] {
+        set_progress(&element, p);
+        scene.advance();
+        assert_eq!(size(), (172.0, 172.0), "at {p}");
+    }
+    assert_eq!(passes(), laid_out, "its progress changes nothing");
+    assert!(CoreRegistry::set_double_handle(
+        &host,
+        NestedArtboardLayoutBase::INSTANCE_WIDTH_PROPERTY_KEY.into(),
+        120.0,
+    ));
+    scene.advance();
+    assert_eq!(size(), (146.0, 172.0), "half way to its new size");
+}
+
 /// A carried root lands at once and then animates again: what the flight
 /// leaves on it is used up by the solve the hold ends in, whether or not the
 /// landing changes the root's size. A size written with the landing lands

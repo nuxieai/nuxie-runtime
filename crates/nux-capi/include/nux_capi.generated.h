@@ -1987,6 +1987,10 @@ typedef struct NuxSemanticSnapshotInfo {
   uint64_t render_revision;
   uint64_t tree_version;
   size_t node_count;
+  /**
+   * How many scroll regions nux_semantic_snapshot_scroll_region reads.
+   */
+  size_t scroll_region_count;
 } NuxSemanticSnapshotInfo;
 
 typedef struct NuxSemanticNodeView {
@@ -2009,7 +2013,45 @@ typedef struct NuxSemanticNodeView {
    * Bit 0: tap; bit 1: increase; bit 2: decrease. Zero for ineligible nodes.
    */
   uint32_t actions;
+  /**
+   * The innermost scroll region whose viewport clips this node, as an
+   * index for nux_semantic_snapshot_scroll_region, or -1. A node clipped
+   * away has no actions, so a node with a region and no actions may be
+   * one scrolled out of view.
+   */
+  int32_t scroll_region;
 } NuxSemanticNodeView;
+
+/**
+ * One scroll viewport on screen in a capture.
+ */
+typedef struct NuxScrollRegionView {
+  uint32_t struct_size;
+  /**
+   * Its index in this capture.
+   */
+  uint32_t id;
+  /**
+   * The viewport's padding box in the space node bounds are in, not
+   * clipped by the regions around it.
+   */
+  float min_x;
+  float min_y;
+  float max_x;
+  float max_y;
+  /**
+   * Bit 0: it can scroll toward its top, showing content above; bit 1:
+   * toward its bottom; bit 2: toward its left; bit 3: toward its right.
+   * Each is the scroller's own clamp test for a one point move, so it
+   * agrees with what a drag would do. Directions are on screen, also in
+   * a right-to-left scroller.
+   */
+  uint32_t can_scroll;
+  /**
+   * The region this one is inside, always an earlier index, or -1.
+   */
+  int32_t parent;
+} NuxScrollRegionView;
 
 typedef struct NuxVideoDecoderRequest {
   uint32_t struct_size;
@@ -2999,8 +3041,11 @@ NuxStatus nux_player_semantic_node_for_text_run(const struct NuxPlayer *player,
 /**
  * Capture only the current acknowledged presentation. Returns HANDLE_MISMATCH
  * for an unpresented revision and NOT_FOUND until semantics are enabled.
- * At most 16,384 nodes and 4 MiB of source UTF-8 text are accepted; larger
- * trees fail as a whole with LIMIT_EXCEEDED. Obscured values are omitted.
+ * At most 16,384 nodes, 4 MiB of source UTF-8 text and 256 scroll regions
+ * are accepted; larger trees fail as a whole with LIMIT_EXCEEDED. Obscured
+ * values are omitted. A scroll region is an interactive scroller whose
+ * viewport is neither collapsed nor empty, nested artboards and list rows
+ * included, listed in tree order.
  */
 NuxStatus nux_player_semantic_snapshot(const struct NuxPlayer *player,
                                        struct NuxSemanticSnapshot **out_snapshot);
@@ -3693,6 +3738,14 @@ NuxStatus nux_semantic_snapshot_info(const struct NuxSemanticSnapshot *snapshot,
 NuxStatus nux_semantic_snapshot_node(const struct NuxSemanticSnapshot *snapshot,
                                      size_t index,
                                      struct NuxSemanticNodeView *out_node);
+
+/**
+ * Read scroll region `index` of a capture, below its info's
+ * `scroll_region_count`; NOT_FOUND past it.
+ */
+NuxStatus nux_semantic_snapshot_scroll_region(const struct NuxSemanticSnapshot *snapshot,
+                                              size_t index,
+                                              struct NuxScrollRegionView *out_view);
 
 /**
  * Advance the artboard while driving `state_machine`. The state machine must

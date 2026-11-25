@@ -1565,6 +1565,45 @@
       ]
     },
     {
+      "name": "NuxScrollRegionView",
+      "size": 32,
+      "alignment": 4,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "id",
+          "offset": 4
+        },
+        {
+          "name": "min_x",
+          "offset": 8
+        },
+        {
+          "name": "min_y",
+          "offset": 12
+        },
+        {
+          "name": "max_x",
+          "offset": 16
+        },
+        {
+          "name": "max_y",
+          "offset": 20
+        },
+        {
+          "name": "can_scroll",
+          "offset": 24
+        },
+        {
+          "name": "parent",
+          "offset": 28
+        }
+      ]
+    },
+    {
       "name": "NuxSemanticNodeView",
       "size": 104,
       "alignment": 8,
@@ -1632,12 +1671,16 @@
         {
           "name": "actions",
           "offset": 96
+        },
+        {
+          "name": "scroll_region",
+          "offset": 100
         }
       ]
     },
     {
       "name": "NuxSemanticSnapshotInfo",
-      "size": 32,
+      "size": 40,
       "alignment": 8,
       "fields": [
         {
@@ -1655,6 +1698,10 @@
         {
           "name": "node_count",
           "offset": 24
+        },
+        {
+          "name": "scroll_region_count",
+          "offset": 32
         }
       ]
     },

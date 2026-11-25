@@ -36,6 +36,7 @@ pub mod card {
     pub const SCROLLER: usize = 13;
     pub const LINES: usize = 15;
     pub const SCROLL: usize = 17;
+    pub const LINE: usize = 18;
     pub const DOT: usize = 20;
     pub const CHOSEN: usize = 21;
     /// In [`Cards::Badged`] only: the card's badge host.
@@ -43,6 +44,8 @@ pub mod card {
     /// In [`scripted_keyed_plans_fixture`] only: the card's scripted
     /// drawable.
     pub const SCRIPT: usize = 28;
+    /// In [`Cards::DescribedLine`] only: the scrolled line's semantic data.
+    pub const LINE_SEMANTICS: usize = 28;
 }
 
 /// The badge's local ids, in [`Cards::Badged`].
@@ -57,6 +60,8 @@ pub const TITLE: &str = "Choose a plan";
 pub const RUN_TEXT: &str = "Monthly";
 /// The card's button label.
 pub const BUTTON_LABEL: &str = "Choose";
+/// The scrolled line's label, in [`Cards::DescribedLine`].
+pub const LINE_LABEL: &str = "Line";
 /// How far the card's "intro" moves its dot.
 pub const DOT_TRAVEL: f32 = 100.0;
 /// The heading's height.
@@ -80,6 +85,9 @@ pub enum Cards {
     /// A list with no `rowArtboardId`, whose rows come from list items as a
     /// bound list hands them over.
     Unkeyed,
+    /// A keyed list of cards whose scrolled "Line" has semantic data, a
+    /// text labeled [`LINE_LABEL`].
+    DescribedLine,
 }
 
 fn var(b: &mut Vec<u8>, mut n: u64) {
@@ -289,7 +297,7 @@ fn build(cards: Cards, script: Option<&[u8]>) -> Vec<u8> {
     text(&mut b, "Title", page::HEADING, 4, TITLE, 20.0); // 4 to 8
     let mut list = vec![("name", S("Cards")), ("parentId", U(0))];
     match cards {
-        Cards::Keyed | Cards::Badged => list.push(("rowArtboardId", U(1))),
+        Cards::Keyed | Cards::Badged | Cards::DescribedLine => list.push(("rowArtboardId", U(1))),
         Cards::MissingArtboard => list.push(("rowArtboardId", U(9))),
         Cards::Unkeyed => {}
     }
@@ -446,6 +454,17 @@ fn build(cards: Cards, script: Option<&[u8]>) -> Vec<u8> {
     }
     if script.is_some() {
         scripted_drawable(&mut b); // 28
+    }
+    if cards == Cards::DescribedLine {
+        obj(
+            &mut b,
+            "SemanticData",
+            &[
+                ("parentId", U(card::LINE as u64)),
+                ("role", U(7)),
+                ("label", S(LINE_LABEL)),
+            ],
+        ); // 28
     }
     // "intro": half a second at 60 frames a second, once, moving the dot.
     obj(

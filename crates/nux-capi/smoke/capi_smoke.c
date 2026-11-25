@@ -404,6 +404,10 @@ static int run_smoke(int argc, char** argv)
     NuxSemanticNodeView semantic_node = {.struct_size = sizeof(NuxSemanticNodeView)};
     CHECK(nux_semantic_snapshot_node(semantic_snapshot, semantic_info.node_count,
                                       &semantic_node) == NUX_STATUS_NOT_FOUND);
+    NuxScrollRegionView scroll_region = {.struct_size = sizeof(NuxScrollRegionView)};
+    CHECK(nux_semantic_snapshot_scroll_region(semantic_snapshot,
+                                              semantic_info.scroll_region_count,
+                                              &scroll_region) == NUX_STATUS_NOT_FOUND);
     CHECK(nux_semantic_snapshot_free(semantic_snapshot) == NUX_STATUS_OK);
     NuxViewModelChangeView step_change = {
         .struct_size = sizeof(NuxViewModelChangeView)};

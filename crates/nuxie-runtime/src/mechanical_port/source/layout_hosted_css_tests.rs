@@ -457,45 +457,96 @@ fn css_hosted_root_flies_with_the_held_box_that_carries_it() {
 }
 
 /// A root that adds the same to its box's size at both ends asks for no
-/// layout as its flight progresses; once its arriving end is resized, it
-/// flies at the progress it has reached.
+/// layout as its flight progresses. Whatever changes that asks for one, at
+/// the progress it has reached: its arriving end resized, alone or with its
+/// box, the flight's box resized, and the root itself gone.
 #[test]
 fn css_hosted_root_of_one_size_is_not_laid_out_again_as_it_flies() {
-    use crate::css_layout::flight_hold::{begin, carry, passes, set_progress};
-    let scene = carrying_box_scene(Carrying::Instance);
-    let board = scene.artboard.core_handle();
-    let element = scene.artboard.with_artboard(|page| {
-        page.find_all_handles::<LayoutComponent>()
-            .into_iter()
-            .find(|handle| *handle != board)
-            .expect("the box")
-    });
-    let host = scene
-        .artboard
-        .with_artboard(|page| page.find_all_handles::<NestedArtboardLayout>()[0].clone());
-    let unit = host
-        .with_downcast::<NestedArtboardLayout, _>(|host| host.base.base.artboard_instance_handle(0))
-        .flatten()
-        .unwrap();
-    let size = || unit.with_artboard(|unit| (unit.layout_width(), unit.layout_height()));
-    assert!(begin(&element, (200.0, 180.0)));
-    carry(&element, &unit.core_handle(), (-28.0, -8.0));
-    scene.advance();
-    assert_eq!(size(), (172.0, 172.0));
-    let laid_out = passes();
-    for p in [0.25, 0.5] {
-        set_progress(&element, p);
-        scene.advance();
-        assert_eq!(size(), (172.0, 172.0), "at {p}");
+    use crate::css_layout::flight_hold::{begin, carry, passes, set_progress, set_size};
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    enum Change {
+        Root,
+        Box,
+        Flight,
+        Gone,
     }
-    assert_eq!(passes(), laid_out, "its progress changes nothing");
-    assert!(CoreRegistry::set_double_handle(
-        &host,
-        NestedArtboardLayoutBase::INSTANCE_WIDTH_PROPERTY_KEY.into(),
-        120.0,
-    ));
-    scene.advance();
-    assert_eq!(size(), (146.0, 172.0), "half way to its new size");
+    // Its width at .5, and at .75.
+    for (change, half, later) in [
+        (Change::Root, 146.0, 133.0),
+        (Change::Box, 152.0, 142.0),
+        (Change::Flight, 152.0, 152.0),
+        (Change::Gone, 0.0, 0.0),
+    ] {
+        let scene = carrying_box_scene(Carrying::Instance);
+        let board = scene.artboard.core_handle();
+        let element = scene.artboard.with_artboard(|page| {
+            page.find_all_handles::<LayoutComponent>()
+                .into_iter()
+                .find(|handle| *handle != board)
+                .expect("the box")
+        });
+        let host = scene
+            .artboard
+            .with_artboard(|page| page.find_all_handles::<NestedArtboardLayout>()[0].clone());
+        let unit = host
+            .with_downcast::<NestedArtboardLayout, _>(|host| {
+                host.base.base.artboard_instance_handle(0)
+            })
+            .flatten()
+            .unwrap();
+        let size = || unit.with_artboard(|unit| (unit.layout_width(), unit.layout_height()));
+        assert!(begin(&element, (200.0, 180.0)));
+        carry(&element, &unit.core_handle(), (-28.0, -8.0));
+        scene.advance();
+        assert_eq!(size(), (172.0, 172.0), "{change:?}");
+        let laid_out = passes();
+        for p in [0.25, 0.5] {
+            set_progress(&element, p);
+            scene.advance();
+            assert_eq!(size(), (172.0, 172.0), "{change:?} at {p}");
+        }
+        assert_eq!(passes(), laid_out, "{change:?}: progress changes nothing");
+        match change {
+            Change::Root => assert!(CoreRegistry::set_double_handle(
+                &host,
+                NestedArtboardLayoutBase::INSTANCE_WIDTH_PROPERTY_KEY.into(),
+                120.0,
+            )),
+            Change::Box => {
+                let record = element
+                    .with(|object| {
+                        let children = object.as_container_component()?.children();
+                        crate::css_layout::record::find_in(children)
+                    })
+                    .flatten()
+                    .expect("its record");
+                assert!(CoreRegistry::set_double_handle(
+                    &record,
+                    WIDTH.into(),
+                    240.0
+                ));
+            }
+            Change::Flight => set_size(&element, (180.0, 180.0)),
+            Change::Gone => NestedArtboardLayout::update_artboard_occurrence(&host, None),
+        }
+        scene.advance();
+        let changed = passes();
+        assert!(changed > laid_out, "{change:?} is laid out");
+        if change != Change::Gone {
+            assert_eq!(size(), (half, 172.0), "{change:?} at .5");
+        }
+        set_progress(&element, 0.75);
+        scene.advance();
+        // The ends still agree when only the flight's box was resized.
+        assert_eq!(
+            passes() > changed,
+            change != Change::Flight,
+            "{change:?}: progress asks for a layout"
+        );
+        if change != Change::Gone {
+            assert_eq!(size(), (later, 172.0), "{change:?} at .75");
+        }
+    }
 }
 
 /// A carried root lands at once and then animates again: what the flight

@@ -2509,30 +2509,28 @@ fn marked_screen(items: Vec<Item>, backing: u32, clear: u32, f: f32) -> Live {
     live
 }
 
-/// Design T8b on a Screen: a box at own fade 1, marked 1 on a Screen with no
-/// flight, so below its first flight, draws outside the Screen's picture
-/// under a scope at the Screen's fade, rule 8's layer, and takes its picture
-/// there. With the Screen at 0.5 over B 60 and U 120, the tile's text, 255
-/// on 50, reads 0.5·255 + 0.5·(0.5·60 + 0.5·120), 172.5, and 255 over
-/// white. The Screen's picture and the box's are a canvas each, and one
-/// `DrawImage` names each. Between own 0.999 and own 1 the text moves less
-/// than a level. A build that leaves the box in the Screen's picture, as
-/// main draws an unmarked one, reads 187.5. One that reads the own fade
-/// alone reads 162.5, or 203.75 over white.
+/// A box at own fade 1, marked 1 on a Screen with no flight, so below its
+/// first flight, stays in the Screen's picture, as an unmarked box does
+/// (UNIV-7025). With the Screen at 0.5 over B 60 and U 120, the tile's text,
+/// 255 on 50, reads 0.5·255 + 0.5·120, 187.5, and 255 over white, and the
+/// draw makes the canvases and composites a box marked 0 does. A build
+/// that draws the box outside the picture under a scope at the Screen's
+/// fade reads 172.5 and makes a second canvas.
 #[test]
-fn a_marked_box_at_own_one_takes_its_picture_under_its_screens_fade() {
-    let tile_at = |o: f32, backing: u32, clear: u32| {
+fn a_marked_box_at_own_one_stays_in_its_screens_picture() {
+    let tile_at = |mark: f32, backing: u32, clear: u32| {
         marked_screen(
-            vec![marked(fading_box(o, Overflow::Hidden, TILE, WHITE), 1.0)],
+            vec![marked(fading_box(1.0, Overflow::Hidden, TILE, WHITE), mark)],
             backing,
             clear,
             0.5,
         )
         .settled(PLAIN)
     };
-    for (backing, clear, want) in [(B, U, 172.5), (WHITE, WHITE, 255.0)] {
+    for (backing, clear, want) in [(B, U, 187.5), (WHITE, WHITE, 255.0)] {
         let what = format!("marked 1 at own 1, Screen at 0.5, backing {backing:#010x}");
         let drawn = tile_at(1.0, backing, clear);
+        let plain = tile_at(0.0, backing, clear);
         assert_reads(
             drawn.at(IN_CHILD.0, IN_CHILD.1),
             gray(want),
@@ -2540,21 +2538,12 @@ fn a_marked_box_at_own_one_takes_its_picture_under_its_screens_fade() {
             &format!("{what}, the text"),
         );
         assert_eq!(
-            drawn.canvases.len(),
-            2,
-            "{what}: the Screen's picture and the box's, {:?}",
+            (drawn.canvases.len(), drawn.composites),
+            (plain.canvases.len(), plain.composites),
+            "{what}: the canvases and composites of a box marked 0, {:?}",
             drawn.canvases
         );
-        assert_eq!(drawn.composites, 2, "{what}: one DrawImage names each");
     }
-    let near = tile_at(0.999, B, U);
-    let at_one = tile_at(1.0, B, U);
-    assert_reads(
-        near.at(IN_CHILD.0, IN_CHILD.1),
-        at_one.at(IN_CHILD.0, IN_CHILD.1),
-        1.0,
-        "the text at own 0.999 against own 1",
-    );
 }
 
 /// Design T12's element on a Screen at `f` over B 60 and U 120: a box of T1
@@ -2572,15 +2561,16 @@ fn own_motion(mark: f32, overflow: Overflow, f: f32) -> [f32; 3] {
 }
 
 /// Design T12, forward: a clipping box with own motion, marked 1, below the
-/// first flight, draws outside the Screen's picture under a scope at f, and
-/// its own picture at o goes down at o·f: o·f·T2 + (1 - o·f)·(f·B + (1 -
-/// f)·U), 117.5 at o = f = 0.5. One group in the Screen's picture reads
-/// 125, paint by paint 145.6, the scope lost 145, and the fade twice 103.75.
+/// first flight, stays in the Screen's picture as one group, so its own fade
+/// multiplies the Screen's as CSS group opacity does: f·(o·T2 + (1 - o)·B) +
+/// (1 - f)·U, 125 at o = f = 0.5 (UNIV-7025). Outside the picture under a
+/// scope at f it reads 117.5, paint by paint 145.6, the scope lost 145, and
+/// the fade twice 103.75.
 #[test]
-fn own_motion_forward_draws_outside_the_screens_picture() {
+fn own_motion_forward_draws_in_the_screens_picture() {
     assert_reads(
         own_motion(1.0, Overflow::Hidden, 0.5),
-        gray(117.5),
+        gray(125.0),
         1.0,
         "marked 1 at own 0.5, Screen at 0.5",
     );
@@ -2588,9 +2578,9 @@ fn own_motion_forward_draws_outside_the_screens_picture() {
 
 /// Design T12, Back: marked 2, the box draws outside the Screen's picture
 /// at its own strength, over the leaving Screen's picture: o·T2 + (1 -
-/// o)·(f·B + (1 - f)·U), 145 at f = 0.5, and 160 at f = 0. Read as mark 1
-/// it reads 117.5, in the picture 125 and, at f = 0, 120, gone with the
-/// Screen. Paint by paint it reads 182.5.
+/// o)·(f·B + (1 - f)·U), 145 at f = 0.5, and 160 at f = 0. In the picture,
+/// as mark 1 reads, it is 125 and, at f = 0, 120, gone with the Screen.
+/// Paint by paint it reads 182.5.
 #[test]
 fn own_motion_back_draws_at_its_own_strength() {
     for (f, want) in [(0.5, 145.0), (0.0, 160.0)] {
@@ -2604,14 +2594,15 @@ fn own_motion_back_draws_at_its_own_strength() {
 }
 
 /// Design T12 with no box: an element that doesn't clip, marked 1, fades
-/// paint by paint under the scope, rule 5's fallback, each paint at o·f:
-/// T1 at 0.25 over 90 is 127.5, and T2 at 0.25 over that 145.6. In the
-/// Screen's picture it reads 147.5.
+/// paint by paint inside the Screen's picture, each paint at o: T1 at 0.5
+/// over 60 is 150, T2 at 0.5 over that 175, and the picture at f over 120
+/// reads 147.5. Paint by paint outside the picture, under a scope at f, it
+/// reads 145.6.
 #[test]
-fn own_motion_with_no_box_fades_paint_by_paint_under_the_scope() {
+fn own_motion_with_no_box_fades_paint_by_paint_in_the_picture() {
     assert_reads(
         own_motion(1.0, Overflow::Visible, 0.5),
-        gray(145.625),
+        gray(147.5),
         1.0,
         "marked 1 at own 0.5 with no clip, Screen at 0.5",
     );
@@ -2643,13 +2634,12 @@ fn a_marked_box_under_a_screen_at_zero_makes_no_canvas() {
 /// clips both axes and doesn't fade, on a Screen at 0.5 over B 60 and U 120.
 /// The parent sits at `AT`, 160 square, and the child at (80, 80) in it, 120
 /// square, so it passes the parent's edge. Past that edge the Screen's
-/// picture reads alone, 90. On the parent alone, 180. On the child inside
-/// the clip, 0.5·200 + 0.5·180, 190. With the clip lost the child reads 145
-/// past the edge. With the parent's own paints drawn again in pass two the
-/// child reads 210 under the scope, or 240 at full strength. In the
-/// Screen's picture, as main draws it, the child reads 160.
+/// picture reads alone, 90. On the parent alone, 180. The child stays in the
+/// Screen's picture, inside the clip: 0.5·200 + 0.5·120, 160 (UNIV-7025).
+/// Outside the picture under a scope it reads 190, and with the clip lost
+/// 160 past the edge.
 #[test]
-fn a_marked_child_draws_outside_the_picture_inside_its_parents_clip() {
+fn a_marked_child_stays_in_the_picture_inside_its_parents_clip() {
     let drawn = marked_screen(
         vec![Item::Block(Block {
             name: Some("parent"),
@@ -2674,10 +2664,47 @@ fn a_marked_child_draws_outside_the_picture_inside_its_parents_clip() {
     assert_reads(drawn.at(60, 60), gray(180.0), 1.0, "on the parent alone");
     assert_reads(
         drawn.at(150, 150),
-        gray(190.0),
+        gray(160.0),
         1.0,
         "on the child, inside the clip",
     );
+}
+
+/// An element marked 1 keeps its place in paint order while its Screen
+/// fades (UNIV-7025): "under", T1, marked 1, is written before "over", T2,
+/// unmarked, which covers its lower right. On a Screen at 0.5 over B 60 and
+/// U 120 the overlap reads "over" alone, 0.5·200 + 0.5·120, 160, as the same
+/// page with "under" marked 0 reads, and "under" alone 0.5·240 + 0.5·120, 180.
+/// A build that draws what is marked after the Screen's picture reads the
+/// overlap as "under" over the picture, 0.5·240 + 0.5·160, 200.
+#[test]
+fn a_marked_element_keeps_its_paint_order_under_a_later_one() {
+    let page = |mark: f32| {
+        marked_screen(
+            vec![
+                marked(block(AT, (160.0, 160.0), T1), mark),
+                block((AT.0 + 80.0, AT.1 + 80.0), (120.0, 120.0), T2),
+            ],
+            B,
+            U,
+            0.5,
+        )
+        .settled(PLAIN)
+    };
+    let (drawn, plain) = (page(1.0), page(0.0));
+    for (at, want, what) in [
+        ((150, 150), 160.0, "the overlap, the later element on top"),
+        ((60, 60), 180.0, "the marked element alone"),
+        ((220, 220), 160.0, "the later element alone"),
+    ] {
+        assert_reads(drawn.at(at.0, at.1), gray(want), 1.0, what);
+        assert_reads(
+            drawn.at(at.0, at.1),
+            plain.at(at.0, at.1),
+            1.0,
+            &format!("{what}, against a mark of 0"),
+        );
+    }
 }
 
 /// Design T14b's page: a box at `AT`, 160 square, at own `box_fade`, that
@@ -2820,15 +2847,15 @@ fn a_marked_panel_above_a_flight_draws_at_its_own_strength() {
 
 /// Design T15 below a flight: the same panel, marked 1, with the red's
 /// resting slot after it, so the red's flight draws above it. Off the
-/// flight the panel reads rule 8's mix, 0.25·200 + 0.75·(0.5·60 + 0.5·120),
-/// 117.5, and under the flight the red, 40. At its own strength off the
-/// flight it reads 145, and in the Screen's picture 125.
+/// flight the panel reads in the Screen's picture, 0.5·(0.5·200 + 0.5·60) +
+/// 0.5·120, 125, and under the flight the red, 40. Outside the picture
+/// under a scope it reads 117.5 off the flight, and at its own strength 145.
 #[test]
-fn a_marked_panel_below_a_flight_draws_under_its_screens_fade() {
+fn a_marked_panel_below_a_flight_draws_in_its_screens_picture() {
     let drawn = match_at(match_marks(true, (0.5, 1.0), (1.0, 0.0)), 0.5);
     assert_reads(
         drawn.at(OFF_FLIGHT.0, OFF_FLIGHT.1),
-        gray(117.5),
+        gray(125.0),
         1.0,
         "the panel marked 1, off the red's flight",
     );
@@ -3235,7 +3262,7 @@ mod in_place_twins {
     }
     twins!(
         a_marked_panel_above_a_flight_draws_at_its_own_strength,
-        a_marked_panel_below_a_flight_draws_under_its_screens_fade,
+        a_marked_panel_below_a_flight_draws_in_its_screens_picture,
         a_marked_child_above_a_flight_leaves_its_plain_boxs_picture,
         a_marked_child_above_a_flight_draws_with_its_screen_at_zero,
         a_layer_mask_after_a_flight_makes_no_canvas_at_zero,

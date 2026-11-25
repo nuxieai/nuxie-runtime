@@ -623,11 +623,11 @@ pub(crate) fn screen_fade_is_zero(artboard: &Artboard) -> bool {
 /// disagree.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ScreenLayer {
-    /// Mark 0 below the Screen's first flight: in its picture. Hidden at its
-    /// zero.
+    /// Marks 0 and 1 below the Screen's first flight: in its picture, each
+    /// in its place in paint order. Hidden at its zero.
     Picture,
-    /// Mark 1 below the first flight, and mark 0 after it: outside the
-    /// picture, under a scope at the Screen's fade. Hidden at its zero.
+    /// Mark 0 after the first flight: outside the picture, under a scope at
+    /// the Screen's fade. Hidden at its zero.
     Scope,
     /// A slot holding a flight and all it hosts, mark 1 at or above the first
     /// flight, and mark 2: outside the picture, at its own strength. Visible
@@ -646,8 +646,10 @@ pub(crate) enum ScreenLayer {
 enum Mark {
     /// 0, the default: in the Screen's picture.
     Inside,
-    /// 1: outside it, at the Screen's fade below its first flight and at its
-    /// own strength above it.
+    /// 1: below the Screen's first flight, in its picture as a mark of 0
+    /// is, so it keeps its place in paint order and its own fade multiplies
+    /// the Screen's, as an element under CSS group opacity does. Above the
+    /// first flight, outside the picture at its own strength.
     Outside,
     /// 2: outside it, at its own strength.
     OwnStrength,
@@ -677,8 +679,8 @@ impl Mark {
         match (self, past_first) {
             (Self::Above, _) => ScreenLayer::Above,
             (Self::OwnStrength, _) | (Self::Outside, true) => ScreenLayer::OwnStrength,
-            (Self::Outside, false) | (Self::Inside, true) => ScreenLayer::Scope,
-            (Self::Inside, false) => ScreenLayer::Picture,
+            (Self::Inside, true) => ScreenLayer::Scope,
+            (Self::Inside | Self::Outside, false) => ScreenLayer::Picture,
         }
     }
 }

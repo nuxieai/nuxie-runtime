@@ -7,6 +7,7 @@ pub mod semantic_manager;
 pub mod semantic_node;
 pub mod semantic_provider;
 pub mod semantic_role;
+pub mod semantic_scroll_regions;
 pub mod semantic_snapshot;
 pub mod semantic_state;
 pub mod semantic_trait;

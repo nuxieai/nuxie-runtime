@@ -5590,10 +5590,7 @@ impl LayoutComponent {
                 let Some(data) = Self::layout_data_of(object) else {
                     return None;
                 };
-                let held = data
-                    .flight_hold
-                    .as_ref()
-                    .map(|hold| hold.flying().clone());
+                let held = data.flight_hold.as_ref().map(|hold| hold.flying().clone());
                 let Some(update) = data.take_update(&link) else {
                     return virtual_tracks;
                 };

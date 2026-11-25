@@ -873,7 +873,15 @@ fn find_sibling_semantic_data(component: &Component) -> Option<CoreHandle> {
 }
 
 impl FocusData {
-    fn scroll_into_view(mut layout_component: Option<CoreHandle>, mut traversal: ParentTraversal) {
+    /// Scroll every scroller above `layout_component`'s nearest layout box,
+    /// across the artboards hosting it, by the smallest move that shows the
+    /// box. Nuxie: also starts a reveal from a semantic node
+    /// (`semantic_reveal`), and answers whether any scroller's effective
+    /// offset (its target while it settles) changed.
+    pub(crate) fn scroll_into_view(
+        mut layout_component: Option<CoreHandle>,
+        mut traversal: ParentTraversal,
+    ) -> bool {
         while let Some(component) = layout_component.clone() {
             if component
                 .with(|component| component.as_layout_component().is_some())
@@ -886,7 +894,7 @@ impl FocusData {
                 .flatten();
         }
         let Some(layout_component) = layout_component else {
-            return;
+            return false;
         };
         let Some(mut element_bounds) = layout_component
             .with(|component| {
@@ -896,8 +904,9 @@ impl FocusData {
             })
             .flatten()
         else {
-            return;
+            return false;
         };
+        let mut moved = false;
 
         while let Some(parent) = traversal.next() {
             if traversal.did_cross_boundary() {
@@ -931,19 +940,26 @@ impl FocusData {
                 continue;
             };
             for constraint in constraints {
-                constraint.with_downcast_mut::<ScrollConstraint, _>(|scroll_constraint| {
-                    Self::scroll_constraint_to_show_bounds(scroll_constraint, element_bounds);
-                });
+                moved |= constraint
+                    .with_downcast_mut::<ScrollConstraint, _>(|scroll_constraint| {
+                        Self::scroll_constraint_to_show_bounds(scroll_constraint, element_bounds)
+                    })
+                    .unwrap_or(false);
             }
         }
+        moved
     }
 
-    fn scroll_constraint_to_show_bounds(constraint: &mut ScrollConstraint, element_bounds: Aabb) {
+    /// Whether the constraint's effective offset changed.
+    fn scroll_constraint_to_show_bounds(
+        constraint: &mut ScrollConstraint,
+        element_bounds: Aabb,
+    ) -> bool {
         let Some(_content) = constraint.content_handle() else {
-            return;
+            return false;
         };
         let Some(viewport) = constraint.viewport_handle() else {
-            return;
+            return false;
         };
         let Some(viewport_transform) = viewport
             .with(|viewport| {
@@ -953,7 +969,7 @@ impl FocusData {
             })
             .flatten()
         else {
-            return;
+            return false;
         };
         let scrollport = constraint.css_scrollport();
         let viewport_world_x = viewport_transform[4] + scrollport.map_or(0.0, |port| port.left());
@@ -994,7 +1010,12 @@ impl FocusData {
             let target = current + delta;
             let snapped = constraint.nearest_snap_offset_in_direction(current, target);
             constraint.scroll_to_position(snapped.x, snapped.y);
+            return Vec2D::new(
+                constraint.effective_scroll_offset_x(),
+                constraint.effective_scroll_offset_y(),
+            ) != current;
         }
+        false
     }
 
     pub fn focused_occurrence(owner: &CoreHandle) {
@@ -1008,7 +1029,7 @@ impl FocusData {
         };
         // Scroll dirt can return through descendants to this FocusData.
         // Release its arena borrow before moving the content.
-        Self::scroll_into_view(parent, traversal);
+        let _ = Self::scroll_into_view(parent, traversal);
         owner.with_downcast_mut::<Self, _>(Self::focused_after_scroll);
     }
 

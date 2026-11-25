@@ -541,6 +541,48 @@ fn translated_scroll_view_is_listed() {
     assert_eq!(found.regions()[0].can_scroll, can_scroll::BOTTOM);
 }
 
+/// A translated (Rive-made) scroller with no physics, its list 240 long in
+/// an 80 point viewport: a host's move of its content lands at once and is
+/// clamped to the 160 point range, where `scroll_to_position` alone does
+/// not clamp without physics. A move at the end, of nothing, or along the
+/// axis it does not scroll answers false. Its region reads where it stands.
+#[test]
+fn translated_scroller_without_physics_moves_at_once_and_clamps() {
+    use crate::source::math::vec2d::Vec2D;
+    let f = translated_scroll_view(css("Item", [width(180.0), height(40.0)].concat(), vec![]));
+    f.machine();
+    let position = |f: &Scene| {
+        let region = regions(f).regions()[0];
+        [
+            region.scroll_x,
+            region.scroll_y,
+            region.range_x,
+            region.range_y,
+        ]
+    };
+    assert_eq!(position(&f), [0.0, 0.0, 0.0, 160.0]);
+    let scroll = regions(&f).constraints()[0].clone();
+    let by = |dx: f32, dy: f32| {
+        scroll
+            .with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                scroll.scroll_content_by(Vec2D::new(dx, dy))
+            })
+            .expect("a scroll constraint")
+    };
+    assert!(by(0.0, -100.0));
+    assert_eq!(f.scroll_offset("List"), (0.0, -100.0), "at once");
+    assert!(by(0.0, -100.0));
+    assert_eq!(f.scroll_offset("List"), (0.0, -160.0), "clamped");
+    assert!(!by(0.0, -1.0), "at the end");
+    assert!(!by(0.0, 0.0));
+    assert!(!by(-50.0, 0.0), "no sideways axis");
+    f.advance(1);
+    assert_eq!(position(&f), [0.0, 160.0, 0.0, 160.0]);
+    assert_eq!(regions(&f).regions()[0].can_scroll, can_scroll::TOP);
+    assert!(by(0.0, 500.0));
+    assert_eq!(f.scroll_offset("List"), (0.0, 0.0), "clamped at the start");
+}
+
 /// Right to left, the start is the viewport's right edge: at its start a
 /// region can move toward its left, showing the content to the left, and
 /// at its end toward its right. The bits name screen directions.

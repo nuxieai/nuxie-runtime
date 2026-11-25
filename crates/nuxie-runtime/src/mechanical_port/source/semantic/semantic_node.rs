@@ -47,6 +47,22 @@ impl SemanticNode {
         {
             return false;
         }
+        Self::attached_without(node, SemanticState::DISABLED.0 | SemanticState::HIDDEN.0)
+    }
+
+    /// Nuxie: a reveal (`semantic_reveal`) needs the node in one live tree
+    /// and not hidden, itself or above. Unlike an action it does not ask
+    /// whether the node is drawn (clipped away, or under opacity 0) or
+    /// disabled: a host reveals a node to show it, and a disabled control
+    /// out of view is still read.
+    pub fn is_reveal_eligible(node: &SemanticNodeRef) -> bool {
+        Self::attached_without(node, SemanticState::HIDDEN.0)
+    }
+
+    /// The node and each ancestor belong to its manager and carry none of
+    /// `flags`, and its root is the manager's. Each node is visited once; a
+    /// cycle answers false.
+    fn attached_without(node: &SemanticNodeRef, flags: u32) -> bool {
         let Some(manager) = node.borrow().manager() else {
             return false;
         };
@@ -58,7 +74,7 @@ impl SemanticNode {
             }
             let entry = current.borrow();
             if !entry.manager().is_some_and(|owner| owner.ptr_eq(&manager))
-                || entry.state_flags & (SemanticState::DISABLED.0 | SemanticState::HIDDEN.0) != 0
+                || entry.state_flags & flags != 0
             {
                 return false;
             }

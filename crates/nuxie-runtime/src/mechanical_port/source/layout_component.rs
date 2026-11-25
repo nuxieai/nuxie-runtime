@@ -6396,6 +6396,9 @@ impl LayoutComponent {
                 current = tree.taffy.parent(node);
             }
         }
+        let carried: Vec<_> = (tree.held.iter())
+            .filter_map(|(_, flying)| flying.carried_root())
+            .collect();
         // Each node, and whether it was reached only past an unchanged static
         // box (below).
         let mut stack = vec![(tree.root, false)];
@@ -6526,6 +6529,9 @@ impl LayoutComponent {
                         layout.scroll_range = scroll_range;
                         let changed = padding_changed || layout.layout_data.solved_layout != next;
                         layout.layout_data.has_new_layout |= touched || changed;
+                        if layout.layout_data.has_new_layout && carried.contains(&&context.owner) {
+                            layout.layout_data.snap_bounds_once();
+                        }
                         layout.layout_data.solved_layout = next;
                         if let (Some(hold), Some(rest)) =
                             (&mut layout.layout_data.flight_hold, rest)

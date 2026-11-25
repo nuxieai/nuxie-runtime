@@ -30,8 +30,9 @@ pub struct LayoutData {
     /// The layout hold while the owner flies in place
     /// (css_layout/flight_hold.rs). None at rest.
     pub(crate) flight_hold: Option<Box<crate::css_layout::flight_hold::FlightHold>>,
-    /// The hold just ended: the owner's next bounds update takes its layout
-    /// at once, not through its own interpolation.
+    /// The owner's next bounds update takes its layout at once, not through
+    /// its own interpolation. Set only with a new layout or a solve that
+    /// makes one, so it never outlives the flight's last layout.
     snap_bounds: bool,
 }
 
@@ -89,7 +90,14 @@ impl LayoutData {
     pub(crate) fn request_solve(&mut self) {
         self.enqueue();
     }
-    /// The next bounds update after a hold ends takes the layout at once.
+    /// A hold just ended: the next solve lays the node out again, so that a
+    /// bounds update follows it, and that one takes the layout at once.
+    pub(crate) fn land(&mut self) {
+        self.snap_bounds = true;
+        self.mark_dirty();
+    }
+    /// A bounds update is due, for a root carried by a held box, and takes
+    /// the layout at once.
     pub(crate) fn snap_bounds_once(&mut self) {
         self.snap_bounds = true;
     }

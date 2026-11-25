@@ -2856,61 +2856,61 @@ cbe9c9 1 - 100,60 200,60 200,120 100,120
 0bf080 1 - 36,20 136,20 136,80 36,80
 0bf080 1 - 36,20 136,20 136,80 36,80
 0bf9f2 1 - 0,50 200,50 200,150 0,150
-# FadeAtRest { native: false } at rest
+# FadeAtRest at rest
 0bf080 0.502 - 36,20 136,20 136,80 36,80
 0bf9f2 1 - 0,50 200,50 200,150 0,150
 0bf080 0.502 - 36,20 136,20 136,80 36,80
-# FadeAtRest { native: false } go at 0
+# FadeAtRest go at 0
 0bf9f2 1 - 0,50 200,50 200,150 0,150
 0bf080 0.502 - 36,20 136,20 136,80 36,80
-# FadeAtRest { native: false } go at 0.25 =
-# FadeAtRest { native: false } go at 0.5 =
-# FadeAtRest { native: false } go at 0.75 =
-# FadeAtRest { native: false } go at 1 =
-# FadeAtRest { native: false } after go
-0bf080 0.502 - 36,20 136,20 136,80 36,80
-0bf9f2 1 - 0,50 200,50 200,150 0,150
-0bf080 0.502 - 36,20 136,20 136,80 36,80
-# FadeAtRest { native: false } back at 0
-0bf9f2 1 - 0,50 200,50 200,150 0,150
-0bf080 0.502 - 36,20 136,20 136,80 36,80
-# FadeAtRest { native: false } back at 0.25 =
-# FadeAtRest { native: false } back at 0.5 =
-# FadeAtRest { native: false } back at 0.75 =
-# FadeAtRest { native: false } back at 1 =
-# FadeAtRest { native: false } after back
+# FadeAtRest go at 0.25 =
+# FadeAtRest go at 0.5 =
+# FadeAtRest go at 0.75 =
+# FadeAtRest go at 1 =
+# FadeAtRest after go
 0bf080 0.502 - 36,20 136,20 136,80 36,80
 0bf9f2 1 - 0,50 200,50 200,150 0,150
 0bf080 0.502 - 36,20 136,20 136,80 36,80
-# FadeAtRest { native: false } go again at 0
+# FadeAtRest back at 0
 0bf9f2 1 - 0,50 200,50 200,150 0,150
 0bf080 0.502 - 36,20 136,20 136,80 36,80
-# FadeAtRest { native: false } go again at 0.25 =
-# FadeAtRest { native: false } go again at 0.5 =
-# FadeAtRest { native: false } go cancelled, B removed
-0bf080 0.502 - 36,20 136,20 136,80 36,80
-# FadeAtRest { native: false } after go cancelled
-0bf080 0.502 - 36,20 136,20 136,80 36,80
-0bf9f2 1 - 0,50 200,50 200,150 0,150
-0bf080 0.502 - 36,20 136,20 136,80 36,80
-# FadeAtRest { native: false } go again at 0
-0bf9f2 1 - 0,50 200,50 200,150 0,150
-0bf080 0.502 - 36,20 136,20 136,80 36,80
-# FadeAtRest { native: false } go again at 0.25 =
-# FadeAtRest { native: false } go again at 0.5 =
-# FadeAtRest { native: false } go again at 0.75 =
-# FadeAtRest { native: false } go again at 1 =
-# FadeAtRest { native: false } after go again
+# FadeAtRest back at 0.25 =
+# FadeAtRest back at 0.5 =
+# FadeAtRest back at 0.75 =
+# FadeAtRest back at 1 =
+# FadeAtRest after back
 0bf080 0.502 - 36,20 136,20 136,80 36,80
 0bf9f2 1 - 0,50 200,50 200,150 0,150
 0bf080 0.502 - 36,20 136,20 136,80 36,80
-# FadeAtRest { native: false } back again at 0
+# FadeAtRest go again at 0
 0bf9f2 1 - 0,50 200,50 200,150 0,150
 0bf080 0.502 - 36,20 136,20 136,80 36,80
-# FadeAtRest { native: false } back again at 0.25 =
-# FadeAtRest { native: false } back again at 0.5 =
-# FadeAtRest { native: false } back cancelled, A removed =
-# FadeAtRest { native: false } after back cancelled
+# FadeAtRest go again at 0.25 =
+# FadeAtRest go again at 0.5 =
+# FadeAtRest go cancelled, B removed
+0bf080 0.502 - 36,20 136,20 136,80 36,80
+# FadeAtRest after go cancelled
+0bf080 0.502 - 36,20 136,20 136,80 36,80
+0bf9f2 1 - 0,50 200,50 200,150 0,150
+0bf080 0.502 - 36,20 136,20 136,80 36,80
+# FadeAtRest go again at 0
+0bf9f2 1 - 0,50 200,50 200,150 0,150
+0bf080 0.502 - 36,20 136,20 136,80 36,80
+# FadeAtRest go again at 0.25 =
+# FadeAtRest go again at 0.5 =
+# FadeAtRest go again at 0.75 =
+# FadeAtRest go again at 1 =
+# FadeAtRest after go again
+0bf080 0.502 - 36,20 136,20 136,80 36,80
+0bf9f2 1 - 0,50 200,50 200,150 0,150
+0bf080 0.502 - 36,20 136,20 136,80 36,80
+# FadeAtRest back again at 0
+0bf9f2 1 - 0,50 200,50 200,150 0,150
+0bf080 0.502 - 36,20 136,20 136,80 36,80
+# FadeAtRest back again at 0.25 =
+# FadeAtRest back again at 0.5 =
+# FadeAtRest back cancelled, A removed =
+# FadeAtRest after back cancelled
 0bf080 0.502 - 36,20 136,20 136,80 36,80
 0bf9f2 1 - 0,50 200,50 200,150 0,150
 0bf080 0.502 - 36,20 136,20 136,80 36,80

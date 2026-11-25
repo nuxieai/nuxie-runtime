@@ -2051,6 +2051,20 @@ typedef struct NuxScrollRegionView {
    * The region this one is inside, always an earlier index, or -1.
    */
   int32_t parent;
+  /**
+   * How far its content has moved from its start on each axis, at or
+   * above 0, and the most it can move, in the scroller's own points
+   * (the space a move by nux_player_scroll_region_by is in; it is the
+   * box's space unless a host scales or turns the scroller). While a
+   * move settles, the scroll is where it is going, not where it is
+   * drawn. Zero on an axis the region does not scroll; a looping axis
+   * has an infinite range. A runtime older than these fields leaves
+   * them alone and returns a struct_size of 32.
+   */
+  float scroll_x;
+  float scroll_y;
+  float range_x;
+  float range_y;
 } NuxScrollRegionView;
 
 typedef struct NuxVideoDecoderRequest {
@@ -3025,6 +3039,59 @@ NuxStatus nux_player_queue_semantic_action(struct NuxPlayer *player,
                                            const struct NuxSemanticSnapshot *snapshot,
                                            uint32_t node_id,
                                            uint32_t action);
+
+/**
+ * Bring a captured node into view: every scroller above it, nested
+ * scrollers and the used components and list rows hosting it included,
+ * moves by the smallest amount that shows it, as the engine's own focus
+ * reveal moves them (snapped where a scroller snaps). Nothing is focused
+ * and no listener hears it. A scroller with physics animates there; one
+ * without moves at once. Either way a capture taken after the next
+ * presented step reports the scroller's target in its region's scroll,
+ * though the node's box shows where it is drawn, in flight until the move
+ * settles; the step's scheduling stays unsettled until then.
+ *
+ * The node must be in the capture's tree and not hidden; unlike an action
+ * it may be clipped, transparent or disabled. Each scroller's move is
+ * worked out from where the node is drawn, before the scrollers inside it
+ * move, so a node in a nested scroller may need a second reveal, after the
+ * first settles, to show whole. Reveal again only once the step reports
+ * itself settled: a reveal while a scroller settles adds the node's
+ * remaining travel to where the scroller is going, as the engine's focus
+ * reveal does, and overshoots. `out_moved` answers whether any scroller
+ * moved: false for a node already in view or under no scroller. A move
+ * invalidates the capture; no move leaves it valid.
+ *
+ * Stale captures return HANDLE_MISMATCH; an unknown, hidden or boundary
+ * node returns NOT_FOUND.
+ */
+NuxStatus nux_player_reveal_semantic_node(struct NuxPlayer *player,
+                                          const struct NuxSemanticSnapshot *snapshot,
+                                          uint32_t node_id,
+                                          bool *out_moved);
+
+/**
+ * Move a captured scroll region's content by `dx`, `dy` points in the
+ * scroller's own space, the sense of a scroll wheel's delta: a negative
+ * `dy` moves the content up, showing what is below, and a negative `dx`
+ * moves it left, showing what is to the right, also in a right-to-left
+ * scroller. A move along an axis the region does not scroll is ignored.
+ * It starts from where the content is going (the region's scroll), is
+ * clamped to the region's range, and moves as a reveal does: animated
+ * with physics, at once without. `out_moved` is false when the clamp
+ * leaves it where it is going, so at an end a move further past it answers
+ * false. A move invalidates the capture; no move leaves it valid.
+ *
+ * Stale captures return HANDLE_MISMATCH; a region past the capture's
+ * `scroll_region_count` returns NOT_FOUND; a delta that is not finite
+ * returns INVALID_ARGUMENT.
+ */
+NuxStatus nux_player_scroll_region_by(struct NuxPlayer *player,
+                                      const struct NuxSemanticSnapshot *snapshot,
+                                      uint32_t region,
+                                      float dx,
+                                      float dy,
+                                      bool *out_moved);
 
 /**
  * Associate an exact-name root text run with its presented semantic text-field node.

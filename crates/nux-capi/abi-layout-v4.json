@@ -1566,7 +1566,7 @@
     },
     {
       "name": "NuxScrollRegionView",
-      "size": 32,
+      "size": 48,
       "alignment": 4,
       "fields": [
         {
@@ -1600,6 +1600,22 @@
         {
           "name": "parent",
           "offset": 28
+        },
+        {
+          "name": "scroll_x",
+          "offset": 32
+        },
+        {
+          "name": "scroll_y",
+          "offset": 36
+        },
+        {
+          "name": "range_x",
+          "offset": 40
+        },
+        {
+          "name": "range_y",
+          "offset": 44
         }
       ]
     },

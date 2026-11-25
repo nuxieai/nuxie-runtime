@@ -408,6 +408,16 @@ static int run_smoke(int argc, char** argv)
     CHECK(nux_semantic_snapshot_scroll_region(semantic_snapshot,
                                               semantic_info.scroll_region_count,
                                               &scroll_region) == NUX_STATUS_NOT_FOUND);
+    bool semantic_moved = true;
+    CHECK(nux_player_reveal_semantic_node(player, semantic_snapshot, UINT32_MAX,
+                                          &semantic_moved) == NUX_STATUS_NOT_FOUND);
+    CHECK(!semantic_moved);
+    semantic_moved = true;
+    CHECK(nux_player_scroll_region_by(player, semantic_snapshot,
+                                      (uint32_t)semantic_info.scroll_region_count,
+                                      0.0f, -10.0f,
+                                      &semantic_moved) == NUX_STATUS_NOT_FOUND);
+    CHECK(!semantic_moved);
     CHECK(nux_semantic_snapshot_free(semantic_snapshot) == NUX_STATUS_OK);
     NuxViewModelChangeView step_change = {
         .struct_size = sizeof(NuxViewModelChangeView)};

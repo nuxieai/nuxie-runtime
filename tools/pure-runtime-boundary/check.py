@@ -424,6 +424,7 @@ PORTABLE_ABI_FACADE_FILE_PATHS = {
         # The capture's scroll regions, collected by the runtime.
         "runtime::semantic::semantic_scroll_regions::ScrollRegion",
         "runtime::semantic::semantic_scroll_regions::ScrollRegions",
+        "runtime::semantic::semantic_scroll_regions::ScrollRegionsError",
         "runtime::text::text_value_run::TextValueRun",
         "runtime::generated::core_registry::CoreRegistry",
         "runtime::generated::component_base::ComponentBase",
@@ -431,11 +432,13 @@ PORTABLE_ABI_FACADE_FILE_PATHS = {
         "runtime::math::path_types::PathDirection",
     },
     # Scroll region tests: each row's list, viewport box and scroll offset,
-    # the oracle for the regions read through the C edge.
+    # the oracle for the regions read through the C edge, and a viewport
+    # clip rebuilt past the geometry budget.
     "crates/nux-capi/src/scroll_region_tests.rs": {
         "runtime::artboard_component_list::ArtboardComponentList",
         "runtime::constraints::scrolling::scroll_constraint::ScrollConstraint",
         "runtime::layout_component::LayoutComponent",
+        "runtime::math::path_types::PathDirection",
     },
     "crates/nux-capi/src/text_geometry.rs": {
         "runtime::core::CoreHandle",

@@ -396,6 +396,37 @@ fn a_page_no_machine_plays_has_no_region() {
     }
 }
 
+/// A scroller's clip past the geometry budget fails the capture as a
+/// node's would, though no semantic node sits under it: the region is not
+/// dropped as if clipped away. Put back to one rectangle, the capture lists
+/// it again.
+#[test]
+fn a_scroller_clip_past_the_geometry_budget_fails_the_capture() {
+    use nuxie::runtime::{layout_component::LayoutComponent, math::path_types::PathDirection};
+    let page = Page::new(Cards::Keyed, 1);
+    assert_eq!(page.capture().expect("a capture").regions().len(), 1);
+    let rebuild = |rectangles: usize| {
+        page.row(0)
+            .with_artboard(|board| board.objects()[card::SCROLLER].clone())
+            .expect("the scroller")
+            .with_downcast_mut::<LayoutComponent, _>(|scroller| {
+                let mut path = scroller.clip_world_path().expect("a scroller clips");
+                let rect = path.raw_path().bounds();
+                path.rewind();
+                for _ in 0..rectangles {
+                    path.mutable_raw_path()
+                        .add_rect(rect, PathDirection::Clockwise);
+                }
+            })
+            .expect("a layout box");
+    };
+    // 5,000 rectangles are 20,000 points, past the 16,384 a clip may have.
+    rebuild(5000);
+    assert_eq!(page.capture().err(), Some(NuxStatus::LimitExceeded));
+    rebuild(1);
+    assert_eq!(page.capture().expect("a capture").regions().len(), 1);
+}
+
 /// A page whose cards are not mounted has no region, and its nodes none.
 #[test]
 fn a_page_without_scrollers_has_no_region() {

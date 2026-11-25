@@ -3042,7 +3042,8 @@ NuxStatus nux_player_semantic_node_for_text_run(const struct NuxPlayer *player,
  * Capture only the current acknowledged presentation. Returns HANDLE_MISMATCH
  * for an unpresented revision and NOT_FOUND until semantics are enabled.
  * At most 16,384 nodes, 4 MiB of source UTF-8 text and 256 scroll regions
- * are accepted; larger trees fail as a whole with LIMIT_EXCEEDED. Obscured
+ * are accepted; larger trees fail as a whole with LIMIT_EXCEEDED, as do
+ * clips past the geometry budget, a scroll region's as a node's. Obscured
  * values are omitted. A scroll region is a scroller that a drag sent
  * through this player would reach, nested artboards and list rows
  * included, listed in tree order. Only a state-machine player sends its

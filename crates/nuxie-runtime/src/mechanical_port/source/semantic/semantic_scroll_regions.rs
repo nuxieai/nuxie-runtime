@@ -28,10 +28,10 @@
 //! | Component collapsed (a `display: none` box and what it holds) | `Drawable::is_hidden` (collapsed dirt) | the walk does not enter it (`component_is_collapsed`) |
 //! | Viewport hidden | `RuntimeDrawableOccurrence::hit_test_point` refuses a hidden proxy | `RuntimeDrawableOccurrence::is_hidden` on the same proxy |
 //! | Viewport transform cannot be inverted | `LayoutComponent::hit_test_point_with_origin` | restated: the viewport's world transform must invert |
-//! | Viewport clipped away by the clips around it | the hit walks the same rendered clips (docs/CSS_LAYOUT.md, padding-box clip) | `semantic_is_fully_clipped`, the semantic layer's walk of those clips |
+//! | Viewport clipped away by the clips around it | the hit walks the same rendered clips (docs/CSS_LAYOUT.md, padding-box clip) | `semantic_clipped_away`, the semantic layer's walk of those clips; a clip past the geometry budget fails the collection, as a node's fails a capture |
 //! | Constraint not interactive | `ViewportDraggableProxy::takes_drag`, `drag`, `start_drag` (`interactive`) | restated: `interactive()` |
 //! | Viewport not a layout box with a layout parent | `ScrollConstraint::draggables` needs the viewport's proxy | restated: `has_layout_parent`, a layout viewport |
-//! | Box empty on screen | nothing to hit | rechecked on the final root-space box |
+//! | Box empty on screen | nothing to hit | its size carried through the linear part of every transform to the root, so a far or tiny host cannot round it away |
 //! | Player sends its pointers to no state machine (a static or linear animation player) | `PagePlayer::operation` applies a step's pointers only in its `Playback::StateMachine` arm and answers every other playback with no hit | not here: the caller collects only for a state machine player (`nux_player_semantic_snapshot`, restated, since that arm binds the machine and has no predicate to share) |
 //!
 //! The constraint's own `wants_scroll` and `can_consume` answer for wheel
@@ -46,7 +46,7 @@ use crate::mechanical_port::source::{
     math::mat2d::Mat2D,
     math::vec2d::Vec2D,
     semantic::{
-        semantic_provider::{root_transform_aabb, semantic_is_fully_clipped},
+        semantic_provider::{SemanticGeometryError, root_transform_aabb, semantic_clipped_away},
         semantic_snapshot::Bounds,
     },
 };
@@ -82,10 +82,17 @@ pub struct ScrollRegion {
     pub parent: i32,
 }
 
-/// A scene has more than [`MAX_SCROLL_REGIONS`] regions, or more than the
-/// limit a caller asked for.
+/// Why a collection failed; either fails a capture as a whole.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TooManyScrollRegions;
+pub enum ScrollRegionsError {
+    /// More than [`MAX_SCROLL_REGIONS`] regions, or more than the limit a
+    /// caller asked for.
+    TooMany,
+    /// A viewport's clips are past the geometry budget or not a valid path,
+    /// the error a node's clips fail a capture with
+    /// (`validate_semantic_geometry`).
+    Geometry(SemanticGeometryError),
+}
 
 /// The scroll regions of a scene, in tree order: each after the region it
 /// is inside.
@@ -100,12 +107,12 @@ impl ScrollRegions {
     /// The regions under `root`, an artboard played by a state machine, its
     /// nested artboards and the rows its lists show included: each scroller
     /// a drag can reach, by the gates in the module's table.
-    pub fn collect(root: &CoreHandle) -> Result<Self, TooManyScrollRegions> {
+    pub fn collect(root: &CoreHandle) -> Result<Self, ScrollRegionsError> {
         Self::collect_at_most(root, MAX_SCROLL_REGIONS)
     }
 
     /// As [`Self::collect`], failing past `limit` regions.
-    pub fn collect_at_most(root: &CoreHandle, limit: usize) -> Result<Self, TooManyScrollRegions> {
+    pub fn collect_at_most(root: &CoreHandle, limit: usize) -> Result<Self, ScrollRegionsError> {
         let mut found = Self::default();
         let mut pending = vec![root.clone()];
         // Each object of the scene is visited once, so the walk is bounded
@@ -142,11 +149,13 @@ impl ScrollRegions {
             // them before walking into the box puts every region after the
             // region it is inside, so its parent is already known.
             for child in &children {
-                let Some((viewport, bounds, can_scroll)) = measure(child) else {
+                let Some((viewport, bounds, can_scroll)) =
+                    measure(child).map_err(ScrollRegionsError::Geometry)?
+                else {
                     continue;
                 };
                 if found.regions.len() == limit {
-                    return Err(TooManyScrollRegions);
+                    return Err(ScrollRegionsError::TooMany);
                 }
                 let parent = found.region_of(&viewport);
                 found
@@ -211,9 +220,12 @@ const LOCAL_MOVES: [Vec2D; 4] = [
 ];
 
 /// A listed constraint's viewport, its box in root space and its
-/// `can_scroll` bits.
-fn measure(constraint: &CoreHandle) -> Option<(CoreHandle, Bounds, u32)> {
-    let (viewport, local, world, artboard, moves) = constraint
+/// `can_scroll` bits; None where no drag reaches it. A viewport whose clips
+/// are past the geometry budget fails, as a node's would.
+fn measure(
+    constraint: &CoreHandle,
+) -> Result<Option<(CoreHandle, Bounds, u32)>, SemanticGeometryError> {
+    let Some((viewport, local, world, artboard, moves)) = constraint
         .with(|object| {
             let scroll = object.as_scroll_constraint()?;
             if !scroll.interactive() || !scroll.has_layout_parent() {
@@ -240,7 +252,10 @@ fn measure(constraint: &CoreHandle) -> Option<(CoreHandle, Bounds, u32)> {
             let moves = LOCAL_MOVES.map(|movement| scroll.can_move_content(movement));
             Some((viewport, local, world, artboard, moves))
         })
-        .flatten()?;
+        .flatten()
+    else {
+        return Ok(None);
+    };
     // The drag's target is the viewport's proxy: hidden, it is not hit.
     let hidden = viewport
         .with_mut(|viewport| {
@@ -251,7 +266,23 @@ fn measure(constraint: &CoreHandle) -> Option<(CoreHandle, Bounds, u32)> {
         .flatten()
         .is_none_or(|proxy| proxy.is_hidden());
     if hidden || !world.invert(&mut Mat2D::default()) {
-        return None;
+        return Ok(None);
+    }
+    // The viewport's space to the root's, without its translation: a size
+    // or a direction carried through it keeps its digits however far from
+    // the root's origin the viewport is, where the difference of two
+    // mapped points loses them (`Artboard::semantic_root_matrix`).
+    let linear = to_root_linear(artboard.as_ref(), world);
+    // Empty on screen once carried through every host: no point of it can
+    // be hit. Measured as a size, from the box's own size, for the same
+    // reason; the box itself is mapped as a node's is and may round.
+    let (width, height) = (local.width(), local.height());
+    let on_screen = (
+        linear[0].abs() * width + linear[2].abs() * height,
+        linear[1].abs() * width + linear[3].abs() * height,
+    );
+    if !(width > 0.0 && height > 0.0 && on_screen.0 > 0.0 && on_screen.1 > 0.0) {
+        return Ok(None);
     }
     let world_box = world.map_bounding_box(local);
     let bounds = Bounds {
@@ -260,37 +291,53 @@ fn measure(constraint: &CoreHandle) -> Option<(CoreHandle, Bounds, u32)> {
         max_x: world_box.max_x,
         max_y: world_box.max_y,
     };
-    if bounds.is_empty_or_nan() {
-        return None;
-    }
     let bounds = artboard
         .as_ref()
         .map_or(bounds, |artboard| root_transform_aabb(artboard, bounds));
-    // Empty on screen once mapped through every host, or clipped away by
-    // the clips around it: no point of it can be hit.
-    if bounds.is_empty_or_nan() || semantic_is_fully_clipped(&viewport) {
-        return None;
+    let corners = [bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y];
+    // Clipped away by the clips around it: no point of it can be hit.
+    if corners.iter().any(|value| value.is_nan()) || semantic_clipped_away(&viewport)? {
+        return Ok(None);
     }
     // Each move the scroller allows, carried to the screen through the same
     // transforms as its box, so a scroller in a turned or mirrored host
     // names the way its content moves on screen.
-    let to_root = |point: Vec2D| {
-        artboard
-            .as_ref()
-            .and_then(|artboard| {
-                artboard.with_downcast_mut::<Artboard, _>(|artboard| artboard.root_transform(point))
-            })
-            .unwrap_or(point)
-    };
-    let start = to_root(world * Vec2D::new(0.0, 0.0));
     let bits = LOCAL_MOVES
         .into_iter()
         .zip(moves)
         .filter(|&(_, can)| can)
         .fold(0, |bits, (movement, _)| {
-            bits | screen_bit(to_root(world * movement) - start)
+            bits | screen_bit(Vec2D::new(
+                linear[0] * movement.x + linear[2] * movement.y,
+                linear[1] * movement.x + linear[3] * movement.y,
+            ))
         });
-    Some((viewport, bounds, bits))
+    Ok(Some((viewport, bounds, bits)))
+}
+
+/// `world` followed by the artboard's transforms to the root, the matrix
+/// semantic drawing uses (`Artboard::semantic_root_matrix`). Only its linear
+/// part is read. Where a host callback maps the root and there is no
+/// matrix, the linear part is read from three mapped points instead.
+fn to_root_linear(artboard: Option<&CoreHandle>, world: Mat2D) -> Mat2D {
+    let Some(artboard) = artboard else {
+        return world;
+    };
+    let root = artboard
+        .with_downcast_mut::<Artboard, _>(Artboard::semantic_root_matrix)
+        .flatten();
+    if let Some(root) = root {
+        return root * world;
+    }
+    let to_root = |point: Vec2D| {
+        artboard
+            .with_downcast_mut::<Artboard, _>(|artboard| artboard.root_transform(point))
+            .unwrap_or(point)
+    };
+    let origin = to_root(world * Vec2D::new(0.0, 0.0));
+    let x = to_root(world * Vec2D::new(1.0, 0.0)) - origin;
+    let y = to_root(world * Vec2D::new(0.0, 1.0)) - origin;
+    Mat2D::new(x.x, x.y, y.x, y.y, origin.x, origin.y)
 }
 
 /// The bit for content moving by `movement` on screen. Content moving down

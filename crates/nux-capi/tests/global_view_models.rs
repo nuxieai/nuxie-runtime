@@ -99,6 +99,7 @@ fn labels(p: *mut NuxPlayer) -> Vec<String> {
             render_revision: 0,
             tree_version: 0,
             node_count: 0,
+            scroll_region_count: 0,
         };
         assert_eq!(nux_semantic_snapshot_info(s, &mut info), NuxStatus::Ok);
         let mut values = Vec::new();

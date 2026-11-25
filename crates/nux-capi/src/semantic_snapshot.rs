@@ -5,6 +5,7 @@ use nuxie::runtime::semantic::{
     semantic_data::SemanticData,
     semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager},
     semantic_node::{SemanticNode, SemanticNodeRef},
+    semantic_scroll_regions::{ScrollRegion, ScrollRegions},
     semantic_snapshot::SemanticsDiffNode,
     semantic_state::SemanticState,
 };
@@ -405,6 +406,10 @@ pub struct NuxSemanticSnapshot {
     tree_version: u64,
     nodes: Vec<SemanticsDiffNode>,
     actions: Vec<u32>,
+    /// Each node's scroll region, beside `nodes`.
+    node_regions: Vec<i32>,
+    /// At most `MAX_SCROLL_REGIONS`.
+    regions: Vec<ScrollRegion>,
 }
 
 #[repr(C)]
@@ -414,6 +419,8 @@ pub struct NuxSemanticSnapshotInfo {
     pub render_revision: u64,
     pub tree_version: u64,
     pub node_count: usize,
+    /// How many scroll regions nux_semantic_snapshot_scroll_region reads.
+    pub scroll_region_count: usize,
 }
 
 #[repr(C)]
@@ -436,12 +443,42 @@ pub struct NuxSemanticNodeView {
     pub hint: NuxStringView,
     /// Bit 0: tap; bit 1: increase; bit 2: decrease. Zero for ineligible nodes.
     pub actions: u32,
+    /// The innermost scroll region whose viewport clips this node, as an
+    /// index for nux_semantic_snapshot_scroll_region, or -1. A node clipped
+    /// away has no actions, so a node with a region and no actions may be
+    /// one scrolled out of view.
+    pub scroll_region: i32,
+}
+
+/// One scroll viewport on screen in a capture.
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct NuxScrollRegionView {
+    pub struct_size: u32,
+    /// Its index in this capture.
+    pub id: u32,
+    /// The viewport's padding box in the space node bounds are in, not
+    /// clipped by the regions around it.
+    pub min_x: f32,
+    pub min_y: f32,
+    pub max_x: f32,
+    pub max_y: f32,
+    /// Bit 0: it can scroll toward its top, showing content above; bit 1:
+    /// toward its bottom; bit 2: toward its left; bit 3: toward its right.
+    /// Each is the scroller's own clamp test for a one point move, so it
+    /// agrees with what a drag would do. Directions are on screen, also in
+    /// a right-to-left scroller.
+    pub can_scroll: u32,
+    /// The region this one is inside, always an earlier index, or -1.
+    pub parent: i32,
 }
 
 pub const NUX_SEMANTIC_SNAPSHOT_INFO_MIN_SIZE: usize =
     std::mem::offset_of!(NuxSemanticSnapshotInfo, node_count) + std::mem::size_of::<usize>();
 pub const NUX_SEMANTIC_NODE_VIEW_MIN_SIZE: usize =
     std::mem::offset_of!(NuxSemanticNodeView, actions) + std::mem::size_of::<u32>();
+pub const NUX_SCROLL_REGION_VIEW_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxScrollRegionView, parent) + std::mem::size_of::<i32>();
 
 fn copy_nodes(nodes: &[SemanticsDiffNode]) -> Result<Vec<SemanticsDiffNode>, NuxStatus> {
     if nodes.len() > MAX_NODES {
@@ -506,8 +543,11 @@ pub unsafe extern "C" fn nux_player_enable_semantics(player: *mut NuxPlayer) -> 
 
 /// Capture only the current acknowledged presentation. Returns HANDLE_MISMATCH
 /// for an unpresented revision and NOT_FOUND until semantics are enabled.
-/// At most 16,384 nodes and 4 MiB of source UTF-8 text are accepted; larger
-/// trees fail as a whole with LIMIT_EXCEEDED. Obscured values are omitted.
+/// At most 16,384 nodes, 4 MiB of source UTF-8 text and 256 scroll regions
+/// are accepted; larger trees fail as a whole with LIMIT_EXCEEDED. Obscured
+/// values are omitted. A scroll region is an interactive scroller whose
+/// viewport is neither collapsed nor empty, nested artboards and list rows
+/// included, listed in tree order.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_player_semantic_snapshot(
     player: *const NuxPlayer,
@@ -576,12 +616,31 @@ pub unsafe extern "C" fn nux_player_semantic_snapshot(
                 .unwrap_or(0)
             })
             .collect();
+        let Ok(regions) = ScrollRegions::collect(&artboard.core_handle()) else {
+            return NuxStatus::LimitExceeded;
+        };
+        let node_regions = nodes
+            .iter()
+            .map(|node| {
+                let owner = manager
+                    .with_semantic_manager(|manager| manager.node_by_id(node.id))
+                    .and_then(|node| {
+                        let node = node.borrow();
+                        node.core_owner
+                            .clone()
+                            .or_else(|| node.boundary_artboard.clone())
+                    });
+                owner.map_or(-1, |owner| regions.region_of(&owner))
+            })
+            .collect();
         let snapshot = Box::into_raw(Box::new(NuxSemanticSnapshot {
             occurrence: Rc::downgrade(&player.artboard),
             render_revision: revision,
             tree_version,
             nodes,
             actions,
+            node_regions,
+            regions: regions.regions().to_vec(),
         }));
         register_handle(snapshot, HandleKind::SemanticSnapshot, player.owner_thread);
         unsafe { *out_snapshot = snapshot };
@@ -818,6 +877,7 @@ pub unsafe extern "C" fn nux_semantic_snapshot_info(
             render_revision: snapshot.render_revision,
             tree_version: snapshot.tree_version,
             node_count: snapshot.nodes.len(),
+            scroll_region_count: snapshot.regions.len(),
         };
         unsafe { write_caller_struct(out_info, &value, NUX_SEMANTIC_SNAPSHOT_INFO_MIN_SIZE) }
             .map_or_else(|status| status, |()| NuxStatus::Ok)
@@ -857,8 +917,38 @@ pub unsafe extern "C" fn nux_semantic_snapshot_node(
             value: string(&node.value),
             hint: string(&node.hint),
             actions: snapshot.actions[index],
+            scroll_region: snapshot.node_regions[index],
         };
         unsafe { write_caller_struct(out_node, &value, NUX_SEMANTIC_NODE_VIEW_MIN_SIZE) }
+            .map_or_else(|status| status, |()| NuxStatus::Ok)
+    })
+}
+
+/// Read scroll region `index` of a capture, below its info's
+/// `scroll_region_count`; NOT_FOUND past it.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_semantic_snapshot_scroll_region(
+    snapshot: *const NuxSemanticSnapshot,
+    index: usize,
+    out_view: *mut NuxScrollRegionView,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let _call = enter_status_handle!(snapshot, HandleKind::SemanticSnapshot);
+        let snapshot = unsafe { &*snapshot };
+        let Some(region) = snapshot.regions.get(index) else {
+            return NuxStatus::NotFound;
+        };
+        let value = NuxScrollRegionView {
+            struct_size: std::mem::size_of::<NuxScrollRegionView>() as u32,
+            id: index as u32,
+            min_x: region.bounds.min_x,
+            min_y: region.bounds.min_y,
+            max_x: region.bounds.max_x,
+            max_y: region.bounds.max_y,
+            can_scroll: region.can_scroll,
+            parent: region.parent,
+        };
+        unsafe { write_caller_struct(out_view, &value, NUX_SCROLL_REGION_VIEW_MIN_SIZE) }
             .map_or_else(|status| status, |()| NuxStatus::Ok)
     })
 }
@@ -1971,6 +2061,8 @@ mod tests {
             render_revision: 7,
             tree_version: 2,
             actions: vec![0],
+            node_regions: vec![-1],
+            regions: Vec::new(),
             nodes: vec![SemanticsDiffNode {
                 label: "Continue".into(),
                 ..Default::default()
@@ -2018,3 +2110,7 @@ mod tests {
 #[cfg(test)]
 #[path = "field_read_tests.rs"]
 mod field_read_tests;
+
+#[cfg(test)]
+#[path = "scroll_region_tests.rs"]
+mod scroll_region_tests;

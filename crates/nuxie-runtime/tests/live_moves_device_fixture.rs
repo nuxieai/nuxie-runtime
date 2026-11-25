@@ -77,8 +77,8 @@ fn check_lifecycle_arrivals(count: usize) {
     let b_flight = rows["B"]
         .with_artboard(|a| a.find_all_handles::<LiveFlight>())
         .into_iter()
-            .next()
-            .unwrap();
+        .next()
+        .unwrap();
     // Both guards matter: entering with another name, and the right name while
     // active, must leave the authored progress at zero.
     for (phase, step) in [("entering", "other"), ("active", "t1")] {

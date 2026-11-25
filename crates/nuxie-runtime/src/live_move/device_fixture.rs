@@ -212,14 +212,7 @@ fn bind(b: &mut Vec<u8>, property: u64, path: &[u8]) {
         ],
     );
 }
-fn slot(
-    b: &mut Vec<u8>,
-    parent: u64,
-    host_id: u64,
-    name: &str,
-    unit: u64,
-    screen_model: u8,
-) {
+fn slot(b: &mut Vec<u8>, parent: u64, host_id: u64, name: &str, unit: u64, screen_model: u8) {
     use V::*;
     obj(
         b,
@@ -585,11 +578,7 @@ fn build(rows: usize, _controls: bool) -> (Vec<u8>, serde_json::Value) {
         obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // tail
         obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // tail + 1
         css_box(&mut b, 1, if i == 0 { 15.0 } else { 215.0 }, false); // tail + 2, 3
-        obj(
-            &mut b,
-            "LayoutComponentStyle",
-            &[("parentId", U(box_id))],
-        ); // tail + 4
+        obj(&mut b, "LayoutComponentStyle", &[("parentId", U(box_id))]); // tail + 4
         obj(
             &mut b,
             "LayoutCssStyle",

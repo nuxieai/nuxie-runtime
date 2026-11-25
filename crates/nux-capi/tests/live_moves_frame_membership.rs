@@ -493,8 +493,14 @@ impl FadePage {
             let (&[a, _], &[a2, b]) = (on_a.as_slice(), on_b.as_slice()) else {
                 panic!("each Screen's copy draws once on both frames: {on_a:?}, {on_b:?}");
             };
-            assert!(b - a > 100.0, "B's placement is to the right of A's: {a}, {b}");
-            assert!((a2 - a).abs() < 0.5, "A's copy draws in A's placement: {on_a:?}, {on_b:?}");
+            assert!(
+                b - a > 100.0,
+                "B's placement is to the right of A's: {a}, {b}"
+            );
+            assert!(
+                (a2 - a).abs() < 0.5,
+                "A's copy draws in A's placement: {on_a:?}, {on_b:?}"
+            );
             page.at = Some((a, b));
             page
         }

@@ -336,9 +336,32 @@ fn a_page_without_scrollers_has_no_region() {
 }
 
 /// 256 regions are captured; one more fails the capture as a whole.
+///
+/// A region is listed only where a drag can reach it, and the page clips
+/// rows below its 640 point height, so the page is first made tall enough
+/// to show every row: 257 cards of 160 points under the heading.
 #[test]
 fn more_than_256_regions_fail_the_capture() {
-    let page = Page::new(Cards::Keyed, 256);
+    let tall = |rows| {
+        let page = Page::new(Cards::Keyed, rows);
+        assert_eq!(
+            unsafe { nux_player_layout_size_set(page.player, 320.0, 42_000.0) },
+            NuxStatus::Ok
+        );
+        page.present(&[]);
+        page
+    };
+    // The page as built shows only the rows that fit in it.
+    let short = Page::new(Cards::Keyed, 256);
+    let shown = short
+        .capture()
+        .expect("a capture")
+        .info()
+        .scroll_region_count;
+    assert!(shown > 0 && shown < 256, "{shown} regions on a short page");
+    drop(short);
+
+    let page = tall(256);
     assert_eq!(
         page.capture()
             .expect("a capture")
@@ -347,7 +370,7 @@ fn more_than_256_regions_fail_the_capture() {
         256
     );
     drop(page);
-    let page = Page::new(Cards::Keyed, 257);
+    let page = tall(257);
     assert_eq!(page.capture().err(), Some(NuxStatus::LimitExceeded));
 }
 

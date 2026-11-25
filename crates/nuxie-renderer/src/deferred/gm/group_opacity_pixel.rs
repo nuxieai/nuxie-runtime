@@ -797,8 +797,9 @@ fn a_mark_written_alone_on_a_cached_screen_reads_on_the_next_draw() {
 }
 
 /// Ruling U13 with a flight: Screen B, with an enabled bitmap cache, fades
-/// while unit c flies over its backing, mid-step. At rest the cache serves
-/// B: one raster of B's size. While B fades, at 0.5 and then 0.25, the
+/// while unit c flies over its backing, mid-step. B has a flight in place, so
+/// it draws past its cache for the step: no raster at full opacity either,
+/// and the uncached twin's pixels. While B fades, at 0.5 and then 0.25, the
 /// cache makes no raster, and the frame is the uncached twin's: the same
 /// canvases, the flight at its own color, and every pixel within a level. A
 /// build whose cached Screen draws through its cache while it fades makes
@@ -806,20 +807,27 @@ fn a_mark_written_alone_on_a_cached_screen_reads_on_the_next_draw() {
 /// picture, and one where B takes its picture but draws what is outside it
 /// through `draw`, which enters the cache.
 #[test]
-fn a_cached_screen_with_a_flight_makes_no_cache_raster_while_it_fades() {
+fn a_cached_screen_with_a_flight_makes_no_cache_raster() {
     let mut cached = Journey::new(&css_flight_over_cached_backing_fixture());
     let mut uncached = Journey::new(&css_flight_over_backing_fixture());
     let row = screen_row(&cached.live.root, "B");
     cache_at_resolution(&row);
-    cached.follow(0.5, "cached, B at rest");
-    uncached.follow(0.5, "uncached, B at rest");
-    let (rest, _) = cached.draw();
-    let _ = uncached.draw();
+    cached.follow(0.5, "cached, B at full opacity");
+    uncached.follow(0.5, "uncached, B at full opacity");
+    let (full, _) = cached.draw();
+    let (twin, _) = uncached.draw();
     assert_eq!(
-        rasters(&rest, &row),
-        1,
-        "at rest the cache serves B: {:?}",
-        rest.canvases
+        rasters(&full, &row),
+        0,
+        "B at full opacity mid-step draws past its cache: {:?}",
+        full.canvases
+    );
+    assert_area(
+        &full,
+        (0, 0, twin.width, twin.pixels.len() / 4 / twin.width),
+        1.0,
+        "B at full opacity mid-step, against the uncached twin",
+        |x, y| Some(twin.at(x, y)),
     );
     for f in [0.5, 0.25] {
         let what = format!("Screen B at {f}, mid-step");

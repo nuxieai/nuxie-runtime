@@ -3043,9 +3043,13 @@ NuxStatus nux_player_semantic_node_for_text_run(const struct NuxPlayer *player,
  * for an unpresented revision and NOT_FOUND until semantics are enabled.
  * At most 16,384 nodes, 4 MiB of source UTF-8 text and 256 scroll regions
  * are accepted; larger trees fail as a whole with LIMIT_EXCEEDED. Obscured
- * values are omitted. A scroll region is an interactive scroller whose
- * viewport is neither collapsed nor empty, nested artboards and list rows
- * included, listed in tree order.
+ * values are omitted. A scroll region is a scroller that a drag sent
+ * through this player would reach, nested artboards and list rows
+ * included, listed in tree order. Only a state-machine player sends its
+ * pointers on, so a static or linear-animation player's capture has no
+ * regions and cannot fail on them. Regions describe this player's
+ * pointers, though the capture is valid for every player sharing the
+ * occurrence.
  */
 NuxStatus nux_player_semantic_snapshot(const struct NuxPlayer *player,
                                        struct NuxSemanticSnapshot **out_snapshot);

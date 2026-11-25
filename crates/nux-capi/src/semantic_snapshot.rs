@@ -545,9 +545,13 @@ pub unsafe extern "C" fn nux_player_enable_semantics(player: *mut NuxPlayer) -> 
 /// for an unpresented revision and NOT_FOUND until semantics are enabled.
 /// At most 16,384 nodes, 4 MiB of source UTF-8 text and 256 scroll regions
 /// are accepted; larger trees fail as a whole with LIMIT_EXCEEDED. Obscured
-/// values are omitted. A scroll region is an interactive scroller whose
-/// viewport is neither collapsed nor empty, nested artboards and list rows
-/// included, listed in tree order.
+/// values are omitted. A scroll region is a scroller that a drag sent
+/// through this player would reach, nested artboards and list rows
+/// included, listed in tree order. Only a state-machine player sends its
+/// pointers on, so a static or linear-animation player's capture has no
+/// regions and cannot fail on them. Regions describe this player's
+/// pointers, though the capture is valid for every player sharing the
+/// occurrence.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_player_semantic_snapshot(
     player: *const NuxPlayer,
@@ -616,8 +620,24 @@ pub unsafe extern "C" fn nux_player_semantic_snapshot(
                 .unwrap_or(0)
             })
             .collect();
-        let Ok(regions) = ScrollRegions::collect(&artboard.core_handle()) else {
-            return NuxStatus::LimitExceeded;
+        // Only a state-machine player sends a step's pointers on:
+        // `PagePlayer::operation` applies them in its `Playback::StateMachine`
+        // arm and answers any other playback with no hit. Restated, because
+        // that arm binds the machine and offers no predicate to share.
+        let Ok(takes_pointers) = player
+            .instance
+            .try_borrow()
+            .map(|instance| matches!(&*instance, PlayerInstance::StateMachine(_)))
+        else {
+            return NuxStatus::ReentrantCall;
+        };
+        let regions = if takes_pointers {
+            let Ok(regions) = ScrollRegions::collect(&artboard.core_handle()) else {
+                return NuxStatus::LimitExceeded;
+            };
+            regions
+        } else {
+            ScrollRegions::default()
         };
         let node_regions = nodes
             .iter()

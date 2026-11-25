@@ -32,7 +32,7 @@
 //! | Constraint not interactive | `ViewportDraggableProxy::takes_drag`, `drag`, `start_drag` (`interactive`) | restated: `interactive()` |
 //! | Viewport not a layout box with a layout parent | `ScrollConstraint::draggables` needs the viewport's proxy | restated: `has_layout_parent`, a layout viewport |
 //! | Box empty on screen | nothing to hit | rechecked on the final root-space box |
-//! | Root artboard has no state machine | no hit components at all | not checked: a capture exists only for a player with a state machine |
+//! | Player sends its pointers to no state machine (a static or linear animation player) | `PagePlayer::operation` applies a step's pointers only in its `Playback::StateMachine` arm and answers every other playback with no hit | not here: the caller collects only for a state machine player (`nux_player_semantic_snapshot`, restated, since that arm binds the machine and has no predicate to share) |
 //!
 //! The constraint's own `wants_scroll` and `can_consume` answer for wheel
 //! scrolls; a drag reads `can_move_content`'s test instead, which is what

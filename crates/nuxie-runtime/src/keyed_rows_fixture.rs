@@ -9,7 +9,8 @@
 //! text, a "Button" box that hears a click and reports "chosen", and a
 //! "Scroller" viewport 60 points tall scrolling a 200 point "Line". Its
 //! machine enters a one-shot animation, "intro", that moves the "Dot" node
-//! right.
+//! right. The page also has an animation that keys nothing, [`STILL`], for
+//! a player that plays the page without a state machine.
 //!
 //! [`scripted_keyed_plans_fixture`] adds a scripted drawable to the card, so
 //! each row runs its own instance of one script.
@@ -62,6 +63,8 @@ pub const RUN_TEXT: &str = "Monthly";
 pub const BUTTON_LABEL: &str = "Choose";
 /// The scrolled line's label, in [`Cards::DescribedLine`].
 pub const LINE_LABEL: &str = "Line";
+/// The page's animation, which keys nothing.
+pub const STILL: &str = "still";
 /// How far the card's "intro" moves its dot.
 pub const DOT_TRAVEL: f32 = 100.0;
 /// The heading's height.
@@ -320,6 +323,11 @@ fn build(cards: Cards, script: Option<&[u8]>) -> Vec<u8> {
             &[("parentId", U(parent as u64))],
         ); // 12 to 14
     }
+    obj(
+        &mut b,
+        "LinearAnimation",
+        &[("name", S(STILL)), ("fps", U(60)), ("duration", U(30))],
+    );
     obj(&mut b, "StateMachine", &[("name", S("plans"))]);
     layer(&mut b, false);
 

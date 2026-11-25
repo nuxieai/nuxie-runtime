@@ -205,7 +205,7 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(
     },
     crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
     crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
-    crate::live_move::compose_slot_transform::<Self>,
+    crate::mechanical_port::source::transform_component::compose_world_transform::<Self>,
     crate::mechanical_port::source::transform_component::update_constraints_super::<Self>
 );
 

@@ -101,7 +101,6 @@ fn artboard_at_rest(board: &Artboard) -> Mat2D {
             .then(|| Vec2D::new(values.x, values.y)),
         values.rotation,
         Vec2D::new(values.scale_x, values.scale_y),
-        board.flight_stretch(),
         board.origin_is_pivot_only().then(|| board.origin_offset()),
     )
 }

@@ -1,20 +1,11 @@
-use super::{
-    records::LiveSlot,
-    transport::{FlightPaint, child, mark_draw_order_dirty, read, size, write},
-    validate_move,
-};
+use super::transport::{child, read, size};
 use crate::{
     Artboard, CoreHandle, RuntimeArtboardInstanceHandle,
-    css_layout::{group_opacity, hosted_frame, paint_order, record},
+    css_layout::{group_opacity, hosted_frame, record},
     source::{
         artboard_component_list::ArtboardComponentList,
-        component_dirt::ComponentDirt,
         drawable::RuntimeDrawableOccurrence,
-        generated::{
-            core_registry::CoreRegistry, nested_artboard_layout_base::NestedArtboardLayoutBase,
-            node_base::NodeBase, transform_component_base::TransformComponentBase,
-            world_transform_component_base::WorldTransformComponentBase,
-        },
+        generated::nested_artboard_layout_base::NestedArtboardLayoutBase,
         layout_component::{FlightShadow, LayoutComponent},
         math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
         nested_artboard::NestedArtboard,
@@ -30,15 +21,9 @@ pub enum SizeMode {
     Scale,
     Layout,
 }
-#[derive(Clone, Copy, Debug)]
-pub struct Pose {
-    pub transform: Mat2D,
-    pub size: Vec2D,
-    pub opacity: f32,
-}
 /// A component's pose in root drawing coordinates. Artboard's existing draw
 /// projection includes frame origins, self transforms, full list-row matrices
-/// and nested layout placement. Endpoints and the flight parent share this path.
+/// and nested layout placement.
 pub(super) fn draw_pose(component: &CoreHandle) -> Result<(Mat2D, f32, f32)> {
     let (board, world, opacity, child_opacity) = component
         .with(|o| {
@@ -82,8 +67,8 @@ pub(super) fn draw_pose(component: &CoreHandle) -> Result<(Mat2D, f32, f32)> {
     };
     Ok((matrix, opacity, child_opacity))
 }
-// Size sampling deliberately does not enter draw_pose. All frame sizes must
-// be applied and laid out before any endpoint transform is sampled.
+/// A placement's size: its instance's, or while it is empty the one
+/// `remember` kept.
 fn slot_size(host: &CoreHandle) -> Result<Vec2D> {
     let frozen_size = read(host, |s| {
         s.live_move
@@ -96,88 +81,22 @@ fn slot_size(host: &CoreHandle) -> Result<Vec2D> {
         .or(frozen_size)
         .unwrap_or_default())
 }
-pub fn slot_pose(host: &CoreHandle) -> Result<Pose> {
-    let (transform, opacity, _) = draw_pose(host)?;
-    Ok(Pose {
-        transform,
-        size: slot_size(host)?,
-        opacity,
-    })
-}
-
-/// The follower sizes the flight slot's own box to `size`, its border box,
-/// through the one route its host kind already sizes a unit by:
-/// - a CSS host: the CSS width and height giving that border box, in its
-///   item record, like a binding;
-/// - a native layout host: `instanceWidth` and `instanceHeight` in points,
-///   which upstream's `StyleOverrider` pushes into the unit;
-/// - a plain host: the unit artboard's own size, as `NestedArtboardLeaf`
-///   sizes its artboard upstream.
-fn set_flight_box(flight: &CoreHandle, instance: &RuntimeArtboardInstanceHandle, size: Vec2D) {
-    use crate::css_layout::keys::{HEIGHT_KIND, WIDTH_KIND};
-    use crate::source::generated::nested_artboard_layout_base::NestedArtboardLayoutBase as Host;
-    let (width, height) = (size.x.max(0.0), size.y.max(0.0));
-    if !flight.is_type_of(Host::TYPE_KEY) {
-        instance.set_size(width, height);
-        return;
-    }
-    let record = instance.with_artboard(|unit| unit.css_record()).and(
-        flight
-            .with(|o| {
-                o.as_container_component()
-                    .and_then(|host| crate::css_layout::record::find_in(host.children()))
-            })
-            .flatten(),
-    );
-    if let Some(record) = record {
-        // `size` is the unit's border box, what the ends measure; its record
-        // holds the CSS size, under the root's own box-sizing.
-        let css = instance.with_artboard(|unit| {
-            unit.base
-                .base
-                .css_size_for_border_box(Vec2D::new(width, height))
-        });
-        for (kind, value) in [(WIDTH_KIND, css.x), (HEIGHT_KIND, css.y)] {
-            // A length-percentage: the length, with no percentage part.
-            CoreRegistry::set_uint_handle(&record, i32::from(kind), 1);
-            CoreRegistry::set_double_handle(&record, i32::from(kind + 1), value);
-            CoreRegistry::set_double_handle(&record, i32::from(kind + 2), 0.0);
-        }
-        return;
-    }
-    for (key, value) in [
-        (Host::INSTANCE_WIDTH_SCALE_TYPE_PROPERTY_KEY, 0),
-        (Host::INSTANCE_HEIGHT_SCALE_TYPE_PROPERTY_KEY, 0),
-        (Host::INSTANCE_WIDTH_UNITS_VALUE_PROPERTY_KEY, 1),
-        (Host::INSTANCE_HEIGHT_UNITS_VALUE_PROPERTY_KEY, 1),
-    ] {
-        CoreRegistry::set_uint_handle(flight, i32::from(key), value);
-    }
-    CoreRegistry::set_double_handle(flight, i32::from(Host::INSTANCE_WIDTH_PROPERTY_KEY), width);
-    CoreRegistry::set_double_handle(
-        flight,
-        i32::from(Host::INSTANCE_HEIGHT_PROPERTY_KEY),
-        height,
-    );
-}
-
 /// One read of the keyed controls, shared by size, value and pose projection.
 pub(super) struct FlightFrame {
     pub(super) progress: f32,
     path: Vec2D,
     fade: f32,
     blended_size: Vec2D,
-    /// The corners the flying unit draws in place of its own, when the
+    /// The corners the flying element draws in place of its own, when the
     /// controls carry all four (docs/live-moves.md).
     pub(super) corners: Option<[f32; 4]>,
-    /// The shadow the flying unit draws in place of its own outer shadows,
+    /// The shadow the flying element draws in place of its own outer shadows,
     /// when the controls carry one (docs/live-moves.md).
     pub(super) shadow: Option<FlightShadow>,
 }
 impl FlightFrame {
-    /// One read of a flight's controls, a flight slot's or a flight
-    /// record's, with its two ends' sizes `a` and `b` blended at its
-    /// progress.
+    /// One read of a flight record's controls, with its two ends' sizes `a`
+    /// and `b` blended at its progress.
     pub(super) fn read(values: &super::records::Values, a: Vec2D, b: Vec2D) -> Result<Self> {
         let (progress, path_x, path_y, fade, corners, shadow) = (
             values.progress,
@@ -248,373 +167,6 @@ impl FlightFrame {
         Mat2D::compose(&blended)
     }
 }
-pub(super) struct ProjectedPose {
-    pub(super) matrix: Mat2D,
-    pub(super) opacity: f32,
-    /// Scale mode's stretch of the flying unit, (1, 1) in Layout mode. A
-    /// zoomed pair's version takes its scale on the box.
-    pub(super) stretch: Vec2D,
-}
-#[derive(Clone)]
-pub struct Flight {
-    pub flight: CoreHandle,
-    pub from: CoreHandle,
-    pub to: CoreHandle,
-    pub size_mode: SizeMode,
-    controls: CoreHandle,
-    departure_size: Vec2D,
-    pub(super) values: super::values::FlightValues,
-    pub(super) landing: CoreHandle,
-    pub(super) board: CoreHandle,
-    from_board: CoreHandle,
-    pub(super) to_board: CoreHandle,
-    from_pose: std::cell::Cell<Pose>,
-    to_pose: std::cell::Cell<Pose>,
-}
-impl Flight {
-    pub fn new(
-        flight: CoreHandle,
-        from: CoreHandle,
-        to: CoreHandle,
-        size_mode: SizeMode,
-    ) -> Result<Self> {
-        validate_move(&from, &flight)?;
-        validate_move(&from, &to)?;
-        Self::along_path(flight, from, to, size_mode)
-    }
-    // Pose endpoints need not hold the same unit. Transport is validated
-    // independently against the named flight and landing slots by the plan.
-    pub(super) fn along_path(
-        flight: CoreHandle,
-        from: CoreHandle,
-        to: CoreHandle,
-        size_mode: SizeMode,
-    ) -> Result<Self> {
-        let board = read(&flight, NestedArtboard::parent_artboard_handle)?
-            .ok_or_else(|| anyhow::anyhow!("flight has no parent"))?;
-        let controls = board
-            .with_downcast::<Artboard, _>(|b| {
-                b.objects()
-                    .iter()
-                    .flatten()
-                    .find(|h| {
-                        h.with_downcast::<LiveSlot, _>(|r| r.parent().as_ref() == Some(&flight))
-                            .unwrap_or(false)
-                    })
-                    .cloned()
-            })
-            .flatten()
-            .ok_or_else(|| anyhow::anyhow!("flight has no LiveSlot record"))?;
-        let from_pose = slot_pose(&from)?;
-        let to_pose = slot_pose(&to)?;
-        let from_board = read(&from, NestedArtboard::parent_artboard_handle)?.expect("slot row");
-        let to_board = read(&to, NestedArtboard::parent_artboard_handle)?.expect("slot row");
-        let departure_size = from_pose.size;
-        Ok(Self {
-            landing: to.clone(),
-            board,
-            from_board,
-            to_board,
-            from_pose: std::cell::Cell::new(from_pose),
-            to_pose: std::cell::Cell::new(to_pose),
-            flight,
-            from,
-            to,
-            size_mode,
-            controls,
-            departure_size,
-            values: super::values::FlightValues::default(),
-        })
-    }
-    pub(super) fn use_departure(&mut self, holder: &CoreHandle) -> Result<()> {
-        self.departure_size = child(holder)?
-            .map(|b| size(holder, &b))
-            .ok_or_else(|| anyhow::anyhow!("empty departure holder"))?;
-        Ok(())
-    }
-    /// The size the unit had in its holder when the step started.
-    pub(super) fn departure_size(&self) -> Vec2D {
-        self.departure_size
-    }
-    pub fn controls(&self) -> CoreHandle {
-        self.controls.clone()
-    }
-    /// The keyed progress, read from the slot record with no checks: None
-    /// when the record is gone or the value isn't finite.
-    pub(super) fn progress(&self) -> Option<f32> {
-        self.controls
-            .with_downcast::<LiveSlot, _>(|r| r.values.progress)
-            .filter(|progress| progress.is_finite())
-    }
-    /// Takeoff validation uses the already settled departure scene and makes
-    /// no writes. Frame execution uses the separate size and pose phases below.
-    pub(super) fn validate(&self) -> Result<()> {
-        self.project_pose(&self.size_frame(None)?, None).map(|_| ())
-    }
-
-    pub(super) fn size_frame(
-        &self,
-        active: Option<&std::collections::HashSet<CoreHandle>>,
-    ) -> Result<FlightFrame> {
-        // Sleeping endpoints retain their last settled size without entering
-        // their artboard, just as pose sampling retains their last transform.
-        let a = if active.is_none_or(|a| a.contains(&self.from_board)) {
-            slot_size(&self.from)?
-        } else {
-            self.from_pose.get().size
-        };
-        let b = if active.is_none_or(|a| a.contains(&self.to_board)) {
-            slot_size(&self.to)?
-        } else {
-            self.to_pose.get().size
-        };
-        let values = self
-            .controls
-            .with_downcast::<LiveSlot, _>(|r| r.values.clone())
-            .ok_or_else(|| anyhow::anyhow!("flight controls retired"))?;
-        let frame = FlightFrame::read(&values, a, b)?;
-        if self.size_mode == SizeMode::Scale {
-            ensure!(
-                self.departure_size.x > 0.0 && self.departure_size.y > 0.0,
-                "scale mode needs a nonzero box"
-            );
-        }
-        Ok(frame)
-    }
-
-    /// The size a flight on its own lays its unit out at: the blend of its
-    /// two slots' sizes in Layout mode, else its departure size.
-    pub(super) fn size_to_lay_out(&self, frame: &FlightFrame) -> Vec2D {
-        if self.size_mode == SizeMode::Layout {
-            frame.blended_size
-        } else {
-            self.departure_size
-        }
-    }
-
-    /// Lays the unit out at `size`, with these corners and this shadow in
-    /// place of its own, and blends its values at `progress`.
-    pub(super) fn apply_size(
-        &self,
-        progress: f32,
-        size: Vec2D,
-        corners: Option<[f32; 4]>,
-        shadow: Option<FlightShadow>,
-    ) -> Result<()> {
-        // Blended values can feed text/layout bindings. Apply them before the
-        // layout barrier too, using the same progress that the pose will use.
-        self.values.follow(progress);
-        let Some(instance) = child(&self.flight)? else {
-            return Ok(());
-        };
-        set_flight_box(&self.flight, &instance, size);
-        // The corners and the shadow mark paths, not layout; transport clears
-        // them.
-        instance.with_artboard_mut(|unit| {
-            unit.set_flight_corners(corners);
-            unit.set_flight_shadow(shadow);
-        });
-        Ok(())
-    }
-
-    pub(super) fn project_pose(
-        &self,
-        frame: &FlightFrame,
-        active: Option<&std::collections::HashSet<CoreHandle>>,
-    ) -> Result<ProjectedPose> {
-        if active.is_none_or(|a| a.contains(&self.from_board)) {
-            self.from_pose.set(slot_pose(&self.from)?);
-        }
-        if active.is_none_or(|a| a.contains(&self.to_board)) {
-            self.to_pose.set(slot_pose(&self.to)?);
-        }
-        let a = self.from_pose.get();
-        let b = self.to_pose.get();
-        let t = frame.progress;
-        let mix = |a: f32, b: f32| a + (b - a) * t;
-        let blended = frame.blend(a.transform, b.transform);
-        let stretch = if self.size_mode == SizeMode::Scale {
-            // Scaling stretches the flying unit under its own transform: it can
-            // use the settled endpoint sizes without changing the departure box
-            // or triggering layout. The slot's pose keeps the blended placement.
-            let size = Vec2D::new(mix(a.size.x, b.size.x), mix(a.size.y, b.size.y));
-            Vec2D::new(
-                size.x / self.departure_size.x,
-                size.y / self.departure_size.y,
-            )
-        } else {
-            Vec2D::new(1.0, 1.0)
-        };
-        let parent = self.flight.with(|o| o.component_parent_handle()).flatten();
-        let (parent_world, _, parent_opacity) = parent
-            .as_ref()
-            .map(draw_pose)
-            .transpose()?
-            .unwrap_or((Mat2D::identity(), 1.0, 1.0));
-        let mut inverse = Mat2D::identity();
-        ensure!(parent_world.invert(&mut inverse), "singular flight parent");
-        let opacity = mix(a.opacity, b.opacity) * frame.fade;
-        ensure!(
-            parent_opacity != 0.0 || opacity == 0.0,
-            "opaque flight under transparent parent"
-        );
-        let matrix = inverse * blended;
-        ensure!(
-            (0..6).all(|i| matrix[i].is_finite()) && opacity.is_finite(),
-            "non-finite flight pose"
-        );
-        Ok(ProjectedPose {
-            matrix,
-            opacity: if parent_opacity == 0.0 {
-                0.0
-            } else {
-                opacity / parent_opacity
-            },
-            stretch,
-        })
-    }
-
-    pub(super) fn apply_pose(&self, pose: ProjectedPose) -> Result<()> {
-        // These are transform/opacity overrides only. Size and value writes
-        // belong to apply_size, so projection cannot invalidate the layout.
-        let matrix = pose.matrix;
-        write(&self.flight, |s| {
-            s.live_move_mut().local_override = Some(matrix);
-            s.base.base.mark_transform_dirty();
-            s.base.base.base.add_dirt(ComponentDirt::COMPONENTS, false);
-        });
-        let local = matrix.decompose();
-        for (key, value) in [
-            (NodeBase::X_PROPERTY_KEY, local.x()),
-            (NodeBase::Y_PROPERTY_KEY, local.y()),
-            (
-                TransformComponentBase::ROTATION_PROPERTY_KEY,
-                local.rotation(),
-            ),
-            (
-                TransformComponentBase::SCALE_X_PROPERTY_KEY,
-                local.scale_x(),
-            ),
-            (
-                TransformComponentBase::SCALE_Y_PROPERTY_KEY,
-                local.scale_y(),
-            ),
-            (
-                WorldTransformComponentBase::OPACITY_PROPERTY_KEY,
-                pose.opacity,
-            ),
-        ] {
-            CoreRegistry::set_double_handle(&self.flight, i32::from(key), value);
-        }
-        if let Some(unit) = child(&self.flight)? {
-            unit.with_artboard_mut(|unit| unit.set_flight_stretch(pose.stretch));
-        }
-        Ok(())
-    }
-
-    /// The matched element's resting slot on the upper Screen, the board
-    /// that holds this flight's slot: `to` going forward, `from` on Back.
-    pub(super) fn anchor(&self) -> Option<CoreHandle> {
-        if self.to_board == self.board {
-            Some(self.to.clone())
-        } else if self.from_board == self.board {
-            Some(self.from.clone())
-        } else {
-            None
-        }
-    }
-
-    /// Reads the anchor's stacking context, through the frame at rest in it.
-    /// When it differs from the one the placement holds, it stores it and
-    /// marks the Screen's draw order dirty, so the list is sorted with it
-    /// before `read_cover` walks it. True when it changed. A flight with no
-    /// anchor ends its placement.
-    pub(super) fn read_context(&self) -> Result<bool> {
-        let Some(anchor) = self.anchor() else {
-            if write(&self.flight, |s| s.live_move_mut().paint.take()).is_some() {
-                mark_draw_order_dirty(&self.flight);
-            }
-            return Ok(false);
-        };
-        let context = anchor_context(&anchor);
-        let changed = write(&self.flight, |s| match s.live_move_mut().paint.as_mut() {
-            Some(paint) if paint.context != context => {
-                paint.context = context;
-                true
-            }
-            _ => false,
-        });
-        if changed {
-            mark_draw_order_dirty(&self.flight);
-        }
-        Ok(changed)
-    }
-
-    /// Finds what covers the anchor: walking the Screen's sorted list from
-    /// the anchor toward the top, the first drawable that draws something
-    /// and covers the anchor's resting box. Stores it in the placement, and
-    /// marks the draw order dirty only when it changed.
-    pub(super) fn read_cover(&self) -> Result<()> {
-        let Some(anchor) = self.anchor() else {
-            return Ok(());
-        };
-        let list = self
-            .board
-            .with_downcast::<Artboard, _>(|board| board.drawables().to_vec())
-            .unwrap_or_default();
-        let at = list.iter().position(
-            |item| matches!(item, RuntimeDrawableOccurrence::Authored(slot) if *slot == anchor),
-        );
-        let mut rest = Resting::new(&self.board);
-        let coverer = at.and_then(|at| {
-            let anchor_box = rest.slot_box(&anchor);
-            list[..at]
-                .iter()
-                .rev()
-                .find(|item| {
-                    draws_something(item)
-                        && match (anchor_box, rest.drawable_box(item)) {
-                            (Some(a), Some(b)) => overlaps(a, b),
-                            _ => true,
-                        }
-                })
-                .cloned()
-        });
-        let changed = write(&self.flight, |s| {
-            let paint = s.live_move_mut().paint.as_mut()?;
-            let same = paint.anchor == anchor
-                && match (&paint.coverer, &coverer) {
-                    (Some(a), Some(b)) => paint_order::same(a, b),
-                    (None, None) => true,
-                    _ => false,
-                };
-            paint.anchor = anchor;
-            paint.coverer = coverer;
-            Some(!same)
-        });
-        if changed == Some(true) {
-            mark_draw_order_dirty(&self.flight);
-        }
-        Ok(())
-    }
-
-    /// The placement take-off seeds on this flight's slot, before any frame
-    /// is drawn: its anchor and the anchor's context, with no coverer yet.
-    pub(super) fn seed_placement(&self) -> Option<CoreHandle> {
-        let anchor = self.anchor()?;
-        let context = anchor_context(&anchor);
-        write(&self.flight, |s| {
-            s.live_move_mut().paint = Some(FlightPaint {
-                anchor: anchor.clone(),
-                coverer: None,
-                context,
-            })
-        });
-        mark_draw_order_dirty(&self.flight);
-        Some(anchor)
-    }
-}
-
 /// The shadow seven controls carry. An alpha below 0 (-1 by default) carries
 /// none: the unit draws its own. Alpha and channels round to 8 bits.
 fn flight_shadow([alpha, red, green, blue, blur, x, y]: [f32; 7]) -> Option<FlightShadow> {
@@ -648,9 +200,9 @@ fn overlaps(a: Aabb, b: Aabb) -> bool {
 }
 
 /// Whether a drawable can cover a flight: it will draw, and it is not a
-/// box's own layout drawable (whose draw only restores), a box's proxy with
-/// no shape paint, or a flight slot. A slot a step emptied has no artboard,
-/// so it will not draw.
+/// box's own layout drawable (whose draw only restores) or a box's proxy
+/// with no shape paint. A placement a step emptied has no artboard, so it
+/// will not draw.
 fn draws_something(item: &RuntimeDrawableOccurrence) -> bool {
     if !item.will_draw() {
         return false;
@@ -666,19 +218,7 @@ fn draws_something(item: &RuntimeDrawableOccurrence) -> bool {
                 .unwrap_or(false)
         }
         RuntimeDrawableOccurrence::Authored(handle) => handle
-            .with(|o| {
-                if o.as_layout_component().is_some() {
-                    return false;
-                }
-                let Some(slot) = o.as_nested_artboard() else {
-                    return true;
-                };
-                !slot.children().iter().any(|child| {
-                    child
-                        .with_downcast::<LiveSlot, _>(|r| r.values.role != 0)
-                        .unwrap_or(false)
-                })
-            })
+            .with(|o| o.as_layout_component().is_none())
             .unwrap_or(false),
     }
 }
@@ -769,19 +309,15 @@ impl Resting {
     }
 
     /// A CSS slot's resting box: its layout box and size under the
-    /// transform of the frame at rest in it, at stretch (1, 1).
+    /// transform of the frame at rest in it.
     fn slot_box(&mut self, slot: &CoreHandle) -> Option<Aabb> {
-        let matrix = self.slot_matrix(slot)?;
-        let size = slot_size(slot).ok()?;
-        Some(transformed_box(matrix, size))
-    }
-
-    /// The matrix a CSS slot's frame rests under: the slot's resting world
-    /// times the frame's rest transform.
-    fn slot_matrix(&mut self, slot: &CoreHandle) -> Option<Mat2D> {
         let world = self.world(slot)?;
         let rest = read(slot, hosted_frame::frame_at_rest).ok()?;
-        Some(world * hosted_frame::rest_transform(&rest))
+        let size = slot_size(slot).ok()?;
+        Some(transformed_box(
+            world * hosted_frame::rest_transform(&rest),
+            size,
+        ))
     }
 
     /// A level's resting world transform, from the Screen root down.
@@ -897,7 +433,7 @@ impl Resting {
 
     /// Reads `slot` as a slot whose frame flies, which holds only its
     /// place: its frame's own keyed layout, and its descendants', count for
-    /// nothing at rest, as for a flight slot's frame in flight.
+    /// nothing at rest.
     fn frame_flies(&mut self, slot: &CoreHandle) {
         if let Some(frame) = layout_instance(slot) {
             self.held.insert(frame.core_handle(), false);
@@ -1064,10 +600,10 @@ pub(super) enum TakeOff {
     /// A transfer, and where its placement rests, recorded at take-off.
     Recorded(PlacedAtRest),
     /// A transfer whose placement had no resting place at take-off, read
-    /// as the slot path reads a slot whose frame flies (`PlacedAtRest::
-    /// record`): its own host record is keyed, a keyed sibling pushes it,
-    /// or a level it rests on is not measured. Unknown, so it is covered by
-    /// whatever it meets, the safe side `Resting` takes.
+    /// as a slot whose frame flies is read (`PlacedAtRest::record`): its own
+    /// host record is keyed, a keyed sibling pushes it, or a level it rests on
+    /// is not measured. Unknown, so it is covered by whatever it meets, the
+    /// safe side `Resting` takes.
     Unknown,
 }
 
@@ -1103,12 +639,11 @@ pub(super) struct PlacedAtRest {
 impl PlacedAtRest {
     /// `placement`, a child of `anchor` (`hosted_scene::boxed_placement`),
     /// at rest inside it, read now, for the carried `instance`. It is read
-    /// as the slot path reads a slot whose frame flies: the frame in it
-    /// flies, so its own keyed layout and its descendants' reach no one at
-    /// rest (`Resting::frame_flies`). Unknown only when the placement or
-    /// the anchor has no resting place even so: the placement's own host
-    /// record is keyed, a keyed sibling pushes it, or a level is not
-    /// measured.
+    /// as a slot whose frame flies: the frame in it flies, so its own keyed
+    /// layout and its descendants' reach no one at rest
+    /// (`Resting::frame_flies`). Unknown only when the placement or the anchor
+    /// has no resting place even so: the placement's own host record is keyed,
+    /// a keyed sibling pushes it, or a level is not measured.
     pub(super) fn record(
         anchor: &CoreHandle,
         placement: &CoreHandle,
@@ -1204,16 +739,6 @@ fn anchor_box(rest: &mut Resting, anchor: &CoreHandle) -> Option<Aabb> {
 #[cfg(test)]
 pub(super) fn resting_anchor_box(board: &CoreHandle, anchor: &CoreHandle) -> Option<Aabb> {
     anchor_box(&mut Resting::new(board), anchor)
-}
-
-/// The matrix placement gives a CSS slot's frame at rest, in its Screen's
-/// space. None when the slot has no resting place on its Screen.
-#[cfg(feature = "test-support")]
-pub(super) fn resting_slot(slot: &CoreHandle) -> Option<Mat2D> {
-    let board = slot
-        .with(|o| o.as_component().and_then(|c| c.artboard_handle()))
-        .flatten()?;
-    Resting::new(&board).slot_matrix(slot)
 }
 
 /// The matrix placement's resting boxes give a CSS box at rest, in its

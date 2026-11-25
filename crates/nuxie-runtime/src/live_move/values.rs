@@ -180,7 +180,7 @@ impl TypedText {
         let binds = instance.with_artboard(|b| b.data_bind_handles());
         let mut bound = bound.to_vec();
         // After take-off the mounted props are the landing props, whereas the
-        // flight slot's inline model still describes its placeholder.
+        // emptied placement's inline model still describes its placeholder.
         for bind in &binds {
             if let Some(target) = bind
                 .with(|o| {

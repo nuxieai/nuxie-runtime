@@ -2,10 +2,7 @@
 //! frame paths iterate active occurrences and never enter collapsed rows.
 use crate::{
     Artboard, CoreHandle, RuntimeArtboardInstanceHandle,
-    source::{
-        artboard_component_list::ArtboardComponentList,
-        core::{CoreObject, CoreType},
-    },
+    source::{artboard_component_list::ArtboardComponentList, core::CoreObject},
 };
 use std::{
     cell::{Cell, RefCell},
@@ -181,24 +178,13 @@ pub(crate) fn is_screen(board: &CoreHandle) -> bool {
         })
         .unwrap_or(false)
 }
-pub(crate) fn is_live_slot(slot: &CoreHandle) -> bool {
-    slot.with(|o| {
-        o.as_nested_artboard().is_some_and(|s| {
-            s.children()
-                .iter()
-                .any(|c| c.is_type_of(crate::live_move::records::LiveSlot::TYPE_KEY))
-        })
-    })
-    .unwrap_or(false)
-        && in_screen_row(slot)
-}
 /// A nested artboard the live-move carry takes an instance from or gives one
-/// to: a slot (`is_live_slot`), or the component placement of an element a
-/// Screen keys to fly in place (docs/live-moves.md, Flying in place). That
-/// placement is the keyed nested artboard itself, or the one nested artboard
-/// directly inside a keyed box, the shape the compiler publishes.
+/// to: the component placement of an element a Screen keys to fly in place
+/// (docs/live-moves.md, Flying in place). It is the keyed nested artboard
+/// itself, or the one nested artboard directly inside a keyed box, the shape
+/// the compiler publishes.
 pub(crate) fn is_carry_host(host: &CoreHandle) -> bool {
-    is_live_slot(host) || (is_keyed_placement(host) && in_screen_row(host))
+    is_keyed_placement(host) && in_screen_row(host)
 }
 fn is_keyed_placement(host: &CoreHandle) -> bool {
     if !host
@@ -812,7 +798,7 @@ pub(crate) fn definition_has_records(source: &CoreHandle) -> bool {
         .is_some_and(|arena| {
             #[cfg(feature = "test-support")]
             record_walk(Walk::CapabilityScan);
-            arena.contains_types(62000..=62002)
+            arena.contains_types(62001..=62002)
         });
     records
         && source

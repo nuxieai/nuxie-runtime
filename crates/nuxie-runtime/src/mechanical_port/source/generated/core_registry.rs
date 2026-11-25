@@ -9900,7 +9900,7 @@ impl CoreRegistry {
         value: f32,
         completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
     ) {
-        // Nuxie LiveSlot keyable flight controls.
+        // Nuxie LiveFlight keyable flight controls.
         if crate::live_move::records::field_id(property_key) == Some(2) {
             crate::live_move::records::set_double(
                 object.as_registry_any_mut(),
@@ -10542,7 +10542,7 @@ impl CoreRegistry {
         object.get_bool(field)
     }
     pub fn get_double<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> f32 {
-        // Nuxie LiveSlot keyable flight controls.
+        // Nuxie LiveFlight keyable flight controls.
         if crate::live_move::records::field_id(property_key) == Some(2) {
             return crate::live_move::records::get_double(object.as_registry_any(), property_key);
         }

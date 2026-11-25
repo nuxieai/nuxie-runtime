@@ -1433,6 +1433,64 @@ impl ScrollConstraint {
             );
         }
     }
+    /// Nuxie: a host's move of the content by `physical` points, in the
+    /// scroller's own space and in upstream's `ScrollEvent` sense (a
+    /// negative y shows content below; a negative x shows content to the
+    /// right, also in a right-to-left viewport). It starts from where the
+    /// content is going (the effective offset, the target while it
+    /// settles), is clamped as `scroll_by` clamps, without the drag
+    /// multiplier, and moves through `scroll_to_position`: animated with
+    /// physics, at once without. False, and nothing called, when the clamp
+    /// leaves the content where it is going.
+    pub fn scroll_content_by(&mut self, physical: Vec2D) -> bool {
+        let logical = self.logical_scroll_delta(physical);
+        let current = Vec2D::new(
+            self.effective_scroll_offset_x(),
+            self.effective_scroll_offset_y(),
+        );
+        let target = Vec2D::new(
+            if self.constrains_horizontal() {
+                self.clamp_resolved_offset(current.x + logical.x, true)
+            } else {
+                current.x
+            },
+            if self.constrains_vertical() {
+                self.clamp_resolved_offset(current.y + logical.y, false)
+            } else {
+                current.y
+            },
+        );
+        if target == current {
+            return false;
+        }
+        self.scroll_to_position(target.x, target.y);
+        true
+    }
+    /// Nuxie: how far the content has moved from its start and the most it
+    /// can, on each axis, in the scroller's own points: at or above 0, from
+    /// the effective offset (the target while it settles), clamped to the
+    /// range. Zero on an axis it does not scroll; a looping axis has an
+    /// infinite range.
+    pub fn scroll_position(&self) -> (Vec2D, Vec2D) {
+        let axis = |constrained: bool, effective: f32, max_offset: f32| {
+            if !constrained {
+                return (0.0, 0.0);
+            }
+            let range = (-max_offset).max(0.0);
+            ((-effective).clamp(0.0, range), range)
+        };
+        let (scroll_x, range_x) = axis(
+            self.constrains_horizontal(),
+            self.effective_scroll_offset_x(),
+            self.max_offset_x(),
+        );
+        let (scroll_y, range_y) = axis(
+            self.constrains_vertical(),
+            self.effective_scroll_offset_y(),
+            self.max_offset_y(),
+        );
+        (Vec2D::new(scroll_x, scroll_y), Vec2D::new(range_x, range_y))
+    }
     pub fn mark_scroll_activity(&mut self) {
         self.scroll_idle_seconds = 0.0;
     }

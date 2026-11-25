@@ -80,6 +80,15 @@ pub struct ScrollRegion {
     pub can_scroll: u32,
     /// The region this one is inside, an index before this one's, or -1.
     pub parent: i32,
+    /// How far the content has moved from its start on each axis, at or
+    /// above 0, and the most it can (`ScrollConstraint::scroll_position`):
+    /// the scroller's own points, its effective offset (the target while it
+    /// settles), zero on an axis it does not scroll, and an infinite range
+    /// on a looping axis.
+    pub scroll_x: f32,
+    pub scroll_y: f32,
+    pub range_x: f32,
+    pub range_y: f32,
 }
 
 /// Why a collection failed; either fails a capture as a whole.
@@ -99,6 +108,9 @@ pub enum ScrollRegionsError {
 #[derive(Default)]
 pub struct ScrollRegions {
     regions: Vec<ScrollRegion>,
+    /// Each region's `ScrollConstraint`, beside `regions`, so a host's move
+    /// of a region finds its scroller. Bounded as `regions` is.
+    constraints: Vec<CoreHandle>,
     /// Each region's viewport, to its index. Bounded as `regions` is.
     viewports: HashMap<CoreHandle, usize>,
 }
@@ -149,8 +161,13 @@ impl ScrollRegions {
             // them before walking into the box puts every region after the
             // region it is inside, so its parent is already known.
             for child in &children {
-                let Some((viewport, bounds, can_scroll)) =
-                    measure(child).map_err(ScrollRegionsError::Geometry)?
+                let Some(Measured {
+                    viewport,
+                    bounds,
+                    can_scroll,
+                    scroll,
+                    range,
+                }) = measure(child).map_err(ScrollRegionsError::Geometry)?
                 else {
                     continue;
                 };
@@ -166,7 +183,12 @@ impl ScrollRegions {
                     bounds,
                     can_scroll,
                     parent,
+                    scroll_x: scroll.x,
+                    scroll_y: scroll.y,
+                    range_x: range.x,
+                    range_y: range.y,
                 });
+                found.constraints.push(child.clone());
             }
             pending.extend(children.into_iter().rev());
         }
@@ -175,6 +197,11 @@ impl ScrollRegions {
 
     pub fn regions(&self) -> &[ScrollRegion] {
         &self.regions
+    }
+
+    /// Each region's `ScrollConstraint`, in the order of [`Self::regions`].
+    pub fn constraints(&self) -> &[CoreHandle] {
+        &self.constraints
     }
 
     /// The innermost region whose viewport clips `component`: the nearest
@@ -219,13 +246,22 @@ const LOCAL_MOVES: [Vec2D; 4] = [
     Vec2D { x: -1.0, y: 0.0 },
 ];
 
-/// A listed constraint's viewport, its box in root space and its
-/// `can_scroll` bits; None where no drag reaches it. A viewport whose clips
-/// are past the geometry budget fails, as a node's would.
-fn measure(
-    constraint: &CoreHandle,
-) -> Result<Option<(CoreHandle, Bounds, u32)>, SemanticGeometryError> {
-    let Some((viewport, local, world, artboard, moves)) = constraint
+/// What a listed constraint shows a host.
+struct Measured {
+    viewport: CoreHandle,
+    /// The viewport's box in root space.
+    bounds: Bounds,
+    can_scroll: u32,
+    /// `ScrollConstraint::scroll_position`.
+    scroll: Vec2D,
+    range: Vec2D,
+}
+
+/// A listed constraint's viewport, its box in root space, its `can_scroll`
+/// bits and its position; None where no drag reaches it. A viewport whose
+/// clips are past the geometry budget fails, as a node's would.
+fn measure(constraint: &CoreHandle) -> Result<Option<Measured>, SemanticGeometryError> {
+    let Some((viewport, local, world, artboard, moves, (scroll, range))) = constraint
         .with(|object| {
             let scroll = object.as_scroll_constraint()?;
             if !scroll.interactive() || !scroll.has_layout_parent() {
@@ -250,7 +286,14 @@ fn measure(
             // one has no border, so its box is its padding box.
             let local = scroll.css_scrollport().unwrap_or(box_bounds);
             let moves = LOCAL_MOVES.map(|movement| scroll.can_move_content(movement));
-            Some((viewport, local, world, artboard, moves))
+            Some((
+                viewport,
+                local,
+                world,
+                artboard,
+                moves,
+                scroll.scroll_position(),
+            ))
         })
         .flatten()
     else {
@@ -312,7 +355,13 @@ fn measure(
                 linear[1] * movement.x + linear[3] * movement.y,
             ))
         });
-    Ok(Some((viewport, bounds, bits)))
+    Ok(Some(Measured {
+        viewport,
+        bounds,
+        can_scroll: bits,
+        scroll,
+        range,
+    }))
 }
 
 /// `world` followed by the artboard's transforms to the root, the matrix

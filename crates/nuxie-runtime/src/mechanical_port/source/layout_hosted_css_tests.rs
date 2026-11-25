@@ -456,6 +456,75 @@ fn css_hosted_root_flies_with_the_held_box_that_carries_it() {
     }
 }
 
+/// A carried root lands at once and then animates again: what the flight
+/// leaves on it is used up by the solve the hold ends in, whether or not the
+/// landing changes the root's size. A size written with the landing lands
+/// with it; one written after it animates.
+#[test]
+fn css_hosted_root_animates_again_after_the_box_that_carried_it_lands() {
+    use crate::css_layout::flight_hold::{begin, carry, end, set_progress, set_size};
+    for (landing, with_landing) in [(1.0, false), (0.5, false), (1.0, true), (0.5, true)] {
+        let scene = carrying_box_scene(Carrying::Animated);
+        let board = scene.artboard.core_handle();
+        let element = scene.artboard.with_artboard(|page| {
+            page.find_all_handles::<LayoutComponent>()
+                .into_iter()
+                .find(|handle| *handle != board)
+                .expect("the box")
+        });
+        let host = scene
+            .artboard
+            .with_artboard(|page| page.find_all_handles::<NestedArtboardLayout>()[0].clone());
+        let unit = host
+            .with_downcast::<NestedArtboardLayout, _>(|host| {
+                host.base.base.artboard_instance_handle(0)
+            })
+            .flatten()
+            .unwrap();
+        let width = || unit.with_artboard(|unit| unit.layout_width());
+        let resize = |width: f32| {
+            assert!(CoreRegistry::set_double_handle(
+                &host,
+                NestedArtboardLayoutBase::INSTANCE_WIDTH_PROPERTY_KEY.into(),
+                width,
+            ));
+        };
+        // One frame.
+        let frame = || scene.artboard.advance_default(1.0 / 60.0);
+        let case = format!("landing at {landing}, written with it: {with_landing}");
+
+        assert!(begin(&element, (160.0, 150.0)));
+        carry(&element, &unit.core_handle(), (-28.0, -18.0));
+        for p in [0.0, landing] {
+            set_size(&element, (160.0 + 40.0 * p, 150.0 + 30.0 * p));
+            set_progress(&element, p);
+            frame();
+            assert_eq!(width(), 132.0 + 40.0 * p, "{case}: at {p}");
+        }
+        end(&element);
+        if with_landing {
+            resize(120.0);
+        }
+        frame();
+        let landed = if with_landing { 120.0 } else { 172.0 };
+        assert_eq!(width(), landed, "{case}: lands at once");
+        for _ in 0..3 {
+            frame();
+        }
+        assert_eq!(width(), landed, "{case}: stays");
+
+        resize(80.0);
+        for _ in 0..6 {
+            frame();
+        }
+        assert!(
+            80.0 < width() && width() < landed,
+            "{case}: a later size animates: {}",
+            width()
+        );
+    }
+}
+
 #[test]
 fn css_nested_copy_without_either_record_keeps_instance_sizing() {
     for (host_css, root_css) in [(false, true), (true, false), (false, false)] {

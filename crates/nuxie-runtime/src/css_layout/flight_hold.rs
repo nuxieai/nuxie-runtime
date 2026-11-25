@@ -391,6 +391,8 @@ mod tests {
         };
         for panics in [false, true] {
             let mut taffy = TaffyTree::<()>::new();
+            // As a layout tree does: the pass writes unrounded layouts.
+            taffy.disable_rounding();
             let root = taffy
                 .new_leaf(Style {
                     size: length(100.0, 80.0),

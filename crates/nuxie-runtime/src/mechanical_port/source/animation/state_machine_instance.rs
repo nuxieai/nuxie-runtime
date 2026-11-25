@@ -38,7 +38,7 @@ use crate::mechanical_port::source::{
         state_machine_trigger::StateMachineTrigger,
         state_transition::{AllowTransition, TransitionRuntime},
     },
-    artboard::{Artboard, RuntimeArtboardInstanceWeakHandle},
+    artboard::{Artboard, RuntimeArtboardInstanceHandle, RuntimeArtboardInstanceWeakHandle},
     artboard_component_list::ArtboardComponentList,
     audio_event::AudioEvent,
     component_dirt::ComponentDirt,
@@ -1950,6 +1950,82 @@ fn nested_state_machine(animation: &CoreHandle) -> Option<RuntimeStateMachineIns
         .flatten()
 }
 
+/// Whether a nested artboard's hit component turns a pointer event away
+/// before it reaches the nested state machines: the host is collapsed,
+/// hidden or paused.
+fn nested_refuses_pointers(component: &CoreHandle) -> bool {
+    component_is_collapsed(component)
+        || component_is_hidden(component)
+        || nested_is_paused(component)
+}
+
+/// Whether a component list's hit component turns a pointer event away
+/// before it reaches any row: the list is collapsed or hidden.
+fn list_refuses_pointers(component: &CoreHandle) -> bool {
+    component_is_collapsed(component) || component_is_hidden(component)
+}
+
+/// Nuxie: the artboard instances a host's hit component passes a pointer
+/// event into, by the gates `HitNestedArtboard::process_event` and
+/// `HitComponentList::process_event` apply before they forward one.
+/// - A nested artboard: not refused (`nested_refuses_pointers`), its
+///   transform maps a pointer into it (`nested_mapping`), and one of its
+///   nested animations is a live state machine (`nested_state_machine`).
+/// - A component list: not refused (`list_refuses_pointers`), then each
+///   row in the list's hit order (`component_list_indices`) whose
+///   transform maps a pointer into it and that has its own state machine.
+/// - Any other host (a picture painted from an artboard) has no hit
+///   component, so none.
+///
+/// A semantic capture lists a scroll region only where these reach
+/// (semantic_scroll_regions.rs). Bounded by the host's rows.
+pub(crate) fn pointer_hosted_instances(host: &CoreHandle) -> Vec<RuntimeArtboardInstanceHandle> {
+    let is_nested = host
+        .with(|object| object.as_nested_artboard().is_some())
+        .unwrap_or(false);
+    if is_nested {
+        // Without a mesh bending the host, a mapping does not depend on the
+        // point: it fails only when the host has no artboard or its
+        // transform cannot be inverted. A mesh host is asked at its origin.
+        if nested_refuses_pointers(host) || nested_mapping(host, Vec2D::default()).is_none() {
+            return Vec::new();
+        }
+        let has_machine = nested_animations(host)
+            .iter()
+            .filter(|animation| animation.is_type_of(crate::mechanical_port::source::generated::animation::nested_state_machine_base::NestedStateMachineBase::TYPE_KEY))
+            .any(|animation| nested_state_machine(animation).is_some());
+        if !has_machine {
+            return Vec::new();
+        }
+        return host
+            .with(|object| {
+                object
+                    .as_artboard_host()
+                    .and_then(|host| host.artboard_instance(0))
+            })
+            .flatten()
+            .into_iter()
+            .collect();
+    }
+    let is_list = host.is_type_of(
+        crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY,
+    );
+    if !is_list || list_refuses_pointers(host) {
+        return Vec::new();
+    }
+    component_list_indices(host)
+        .into_iter()
+        .filter(|&index| {
+            component_list_world_to_local(host, Vec2D::default(), index).is_some()
+                && component_list_state_machine(host, index).is_some()
+        })
+        .filter_map(|index| {
+            host.with_downcast::<ArtboardComponentList, _>(|list| list.artboard_instance(index))
+                .flatten()
+        })
+        .collect()
+}
+
 fn component_list_indices(component: &CoreHandle) -> Vec<i32> {
     component
         .with_downcast_mut::<ArtboardComponentList, _>(|list| list.ordered_list_indices().to_vec())
@@ -2537,10 +2613,7 @@ impl HitComponent for HitNestedArtboard {
             .any(|machine| machine.with_instance(|machine| machine.holds_css_drag(pointer_id)))
     }
     fn listens_to_button_at(&self, position: Vec2D, button: PointerButton) -> bool {
-        if component_is_collapsed(&self.component)
-            || component_is_hidden(&self.component)
-            || nested_is_paused(&self.component)
-        {
+        if nested_refuses_pointers(&self.component) {
             return false;
         }
         let Some(local) = nested_drawn_position(&self.component, position) else {
@@ -2675,10 +2748,7 @@ impl HitComponent for HitNestedArtboard {
     }
 
     fn hit_test(&self, position: Vec2D) -> bool {
-        if component_is_collapsed(&self.component)
-            || component_is_hidden(&self.component)
-            || nested_is_paused(&self.component)
-        {
+        if nested_refuses_pointers(&self.component) {
             return false;
         }
         let Some(local) = nested_drawn_position(&self.component, position) else {
@@ -2694,10 +2764,7 @@ impl HitComponent for HitNestedArtboard {
     }
 
     fn hit_test_bounded(&self, position: Vec2D) -> bool {
-        if component_is_collapsed(&self.component)
-            || component_is_hidden(&self.component)
-            || nested_is_paused(&self.component)
-        {
+        if nested_refuses_pointers(&self.component) {
             return false;
         }
         let Some(local) = nested_drawn_position(&self.component, position) else {
@@ -2726,10 +2793,7 @@ impl HitComponent for HitNestedArtboard {
         if hit_type == ListenerType::Exit {
             self.pointers_off.remove(pointer_id);
         }
-        if component_is_collapsed(&self.component)
-            || component_is_hidden(&self.component)
-            || nested_is_paused(&self.component)
-        {
+        if nested_refuses_pointers(&self.component) {
             return HitResult::None;
         }
         let Some((local, off_mesh, _)) = nested_mapping(&self.component, position) else {
@@ -2830,10 +2894,7 @@ impl HitComponent for HitNestedArtboard {
             .any(|machine| machine.with_instance(StateMachineInstance::has_capture_listeners))
     }
     fn blocks_capture(&self, position: Vec2D) -> bool {
-        if component_is_collapsed(&self.component)
-            || component_is_hidden(&self.component)
-            || nested_is_paused(&self.component)
-        {
+        if nested_refuses_pointers(&self.component) {
             return false;
         }
         let Some(local) = nested_drawn_position(&self.component, position) else {
@@ -2852,10 +2913,7 @@ impl HitComponent for HitNestedArtboard {
         timestamp: f32,
         button: PointerButton,
     ) -> HitResult {
-        if component_is_collapsed(&self.component)
-            || component_is_hidden(&self.component)
-            || nested_is_paused(&self.component)
-        {
+        if nested_refuses_pointers(&self.component) {
             return HitResult::None;
         }
         let Some((local, off_mesh, _)) = nested_mapping(&self.component, position) else {
@@ -2907,7 +2965,7 @@ impl HitComponent for HitComponentList {
             .any(|machine| machine.with_instance(|machine| machine.holds_css_drag(pointer_id)))
     }
     fn listens_to_button_at(&self, position: Vec2D, button: PointerButton) -> bool {
-        if component_is_collapsed(&self.component) || component_is_hidden(&self.component) {
+        if list_refuses_pointers(&self.component) {
             return false;
         }
         for index in component_list_indices(&self.component).into_iter().rev() {
@@ -3068,7 +3126,7 @@ impl HitComponent for HitComponentList {
     }
 
     fn hit_test(&self, position: Vec2D) -> bool {
-        if component_is_collapsed(&self.component) || component_is_hidden(&self.component) {
+        if list_refuses_pointers(&self.component) {
             return false;
         }
         for index in component_list_indices(&self.component).into_iter().rev() {
@@ -3086,7 +3144,7 @@ impl HitComponent for HitComponentList {
     }
 
     fn hit_test_bounded(&self, position: Vec2D) -> bool {
-        if component_is_collapsed(&self.component) || component_is_hidden(&self.component) {
+        if list_refuses_pointers(&self.component) {
             return false;
         }
         for index in component_list_indices(&self.component).into_iter().rev() {
@@ -3116,7 +3174,7 @@ impl HitComponent for HitComponentList {
         if hit_type == ListenerType::Exit {
             self.pointers_off.remove(pointer_id);
         }
-        if component_is_collapsed(&self.component) || component_is_hidden(&self.component) {
+        if list_refuses_pointers(&self.component) {
             return HitResult::None;
         }
         let mut result = HitResult::None;
@@ -3244,7 +3302,7 @@ impl HitComponent for HitComponentList {
             .any(|machine| machine.with_instance(StateMachineInstance::has_capture_listeners))
     }
     fn blocks_capture(&self, position: Vec2D) -> bool {
-        if component_is_collapsed(&self.component) || component_is_hidden(&self.component) {
+        if list_refuses_pointers(&self.component) {
             return false;
         }
         for index in component_list_indices(&self.component) {
@@ -3268,7 +3326,7 @@ impl HitComponent for HitComponentList {
         timestamp: f32,
         button: PointerButton,
     ) -> HitResult {
-        if component_is_collapsed(&self.component) || component_is_hidden(&self.component) {
+        if list_refuses_pointers(&self.component) {
             return HitResult::None;
         }
         let mut result = HitResult::None;

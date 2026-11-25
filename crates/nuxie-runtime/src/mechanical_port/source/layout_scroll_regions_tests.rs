@@ -237,6 +237,19 @@ fn nested_translated_scroller_is_listed_in_root_space() {
 /// scaled by `scale_x`.
 fn hosted_scroller(rotation: f32, scale_x: f32) -> Scene {
     use crate::source::generated::transform_component_base::TransformComponentBase;
+    hosted_scroller_with(|host| {
+        for (key, value) in [
+            (TransformComponentBase::ROTATION_PROPERTY_KEY, rotation),
+            (TransformComponentBase::SCALE_X_PROPERTY_KEY, scale_x),
+        ] {
+            assert!(CoreRegistry::set_double_handle(host, key.into(), value));
+        }
+    })
+}
+
+/// The same scene, its nested host changed by `edit` before the first
+/// frame.
+fn hosted_scroller_with(edit: impl Fn(&CoreHandle)) -> Scene {
     use crate::source::nested_artboard::NestedArtboard;
     let f = scene(
         (500.0, 500.0),
@@ -253,12 +266,7 @@ fn hosted_scroller(rotation: f32, scale_x: f32) -> Scene {
         .artboard
         .with_artboard(|artboard| artboard.find_handle::<NestedArtboard>("Nested"))
         .expect("the nested host");
-    for (key, value) in [
-        (TransformComponentBase::ROTATION_PROPERTY_KEY, rotation),
-        (TransformComponentBase::SCALE_X_PROPERTY_KEY, scale_x),
-    ] {
-        assert!(CoreRegistry::set_double_handle(&host, key.into(), value));
-    }
+    edit(&host);
     f.machine();
     f.advance(1);
     f
@@ -341,6 +349,102 @@ fn turned_and_mirrored_hosts_name_screen_directions() {
             "{name}"
         );
     }
+}
+
+/// A host the pointer path turns away lists no region, and a drag where
+/// its scroller would be moves nothing: hidden, paused, or scaled to 0 on
+/// one axis (its transform cannot be inverted). Unchanged, the same drag
+/// moves the scroller (turned_and_mirrored_hosts_name_screen_directions).
+#[test]
+fn hosts_that_take_no_drag_list_no_region() {
+    use crate::source::drawable_flag::DrawableFlag;
+    use crate::source::generated::{
+        drawable_base::DrawableBase, nested_artboard_base::NestedArtboardBase,
+        transform_component_base::TransformComponentBase,
+    };
+    let plain = hosted_scroller(0.0, 1.0);
+    let [left, top, right, bottom] = region_box(&regions(&plain).regions()[0]);
+    let (x, y) = ((left + right) / 2.0, (top + bottom) / 2.0);
+    let gates: [(&str, fn(&CoreHandle)); 3] = [
+        ("hidden", |host| {
+            assert!(CoreRegistry::set_uint_handle(
+                host,
+                DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY.into(),
+                u32::from(DrawableFlag::HIDDEN.0)
+            ))
+        }),
+        ("paused", |host| {
+            assert!(CoreRegistry::set_bool_handle(
+                host,
+                NestedArtboardBase::IS_PAUSED_PROPERTY_KEY.into(),
+                true
+            ))
+        }),
+        ("no height", |host| {
+            assert!(CoreRegistry::set_double_handle(
+                host,
+                TransformComponentBase::SCALE_Y_PROPERTY_KEY.into(),
+                0.0
+            ))
+        }),
+    ];
+    for (name, gate) in gates {
+        let f = hosted_scroller_with(gate);
+        assert!(regions(&f).regions().is_empty(), "{name}");
+        press_and_hold(&f.machine(), (x, y), &[(x - 20.0, y), (x - 40.0, y)]);
+        f.advance(1);
+        assert_eq!(f.nested_scroll_offset(), (0.0, 0.0), "{name}");
+    }
+}
+
+/// An inner scroller scrolled wholly out of its outer one's padding box is
+/// clipped away: it is not listed, and a drag where it was moves the outer
+/// scroller, not it.
+#[test]
+fn a_scroller_clipped_away_is_not_listed() {
+    let f = scene(
+        (400.0, 300.0),
+        scroll_box(
+            "Viewport",
+            "List",
+            vec![
+                scroll_box("Inner viewport", "Inner list", tall_rows()),
+                css("Outer tail", height(200.0), vec![]),
+            ],
+        ),
+    );
+    f.machine();
+    let [left, top, right, bottom] = region_box(&regions(&f).regions()[1]);
+    let (x, y) = ((left + right) / 2.0, (top + bottom) / 2.0);
+    // The outer list is 288 tall in an 80 point padding box: at its end
+    // the inner box, 88 tall at its top, is 120 points above the viewport.
+    let outer = f
+        .artboard
+        .with_artboard(|artboard| artboard.find_all_handles::<ScrollConstraint>())
+        .into_iter()
+        .find(|scroll| {
+            scroll
+                .with(|object| object.component_parent_handle())
+                .flatten()
+                == Some(f.named("List"))
+        })
+        .expect("the outer scroll");
+    assert!(CoreRegistry::set_double_handle(
+        &outer,
+        ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY.into(),
+        -208.0
+    ));
+    f.advance(2);
+    assert_eq!(f.scroll_offset("List"), (0.0, -208.0));
+    let found = regions(&f);
+    assert_eq!(found.regions().len(), 1);
+    assert_eq!(found.regions()[0].can_scroll, can_scroll::TOP);
+    drag_vertically(&f, (x, y), 30.0);
+    assert!(
+        f.scroll_offset("List").1 > -208.0,
+        "the outer scroller takes it"
+    );
+    assert_eq!(f.scroll_offset("Inner list"), (0.0, 0.0));
 }
 
 /// A translated scroll view on its own: one region, its viewport's box.

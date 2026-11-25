@@ -575,45 +575,65 @@ fn two_artboard_versions_keep_identity_and_reverse_authored_draw_order() {
     }
 }
 
+/// The opacity above the two elements blends between its ends, times each
+/// copy's fade; an opacity an element has itself is that copy's own and does
+/// not blend.
 #[test]
 fn two_version_fade_multiplies_blended_opacity_at_each_progress() {
-    let mut s = Scene::from_bytes(&fixture::two_version_fixture());
-    set(&box_of(&s.s), 18, 0.4);
-    set(&box_of(&s.d), 18, 0.8);
-    s.advance(0.0);
-    let (a, a_opacity) = s.drawn_once(UNIT_FILL);
-    let (b, b_opacity) = s.drawn_once(VERSION_B_FILL);
-    close(a_opacity, 0.4);
-    close(b_opacity, 0.8);
-    for (incoming, step, ends) in [("B", "t1", [(a, 0.4), (b, 0.8)]), ("A", "back", [(b, 0.8), (a, 0.4)])]
-    {
-        s.moves.step_begin(&s.root, incoming, Some(step)).unwrap();
-        for t in [0.0_f32, 0.5, 1.0] {
-            let fades = [((1.0 - t) * 2.0).min(1.0), (t * 2.0).min(1.0)];
-            for (element, _, record) in s.moves.lifted_records(&s.root) {
-                let arriving = (element == box_of(&s.d)) == (incoming == "B");
-                set(&record, 62033, t);
-                set(&record, 62036, fades[usize::from(arriving)]);
-            }
-            s.advance(0.0);
-            let blended = ends[0].1 + (ends[1].1 - ends[0].1) * t;
-            for (rgb, arriving) in [
-                (UNIT_FILL, incoming == "A"),
-                (VERSION_B_FILL, incoming == "B"),
-            ] {
-                let opacity = blended * fades[usize::from(arriving)];
-                if opacity == 0.0 {
-                    for (_, drawn) in s.drawn(rgb) {
-                        close(drawn, 0.0);
-                    }
-                    continue;
+    for own in [false, true] {
+        let mut s = Scene::from_bytes(&fixture::two_version_fixture());
+        let (a, _) = s.drawn_once(UNIT_FILL);
+        let (b, _) = s.drawn_once(VERSION_B_FILL);
+        let targets = if own {
+            [box_of(&s.s), box_of(&s.d)]
+        } else {
+            [(&s.a, "card"), (&s.b, "header")].map(|(row, name)| {
+                row.with_artboard(|r| {
+                    r.find_handle::<source::layout_component::LayoutComponent>(name)
+                })
+                .unwrap()
+            })
+        };
+        set(&targets[0], 18, 0.4);
+        set(&targets[1], 18, 0.8);
+        s.advance(0.0);
+        for (incoming, step, ends) in [
+            ("B", "t1", [(a, 0.4), (b, 0.8)]),
+            ("A", "back", [(b, 0.8), (a, 0.4)]),
+        ] {
+            s.moves.step_begin(&s.root, incoming, Some(step)).unwrap();
+            for t in [0.0_f32, 0.5, 1.0] {
+                let fades = [((1.0 - t) * 2.0).min(1.0), (t * 2.0).min(1.0)];
+                for (element, _, record) in s.moves.lifted_records(&s.root) {
+                    let arriving = (element == box_of(&s.d)) == (incoming == "B");
+                    set(&record, 62033, t);
+                    set(&record, 62036, fades[usize::from(arriving)]);
                 }
-                let (drawn, at) = s.drawn_once(rgb);
-                close(at, opacity);
-                close(drawn[0], ends[0].0[0] + (ends[1].0[0] - ends[0].0[0]) * t);
+                s.advance(0.0);
+                let blended = ends[0].1 + (ends[1].1 - ends[0].1) * t;
+                for (rgb, arriving) in [
+                    (UNIT_FILL, incoming == "A"),
+                    (VERSION_B_FILL, incoming == "B"),
+                ] {
+                    let end = if own {
+                        ends[usize::from(arriving)].1
+                    } else {
+                        blended
+                    };
+                    let opacity = end * fades[usize::from(arriving)];
+                    if opacity == 0.0 {
+                        for (_, drawn) in s.drawn(rgb) {
+                            close(drawn, 0.0);
+                        }
+                        continue;
+                    }
+                    let (drawn, at) = s.drawn_once(rgb);
+                    close(at, opacity);
+                    close(drawn[0], ends[0].0[0] + (ends[1].0[0] - ends[0].0[0]) * t);
+                }
             }
+            s.moves.step_end(&s.root, incoming, Some(step)).unwrap();
         }
-        s.moves.step_end(&s.root, incoming, Some(step)).unwrap();
     }
 }
 
@@ -1257,17 +1277,29 @@ fn a_cancel_puts_every_instance_back_before_the_next_frame() {
     s.moves.step_begin(&s.root, "A", None).unwrap();
     s.moves.step_end(&s.root, "A", None).unwrap();
 
-    // Removing the leaving row cancels nothing: the flight lands, and no
-    // refill is tried for the removed placement.
+    // Removing the leaving row ends the step: the instance stays where it
+    // flew, in the arriving placement, and draws at its resting place from
+    // the removal's own frame.
     let mut s = Scene::new();
     let unit = child(&s.s).unwrap().core_handle();
     s.begin();
-    s.advance(0.1);
+    set(&s.moves.flight_controls(&s.root)[0], 62033, 0.5);
+    s.advance(0.0);
+    let (flying, _) = s.drawn_once(UNIT_FILL);
     let (list, b) = screens_item(&s, 1);
     ArtboardComponentList::update_list_occurrence(&list, &[b]);
+    s.advance(0.0);
+    assert!(s.moves.flight_controls(&s.root).is_empty());
+    let (removal, opacity) = s.drawn_once(UNIT_FILL);
+    let (settled, _) = {
+        s.advance(0.0);
+        s.drawn_once(UNIT_FILL)
+    };
+    eprintln!("leaving row removed: flying {flying:?}, removal frame {removal:?} at {opacity}");
+    assert_ne!(flying, removal, "the instance leaves its flight");
+    assert_eq!(removal, settled, "it is at rest on the removal frame");
+    close(opacity, 1.0);
     s.advance(0.1);
-    assert_eq!(s.moves.flight_controls(&s.root).len(), 1);
-    s.end();
     assert_eq!(holds(&s.d), Some(unit));
 }
 

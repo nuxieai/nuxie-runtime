@@ -516,7 +516,7 @@ fn native_keyframes_drive_a_flight_records_progress() {
 }
 
 #[test]
-fn two_artboard_versions_keep_identity_and_reverse_authored_draw_order() {
+fn two_artboard_versions_keep_identity_and_draw_bs_copy_on_top() {
     let mut s = Scene::from_bytes(&fixture::two_version_fixture());
     let a = child(&s.s).unwrap().core_handle();
     let b = child(&s.d).unwrap().core_handle();
@@ -540,8 +540,8 @@ fn two_artboard_versions_keep_identity_and_reverse_authored_draw_order() {
         (
             "A",
             "back",
-            [14, 13],
-            ["color=0xff0000ff", "color=0xffff0000"],
+            [13, 14],
+            ["color=0xffff0000", "color=0xff0000ff"],
         ),
     ] {
         s.moves.step_begin(&s.root, incoming, Some(step)).unwrap();
@@ -566,6 +566,8 @@ fn two_artboard_versions_keep_identity_and_reverse_authored_draw_order() {
             .filter(|line| line.starts_with("drawPath "))
             .collect::<Vec<_>>();
         assert_eq!(draws.len(), 2, "exactly the two versions draw");
+        // A is red and B blue: B, the upper Screen both ways, has its own
+        // copy on top.
         for (draw, color) in draws.iter().zip(colors) {
             assert!(draw.contains(color), "{draw}");
         }
@@ -1282,6 +1284,7 @@ fn a_cancel_puts_every_instance_back_before_the_next_frame() {
     // the removal's own frame.
     let mut s = Scene::new();
     let unit = child(&s.s).unwrap().core_handle();
+    let [_, (resting, _)] = at_rest(&s);
     s.begin();
     set(&s.moves.flight_controls(&s.root)[0], 62033, 0.5);
     s.advance(0.0);
@@ -1295,7 +1298,14 @@ fn a_cancel_puts_every_instance_back_before_the_next_frame() {
         s.advance(0.0);
         s.drawn_once(UNIT_FILL)
     };
-    eprintln!("leaving row removed: flying {flying:?}, removal frame {removal:?} at {opacity}");
+    println!(
+        "leaving row removed: flying {flying:?}, removal frame {removal:?} at {opacity}, next \
+         frame {settled:?}, B's copy at rest before the step {resting:?}"
+    );
+    // At rest is where B's own copy drew before the step.
+    for (drawn, rest) in removal.into_iter().zip(resting) {
+        close(drawn, rest);
+    }
     assert_ne!(flying, removal, "the instance leaves its flight");
     assert_eq!(removal, settled, "it is at rest on the removal frame");
     close(opacity, 1.0);
@@ -8134,7 +8144,7 @@ mod drawn {
 
         // Back: the arriving copy's flight is held at 1 and starts there.
         let mut s = Scene::from_bytes(&fixture::flight_animation_fixture(FlightWindow::Whole));
-        let (leaving, held) = (record(&s, 13), record(&s, 14));
+        let (leaving, held) = (record(&s, 14), record(&s, 13));
         for r in [&leaving, &held] {
             writes(r, &[(PROGRESS, 1.0), (FADE, 0.0)]);
         }

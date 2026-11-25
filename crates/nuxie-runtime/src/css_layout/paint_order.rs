@@ -498,21 +498,18 @@ pub(crate) struct Lifted {
     pub(crate) coverer: Option<RuntimeDrawableOccurrence>,
 }
 
-/// Paints each flight slot that carries a placement right where its anchor
-/// paints (docs/CSS_LAYOUT.md, 4.4), on the root's draw list after `order`:
+/// Paints each lift entry right where its anchor paints
+/// (docs/CSS_LAYOUT.md, 4.4), on the root's draw list after `order`:
 /// directly under its coverer, at the top when it has none, and directly
 /// above its anchor when the coverer no longer paints after the anchor.
 /// Flights keep their anchors' order among themselves, and flights at one
 /// gap stack in placing order. A flight never goes inside a mask's run, nor
 /// a clipping box's bracket that doesn't hold its anchor. It stays inside a
 /// bracket that does, under what covers its anchor there, and draws out of
-/// that box's clip (`Escape`). A list with no placed flight is left
-/// untouched.
+/// that box's clip (`Escape`). A list with no lift is left untouched.
 ///
-/// A lift entry of a copy flying in place (css_layout/lift.rs) is placed by
-/// the same rule, `lifts` in placing order. Its anchor is the upper Screen's
-/// own copy, an element of any kind, read where it paints
-/// (`anchor_positions`), as a slot paints at its element's own place.
+/// `lifts` is in placing order. A lift's anchor is the upper Screen's own
+/// copy, an element of any kind, read where it paints (`anchor_positions`).
 ///
 /// Answers each placed flight that sits inside clipping boxes' brackets,
 /// with those boxes.
@@ -522,55 +519,20 @@ pub(crate) fn place(
     drawables: &mut Vec<RuntimeDrawableOccurrence>,
     lifts: Vec<Lifted>,
 ) -> Vec<Escape> {
-    let placement = |item: &RuntimeDrawableOccurrence| match item {
-        RuntimeDrawableOccurrence::Authored(slot) if slot != root => slot
-            .with(|object| {
-                object
-                    .as_nested_artboard()
-                    .and_then(crate::source::nested_artboard::NestedArtboard::live_move_paint)
-            })
-            .flatten(),
-        _ => None,
-    };
-    let has_anchor = |anchor: &CoreHandle| {
-        drawables
-            .iter()
-            .any(|item| matches!(item, RuntimeDrawableOccurrence::Authored(slot) if slot == anchor))
-    };
-    let placements: Vec<_> = drawables
-        .iter()
-        .map(|item| placement(item).filter(|(anchor, _)| has_anchor(anchor)))
-        .collect();
-    if placements.iter().all(Option::is_none) && lifts.is_empty() {
+    if lifts.is_empty() {
         return Vec::new();
     }
-    // Take the placed flights out, keeping their relative order.
-    let mut rest = Vec::with_capacity(drawables.len());
-    let mut flights = Vec::new();
-    for (item, placement) in std::mem::take(drawables).into_iter().zip(placements) {
-        match placement {
-            Some((anchor, coverer)) => flights.push((item, anchor, coverer)),
-            None => rest.push(item),
-        }
-    }
+    let rest = std::mem::take(drawables);
     let index_of =
         |target: &RuntimeDrawableOccurrence| rest.iter().position(|item| same(item, target));
-    let mut flights: Vec<_> = flights
-        .into_iter()
-        .filter_map(|(item, anchor, coverer)| {
-            let anchor = index_of(&RuntimeDrawableOccurrence::Authored(anchor))?;
-            Some((item, anchor, coverer))
-        })
-        .collect();
     let anchors: Vec<_> = lifts.iter().map(|lift| lift.anchor.clone()).collect();
     let at = anchor_positions(root, root_kind, &rest, &anchors);
-    flights.extend(
-        lifts
-            .into_iter()
-            .zip(at)
-            .map(|(lift, at)| (lift.entry, at, lift.coverer)),
-    );
-    // By anchor, top first; flights that share an anchor keep file order.
+    let mut flights: Vec<_> = lifts
+        .into_iter()
+        .zip(at)
+        .map(|(lift, at)| (lift.entry, at, lift.coverer))
+        .collect();
+    // By anchor, top first; flights that share an anchor keep placing order.
     flights.sort_by_key(|(_, anchor, _)| *anchor);
     // The root's own top items stay above every unit and every flight.
     let top = rest

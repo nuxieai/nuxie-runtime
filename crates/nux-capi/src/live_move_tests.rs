@@ -3314,3 +3314,100 @@ fn published_event_delays_are_finite_and_never_negative() {
         assert_eq!(seconds_since_event(delay), 0.0);
     }
 }
+
+// A file of the retired slot shape, published before flights flew in place
+// (docs/live-moves.md, Files of the retired slot shape).
+
+/// It opens when its header lists the slot record's property keys. Nothing
+/// empties its flight slots any more: at rest each holds a live copy of its
+/// unit, 0 by 0 at the Screen's top left with the unit's own box overflowing
+/// it. Its named step is refused with a status and moves nothing, and the
+/// page plays on.
+#[test]
+fn a_retired_slot_file_opens_and_refuses_its_named_step() {
+    use nuxie::runtime::layout_component::LayoutComponent;
+    unsafe {
+        let scene = LiveScene::from_bytes_named(
+            &fixture::in_place_fixture(fixture::InPlaceFixture::SlotFile { listed: true }),
+            "Page",
+        );
+        let player = scene.player;
+        let root = page_root(&scene);
+        let hosts = |screen: &str| placements(&root, screen);
+        let (a, b) = (hosts("A"), hosts("B"));
+        assert_eq!((a.len(), b.len()), (1, 3), "home on each, two flights on B");
+        let copies = || {
+            a.iter()
+                .chain(&b)
+                .map(|host| held(host).map(|unit| unit.core_handle()))
+                .collect::<Vec<_>>()
+        };
+        let at_rest = copies();
+        assert!(at_rest.iter().all(Option::is_some), "every slot holds one");
+        for flight in &b[1..] {
+            let (world, draws) = flight
+                .with(|o| {
+                    (
+                        o.as_world_transform_component().unwrap().world_transform(),
+                        o.as_nested_artboard().unwrap().will_draw(),
+                    )
+                })
+                .unwrap();
+            assert_eq!((world[4], world[5]), (0.0, 0.0), "the Screen's top left");
+            assert!(draws, "the copy draws");
+            let unit = held(flight).unwrap();
+            let (frame, badge) = unit.with_artboard(|unit| {
+                (
+                    (unit.layout_width(), unit.layout_height()),
+                    unit.find_handle::<LayoutComponent>("badge").unwrap(),
+                )
+            });
+            assert_eq!(frame, (0.0, 0.0), "its frame is the 0 by 0 slot");
+            let badge = badge
+                .with_downcast::<LayoutComponent, _>(|b| (b.layout_width(), b.layout_height()))
+                .unwrap();
+            assert_eq!(badge, (40.0, 40.0), "its box overflows the slot");
+        }
+        for _ in 0..2 {
+            assert_eq!(
+                nux_player_step_begin(player, view("B"), &view("t1")),
+                NuxStatus::InvalidArgument
+            );
+            assert!(copies() == at_rest, "a refused step moves nothing");
+            step_ok(player);
+        }
+        for screen in ["B", "A"] {
+            assert_eq!(
+                nux_player_step_begin(player, view(screen), ptr::null()),
+                NuxStatus::Ok
+            );
+            step_ok(player);
+            assert_eq!(
+                nux_player_step_end(player, view(screen), ptr::null()),
+                NuxStatus::Ok
+            );
+        }
+        for collapsed in [1, 0] {
+            assert_eq!(
+                nux_player_set_row_collapsed(player, view("screens"), 1, collapsed),
+                NuxStatus::Ok
+            );
+            step_ok(player);
+        }
+        assert!(copies() == at_rest, "a nameless step moves nothing");
+        scene.close();
+    }
+}
+
+/// One whose header lists no slot keys can't be read past its first slot
+/// record: it is malformed.
+#[test]
+fn a_retired_slot_file_without_listed_keys_is_malformed() {
+    let mut file = ptr::null_mut();
+    let bytes = fixture::in_place_fixture(fixture::InPlaceFixture::SlotFile { listed: false });
+    assert_eq!(
+        unsafe { import_fixture(&bytes, &mut file) },
+        NuxStatus::ImportError
+    );
+    assert!(file.is_null());
+}

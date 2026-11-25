@@ -44,7 +44,7 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(
     },
     crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
     crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
-    crate::live_move::compose_slot_transform::<Self>,
+    crate::mechanical_port::source::transform_component::compose_world_transform::<Self>,
     |owner| {
         let Some((layout,transforms)) = owner.with_downcast::<Self,_>(|object| {
             (object.layout_constraint_handles(),
@@ -102,16 +102,6 @@ impl NestedArtboardLayout {
     // `P_lin * p - W_lin * p`: the pivot's world point is then where it is
     // with no turn, as an inline box keeps its ComponentOrigin.
     pub(crate) fn apply_layout_placement(&mut self) {
-        // Nuxie: the flight override already contains the full slot placement.
-        if self
-            .base
-            .base
-            .live_move
-            .as_ref()
-            .is_some_and(|s| s.local_override.is_some())
-        {
-            return;
-        }
         let Some(instance) = self.base.base.live_move_layout_instance() else {
             return;
         };

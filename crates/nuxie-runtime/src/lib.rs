@@ -74,7 +74,6 @@ pub(crate) fn make_core(type_key: i32) -> Option<Box<dyn source::core::CoreObjec
         60001 => Some(Box::new(video::Video::default())),
         61005 => Some(Box::new(css_text::TextStyleCssText::default())),
         60002 => Some(Box::new(text_decoration::TextStyleDecoration::default())),
-        62000 => Some(Box::new(live_move::records::LiveSlot::default())),
         62001 => Some(Box::new(live_move::records::LiveStep::default())),
         62002 => Some(Box::new(live_move::records::LiveStepUnit::default())),
         62003 => Some(Box::new(live_move::records::LiveFlight::default())),

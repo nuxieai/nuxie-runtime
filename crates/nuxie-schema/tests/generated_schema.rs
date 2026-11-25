@@ -16,9 +16,9 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // with its Number and String kinds, and TextStyleDecoration. CSS layout
     // adds LayoutCssStyle, BoxBorder, BoxGradient, BoxShadow and BoxPaint
     // (61000 to 61005, including TextStyleCssText, docs/CSS_LAYOUT.md).
-    // Live-move records add LiveSlot, LiveStep, LiveStepUnit and LiveFlight
-    // (62000–62003).
-    assert_eq!(DEFINITIONS.len(), 376);
+    // Live-move records add LiveStep, LiveStepUnit and LiveFlight
+    // (62001–62003).
+    assert_eq!(DEFINITIONS.len(), 375);
     assert!(definition_by_name("Folder").is_none());
     assert!(definition_by_type_key(102).is_none());
     assert_eq!(
@@ -50,8 +50,8 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // 60021); and TextStyleDecoration's line (60022). CSS layout and text add 109
     // (61000 to 61108): LayoutCssStyle's 88, BoxGradient's 12, BoxPaint's 4,
     // BoxBorder's 2, BoxShadow's 1 and TextStyleCssText's 2.
-    // LiveSlot adds 19, LiveStep 4, LiveStepUnit 6 and LiveFlight 17 (62000
-    // to 62047; 62027 and 62028 are unused).
+    // LiveStep adds 4, LiveStepUnit 6 and LiveFlight 17 (62006 to 62012, 62026
+    // and 62029 to 62047).
     // Upstream 8ea42e0e adds TextInput.maxCharacters/maxLines (489, 490).
     // Global text styles add TextStyleReference/TextStyleGlobal and artboardId (493).
     // Upstream 542aa31c adds StateMachineListener.phaseValue (535).
@@ -59,7 +59,7 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // stored but not read by CSS-mode layout.
     // StateTransition's isHold (60023) and ArtboardComponentList's
     // rowArtboardId (60024) are Nuxie augmentations.
-    assert_eq!(runtime_property_count, 854);
+    assert_eq!(runtime_property_count, 835);
 
     let animatable_property_count = DEFINITIONS
         .iter()
@@ -70,10 +70,9 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // and position animate since its native property migration. Of CSS
     // layout's, 70 animate: LayoutCssStyle's 56 (its numbers), BoxGradient's
     // 9, BoxPaint's 4 and BoxShadow's spread.
-    // LiveSlot's progress, pathX, pathY, fade, four corners and seven shadow
-    // controls add 15, and LiveFlight's same 15 add 15 more; text limits do
-    // not animate.
-    assert_eq!(animatable_property_count, 342);
+    // LiveFlight's progress, pathX, pathY, fade, four corners and seven shadow
+    // controls add 15; text limits do not animate.
+    assert_eq!(animatable_property_count, 327);
 
     let grouped_property_count = DEFINITIONS
         .iter()

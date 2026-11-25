@@ -17,34 +17,13 @@ pub(crate) use collapse::{
     apply_row_collapse, effectively_hidden, reconcile_row_hosts, reconcile_slot_collapse,
 };
 pub use drawn::When;
-pub use follow::{Flight, Pose, SizeMode, slot_pose};
-pub use plan::{
-    Entry, LiveMoves, screens,
-    zoom::{Ends, Pair},
-};
-pub(crate) use transport::{SlotState, reconcile_slot, settle_leaving_rows};
-pub use transport::{carry, empty_slot, move_live, validate_move};
+pub use follow::SizeMode;
+pub use plan::{LiveMoves, screens, zoom::Ends};
 #[cfg(feature = "test-support")]
-pub use transport::{refill_slot, slot_placement};
+pub use transport::refill_slot;
+pub(crate) use transport::{SlotState, reconcile_slot, settle_leaving_rows};
+pub use transport::{carry, validate_move};
 pub(crate) use values::ValueBlend;
-
-// Nuxie slots can carry the full local matrix produced by flight following.
-// An ordinary host falls through to the original composition function.
-pub(crate) fn compose_slot_transform<T: crate::source::transform_component::TransformUpdate>(
-    object: &mut T,
-) {
-    if let Some(matrix) = object
-        .as_nested_artboard()
-        .and_then(|s| s.live_move.as_ref().and_then(|state| state.local_override))
-    {
-        object
-            .as_transform_component_mut()
-            .expect("slot transform")
-            .cells()
-            .set_local(matrix);
-    }
-    crate::source::transform_component::compose_world_transform(object);
-}
 
 #[cfg(feature = "test-support")]
 pub mod device_fixture;

@@ -5,8 +5,8 @@
 //! place in layout is held (Layout mode), its ancestors' opacity is left out
 //! of it, and its Screen's draw leaves it out, while the upper Screen, the
 //! one holding the step's flight records, draws it from a lift entry placed
-//! where today's flight slot would paint (css_layout/lift.rs). Each frame
-//! runs the slot path's four barriers: Size, Layout, Pose and Settle.
+//! where its element paints at rest (css_layout/lift.rs). Each frame runs
+//! four barriers: Size, Layout, Pose and Settle.
 //! Landing and cancel clear the marks; nothing was moved, so nothing is put
 //! back.
 use super::{
@@ -88,10 +88,9 @@ pub(super) fn flight_records(objects: &[CoreHandle]) -> Vec<(u32, CoreHandle)> {
 /// own transform; a component placement's own matrix without its
 /// translation; nothing for a text, an image or a video. What draws inside
 /// the box is its content: a text's wrapping, an image's fit and origin, a
-/// placed root's own turn and scale, as a flight slot carries a unit holding
-/// the element. The box matrix is place · O, and C takes the box to the
-/// element's own drawing space, where its world draws: a box's is
-/// identity. Only a box paints a box of its own, so only a box draws a
+/// placed root's own turn and scale. The box matrix is place · O, and C takes
+/// the box to the element's own drawing space, where its world draws: a box's
+/// is identity. Only a box paints a box of its own, so only a box draws a
 /// flight's corners and shadow.
 #[derive(Clone)]
 pub(super) struct Flying {
@@ -249,9 +248,8 @@ impl Flying {
     }
 
     /// Where the box is placed, without its own transform, read at `when`:
-    /// its parent as `drawn` reads it, then its offset. It is what the slot
-    /// path reads from a home slot, which a key on the element itself does
-    /// not move.
+    /// its parent as `drawn` reads it, then its offset. A key on the element
+    /// itself does not move it.
     pub(super) fn place(&self, when: When) -> Result<Mat2D> {
         let parent = self.parent()?;
         Ok(drawn(&parent, when)? * Mat2D::from_translation(self.offset(&parent)?))
@@ -306,7 +304,7 @@ impl Flying {
     /// transform is built (`hosted_frame::self_transform`): a box turning
     /// and scaling about its pivot taken from `size`, its CSS translate
     /// unscaled; any other element's box stretched from its top left, its
-    /// content inside it, as a flying unit holding it stretches.
+    /// content inside it.
     fn own_transforms(&self, size: Vec2D, stretch: Vec2D) -> Option<(Mat2D, Mat2D)> {
         let own = match &self.shape {
             Shape::Css => {
@@ -479,9 +477,9 @@ fn offset_in(parent: Mat2D, world: Mat2D) -> Option<Vec2D> {
 }
 
 /// One end: the element's box placed in its parent without its own
-/// transform, as a slot's pose is today, so its own turn, scale and offset
-/// stay inside its draw. Its opacity is its parent's child opacity times the
-/// fades the boxes above it hold out of it.
+/// transform, so its own turn, scale and offset stay inside its draw. Its
+/// opacity is its parent's child opacity times the fades the boxes above it
+/// hold out of it.
 pub(super) fn end(flying: &Flying) -> Result<End> {
     let parent = flying.parent()?;
     let (_, _, child_opacity) = draw_pose(&parent)?;
@@ -607,7 +605,7 @@ fn fly_root_in(element: &CoreHandle, root: &CoreHandle, over_box: Vec2D) {
 /// inside the arriving element, the flying copy, which is never empty. The
 /// leaving element stays where it rests, its placement empty, and its
 /// Screen leaves it out of its draw for the step, with no lift drawing it,
-/// so one occurrence shows, as when a unit transfers through slots.
+/// so one occurrence shows.
 #[derive(Clone)]
 pub(super) struct Carried {
     /// The placement inside the leaving element, then the arriving one's.
@@ -782,10 +780,9 @@ impl InPlaceFlight {
     }
 
     /// The arriving copy of a transferring unit, the only copy it flies.
-    /// Its lift sorts as the placement it carries inside its anchor, as a
-    /// flight slot sorts as the slot it carries. Where that placement rests
-    /// inside the anchor is recorded now, before anything moves, for the
-    /// lift's cover.
+    /// Its lift sorts as the placement it carries inside its anchor. Where
+    /// that placement rests inside the anchor is recorded now, before anything
+    /// moves, for the lift's cover.
     pub(super) fn carrying(mut self, mut carried: Carried) -> Self {
         let anchor = self.lift.0.borrow().anchor.clone();
         let placed_as = if anchor == self.to {
@@ -1086,10 +1083,10 @@ impl InPlaceFlight {
 /// takes the box as its transform, at λ in place of the frame's stretch, the
 /// box in its content space as its clip, and the hand-over as its opacity;
 /// the copy leaves its own opacity and its ancestors' out. Each version is
-/// held at its departure size for the step, as `zoom::Pair::size` lays a
-/// zoomed unit out: its place in layout stays its rest, and a size change
-/// during the step, from a binding or a parent's percentage, leaves its
-/// inside as it took off, the size the pair's box and clip read.
+/// held at its departure size for the step: its place in layout stays its
+/// rest, and a size change during the step, from a binding or a parent's
+/// percentage, leaves its inside as it took off, the size the pair's box and
+/// clip read.
 pub(super) struct InPlacePair {
     /// The leaving version's copy, then the arriving one's.
     pub(super) copies: [CoreHandle; 2],
@@ -1106,7 +1103,7 @@ pub(super) struct InPlacePair {
 }
 
 impl InPlacePair {
-    /// Reads the box's ends before anything is marked, as `zoom::Pair` does:
+    /// Reads the box's ends before anything is marked:
     /// the leaving copy as drawn, the arriving copy at its resting place, each
     /// copy's departure size and its own corners, and on Back the arriving
     /// copy at rest and the tracked point, `center`.
@@ -1209,9 +1206,8 @@ impl InPlacePair {
         Ok(())
     }
 
-    /// r and t on Back, as `zoom::Pair` reads them from the home slot, here
-    /// from the arriving copy's place now over its place at rest, without
-    /// its own transform, as a slot holds its unit. While its Screen sleeps,
+    /// r and t on Back, from the arriving copy's place now over its place at
+    /// rest, without its own transform. While its Screen sleeps,
     /// the last r and t stay.
     fn follow(
         &self,

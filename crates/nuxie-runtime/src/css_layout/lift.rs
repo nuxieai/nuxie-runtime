@@ -4,12 +4,12 @@
 //! While a matched element flies in place, each Screen's copy stays in its
 //! own Screen's tree. Its own Screen's draw leaves its entries out, and the
 //! upper Screen draws it from one runtime-only entry of its own sorted draw
-//! list, the lift entry, which `paint_order::place` puts where a flight slot
-//! would go. The lift entry draws the copy's own entries of its own Screen's
-//! list and nothing else, so none of its ancestors' clips opens, under the
-//! flight's transform and opacity: save, the transform, the opacity as one
-//! picture or a scope, inside it the zoom's clip when there is one and the
-//! entries, restore.
+//! list, the lift entry, which `paint_order::place` puts where the element
+//! paints at rest. The lift entry draws the copy's own entries of its own
+//! Screen's list and nothing else, so none of its ancestors' clips opens,
+//! under the flight's transform and opacity: save, the transform, the opacity
+//! as one picture or a scope, inside it the zoom's clip when there is one and
+//! the entries, restore.
 //!
 //! Which entries draw for each lifted copy is worked out where its Screen's
 //! draw order is sorted (`Artboard::sort_draw_order`), so it is never older
@@ -33,8 +33,8 @@ pub(crate) struct LiftState {
     /// The upper Screen's own copy, where the lift paints.
     pub(crate) anchor: CoreHandle,
     /// A transferring unit's lift: the component placement it carries inside
-    /// the anchor. The lift sorts as that placement sorts, as a flight slot
-    /// sorts as the slot it carries, while its cover still reads the anchor.
+    /// the anchor. The lift sorts as that placement sorts, while its cover
+    /// still reads the anchor.
     pub(crate) placed_as: Option<CoreHandle>,
     /// What covers the anchor on the upper Screen, read each frame; None
     /// paints the lift on top.
@@ -329,12 +329,11 @@ pub(crate) fn clip_bounds(
 /// Clips the renderer to a zoom's box, `clip`, in `element`'s box, which
 /// `space` takes to its own drawing space, under the element's world, so it
 /// turns and stretches with the copy.
-/// The box reaches the renderer as a flying unit's does (`Artboard::draw`):
-/// its own outline under the element's world, the input the element's paint
-/// draws with, so the clip covers the samples the fill covers and a rounded
-/// edge is smoothed once. The world is taken back after the clip, so the
-/// copy's entries draw under the lift's transform alone. An element whose
-/// world collapses draws nothing, and takes no clip.
+/// The box reaches the renderer as its own outline under the element's world,
+/// the input the element's paint draws with, so the clip covers the samples
+/// the fill covers and a rounded edge is smoothed once. The world is taken
+/// back after the clip, so the copy's entries draw under the lift's transform
+/// alone. An element whose world collapses draws nothing, and takes no clip.
 pub(crate) fn apply_clip(
     renderer: &mut Renderer,
     element: &CoreHandle,

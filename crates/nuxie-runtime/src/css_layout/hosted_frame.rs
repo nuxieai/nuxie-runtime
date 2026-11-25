@@ -13,8 +13,8 @@
 //! Both things are read through one reader, the frame at rest in a slot
 //! ([`frame_at_rest`]). It takes each value from whoever sets it: what the
 //! host sets from the slot, what the element sets live from the frame. While
-//! a live move's flight carries an anchor's element, the anchor's frame at
-//! rest is the frame in that flight (docs/CSS_LAYOUT.md, 4.4).
+//! a live move carries a placement's frame, the frame at rest in it is the
+//! carried one (docs/CSS_LAYOUT.md, 4.4).
 use crate::source::{
     artboard::{Artboard, RuntimeArtboardDirtyHandle, RuntimeArtboardInstanceHandle},
     core::{CoreHandle, CoreObject},
@@ -29,36 +29,28 @@ pub(crate) fn placed_by_css_slot(hosted: Option<&CoreHandle>, own: Option<&CoreH
 }
 
 /// Whether [`self_transform`] differs from identity.
-pub(crate) fn has_self_transform(
-    offset: Option<Vec2D>,
-    rotation: f32,
-    scale: Vec2D,
-    stretch: Vec2D,
-) -> bool {
+pub(crate) fn has_self_transform(offset: Option<Vec2D>, rotation: f32, scale: Vec2D) -> bool {
     rotation != 0.0
         || scale.x != 1.0
         || scale.y != 1.0
-        || stretch.x != 1.0
-        || stretch.y != 1.0
         || offset.is_some_and(|offset| offset.x != 0.0 || offset.y != 0.0)
 }
 
 /// A frame's own transform. A frame placed by a CSS slot draws CSS's
 /// `translate(x, y) rotate scale`, as an inline box does; `offset` is its x
 /// and y. Any other frame draws upstream's `rotate scale`, since load zeroes
-/// an artboard's x and y. A flight's stretch is the innermost factor.
+/// an artboard's x and y.
 ///
 /// A frame whose origin is a pivot only (docs/CSS_LAYOUT.md, 2.1) turns and
 /// scales about its `pivot`, with its content in its top-left frame:
 /// `translate(pivot) * rotate * scale * translate(-pivot)`, as
 /// `LayoutComponent` turns about its origin, skipped when nothing turns or
-/// scales. The stretch scales the pivot with the frame. Without a pivot it
-/// turns about its local zero, which is upstream's origin.
+/// scales. Without a pivot it turns about its local zero, which is upstream's
+/// origin.
 pub(crate) fn self_transform(
     offset: Option<Vec2D>,
     rotation: f32,
     scale: Vec2D,
-    stretch: Vec2D,
     pivot: Option<Vec2D>,
 ) -> Mat2D {
     let mut local = Mat2D::from_rotation(rotation);
@@ -66,19 +58,16 @@ pub(crate) fn self_transform(
     if let Some(pivot) = pivot
         && (rotation != 0.0 || scale.x != 1.0 || scale.y != 1.0)
     {
-        let pivot = Vec2D::new(pivot.x * stretch.x, pivot.y * stretch.y);
         if pivot.x != 0.0 || pivot.y != 0.0 {
             local = Mat2D::from_translate(pivot.x, pivot.y)
                 * local
                 * Mat2D::from_translate(-pivot.x, -pivot.y);
         }
     }
-    let mut transform = match offset {
+    match offset {
         Some(offset) => Mat2D::from_translate(offset.x, offset.y) * local,
         None => local,
-    };
-    transform.scale_by_values(stretch.x, stretch.y);
-    transform
+    }
 }
 
 /// Queues a CSS paint-order sort of the Screen that hosts this frame: the
@@ -96,8 +85,8 @@ pub(crate) fn mark_host_screen(frame: &RuntimeArtboardDirtyHandle) {
 /// The frame at rest in a slot. Each value comes from whoever sets it.
 pub(crate) struct FrameAtRest {
     /// The frame whose own x, y, turn, scale, opacity and transform marks
-    /// are read live: the slot's own, or for an empty anchor the frame in the
-    /// flight slot carrying its element.
+    /// are read live: the slot's own, or for an empty slot the frame a
+    /// transfer carried out of it.
     pub frame: Option<CoreHandle>,
     /// The host's layout instance, which holds the layout box, origin and
     /// pivot-only flag it places its frame by: the frame when the slot is
@@ -108,10 +97,10 @@ pub(crate) struct FrameAtRest {
     pub gate: bool,
 }
 
-/// The frame at rest in `slot`. An empty slot reads the frame in the slot
-/// its link names while that slot names it back: a flight slot by its
-/// placement, or in place the placement a transfer carried its instance
-/// into, by where that instance took off. Any other empty slot reads none.
+/// The frame at rest in `slot`. An empty slot reads the frame in the
+/// placement its link names, the one a transfer carried its instance into,
+/// while that placement names it back as where the instance took off. Any
+/// other empty slot reads none.
 pub(crate) fn frame_at_rest(slot: &NestedArtboard) -> FrameAtRest {
     let layout = slot.live_move_layout_instance();
     if let Some(frame) = slot.source_artboard() {
@@ -144,7 +133,7 @@ pub(crate) fn frame_at_rest(slot: &NestedArtboard) -> FrameAtRest {
 }
 
 /// The transform the frame at rest draws inside its slot, at rest: its x
-/// and y when the gate is set, its own turn and scale, no stretch, about the
+/// and y when the gate is set, its own turn and scale, about the
 /// pivot its slot places it by. A property a timeline keys is motion, taken at
 /// its rest, identity; every other keeps its value.
 pub(crate) fn rest_transform(rest: &FrameAtRest) -> Mat2D {
@@ -176,7 +165,6 @@ pub(crate) fn rest_transform_about(
                 gate.then(|| Vec2D::new(values.x, values.y)),
                 values.rotation,
                 Vec2D::new(values.scale_x, values.scale_y),
-                Vec2D::new(1.0, 1.0),
                 pivot,
             )
         })

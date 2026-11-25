@@ -346,8 +346,8 @@ pub(crate) struct OwnTransformValues {
     pub scale_y: f32,
 }
 
-/// Nuxie: the shadow a flying unit's CSS box draws in place of its own outer
-/// shadows, from its flight slot (docs/live-moves.md): `blur` a Feather's
+/// Nuxie: the shadow a flying CSS box draws in place of its own outer
+/// shadows, from its flight record (docs/live-moves.md): `blur` a Feather's
 /// strength, `offset` in points in the box's own space.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct FlightShadow {
@@ -575,13 +575,13 @@ pub struct LayoutComponent {
     width_unit_value_override: i8,
     height_override: f32,
     height_unit_value_override: i8,
-    /// Nuxie: the corners a flying unit's box draws in place of its own, from
-    /// its flight slot (docs/live-moves.md), in points: top left, top right,
+    /// Nuxie: the corners a flying box draws in place of its own, from its
+    /// flight record (docs/live-moves.md), in points: top left, top right,
     /// bottom right, bottom left. Runtime only: not a file property, not
     /// keyable. None at rest.
     flight_corners: Option<[f32; 4]>,
-    /// Nuxie: the shadow a flying unit's box draws in place of its own outer
-    /// shadows, from its flight slot (docs/live-moves.md). Runtime only, like
+    /// Nuxie: the shadow a flying box draws in place of its own outer
+    /// shadows, from its flight record (docs/live-moves.md). Runtime only, like
     /// `flight_corners`. None at rest.
     flight_shadow: Option<FlightShadow>,
     /// Our layer (css_layout/group_opacity.rs): the picture a CSS box that
@@ -2782,15 +2782,6 @@ impl LayoutComponent {
             padding.top() + padding.bottom() + top + bottom,
         )
     }
-    /// Nuxie: the CSS width and height that give this box `border_box`
-    /// under its own box-sizing, as last solved.
-    pub(crate) fn css_size_for_border_box(&self, border_box: Vec2D) -> Vec2D {
-        let edges = self.css_size_edges(self.layout_style().box_sizing);
-        Vec2D::new(
-            (border_box.x - edges.x).max(0.0),
-            (border_box.y - edges.y).max(0.0),
-        )
-    }
     fn css_scroll_thumb_dimension(
         &self,
         style: &Style,
@@ -3318,7 +3309,7 @@ impl LayoutComponent {
         let percents: [f32; 4] = self.with_css(|css| {
             std::array::from_fn(|corner| css.number(keys::RADIUS_TOP_LEFT_PERCENT + corner as u16))
         })?;
-        // A flying unit draws its flight slot's corners in place of its own
+        // A flying box draws its flight's corners in place of its own
         // point and percent radii (docs/live-moves.md).
         let (points, percents) = match self.flight_corners {
             Some(corners) => (corners, [0.0; 4]),

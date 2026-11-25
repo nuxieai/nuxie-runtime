@@ -444,8 +444,8 @@ impl DrawRangeState {
     }
 }
 
-/// Nuxie: a rounded rectangle in a flying unit's content space, from (0, 0) to
-/// its size, that bounds what the unit draws while it flies.
+/// Nuxie: a rounded rectangle in a flying element's content space, from (0, 0)
+/// to its size, that bounds what the unit draws while it flies.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FlightClip {
     pub width: f32,
@@ -573,20 +573,6 @@ pub struct Artboard {
     audio_engine: Option<AudioEngineRef>,
     volume: f32,
     skip_self_transform: bool,
-    /// Nuxie: Scale mode's stretch while this unit flies, the innermost factor
-    /// of its self transform. Runtime only: not a file property, not keyable.
-    flight_stretch: Vec2D,
-    /// Nuxie: the box this unit is clipped to while it flies. Runtime only.
-    flight_clip: Option<FlightClip>,
-    /// Nuxie: while a zoomed pair flies this unit, it leaves its own opacity
-    /// out of what it draws at, so it draws at its flight slot's fade alone.
-    /// Runtime only.
-    flight_skips_own_opacity: bool,
-    /// Nuxie: the flight clip's path, held apart from this artboard so a
-    /// renderer callback doesn't hold it borrowed.
-    flight_clip_path: Rc<
-        RefCell<crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath>,
-    >,
     /// Nuxie: this artboard reads its origin as a pivot only, as a CSS
     /// artboard does, without a CSS record of its own: the stand-in a live
     /// move leaves in a unit's slot. Runtime only.
@@ -692,10 +678,6 @@ impl Default for Artboard {
             audio_engine: None,
             volume: 1.0,
             skip_self_transform: false,
-            flight_stretch: Vec2D::new(1.0, 1.0),
-            flight_clip: None,
-            flight_skips_own_opacity: false,
-            flight_clip_path: Default::default(),
             pivot_only_origin: false,
             #[cfg(feature = "tools")]
             layout_changed_callback: None,
@@ -1272,13 +1254,12 @@ impl Artboard {
     }
 
     pub fn has_self_transform(&self) -> bool {
-        // Nuxie: a CSS slot's frame also draws its x and y, and a flying unit
-        // its stretch (css_layout/hosted_frame.rs).
+        // Nuxie: a CSS slot's frame also draws its x and y
+        // (css_layout/hosted_frame.rs).
         crate::css_layout::hosted_frame::has_self_transform(
             self.css_slot_offset(),
             self.rotation(),
             Vec2D::new(self.scale_x(), self.scale_y()),
-            self.flight_stretch,
         )
     }
 
@@ -1287,7 +1268,6 @@ impl Artboard {
             self.css_slot_offset(),
             self.rotation(),
             Vec2D::new(self.scale_x(), self.scale_y()),
-            self.flight_stretch,
             self.origin_is_pivot_only().then(|| self.origin_offset()),
         )
     }
@@ -1322,76 +1302,6 @@ impl Artboard {
     /// context (css_layout/hosted_frame.rs).
     pub(crate) fn css_slot_frame_makes_context(&self) -> bool {
         self.base.base.is_css_slot_frame() && self.base.base.css_effect_stacking_context()
-    }
-
-    /// Nuxie: Scale mode's stretch of this flying unit, (1, 1) at rest.
-    pub fn flight_stretch(&self) -> Vec2D {
-        self.flight_stretch
-    }
-
-    pub(crate) fn set_flight_stretch(&mut self, stretch: Vec2D) {
-        if self.flight_stretch != stretch {
-            self.flight_stretch = stretch;
-            self.self_transform_changed();
-        }
-    }
-
-    /// Nuxie: the box this flying unit is clipped to, None at rest.
-    pub fn flight_clip(&self) -> Option<FlightClip> {
-        self.flight_clip
-    }
-
-    /// A change is a change of what this artboard draws, so a kept result of
-    /// its content is stale and a host that skips quiet frames must draw.
-    pub(crate) fn set_flight_clip(&mut self, clip: Option<FlightClip>) {
-        if self.flight_clip == clip {
-            return;
-        }
-        self.flight_clip = clip;
-        if let Some(clip) = clip {
-            let mut raw = RawPath::default();
-            crate::css_layout::paint::add_rounded_rect(&mut raw, clip.area(), clip.radii);
-            let mut path = self.flight_clip_path.borrow_mut();
-            path.rewind();
-            path.add_path(&raw, None);
-        }
-        self.changed();
-    }
-
-    /// Nuxie: whether this flying unit leaves its own opacity out of what it
-    /// draws at, as a zoomed pair's versions do (docs/live-moves.md).
-    pub(crate) fn flight_skips_own_opacity(&self) -> bool {
-        self.flight_skips_own_opacity
-    }
-
-    /// The one writer of render opacity reads it (`group_opacity::holds_fade`),
-    /// so a change marks render opacity down the unit, as a host fade does.
-    pub(crate) fn set_flight_skips_own_opacity(&mut self, skips: bool) {
-        if self.flight_skips_own_opacity != skips {
-            self.flight_skips_own_opacity = skips;
-            self.add_dirt(ComponentDirt::RENDER_OPACITY, true);
-        }
-    }
-
-    /// Nuxie: the corners this flying unit's CSS box draws in place of its
-    /// own, from its flight slot, or None for its own (docs/live-moves.md).
-    /// A change rebuilds the background, clip and paint paths.
-    pub(crate) fn set_flight_corners(&mut self, corners: Option<[f32; 4]>) {
-        if self.base.base.set_flight_corners(corners) {
-            self.add_dirt(ComponentDirt::PATH, false);
-        }
-    }
-
-    /// Nuxie: the shadow this flying unit's CSS box draws in place of its own
-    /// outer shadows, from its flight slot, or None for its own
-    /// (docs/live-moves.md). A change rebuilds the paint paths.
-    pub(crate) fn set_flight_shadow(
-        &mut self,
-        shadow: Option<crate::mechanical_port::source::layout_component::FlightShadow>,
-    ) {
-        if self.base.base.set_flight_shadow(shadow) {
-            self.add_dirt(ComponentDirt::PATH, false);
-        }
     }
 
     /// Nuxie: re-sorts the host Screen when this frame's effects change
@@ -1535,12 +1445,9 @@ impl Artboard {
                 root_transform_callback: _,
             #[cfg(feature = "tools")]
                 callback_user_data: _,
-            // A live move's flight, which the live move that set it ends.
+            // One draw's, which that draw restores, and a live move's stand-in,
+            // which the live move that made it ends.
             skip_self_transform: _,
-            flight_stretch: _,
-            flight_clip: _,
-            flight_skips_own_opacity: _,
-            flight_clip_path: _,
             pivot_only_origin: _,
         } = self;
     }
@@ -5062,11 +4969,7 @@ impl Artboard {
             let has_self = artboard.has_self_transform() && !artboard.skip_self_transform;
             (
                 has_self,
-                artboard.clip()
-                    || artboard.frame_origin
-                    || has_self
-                    || artboard.css_clips()
-                    || artboard.flight_clip.is_some(),
+                artboard.clip() || artboard.frame_origin || has_self || artboard.css_clips(),
             )
         }) else {
             return;
@@ -5106,20 +5009,6 @@ impl Artboard {
             let paths = &mut *paths;
             let clip = paths.frame_clip.as_mut().unwrap_or(&mut paths.local);
             renderer.clip_path(clip.render_path(&factory));
-        }
-        // Our layer: a flying unit's box, under its own transform, so it
-        // scales, turns and stretches with the unit.
-        let flight_clip = Self::with_root(root, receiver, |artboard| {
-            artboard.flight_clip.map(|_| {
-                (
-                    Rc::clone(&artboard.flight_clip_path),
-                    artboard.factory().expect("Artboard renderer factory"),
-                )
-            })
-        })
-        .flatten();
-        if let Some((path, factory)) = flight_clip {
-            renderer.clip_path(path.borrow_mut().render_path(&factory));
         }
         // Our layer: a Screen's draw leaves its own paints out or puts them
         // under its fade (css_layout/group_opacity.rs).
@@ -5396,8 +5285,8 @@ impl Artboard {
         let clip_area =
             clip.and_then(|clip| crate::css_layout::lift::clip_bounds(&element, clip, clip_space));
         let plain = visitor.is_none();
-        // The zoom's clip is part of what the copy draws, inside its picture,
-        // as a flying unit's is: clipping where the picture composites would
+        // The zoom's clip is part of what the copy draws, inside its picture:
+        // clipping where the picture composites would
         // smooth its rounded edge twice.
         let draw_entries = |renderer: &mut Renderer| {
             renderer.save();

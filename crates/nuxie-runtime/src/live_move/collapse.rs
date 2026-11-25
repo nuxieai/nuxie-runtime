@@ -164,8 +164,8 @@ pub fn set_row_collapsed(list: &CoreHandle, index: i32, collapsed: bool) -> Resu
         LayoutComponent::mark_layout_style_dirty_occurrence(&parent);
     }
     // Sleep is a membership change. The plan reconciles it here, on every
-    // path to this call, at this mutation boundary: its rows, its validation
-    // and its unused flight slots, before any frame.
+    // path to this call, at this mutation boundary: its rows and its
+    // validation, before any frame.
     scene.prepare()
 }
 

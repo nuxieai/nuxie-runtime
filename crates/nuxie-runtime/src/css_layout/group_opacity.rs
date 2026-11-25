@@ -10,7 +10,6 @@ use super::{
     keys::{ABOVE_RANK, FADE_OUTSIDE},
     record::{LayoutCssStyle, find_in},
 };
-use crate::live_move::records::LiveSlot;
 use crate::source::{
     artboard::Artboard,
     artboard_component_list::ArtboardComponentList,
@@ -304,18 +303,16 @@ fn canvas_host(artboard: &CoreHandle) -> Option<DeferredCanvasHostHandle> {
 }
 
 /// Whether an element holds its own fade out of what it and its children draw
-/// at, to apply it to its picture or as a scope at its draw. Three do. A CSS
+/// at, to apply it to its picture or as a scope at its draw. Two do. A CSS
 /// box does while it clips both axes at an own fade strictly between 0 and 1,
 /// in a run that holds what it clips; zero reaches its children, so every "is
 /// it hidden" check keeps its answer. A Screen does at an own fade below 1,
-/// zero included, because its flights still draw at its zero. A zoomed pair's
-/// version does while it flies, and nothing applies that fade: it draws at its
-/// flight slot's fade alone (docs/live-moves.md). Any other artboard hands its
-/// own opacity down as before. Read by the writer of render opacity, the draw
-/// and a flight's pose, so the three can't disagree.
+/// zero included, because its flights still draw at its zero. Any other
+/// artboard hands its own opacity down as before. Read by the writer of render
+/// opacity, the draw and a flight's pose, so the three can't disagree.
 pub(crate) fn holds_fade(element: &dyn CoreObject) -> bool {
     match element.as_artboard() {
-        Some(artboard) => screen_holds_fade(artboard) || artboard.flight_skips_own_opacity(),
+        Some(artboard) => screen_holds_fade(artboard),
         None => element.as_layout_component().is_some_and(box_holds_fade),
     }
 }
@@ -509,7 +506,7 @@ fn box_run(proxy: &RuntimeDrawableOccurrence, owner: &CoreHandle) -> Option<BoxR
         }
         // A flight in the run draws out of the box's clip, which its picture
         // would hold: the box draws entry by entry instead.
-        if is_flight(&drawable) {
+        if lift_of(&drawable).is_some() {
             return None;
         }
         current = drawable.with(Drawable::prev_drawable).flatten();
@@ -810,7 +807,7 @@ impl ScreenList {
             if skip.contains(&entry) {
                 continue;
             }
-            let (layer, rank) = if holds_flight(&entry).is_some() || lift_of(&entry).is_some() {
+            let (layer, rank) = if lift_of(&entry).is_some() {
                 past_first = true;
                 (ScreenLayer::OwnStrength, 0.0)
             } else if let Some((layer, rank, _)) = run {
@@ -989,25 +986,6 @@ pub(crate) fn draws_for(entry: &RuntimeDrawableOccurrence, element: &CoreHandle)
             .flatten();
     }
     false
-}
-
-/// A slot holding a flight: a nested artboard with a flight's record, role
-/// 1, and a unit in it.
-fn holds_flight(entry: &RuntimeDrawableOccurrence) -> Option<CoreHandle> {
-    let slot = entry.authored_handle()?;
-    let flies = slot
-        .with(|object| {
-            let nested = object.as_nested_artboard()?;
-            nested.artboard_instance_default()?;
-            Some(nested.children().iter().any(|child| {
-                child
-                    .with_downcast::<LiveSlot, _>(|record| record.values.role == 1)
-                    .unwrap_or(false)
-            }))
-        })
-        .flatten()
-        .unwrap_or(false);
-    flies.then_some(slot)
 }
 
 /// Which of a Screen's draws a draw of its content is.
@@ -1253,22 +1231,6 @@ pub(crate) fn enter_box_clips(left: &[CoreHandle], renderer: &mut Renderer) {
             }
         });
     }
-}
-
-/// Whether `entry` is a flight: a flight slot that carries a placement, or a
-/// lift entry. In a clipping box's run one is always one that escapes its
-/// clip (paint_order.rs, `place`).
-fn is_flight(entry: &RuntimeDrawableOccurrence) -> bool {
-    lift_of(entry).is_some()
-        || entry.authored_handle().is_some_and(|handle| {
-            handle
-                .with(|object| {
-                    object
-                        .as_nested_artboard()
-                        .is_some_and(|slot| slot.live_move_paint().is_some())
-                })
-                .unwrap_or(false)
-        })
 }
 
 /// A box's own paint in a Screen's pass two, one entry under a scope at the
@@ -1785,7 +1747,7 @@ impl Term {
 }
 
 /// What an artboard's draw can reach, in the space its content draws in: its
-/// frame clip and its flight clip around its own paints and its content. The
+/// frame clip around its own paints and its content. The
 /// box holds every pixel the vectors would draw, so it comes only from clips
 /// the draw installs and from own paints with an exact bound, and never from
 /// bounding what the content paints.
@@ -1793,19 +1755,14 @@ fn box_term(artboard: &CoreHandle) -> Term {
     let read = artboard.with_downcast::<Artboard, _>(|artboard| {
         (
             frame_clip(artboard),
-            artboard.flight_clip(),
             own_paints(artboard),
             record_clip(artboard),
             DrawList::of(artboard),
             artboard.has_draw_rules(),
         )
     });
-    let Some((frame, flight, own, record, list, has_rules)) = read else {
+    let Some((clip, own, record, list, has_rules)) = read else {
         return Term::Unknown;
-    };
-    let clip = match (frame, flight.map(|flight| flight.area())) {
-        (Some(frame), Some(flight)) => Some(overlap(frame, flight)),
-        (frame, flight) => frame.or(flight),
     };
     let content = record.unwrap_or_else(|| listed_content(&list, has_rules));
     match (clip, own.joined(content)) {

@@ -11,11 +11,10 @@ use crate::{
         artboard::ArtboardInstance,
         component_dirt::ComponentDirt,
         data_bind::{data_bind::DataBind, data_context::DataContext},
-        drawable::RuntimeDrawableOccurrence,
         generated::{core_registry::CoreRegistry, nested_animation_base::NestedAnimationBase},
         input::{focus_manager::RuntimeFocusManagerHandle, focus_node::FocusNodeRef},
         layout_component::{LayoutComponent, owning_layout},
-        math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
+        math::{aabb::Aabb, vec2d::Vec2D},
         nested_artboard::NestedArtboard,
         nested_artboard_layout::NestedArtboardLayout,
         semantic::semantic_data::SemanticData,
@@ -29,7 +28,6 @@ use std::collections::HashSet;
 pub(crate) struct SlotState {
     pub size: Option<Vec2D>,
     pub bounds: Option<Aabb>,
-    pub local_override: Option<Mat2D>,
     placeholder: Option<RuntimeArtboardInstanceHandle>,
     // The placeholder's root, read once at install, outside any borrow.
     placeholder_root: Option<CoreHandle>,
@@ -39,21 +37,11 @@ pub(crate) struct SlotState {
     /// On a host holding an instance in the air: the host it took off from,
     /// as the carry's caller says. Any landing clears it.
     origin_home: Option<CoreHandle>,
-    /// On a flight slot: where it paints on its Screen while it flies.
-    pub(crate) paint: Option<FlightPaint>,
-    /// On an anchor: the slot carrying the frame at rest in it
-    /// (`live_move_carried_by`).
+    /// On a placement a transfer left: the one carrying the frame at rest
+    /// in it (`live_move_carried_by`).
     pub(crate) carried_by: Option<CoreHandle>,
     /// The CSS-slot gate the frame's hosting set, kept while the slot is empty.
     pub(crate) gate: bool,
-}
-/// A flight's placement in its Screen's paint order: directly under the
-/// first thing painted after its anchor that draws something and covers it,
-/// and on top when nothing does.
-pub(crate) struct FlightPaint {
-    pub anchor: CoreHandle,
-    pub coverer: Option<RuntimeDrawableOccurrence>,
-    pub context: bool,
 }
 impl SlotState {
     fn allocate() -> Box<Self> {
@@ -86,85 +74,24 @@ impl NestedArtboard {
             .as_ref()
             .and_then(|state| state.placeholder_root.clone())
     }
-    /// On an anchor: the slot carrying the frame at rest in it, a flight slot
-    /// or, in place, the placement a transferring unit carried it into. Like
-    /// the accessors below, this borrows no artboard.
+    /// On a placement a transferring unit's instance left: the placement it
+    /// was carried into. Like the accessors below, this borrows no artboard.
     pub(crate) fn live_move_carried_by(&self) -> Option<CoreHandle> {
         self.live_move
             .as_ref()
             .and_then(|state| state.carried_by.clone())
     }
-    /// Whether this slot carries the frame at rest in `anchor`: as a flight
-    /// slot placed at it, or as a placement holding the instance a transfer
-    /// carried out of it in place.
-    pub(crate) fn live_move_carries_for(&self, anchor: &CoreHandle) -> bool {
-        self.live_move.as_ref().is_some_and(|state| {
-            state
-                .paint
-                .as_ref()
-                .is_some_and(|paint| paint.anchor == *anchor)
-                || (state.paint.is_none() && state.origin_home.as_ref() == Some(anchor))
-        })
+    /// Whether this placement holds the instance a transfer carried out of
+    /// `left`.
+    pub(crate) fn live_move_carries_for(&self, left: &CoreHandle) -> bool {
+        self.live_move
+            .as_ref()
+            .is_some_and(|state| state.origin_home.as_ref() == Some(left))
     }
     /// The CSS-slot gate the frame's hosting set, as `remember` kept it.
     pub(crate) fn live_move_gate(&self) -> bool {
         self.live_move.as_ref().is_some_and(|state| state.gate)
     }
-    /// On a flight slot that carries a placement: its anchor and coverer.
-    pub(crate) fn live_move_paint(
-        &self,
-    ) -> Option<(CoreHandle, Option<RuntimeDrawableOccurrence>)> {
-        self.live_move
-            .as_ref()
-            .and_then(|state| state.paint.as_ref())
-            .map(|paint| (paint.anchor.clone(), paint.coverer.clone()))
-    }
-}
-/// Ends a flight slot's placement, at every way a flight ends: takes its
-/// `paint`, clears the link on the anchor it names when the link names this
-/// slot, and sorts the Screen again when it cleared anything.
-fn end_placement(slot: &CoreHandle) {
-    let Some(paint) = slot
-        .with_mut(|o| {
-            o.as_nested_artboard_mut()
-                .and_then(|s| s.live_move.as_mut())
-                .and_then(|state| state.paint.take())
-        })
-        .flatten()
-    else {
-        return;
-    };
-    paint.anchor.with_mut(|o| {
-        if let Some(state) = o
-            .as_nested_artboard_mut()
-            .and_then(|s| s.live_move.as_mut())
-            && state.carried_by.as_ref() == Some(slot)
-        {
-            state.carried_by = None;
-        }
-    });
-    mark_draw_order_dirty(slot);
-}
-/// Sorts the draw order of the Screen that holds `slot` again. It reads
-/// cells only, so it borrows no artboard.
-pub(super) fn mark_draw_order_dirty(slot: &CoreHandle) {
-    if let Some(screen) = read(slot, NestedArtboard::parent_artboard_handle)
-        .ok()
-        .flatten()
-        .and_then(|screen| screen.artboard_dirty_handle())
-    {
-        screen.mark_css_draw_order_dirty();
-    }
-}
-/// Whether a slot carries a flight's placement and whether it names the
-/// flight slot carrying its frame.
-#[cfg(feature = "test-support")]
-pub fn slot_placement(slot: &CoreHandle) -> Result<(bool, bool)> {
-    read(slot, |slot| {
-        slot.live_move.as_ref().map_or((false, false), |state| {
-            (state.paint.is_some(), state.carried_by.is_some())
-        })
-    })
 }
 pub(super) fn read<T>(host: &CoreHandle, f: impl FnOnce(&NestedArtboard) -> T) -> Result<T> {
     host.with(|o| o.as_nested_artboard().map(f))
@@ -177,14 +104,6 @@ pub(super) fn write<T>(host: &CoreHandle, f: impl FnOnce(&mut NestedArtboard) ->
 }
 pub(super) fn child(host: &CoreHandle) -> Result<Option<RuntimeArtboardInstanceHandle>> {
     read(host, NestedArtboard::artboard_instance_default)
-}
-/// On a flight slot holding an instance in the air: the slot it took off from.
-pub(super) fn origin_home(host: &CoreHandle) -> Result<Option<CoreHandle>> {
-    read(host, |s| {
-        s.live_move
-            .as_ref()
-            .and_then(|state| state.origin_home.clone())
-    })
 }
 fn definition(host: &CoreHandle) -> Result<CoreHandle> {
     // An occupied slot's native child always wins over saved empty-slot state.
@@ -214,14 +133,14 @@ fn reconcile_native_child(host: &CoreHandle) {
 }
 pub(crate) fn reconcile_slot(host: &CoreHandle, hosts: &HashSet<CoreHandle>) {
     reconcile_native_child(host);
-    // A link whose flight slot is gone, or no longer places this anchor,
-    // is cleared. The named slot is read before this one is borrowed.
+    // A link whose placement is gone, or no longer carries for this one, is
+    // cleared. The named placement is read before this one is borrowed.
     let unbacked = read(host, NestedArtboard::live_move_carried_by)
         .ok()
         .flatten()
-        .is_some_and(|flight| {
-            !hosts.contains(&flight)
-                || !read(&flight, |flight| flight.live_move_carries_for(host)).unwrap_or(false)
+        .is_some_and(|carrier| {
+            !hosts.contains(&carrier)
+                || !read(&carrier, |carrier| carrier.live_move_carries_for(host)).unwrap_or(false)
         });
     host.with_mut(|o| {
         let Some(state) = o
@@ -273,8 +192,7 @@ pub fn validate_move(from: &CoreHandle, to: &CoreHandle) -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("file has no live-move records"))?;
     ensure!(
         crate::hosted_scene::is_carry_host(from) && crate::hosted_scene::is_carry_host(to),
-        "live moves require slots or keyed component placements in Page.screens Screen \
-         artboards"
+        "live moves require keyed component placements in Page.screens Screen artboards"
     );
     scene.reconcile();
     ensure!(from != to, "source and destination are the same slot");
@@ -347,8 +265,7 @@ fn wrapper_listeners(wrapper: &CoreHandle) -> Vec<RuntimeStateMachineInstanceWea
 fn remember(host: &CoreHandle) -> Result<()> {
     ensure!(
         crate::hosted_scene::is_carry_host(host),
-        "live moves require a slot or a keyed component placement in a Page.screens Screen \
-         artboard"
+        "live moves require a keyed component placement in a Page.screens Screen artboard"
     );
     reconcile_native_child(host);
     if read(host, |s| {
@@ -457,36 +374,6 @@ fn sync_layout(host: &CoreHandle) {
         LayoutComponent::mark_layout_style_dirty_occurrence(&parent);
     }
 }
-pub fn empty_slot(host: &CoreHandle) -> Result<()> {
-    let scene = crate::hosted_scene::scene_for_operation(host)
-        .ok_or_else(|| anyhow::anyhow!("file has no live-move records"))?;
-    ensure!(
-        crate::hosted_scene::is_carry_host(host),
-        "live moves require a Screen slot or a keyed component placement"
-    );
-    scene.reconcile();
-    remember(host)?;
-    end_placement(host);
-    discard(host);
-    write(host, |s| {
-        s.artboard_referencer.set_referenced_artboard(None)
-    });
-    sync_layout(host);
-    crate::hosted_scene::membership_changed_for(host);
-    Ok(())
-}
-
-/// Whether `host` is a flight slot: its `LiveSlot` record has role 1.
-fn is_flight_slot(host: &CoreHandle) -> Result<bool> {
-    read(host, |s| {
-        s.children().iter().any(|child| {
-            child
-                .with_downcast::<super::records::LiveSlot, _>(|r| r.values.role != 0)
-                .unwrap_or(false)
-        })
-    })
-}
-
 /// Gives an emptied slot a fresh instance of its own definition, at its entry
 /// state, as load leaves a mounted slot (decision 297). Take-off left the
 /// slot its definition and listeners (`remember`). The instance is nested and
@@ -496,7 +383,7 @@ fn is_flight_slot(host: &CoreHandle) -> Result<bool> {
 pub fn refill_slot(host: &CoreHandle) -> Result<()> {
     ensure!(
         crate::hosted_scene::is_carry_host(host),
-        "live moves require a Screen slot or a keyed component placement"
+        "live moves require a keyed component placement"
     );
     ensure!(child(host)?.is_none(), "slot already holds an instance");
     let source = read(host, |s| {
@@ -546,25 +433,17 @@ pub fn refill_slot(host: &CoreHandle) -> Result<()> {
 }
 
 /// Validate before taking anything. Call between frames under the shared
-/// occurrence guard. A stateful bind the source slot has scheduled runs
+/// occurrence guard. A stateful bind the source placement has scheduled runs
 /// first, as its next advance would; otherwise no mount, machine
 /// initialization, or user callback runs.
 ///
-/// `to` notes where the instance took off exactly when it is a flight slot,
-/// as the slot path's caller says; `carry` lets its caller say.
-pub fn move_live(from: &CoreHandle, to: &CoreHandle) -> Result<()> {
-    validate_move(from, to)?;
-    let in_the_air = is_flight_slot(to)?;
-    move_with_props(from, to, to, None, in_the_air)
-}
-
-/// `move_live`, where the caller says whether the instance is in the air in
-/// `to`: then `to` notes `from` (or where `from`'s instance took off) as its
-/// home, and a cancel or the removal of `to`'s row carries it back there
+/// The caller says whether the instance is in the air in `to`: then `to`
+/// notes `from` (or where `from`'s instance took off) as its home, and a
+/// cancel or the removal of `to`'s row carries it back there
 /// (`settle_leaving_rows`). Any later carry out of `to` clears the note.
 pub fn carry(from: &CoreHandle, to: &CoreHandle, in_the_air: bool) -> Result<()> {
     validate_move(from, to)?;
-    move_with_props(from, to, to, None, in_the_air)
+    move_with_props(from, to, None, in_the_air)
 }
 
 /// Lands an instance carried in place where it already is: `host` no longer
@@ -579,17 +458,15 @@ pub(super) fn land_in_place(host: &CoreHandle) -> Result<()> {
 pub(super) fn move_to_flight(
     from: &CoreHandle,
     to: &CoreHandle,
-    landing: &CoreHandle,
     values: &mut FlightValues,
 ) -> Result<()> {
     validate_move(from, to)?;
-    move_with_props(from, to, landing, Some(values), true)
+    move_with_props(from, to, Some(values), true)
 }
 
 fn move_with_props(
     from: &CoreHandle,
     to: &CoreHandle,
-    prop_slot: &CoreHandle,
     values: Option<&mut FlightValues>,
     in_the_air: bool,
 ) -> Result<()> {
@@ -662,7 +539,6 @@ fn move_with_props(
         s.take_artboard_instance();
         s.artboard_referencer.set_referenced_artboard(None);
         s.reset_mesh_raster();
-        s.live_move_mut().local_override = None;
         s.live_move_mut().mounted = None;
         (
             s.view_model_instance.take(),
@@ -675,8 +551,6 @@ fn move_with_props(
             s.mounted_bindable.take(),
         )
     });
-    // The unit leaves: a flight slot's placement ends with it.
-    end_placement(from);
     let (old_scope, old_manager, context, mark, opacity, destination_size, leaf) = write(to, |s| {
         (
             s.focus_scope.take(),
@@ -726,14 +600,6 @@ fn move_with_props(
         b.set_host_opacity(opacity);
         b.set_host_state(Some(to.clone()), Some(parent.clone()), Some(mark));
         b.mark_own_inactive_through(missed);
-        // Every move starts unstretched; a flight's pose stretches it again.
-        b.set_flight_stretch(Vec2D::new(1.0, 1.0));
-        // Every move starts with the unit's own corners, shadow and opacity
-        // and no flight clip; a flight's frames set them again.
-        b.set_flight_corners(None);
-        b.set_flight_shadow(None);
-        b.set_flight_clip(None);
-        b.set_flight_skips_own_opacity(false);
     });
     write(to, |s| {
         s.instance = Some(instance.clone());
@@ -757,8 +623,7 @@ fn move_with_props(
         s.base.base.base.add_dirt(ComponentDirt::FILTHY, false);
     });
     // Release the old host's native sizing caches, then use ordinary
-    // hosting's complete native/CSS setup. In flight, the follower sizes the
-    // flight host's own box, so that setup is the only sizing route.
+    // hosting's complete native/CSS setup.
     LayoutComponent::release_hosted_item_sizing_occurrence(&instance.core_handle());
     if to
         .with_downcast_mut::<crate::source::nested_artboard_layout::NestedArtboardLayout, _>(
@@ -800,15 +665,9 @@ fn move_with_props(
     restore_listeners(to, &instance)?;
     rebuild_semantics(to, &parent, &instance);
     super::reconcile_slot_collapse(to);
-    // Attach the landing slot's props directly, never the flight placeholder's.
-    // Its native inline model remains the owner of the authored bindings.
-    if prop_slot != to {
-        let context = read(prop_slot, |s| s.data_context.clone())?;
-        if let Some(own) = instance.data_context() {
-            own.with_context_mut(|c| c.set_parent(context));
-        }
-    }
-    adopt_props(prop_slot, &instance, values, &typed)?;
+    // Attach the arriving placement's props. Its native inline model remains
+    // the owner of the authored bindings.
+    adopt_props(to, &instance, values, &typed)?;
     sync_layout(from);
     sync_layout(to);
     // The instance may change layout trees. Publish its adopted dimensions
@@ -1211,7 +1070,7 @@ fn register_loan(slot: &CoreHandle, occupied: bool) {
 }
 
 /// Structural unmount hook, run by the list before it changes its rows. An
-/// instance in the air (in a flight slot, which names its `origin_home`) on a
+/// instance in the air (in a placement that names its `origin_home`) on a
 /// row the change removes goes back to the slot it took off from, when that
 /// slot is empty and on a row the change keeps or on no row of this list.
 /// Otherwise it goes with its row. Nothing else is done here: the plan
@@ -1292,7 +1151,7 @@ pub(crate) fn settle_leaving_rows(owner: &CoreHandle, next: &[CoreHandle]) -> Re
         validate_move(holder, home)?;
     }
     for (holder, home) in returns {
-        move_live(&holder, &home)?;
+        carry(&holder, &home, false)?;
     }
     Ok(())
 }

@@ -47,7 +47,7 @@ impl Request {
 }
 /// Take off the units of a published LiveStep. incoming_screen names the
 /// mounted, expanded Screen artboard. A NULL step_name plays no flights.
-/// Returns INVALID_ARGUMENT for an unknown step, incompatible slots,
+/// Returns INVALID_ARGUMENT for an unknown step, unmatched elements,
 /// collapsed incoming Screen, or an already active step. Uses the player's
 /// normal thread, occurrence, reentrancy and render-revision guards.
 #[unsafe(no_mangle)]
@@ -59,8 +59,8 @@ pub unsafe extern "C" fn nux_player_step_begin(
     player_live_move_body(player, Request::Begin(incoming_screen, step_name))
 }
 /// Land a published step. Both arguments must match step_begin, including a
-/// NULL step_name. Land every flight: each copy in its own Screen's slot, and
-/// a transferred unit in the arriving Screen's slot, whose departure slot gets
+/// NULL step_name. Land every flight: each copy on its own Screen, and
+/// a transferred unit in the arriving placement, whose departure placement gets
 /// a fresh instance.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_player_step_end(

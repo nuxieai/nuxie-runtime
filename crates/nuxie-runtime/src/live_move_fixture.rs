@@ -547,14 +547,14 @@ pub enum InPlaceFixture {
     Plain,
     /// `Plain` without its flight keys or flight records: the same Screens.
     Stripped,
-    /// `Plain` with a `LiveSlot` on A too, hosting a unit artboard.
-    WithSlot,
     /// `Plain` with a second box on B, "badge", sharing card's key.
     DuplicateElementKey,
     /// `Plain` with B's two flight records sharing one key.
     DuplicateRecordKey,
-    /// A slot file: `Stripped` with A's `LiveSlot` of `WithSlot`.
-    SlotOnly,
+    /// A file of the retired slot shape, as the compiler
+    /// published it before flights flew in place; its header lists the slot
+    /// record's property keys when `listed`, as a published file's does.
+    SlotFile { listed: bool },
     /// `Plain` with its two flight records on A instead of B.
     FlightsOnA,
     /// `Plain` with a box "badge", 40 by 40, inside each Screen's card,
@@ -587,18 +587,103 @@ pub enum KeyedKind {
     Shape,
 }
 
+/// The retired slot record's type, and its property keys with their field
+/// types. The schema no longer names them, so `slot_record` writes them raw.
+const SLOT_RECORD: u64 = 62000;
+const SLOT_RECORD_KEYS: [(u16, u32); 19] = [
+    (62000, 0), // unitKey
+    (62001, 0), // role
+    (62002, 0), // sizeMode
+    (62003, 2), // progress
+    (62004, 2), // pathX
+    (62005, 2), // pathY
+    (62013, 0), // flightKey
+    (62014, 2), // fade
+    (62015, 2), // the four corners
+    (62016, 2),
+    (62017, 2),
+    (62018, 2),
+    (62019, 2), // the seven shadow controls
+    (62020, 2),
+    (62021, 2),
+    (62022, 2),
+    (62023, 2),
+    (62024, 2),
+    (62025, 2),
+];
+/// A slot record on `host`: a home slot's, or with `flight` the flight slot
+/// that flight key names.
+fn slot_record(b: &mut Vec<u8>, host: u64, unit: u64, flight: Option<u64>) {
+    var(b, SLOT_RECORD);
+    let mut props = vec![
+        (u64::from(key("Component", "parentId")), host),
+        (62000, unit),
+    ];
+    if let Some(flight) = flight {
+        props.extend([(62001, 1), (62002, 1), (62013, flight)]);
+    }
+    for (property, value) in props {
+        var(b, property);
+        var(b, value);
+    }
+    var(b, 0);
+}
+/// A CSS slot at `at` hosting "unit x" at `size`, its record at `at + 1`.
+fn slot_host(b: &mut Vec<u8>, at: u64, name: &str, size: (f32, f32), absolute: bool) {
+    use V::*;
+    obj(
+        b,
+        "NestedArtboardLayout",
+        &[("name", S(name)), ("parentId", U(0)), ("artboardId", U(2))],
+    );
+    let mut record = vec![
+        ("parentId", U(at)),
+        ("widthKind", U(1)),
+        ("width", F(size.0)),
+        ("heightKind", U(1)),
+        ("height", F(size.1)),
+    ];
+    if absolute {
+        record.extend([
+            ("position", U(2)),
+            ("insetLeftKind", U(1)),
+            ("insetLeft", F(0.0)),
+            ("insetTopKind", U(1)),
+            ("insetTop", F(0.0)),
+        ]);
+    }
+    obj(b, "LayoutCssStyle", &record);
+}
+
 /// A page of two CSS Screens, each with a box "card" (A's 120 by 80, B's
 /// 200 by 140) beside a box "note", for the in-place format's import rules.
 pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
     use InPlaceFixture::*;
     use V::*;
-    let keyed = !matches!(kind, Stripped | SlotOnly);
-    let slot = matches!(kind, WithSlot | SlotOnly);
+    let keyed = !matches!(kind, Stripped | SlotFile { .. });
+    let slot = matches!(kind, SlotFile { .. });
     let records_on = if kind == FlightsOnA { "A" } else { "B" };
     let field = kind == Field;
     let mut b = b"RIVE".to_vec();
-    for n in [7, 0, 0, 0] {
+    for n in [7, 0, 0] {
         var(&mut b, n);
+    }
+    // The property table: each key, then its field type in two bits, four
+    // keys to a word (0 a uint, 2 a double).
+    if kind == (SlotFile { listed: true }) {
+        for (key, _) in SLOT_RECORD_KEYS {
+            var(&mut b, key.into());
+        }
+        var(&mut b, 0);
+        for word in SLOT_RECORD_KEYS.chunks(4) {
+            let bits = word
+                .iter()
+                .enumerate()
+                .fold(0u32, |bits, (at, (_, field))| bits | field << (2 * at));
+            b.extend(bits.to_le_bytes());
+        }
+    } else {
+        var(&mut b, 0);
     }
     obj(&mut b, "Backboard", &[]);
     if kind == Keyed(KeyedKind::Video) || field {
@@ -752,32 +837,20 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
         if field {
             field_card(&mut b, screen); // 13 to 23
         }
-        if screen == "A" && slot {
-            obj(
-                &mut b,
-                "NestedArtboardLayout",
-                &[
-                    ("name", S("slot")),
-                    ("parentId", U(0)),
-                    ("artboardId", U(2)),
-                ],
-            ); // 13
-            obj(
-                &mut b,
-                "LayoutCssStyle",
-                &[
-                    ("parentId", U(13)),
-                    ("widthKind", U(1)),
-                    ("width", F(40.0)),
-                    ("heightKind", U(1)),
-                    ("height", F(40.0)),
-                ],
-            ); // 14
-            obj(
-                &mut b,
-                "LiveSlot",
-                &[("parentId", U(13)), ("unitKey", U(5))],
-            ); // 15
+        if slot {
+            // The Screen's home slot: 13 to 15.
+            slot_host(&mut b, 13, "home", (40.0, 40.0), false);
+            slot_record(&mut b, 13, if screen == "A" { 5 } else { 6 }, None);
+        }
+        if slot && screen == "B" {
+            // The step's two flight slots, as that compiler wrote them: 0 by
+            // 0, out of flow at the Screen's top left, last in the file.
+            for (at, unit, flight) in [(16, 5, 11), (19, 6, 12)] {
+                slot_host(&mut b, at, &format!("flight {flight}"), (0.0, 0.0), true);
+                slot_record(&mut b, at, unit, Some(flight));
+            }
+            // The flight timeline keys the leaving copy's progress (62003).
+            timeline(&mut b, "t1", 18, 62003, 0.0, 1.0);
         }
         if screen == "B" && kind == DuplicateElementKey {
             boxed(&mut b, 13, "badge", (40.0, 40.0), 2, 0xff33cc33); // 13 to 17
@@ -804,23 +877,40 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
             }
         }
     }
-    if slot || kind == Keyed(KeyedKind::Placement) {
+    if slot {
+        // The unit: an unclipped artboard holding a painted box.
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S("unit x")),
+                ("width", F(40.0)),
+                ("height", F(40.0)),
+                ("styleId", U(2)),
+                ("clip", B(false)),
+            ],
+        ); // 0
+        obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+        obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+        boxed(&mut b, 3, "badge", (40.0, 40.0), 0, 0xff33cc33); // 3 to 7
+    }
+    if kind == Keyed(KeyedKind::Placement) {
         // A keyed placement places a CSS artboard, its origin at its center,
         // as only a CSS root flies in place.
-        let css = kind == Keyed(KeyedKind::Placement);
-        let mut unit = vec![
-            ("name", S("unit x")),
-            ("width", F(40.0)),
-            ("height", F(40.0)),
-        ];
-        if css {
-            unit.extend([("originX", F(0.5)), ("originY", F(0.5)), ("styleId", U(2))]);
-        }
-        obj(&mut b, "Artboard", &unit); // 0
-        if css {
-            obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
-            obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
-        }
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S("unit x")),
+                ("width", F(40.0)),
+                ("height", F(40.0)),
+                ("originX", F(0.5)),
+                ("originY", F(0.5)),
+                ("styleId", U(2)),
+            ],
+        ); // 0
+        obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+        obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
     }
     obj(
         &mut b,
@@ -839,6 +929,30 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
         &[("name", S("screens")), ("parentId", U(0))],
     ); // 1
     bind(&mut b, 800, &[2, 0]);
+    if slot {
+        obj(
+            &mut b,
+            "LiveStep",
+            &[
+                ("parentId", U(0)),
+                ("name", S("t1")),
+                ("fromArtboard", S("A")),
+                ("toArtboard", S("B")),
+                ("flightAnimationId", U(0)),
+            ],
+        ); // 2
+        obj(
+            &mut b,
+            "LiveStepUnit",
+            &[
+                ("parentId", U(2)),
+                ("outgoingUnitKey", U(5)),
+                ("incomingUnitKey", U(6)),
+                ("outgoingFlightKey", U(11)),
+                ("incomingFlightKey", U(12)),
+            ],
+        ); // 3
+    }
     if keyed {
         obj(
             &mut b,
@@ -3890,7 +4004,7 @@ pub fn css_two_screen_stacking_fixture() -> Vec<u8> {
     b
 }
 
-/// LiveSlot's four corner controls, in CSS order.
+/// A flight record's four corner controls, in CSS order.
 const CORNERS: [&str; 4] = [
     "cornerTopLeft",
     "cornerTopRight",

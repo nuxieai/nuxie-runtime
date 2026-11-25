@@ -1889,6 +1889,34 @@ its separate floating baseline per drag and its explicit event-time contract.
 `tests/upstream_scroll_input.rs` pin it. Tracking:
 [UNIV-4773](https://universe.basis.dev/issue/UNIV-4773).
 
+### Host reveal and scroll of semantic regions (X6)
+
+`nux_player_reveal_semantic_node` and `nux_player_scroll_region_by` are
+Nuxie host calls keyed by a semantic capture, like
+`nux_player_queue_semantic_action`. Each validates the capture first (a stale
+capture is HANDLE_MISMATCH), checks the next render revision before moving
+anything, and commits a render revision only when something moved.
+
+A reveal admits a node by `SemanticNode::is_reveal_eligible`: the node must
+belong to a live semantic occurrence and neither it nor an ancestor may be
+hidden. Unlike an action it ignores the disabled flag and whether the source
+is drawn (opacity, clipping), because a host reveals a node in order to show
+it. Boundary nodes, which have no `SemanticData`, are refused. The walk is
+upstream's `FocusData::scrollIntoView` and `scrollConstraintToShowBounds`
+(`src/focus_data.cpp`), made `pub(crate)` and reporting whether any
+scroller's effective offset changed; it starts from the node's
+`SemanticData` and, unlike `FocusData::focused`, notifies no focus listener.
+Upstream's arithmetic is kept, including adding each move to the effective
+offset while measuring the node where it is drawn.
+
+A region move adds the caller's delta, mapped by `logical_scroll_delta`, to
+the effective offset, clamps it as `ScrollConstraint::scrollBy` does (without
+the drag multiplier) and calls `scrollToPosition`
+(`src/constraints/scrolling/scroll_constraint.cpp`). Tracking:
+[UNIV-6334](https://universe.basis.dev/issue/UNIV-6334).
+The capture keeps each region's constraint beside its view, at most 256.
+Upstream's focus reveal, `requestSemanticFocus` and the wheel are unchanged.
+
 ### Atomic checked host replacements
 
 `runtime_checked_value_write_batch` is an additive host API for one atomic

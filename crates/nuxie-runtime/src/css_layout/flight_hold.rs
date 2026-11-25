@@ -63,9 +63,19 @@ struct CarriedRoot {
 #[derive(Clone, Debug)]
 pub(crate) struct FlightHold {
     flying: Flying,
+    /// What the carried root's border box adds to its box's at the arriving
+    /// end, as the last solve read it.
+    arriving: Option<(f32, f32)>,
     /// The element's resting slot, relative to its layout parent, as the
     /// last solve published it: its own published layout, were it at rest.
     pub(crate) rest: Layout,
+}
+
+/// What a flight pass gives.
+pub(crate) struct Flown {
+    pub(crate) output: LayoutOutput,
+    /// What the carried root's border box adds to its box's at rest.
+    arriving: Option<(f32, f32)>,
 }
 
 impl Flying {
@@ -77,6 +87,10 @@ impl Flying {
 impl FlightHold {
     pub(crate) fn flying(&self) -> &Flying {
         &self.flying
+    }
+    /// Keeps what a solve's flight pass read.
+    pub(crate) fn flown(&mut self, flown: &Flown) {
+        self.arriving = flown.arriving;
     }
 }
 
@@ -107,7 +121,7 @@ pub(crate) fn fly<T, M>(
     flying: &Flying,
     owner: impl Fn(&T) -> &CoreHandle,
     measure: M,
-) -> Option<LayoutOutput>
+) -> Option<Flown>
 where
     M: FnMut(LayoutInput, NodeId, Option<&mut T>, &Style) -> LayoutOutput,
 {
@@ -123,24 +137,25 @@ where
         })?;
         // The parent pass has just laid both out at rest.
         let rest = resting_slot(taffy, root)?.size;
+        let arriving = (rest.width - slot.size.width, rest.height - slot.size.height);
         let blend = |box_size: f32, left: f32, arriving: f32| {
             (box_size + left + (arriving - left) * carried.progress).max(0.0)
         };
-        Some((
-            root,
-            Size {
-                width: blend(width, carried.left.0, rest.width - slot.size.width),
-                height: blend(height, carried.left.1, rest.height - slot.size.height),
-            },
-        ))
+        let root_size = Size {
+            width: blend(width, carried.left.0, arriving.0),
+            height: blend(height, carried.left.1, arriving.1),
+        };
+        Some((root, root_size, arriving))
     });
     let size = Size { width, height };
-    match root {
-        Some((root, root_size)) => Resized::new(taffy, node, root, root_size)
+    let arriving = root.map(|(.., arriving)| arriving);
+    let output = match root {
+        Some((root, root_size, _)) => Resized::new(taffy, node, root, root_size)
             .taffy
             .relayout_at_size(node, size, measure),
         None => taffy.relayout_at_size(node, size, measure),
-    }
+    }?;
+    Some(Flown { output, arriving })
 }
 
 /// A carried root's Taffy style, sized for the flight pass of the box it is
@@ -233,6 +248,7 @@ pub(crate) fn begin(element: &CoreHandle, size: (f32, f32)) -> bool {
                     size,
                     carried: None,
                 },
+                arriving: None,
                 rest,
             }));
             data.request_solve();
@@ -277,15 +293,26 @@ pub(crate) fn carry(element: &CoreHandle, root: &CoreHandle, left: (f32, f32)) {
     });
 }
 
-/// How far along a carried root's blend is (`carry`).
+/// How far along a carried root's blend is (`carry`). It asks for a solve
+/// unless the blend's two ends are the same; the next one takes it then.
 pub(crate) fn set_progress(element: &CoreHandle, progress: f32) {
-    change(element, |flying| match &mut flying.carried {
-        Some(carried) if carried.progress != progress => {
+    let moves = element
+        .with_mut(|object| {
+            let data = LayoutComponent::layout_data_of(object)?;
+            let hold = data.flight_hold.as_mut()?;
+            let carried = hold.flying.carried.as_mut()?;
+            if carried.progress == progress {
+                return None;
+            }
             carried.progress = progress;
-            true
-        }
-        _ => false,
-    });
+            let moves = hold.arriving != Some(carried.left);
+            data.request_solve();
+            Some(moves)
+        })
+        .flatten();
+    if moves == Some(true) {
+        LayoutComponent::request_layout_solve(element);
+    }
 }
 
 /// Changes how a held `element` flies, and asks for a solve when that says

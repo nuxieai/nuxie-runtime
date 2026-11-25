@@ -474,9 +474,7 @@ fn css_hosted_root_of_one_size_is_not_laid_out_again_as_it_flies() {
         .artboard
         .with_artboard(|page| page.find_all_handles::<NestedArtboardLayout>()[0].clone());
     let unit = host
-        .with_downcast::<NestedArtboardLayout, _>(|host| {
-            host.base.base.artboard_instance_handle(0)
-        })
+        .with_downcast::<NestedArtboardLayout, _>(|host| host.base.base.artboard_instance_handle(0))
         .flatten()
         .unwrap();
     let size = || unit.with_artboard(|unit| (unit.layout_width(), unit.layout_height()));

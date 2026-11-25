@@ -111,6 +111,8 @@ pub(crate) fn fly<T, M>(
 where
     M: FnMut(LayoutInput, NodeId, Option<&mut T>, &Style) -> LayoutOutput,
 {
+    #[cfg(test)]
+    PASSES.with(|count| count.set(count.get() + 1));
     let slot = resting_slot(taffy, node)?;
     let (width, height) = flying.size;
     let root = flying.carried.as_ref().and_then(|carried| {
@@ -361,6 +363,17 @@ pub(crate) fn held_rest(element: &CoreHandle) -> Option<Layout> {
 #[cfg(any(test, feature = "test-support"))]
 thread_local! {
     static HOLDS_BEGUN: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+thread_local! {
+    static PASSES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// The flight passes run on this thread.
+#[cfg(test)]
+pub(crate) fn passes() -> usize {
+    PASSES.with(std::cell::Cell::get)
 }
 
 /// The holds begun on this thread.

@@ -26032,3 +26032,6 @@ mod flight_hold_tests;
 
 #[path = "layout_host_driver_tests.rs"]
 mod host_driver_tests;
+
+#[path = "layout_scroll_regions_tests.rs"]
+mod scroll_regions_tests;

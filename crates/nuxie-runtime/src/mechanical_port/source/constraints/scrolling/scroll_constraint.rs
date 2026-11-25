@@ -1402,6 +1402,24 @@ impl ScrollConstraint {
                 != self.clamp_resolved_offset(self.offset_y(), false);
         (wants_x && moves_x) || (wants_y && moves_y)
     }
+    /// Nuxie: whether moving the content by `physical` points on screen
+    /// would change where it rests: `can_consume`'s clamp test, before the
+    /// drag multiplier and without the wheel flag, which a drag does not
+    /// read. A positive y shows content above; a positive x shows content
+    /// to the left, also in a right-to-left viewport. Hosts read it through
+    /// the semantic capture's scroll regions (semantic_scroll_regions.rs).
+    pub fn can_move_content(&self, physical: Vec2D) -> bool {
+        let wants_x = self.constrains_horizontal() && physical.x != 0.0;
+        let wants_y = self.constrains_vertical() && physical.y != 0.0;
+        let x = self.logical_x(physical.x);
+        let moves_x = self.loops_x()
+            || self.clamp_resolved_offset(self.offset_x() + x, true)
+                != self.clamp_resolved_offset(self.offset_x(), true);
+        let moves_y = self.loops_y()
+            || self.clamp_resolved_offset(self.offset_y() + physical.y, false)
+                != self.clamp_resolved_offset(self.offset_y(), false);
+        (wants_x && moves_x) || (wants_y && moves_y)
+    }
     pub fn scroll_by(&mut self, delta: Vec2D) {
         let scaled = self.scaled_delta(delta);
         if self.constrains_horizontal() {

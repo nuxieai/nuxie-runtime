@@ -326,6 +326,7 @@ PORTABLE_ABI_FACADE_FILE_MODULE_SYMBOLS = {
             "Cards",
             "LINE_LABEL",
             "RUN_TEXT",
+            "STILL",
             "card",
             "keyed_plans_fixture",
             "page",
@@ -425,10 +426,11 @@ PORTABLE_ABI_FACADE_FILE_PATHS = {
         "runtime::generated::layout_component_base::LayoutComponentBase",
         "runtime::math::path_types::PathDirection",
     },
-    # Scroll region tests: each row's list and viewport box, the oracle for
-    # the regions read through the C edge.
+    # Scroll region tests: each row's list, viewport box and scroll offset,
+    # the oracle for the regions read through the C edge.
     "crates/nux-capi/src/scroll_region_tests.rs": {
         "runtime::artboard_component_list::ArtboardComponentList",
+        "runtime::constraints::scrolling::scroll_constraint::ScrollConstraint",
         "runtime::layout_component::LayoutComponent",
     },
     "crates/nux-capi/src/text_geometry.rs": {

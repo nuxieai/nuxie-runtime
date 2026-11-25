@@ -7,7 +7,7 @@
 //! not at that end of its range.
 use super::*;
 use nuxie::keyed_rows_fixture::{
-    BUTTON_LABEL, Cards, LINE_LABEL, RUN_TEXT, card, keyed_plans_fixture, page,
+    BUTTON_LABEL, Cards, LINE_LABEL, RUN_TEXT, STILL, card, keyed_plans_fixture, page,
 };
 use std::ffi::c_void;
 
@@ -55,6 +55,17 @@ unsafe extern "C" fn mount_rows(
     NuxStatus::Ok
 }
 
+/// What plays the page.
+#[derive(Clone, Copy)]
+enum Plays {
+    /// Its state machine, the default player.
+    Machine,
+    /// Nothing: a static player.
+    Nothing,
+    /// Its animation, [`STILL`].
+    Animation,
+}
+
 /// A plans page playing with `rows` cards mounted and semantics on.
 struct Page {
     file: *mut NuxFile,
@@ -65,6 +76,10 @@ struct Page {
 
 impl Page {
     fn new(cards: Cards, rows: usize) -> Self {
+        Self::played(cards, rows, Plays::Machine)
+    }
+
+    fn played(cards: Cards, rows: usize, plays: Plays) -> Self {
         let bytes = keyed_plans_fixture(cards);
         let mut file = ptr::null_mut();
         let mut instance = ptr::null_mut();
@@ -87,7 +102,19 @@ impl Page {
                 nux_artboard_instance_new(file, 0, &mut instance),
                 NuxStatus::Ok
             );
-            assert_eq!(nux_player_new_default(instance, &mut player), NuxStatus::Ok);
+            let made = match plays {
+                Plays::Machine => nux_player_new_default(instance, &mut player),
+                Plays::Nothing => nux_player_new_static(instance, &mut player),
+                Plays::Animation => nux_player_new_linear_animation_named(
+                    instance,
+                    NuxStringView {
+                        data: STILL.as_ptr().cast(),
+                        len: STILL.len(),
+                    },
+                    &mut player,
+                ),
+            };
+            assert_eq!(made, NuxStatus::Ok);
             assert_eq!(nux_player_enable_semantics(player), NuxStatus::Ok);
             let driver = NuxPlayerDriver {
                 struct_size: std::mem::size_of::<NuxPlayerDriver>() as u32,
@@ -149,11 +176,9 @@ impl Page {
         Ok(Capture(snapshot))
     }
 
-    /// Row `index`'s viewport, "Scroller", in page space, from the layout.
-    fn scroller_box(&self, index: i32) -> [f32; 4] {
-        use nuxie::runtime::{
-            artboard_component_list::ArtboardComponentList, layout_component::LayoutComponent,
-        };
+    /// Row `index`'s artboard.
+    fn row(&self, index: i32) -> nuxie::RuntimeArtboardInstanceHandle {
+        use nuxie::runtime::artboard_component_list::ArtboardComponentList;
         let native = unsafe { &*self.player }
             .artboard
             .instance
@@ -162,10 +187,46 @@ impl Page {
         let list = native
             .with_artboard(|board| board.objects()[page::CARDS].clone())
             .expect("the list");
-        let row = list
-            .with_downcast::<ArtboardComponentList, _>(|list| list.artboard_instance(index))
+        list.with_downcast::<ArtboardComponentList, _>(|list| list.artboard_instance(index))
             .flatten()
-            .expect("a row");
+            .expect("a row")
+    }
+
+    /// Row `index`'s scroll offset, from its constraint.
+    fn scroll_offset(&self, index: i32) -> f32 {
+        use nuxie::runtime::constraints::scrolling::scroll_constraint::ScrollConstraint;
+        self.row(index)
+            .with_artboard(|board| board.objects()[card::SCROLL].clone())
+            .expect("the constraint")
+            .with_downcast::<ScrollConstraint, _>(|scroll| scroll.offset_y())
+            .expect("a scroll constraint")
+    }
+
+    /// A held drag 30 points up from the middle of row `index`'s viewport.
+    fn drag_up(&self, index: i32) {
+        let [left, top, right, bottom] = self.scroller_box(index);
+        let (x, y) = ((left + right) / 2.0, (top + bottom) / 2.0);
+        let pointer = |kind, dy: f32, step: usize| NuxPlayerPointerEvent {
+            kind,
+            x,
+            y: y + dy,
+            pointer_id: 0,
+            timestamp_seconds: step as f32 / 60.0,
+        };
+        self.present(&[pointer(NUX_PLAYER_POINTER_KIND_DOWN, 0.0, 0)]);
+        for step in 1..=3 {
+            self.present(&[pointer(
+                NUX_PLAYER_POINTER_KIND_MOVE,
+                -10.0 * step as f32,
+                step,
+            )]);
+        }
+    }
+
+    /// Row `index`'s viewport, "Scroller", in page space, from the layout.
+    fn scroller_box(&self, index: i32) -> [f32; 4] {
+        use nuxie::runtime::layout_component::LayoutComponent;
+        let row = self.row(index);
         let scroller = row
             .with_artboard(|board| board.objects()[card::SCROLLER].clone())
             .expect("the scroller")
@@ -290,27 +351,49 @@ fn each_rows_scroller_is_a_region_and_follows_a_drag() {
     assert_eq!(named(RUN_TEXT), [-1, -1]);
     drop(capture);
 
-    let [left, top, right, bottom] = page.scroller_box(0);
-    let (x, y) = ((left + right) / 2.0, (top + bottom) / 2.0);
-    let pointer = |kind, dy: f32, step: usize| NuxPlayerPointerEvent {
-        kind,
-        x,
-        y: y + dy,
-        pointer_id: 0,
-        timestamp_seconds: step as f32 / 60.0,
-    };
-    page.present(&[pointer(NUX_PLAYER_POINTER_KIND_DOWN, 0.0, 0)]);
-    for step in 1..=3 {
-        page.present(&[pointer(
-            NUX_PLAYER_POINTER_KIND_MOVE,
-            -10.0 * step as f32,
-            step,
-        )]);
-    }
+    page.drag_up(0);
     let regions = page.capture().expect("a capture").regions();
     assert_eq!(regions[0].can_scroll, TOP | BOTTOM);
     assert_eq!(regions[1].can_scroll, BOTTOM);
     assert_eq!(region_box(&regions[0]), page.scroller_box(0));
+}
+
+/// Only a state-machine player sends its pointers on, so a page played by
+/// nothing or by an animation has no region, though its rows and their
+/// scrollers are there, and its nodes name none. A drag where a row's
+/// region would be moves nothing, where the same drag through the page's
+/// state machine scrolls the row.
+#[test]
+fn a_page_no_machine_plays_has_no_region() {
+    let machine = Page::played(Cards::DescribedLine, 2, Plays::Machine);
+    assert_eq!(machine.capture().expect("a capture").regions().len(), 2);
+    assert_eq!(machine.scroll_offset(0), 0.0);
+    machine.drag_up(0);
+    assert!(machine.scroll_offset(0) < 0.0, "a machine's drag scrolls");
+    drop(machine);
+
+    for plays in [Plays::Nothing, Plays::Animation] {
+        let page = Page::played(Cards::DescribedLine, 2, plays);
+        let capture = page.capture().expect("a capture");
+        assert_eq!(capture.info().scroll_region_count, 0);
+        assert!(capture.regions().is_empty());
+        let lines = capture
+            .node_regions()
+            .into_iter()
+            .filter(|(name, _)| name == LINE_LABEL)
+            .map(|(_, region)| region)
+            .collect::<Vec<_>>();
+        assert_eq!(lines, [-1, -1], "both rows' lines, in no region");
+        assert!(
+            capture
+                .node_regions()
+                .iter()
+                .all(|(_, region)| *region == -1)
+        );
+        drop(capture);
+        page.drag_up(0);
+        assert_eq!(page.scroll_offset(0), 0.0);
+    }
 }
 
 /// A page whose cards are not mounted has no region, and its nodes none.
@@ -335,15 +418,17 @@ fn a_page_without_scrollers_has_no_region() {
     );
 }
 
-/// 256 regions are captured; one more fails the capture as a whole.
+/// 256 regions are captured; one more fails the capture as a whole, for a
+/// state-machine player. A static player lists no region, so the same 257
+/// rows capture.
 ///
 /// A region is listed only where a drag can reach it, and the page clips
 /// rows below its 640 point height, so the page is first made tall enough
 /// to show every row: 257 cards of 160 points under the heading.
 #[test]
 fn more_than_256_regions_fail_the_capture() {
-    let tall = |rows| {
-        let page = Page::new(Cards::Keyed, rows);
+    let tall = |rows, plays| {
+        let page = Page::played(Cards::Keyed, rows, plays);
         assert_eq!(
             unsafe { nux_player_layout_size_set(page.player, 320.0, 42_000.0) },
             NuxStatus::Ok
@@ -361,7 +446,7 @@ fn more_than_256_regions_fail_the_capture() {
     assert!(shown > 0 && shown < 256, "{shown} regions on a short page");
     drop(short);
 
-    let page = tall(256);
+    let page = tall(256, Plays::Machine);
     assert_eq!(
         page.capture()
             .expect("a capture")
@@ -370,8 +455,13 @@ fn more_than_256_regions_fail_the_capture() {
         256
     );
     drop(page);
-    let page = tall(257);
+    let page = tall(257, Plays::Machine);
     assert_eq!(page.capture().err(), Some(NuxStatus::LimitExceeded));
+    drop(page);
+    let page = tall(257, Plays::Nothing);
+    let capture = page.capture().expect("a static page's capture");
+    assert_eq!(capture.info().scroll_region_count, 0);
+    assert!(capture.info().node_count > 257, "every row's nodes");
 }
 
 /// The views' layouts, and callers of each older or shorter size: an info

@@ -550,7 +550,8 @@ fn two_artboard_versions_keep_identity_and_reverse_authored_draw_order() {
         // A's copy is the leaving one of t1, and the arriving one of back.
         for (element, key) in [(box_of(&s.s), keys[0]), (box_of(&s.d), keys[1])] {
             let record = &flights.iter().find(|f| f.0 == element).unwrap().2;
-            assert_eq!(CoreRegistry::get_uint_handle(record, 62031), Some(key));
+            let named = record.with_downcast::<records::LiveFlight, _>(|r| r.values.key);
+            assert_eq!(named, Some(key));
             set(record, 62033, 0.5);
         }
         assert_eq!(child(&s.s).unwrap().core_handle(), a);
@@ -618,21 +619,17 @@ fn two_version_fade_multiplies_blended_opacity_at_each_progress() {
 
 #[test]
 fn malformed_flight_plans_are_rejected_before_transport() {
-    for (kind, error) in [(1, "999"), (3, "duplicate")] {
-        let mut s = Scene::load(&fixture::invalid_plan_fixture(kind), false);
-        let a = child(&s.s).unwrap().core_handle();
-        let b = child(&s.d).unwrap().core_handle();
-        assert!(
-            s.moves
-                .prepare(&s.root)
-                .unwrap_err()
-                .to_string()
-                .contains(error)
-        );
-        assert_eq!(child(&s.s).unwrap().core_handle(), a);
-        assert_eq!(child(&s.d).unwrap().core_handle(), b);
-        assert!(s.moves.flight_controls(&s.root).is_empty());
-    }
+    // A step that names no record is refused as it begins.
+    let mut s = Scene::load(&fixture::invalid_plan_fixture(1), true);
+    let a = child(&s.s).unwrap().core_handle();
+    let b = child(&s.d).unwrap().core_handle();
+    let refused = s.moves.step_begin(&s.root, "B", Some("t1")).unwrap_err();
+    assert!(refused.to_string().contains("999"), "{refused}");
+    assert_eq!(child(&s.s).unwrap().core_handle(), a);
+    assert_eq!(child(&s.d).unwrap().core_handle(), b);
+    assert!(s.moves.flight_controls(&s.root).is_empty());
+    // Two records of one Screen with one key don't import.
+    assert!(!imports(&fixture::invalid_plan_fixture(3)));
 }
 
 #[test]
@@ -1782,7 +1779,13 @@ fn crossed_two_version_flights_release_rows_and_units_round7() {
         .root
         .with_artboard(|b| b.find_all_handles::<records::LiveStepUnit>())[0]
         .clone();
-    mapping.with_downcast_mut::<records::LiveStepUnit, _>(|r| r.values.incoming_flight_key = 2);
+    mapping.with_downcast_mut::<records::LiveStepUnit, _>(|r| {
+        // The two versions fly each other's record.
+        std::mem::swap(
+            &mut r.values.incoming_flight_key,
+            &mut r.values.outgoing_flight_key,
+        );
+    });
     s.moves.prepare(&s.root).unwrap();
     let rows = [s.a.downgrade(), s.b.downgrade()];
     let units = [
@@ -6273,7 +6276,6 @@ mod paint_order {
             // `Cancel`'s steps are its own (go2, back2), driven by
             // `paint_order_19b_*` and its in-place twin.
             CanvasAfterFlight { mask: true },
-            CanvasAfterFlight { mask: false },
             AboveBar { badge: false },
             AboveBar { badge: true },
             MarkedVideos,

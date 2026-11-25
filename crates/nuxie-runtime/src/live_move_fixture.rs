@@ -2265,7 +2265,8 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
     let entered = 1;
     let button_view_model = rows as u64 + 2;
     let mut b = b"RIVE".to_vec();
-    for n in [7, 0, 0, 0] {
+    // A box composes its x, rotation and scale from 7.3 on.
+    for n in [7, 5, 0, 0] {
         var(&mut b, n);
     }
     obj(&mut b, "Backboard", &[]);
@@ -7832,7 +7833,10 @@ fn paint_screen(
     machine(b, animated);
     if upper {
         for (input, &(target, number)) in spec.listeners.iter().enumerate() {
-            hit_listener(b, names[target], number, input as u64);
+            // A boxed unit's target is its own artboard's, not the Screen's.
+            if let Some(&target) = names.get(target) {
+                hit_listener(b, target, number, input as u64);
+            }
         }
     }
     Ok(())

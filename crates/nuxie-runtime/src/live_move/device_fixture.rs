@@ -512,7 +512,9 @@ fn build(rows: usize, _controls: bool) -> (Vec<u8>, serde_json::Value) {
         };
         let clipped = i == 1;
         let has_flight = rows > 1 && i < 2;
-        let host_id = if clipped { 3 } else { 2 };
+        // The keyed box, then the one placement it holds.
+        let box_id = if clipped { 3 } else { 2 };
+        let host_id = box_id + 1;
         let layer_id = host_id + 8;
         // Screen A's inline content, 151 objects, comes before its styles.
         let tail = if i == 0 { layer_id + 151 } else { layer_id };
@@ -547,13 +549,23 @@ fn build(rows: usize, _controls: bool) -> (Vec<u8>, serde_json::Value) {
                 &[
                     ("name", S("clip")),
                     ("parentId", U(1)),
-                    ("styleId", U(tail + 5)),
+                    ("styleId", U(tail + 7)),
                 ],
             ); // 2
         }
+        obj(
+            &mut b,
+            "LayoutComponent",
+            &[
+                ("name", S("mascot box")),
+                ("parentId", U(if clipped { 2 } else { 1 })),
+                ("styleId", U(tail + 4)),
+                ("clip", B(false)),
+            ],
+        ); // box_id
         slot(
             &mut b,
-            if clipped { 2 } else { 1 },
+            box_id,
             host_id,
             "mascot",
             rows as u64 + 1,
@@ -575,9 +587,14 @@ fn build(rows: usize, _controls: bool) -> (Vec<u8>, serde_json::Value) {
         css_box(&mut b, 1, if i == 0 { 15.0 } else { 215.0 }, false); // tail + 2, 3
         obj(
             &mut b,
+            "LayoutComponentStyle",
+            &[("parentId", U(box_id))],
+        ); // tail + 4
+        obj(
+            &mut b,
             "LayoutCssStyle",
             &[
-                ("parentId", U(host_id)),
+                ("parentId", U(box_id)),
                 ("flexShrink", F(0.0)),
                 ("marginLeft", F(5.0)),
                 ("widthKind", U(1)),
@@ -586,10 +603,22 @@ fn build(rows: usize, _controls: bool) -> (Vec<u8>, serde_json::Value) {
                 ("height", F(260.0)),
                 ("flightKey", U(1)),
             ],
-        ); // tail + 4
-        let mut next = tail + 5;
+        ); // tail + 5
+        obj(
+            &mut b,
+            "LayoutCssStyle",
+            &[
+                ("parentId", U(host_id)),
+                ("flexShrink", F(0.0)),
+                ("widthKind", U(1)),
+                ("width", F(160.0)),
+                ("heightKind", U(1)),
+                ("height", F(260.0)),
+            ],
+        ); // tail + 6
+        let mut next = tail + 7;
         if clipped {
-            css_box(&mut b, 2, 0.0, true); // tail + 5, 6
+            css_box(&mut b, 2, 0.0, true); // tail + 7, 8
             next += 2;
         }
         if has_flight {

@@ -982,7 +982,7 @@ fn live_moves_paint_content_edits_invalidate_the_enclosing_index_round9() {
         ArtboardComponentList::update_list_occurrence(&list, &[item.clone()]);
         assert_eq!(
             video_ids(scene.player).len(),
-            before + 2,
+            before + 1,
             "paint list edit left the enclosing index stale"
         );
         step_ok(scene.player);

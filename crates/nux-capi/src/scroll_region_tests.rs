@@ -502,7 +502,7 @@ fn more_than_256_regions_fail_the_capture() {
 #[test]
 fn view_sizes_and_older_callers() {
     use std::mem::{offset_of, size_of};
-    assert_eq!(size_of::<NuxScrollRegionView>(), 32);
+    assert_eq!(size_of::<NuxScrollRegionView>(), 48);
     assert_eq!(
         [
             offset_of!(NuxScrollRegionView, id),

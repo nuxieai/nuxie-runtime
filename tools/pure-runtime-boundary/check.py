@@ -425,6 +425,9 @@ PORTABLE_ABI_FACADE_FILE_PATHS = {
         "runtime::semantic::semantic_scroll_regions::ScrollRegion",
         "runtime::semantic::semantic_scroll_regions::ScrollRegions",
         "runtime::semantic::semantic_scroll_regions::ScrollRegionsError",
+        # A host's reveal of a node and move of a region's content.
+        "runtime::semantic::semantic_reveal::semantic_reveal",
+        "runtime::math::vec2d::Vec2D",
         "runtime::text::text_value_run::TextValueRun",
         "runtime::generated::core_registry::CoreRegistry",
         "runtime::generated::component_base::ComponentBase",
@@ -439,6 +442,12 @@ PORTABLE_ABI_FACADE_FILE_PATHS = {
         "runtime::constraints::scrolling::scroll_constraint::ScrollConstraint",
         "runtime::layout_component::LayoutComponent",
         "runtime::math::path_types::PathDirection",
+    },
+    # Semantic reveal tests: a live node, to find a boundary node and to
+    # disable a button through its semantic data.
+    "crates/nux-capi/src/semantic_reveal_tests.rs": {
+        "runtime::semantic::semantic_data::SemanticData",
+        "runtime::semantic::semantic_node::SemanticNodeRef",
     },
     "crates/nux-capi/src/text_geometry.rs": {
         "runtime::core::CoreHandle",

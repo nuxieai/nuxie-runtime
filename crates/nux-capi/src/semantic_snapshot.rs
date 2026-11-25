@@ -5,6 +5,7 @@ use nuxie::runtime::semantic::{
     semantic_data::SemanticData,
     semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager},
     semantic_node::{SemanticNode, SemanticNodeRef},
+    semantic_reveal::semantic_reveal,
     semantic_scroll_regions::{ScrollRegion, ScrollRegions, ScrollRegionsError},
     semantic_snapshot::SemanticsDiffNode,
     semantic_state::SemanticState,
@@ -410,6 +411,9 @@ pub struct NuxSemanticSnapshot {
     node_regions: Vec<i32>,
     /// At most `MAX_SCROLL_REGIONS`.
     regions: Vec<ScrollRegion>,
+    /// Each region's scroll constraint, beside `regions`, so at most
+    /// `MAX_SCROLL_REGIONS` too.
+    region_constraints: Vec<nuxie::runtime::core::CoreHandle>,
 }
 
 #[repr(C)]
@@ -471,6 +475,18 @@ pub struct NuxScrollRegionView {
     pub can_scroll: u32,
     /// The region this one is inside, always an earlier index, or -1.
     pub parent: i32,
+    /// How far its content has moved from its start on each axis, at or
+    /// above 0, and the most it can move, in the scroller's own points
+    /// (the space a move by nux_player_scroll_region_by is in; it is the
+    /// box's space unless a host scales or turns the scroller). While a
+    /// move settles, the scroll is where it is going, not where it is
+    /// drawn. Zero on an axis the region does not scroll; a looping axis
+    /// has an infinite range. A runtime older than these fields leaves
+    /// them alone and returns a struct_size of 32.
+    pub scroll_x: f32,
+    pub scroll_y: f32,
+    pub range_x: f32,
+    pub range_y: f32,
 }
 
 pub const NUX_SEMANTIC_SNAPSHOT_INFO_MIN_SIZE: usize =
@@ -670,6 +686,7 @@ pub unsafe extern "C" fn nux_player_semantic_snapshot(
             actions,
             node_regions,
             regions: regions.regions().to_vec(),
+            region_constraints: regions.constraints().to_vec(),
         }));
         register_handle(snapshot, HandleKind::SemanticSnapshot, player.owner_thread);
         unsafe { *out_snapshot = snapshot };
@@ -893,6 +910,150 @@ pub unsafe extern "C" fn nux_player_queue_semantic_action(
     })
 }
 
+/// Run `move_content` on a presented capture's occurrence and fold whether
+/// it moved anything into presentation: a move invalidates the capture, and
+/// no move leaves it valid. The next render revision is checked first, so
+/// a move is never made that could not be presented.
+unsafe fn move_presented_content(
+    player: *mut NuxPlayer,
+    snapshot: *const NuxSemanticSnapshot,
+    out_moved: *mut bool,
+    move_content: impl FnOnce(&NuxPlayer, &NuxSemanticSnapshot) -> Result<bool, NuxStatus>,
+) -> NuxStatus {
+    if out_moved.is_null() {
+        return NuxStatus::NullArgument;
+    }
+    unsafe { *out_moved = false };
+    let validity = unsafe { nux_player_validate_semantic_snapshot(player, snapshot) };
+    if validity != NuxStatus::Ok {
+        return validity;
+    }
+    let _player = enter_status_handle!(player, HandleKind::Player);
+    let _snapshot = enter_status_handle!(snapshot, HandleKind::SemanticSnapshot);
+    let player = unsafe { &*player };
+    let snapshot = unsafe { &*snapshot };
+    let _occurrence = match enter_occurrence(&player.artboard) {
+        Ok(guard) => guard,
+        Err(status) => return status,
+    };
+    if let Err(status) = player.artboard.next_render_revision() {
+        return status;
+    }
+    let moved = match move_content(player, snapshot) {
+        Ok(moved) => moved,
+        Err(status) => return status,
+    };
+    let status = player.artboard.commit_runtime_change_or_poison(moved);
+    if status == NuxStatus::Ok {
+        unsafe { *out_moved = moved };
+    }
+    status
+}
+
+/// Bring a captured node into view: every scroller above it, nested
+/// scrollers and the used components and list rows hosting it included,
+/// moves by the smallest amount that shows it, as the engine's own focus
+/// reveal moves them (snapped where a scroller snaps). Nothing is focused
+/// and no listener hears it. A scroller with physics animates there; one
+/// without moves at once. Either way a capture taken after the next
+/// presented step reports the scroller's target in its region's scroll,
+/// though the node's box shows where it is drawn, in flight until the move
+/// settles; the step's scheduling stays unsettled until then.
+///
+/// The node must be in the capture's tree and not hidden; unlike an action
+/// it may be clipped, transparent or disabled. Each scroller's move is
+/// worked out from where the node is drawn, before the scrollers inside it
+/// move, so a node in a nested scroller may need a second reveal, after the
+/// first settles, to show whole. Reveal again only once the step reports
+/// itself settled: a reveal while a scroller settles adds the node's
+/// remaining travel to where the scroller is going, as the engine's focus
+/// reveal does, and overshoots. `out_moved` answers whether any scroller
+/// moved: false for a node already in view or under no scroller. A move
+/// invalidates the capture; no move leaves it valid.
+///
+/// Stale captures return HANDLE_MISMATCH; an unknown, hidden or boundary
+/// node returns NOT_FOUND.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_reveal_semantic_node(
+    player: *mut NuxPlayer,
+    snapshot: *const NuxSemanticSnapshot,
+    node_id: u32,
+    out_moved: *mut bool,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || unsafe {
+        move_presented_content(player, snapshot, out_moved, |player, snapshot| {
+            if !snapshot.nodes.iter().any(|node| node.id == node_id) {
+                return Err(NuxStatus::NotFound);
+            }
+            let artboard = player.artboard.instance.borrow().native_handle();
+            let manager = artboard
+                .with_artboard(|artboard| artboard.semantic_manager())
+                .ok_or(NuxStatus::NotFound)?;
+            let node = manager.with_semantic_manager_mut(|manager| {
+                manager.snapshot();
+                if manager.version() != snapshot.tree_version {
+                    return Err(NuxStatus::HandleMismatch);
+                }
+                manager.node_by_id(node_id).ok_or(NuxStatus::NotFound)
+            })?;
+            if !SemanticNode::is_reveal_eligible(&node) || node.borrow().semantic_data.is_none() {
+                return Err(NuxStatus::NotFound);
+            }
+            Ok(semantic_reveal(&node))
+        })
+    })
+}
+
+/// Move a captured scroll region's content by `dx`, `dy` points in the
+/// scroller's own space, the sense of a scroll wheel's delta: a negative
+/// `dy` moves the content up, showing what is below, and a negative `dx`
+/// moves it left, showing what is to the right, also in a right-to-left
+/// scroller. A move along an axis the region does not scroll is ignored.
+/// It starts from where the content is going (the region's scroll), is
+/// clamped to the region's range, and moves as a reveal does: animated
+/// with physics, at once without. `out_moved` is false when the clamp
+/// leaves it where it is going, so at an end a move further past it answers
+/// false. A move invalidates the capture; no move leaves it valid.
+///
+/// Stale captures return HANDLE_MISMATCH; a region past the capture's
+/// `scroll_region_count` returns NOT_FOUND; a delta that is not finite
+/// returns INVALID_ARGUMENT.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_scroll_region_by(
+    player: *mut NuxPlayer,
+    snapshot: *const NuxSemanticSnapshot,
+    region: u32,
+    dx: f32,
+    dy: f32,
+    out_moved: *mut bool,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if !out_moved.is_null() {
+            unsafe { *out_moved = false };
+        }
+        if !dx.is_finite() || !dy.is_finite() {
+            return NuxStatus::InvalidArgument;
+        }
+        unsafe {
+            move_presented_content(player, snapshot, out_moved, |_, snapshot| {
+                let constraint = snapshot
+                    .region_constraints
+                    .get(region as usize)
+                    .ok_or(NuxStatus::NotFound)?;
+                constraint
+                    .with_mut(|object| {
+                        object.as_scroll_constraint_mut().map(|scroll| {
+                            scroll
+                                .scroll_content_by(nuxie::runtime::math::vec2d::Vec2D::new(dx, dy))
+                        })
+                    })
+                    .flatten()
+                    .ok_or(NuxStatus::NotFound)
+            })
+        }
+    })
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_semantic_snapshot_info(
     snapshot: *const NuxSemanticSnapshot,
@@ -976,6 +1137,10 @@ pub unsafe extern "C" fn nux_semantic_snapshot_scroll_region(
             max_y: region.bounds.max_y,
             can_scroll: region.can_scroll,
             parent: region.parent,
+            scroll_x: region.scroll_x,
+            scroll_y: region.scroll_y,
+            range_x: region.range_x,
+            range_y: region.range_y,
         };
         unsafe { write_caller_struct(out_view, &value, NUX_SCROLL_REGION_VIEW_MIN_SIZE) }
             .map_or_else(|status| status, |()| NuxStatus::Ok)
@@ -2092,6 +2257,7 @@ mod tests {
             actions: vec![0],
             node_regions: vec![-1],
             regions: Vec::new(),
+            region_constraints: Vec::new(),
             nodes: vec![SemanticsDiffNode {
                 label: "Continue".into(),
                 ..Default::default()
@@ -2143,3 +2309,7 @@ mod field_read_tests;
 #[cfg(test)]
 #[path = "scroll_region_tests.rs"]
 mod scroll_region_tests;
+
+#[cfg(test)]
+#[path = "semantic_reveal_tests.rs"]
+mod semantic_reveal_tests;

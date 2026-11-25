@@ -1200,6 +1200,11 @@ fn collect_geometry(
                 let RuntimeDrawableOccurrence::RuntimeProxy(proxy) = &drawable else {
                     continue;
                 };
+                // A flying copy's entry is no box's own paint; its anchor's
+                // proxy already lists that box.
+                if crate::css_layout::lift::lift_of(&drawable).is_some() {
+                    continue;
+                }
                 let owner = proxy.borrow().owner_handle();
                 if !owner
                     .with(|object| css_box_paints(object, visibility))

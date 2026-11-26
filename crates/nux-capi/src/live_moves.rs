@@ -9,6 +9,8 @@ pub(super) enum Request {
     KeyedRow(NuxStringView, NuxByteView, u8),
     BeginRow(NuxByteView),
     EndRow(NuxByteView),
+    BeginBetween(NuxByteView, NuxByteView, NuxStringView),
+    EndBetween(NuxByteView, NuxByteView, NuxStringView),
 }
 /// Copy a key's bytes: NULL is allowed only with length 0.
 fn key_bytes(key: NuxByteView) -> Result<Vec<u8>, NuxStatus> {
@@ -65,6 +67,16 @@ impl Request {
             }
             Self::BeginRow(key) => Operation::BeginRow(key_bytes(key)?),
             Self::EndRow(key) => Operation::EndRow(key_bytes(key)?),
+            Self::BeginBetween(outgoing, incoming, name) => Operation::BeginBetween {
+                outgoing: key_bytes(outgoing)?,
+                incoming: key_bytes(incoming)?,
+                name: with_utf8_view(name, str::to_owned)?,
+            },
+            Self::EndBetween(outgoing, incoming, name) => Operation::EndBetween {
+                outgoing: key_bytes(outgoing)?,
+                incoming: key_bytes(incoming)?,
+                name: with_utf8_view(name, str::to_owned)?,
+            },
         })
     }
 }
@@ -145,4 +157,45 @@ pub unsafe extern "C" fn nux_player_step_end_row(
     incoming_key: NuxByteView,
 ) -> NuxStatus {
     player_live_move_body(player, Request::EndRow(incoming_key))
+}
+/// Take off the units of the published LiveStep `step_name` on a driver
+/// page (a keyed list marked `isPageRows`), between the row of the page's
+/// list mounted by `outgoing_key` and the one mounted by `incoming_key`.
+/// The keys' bytes are compared only for equality. The step's from and to
+/// artboards must be the rows' own; a step from an artboard to itself runs
+/// between two rows of one component. The step reads its flight records
+/// from the upper row alone, the one later in the list's order. It holds
+/// both rows: removing either key cancels it, and a key removed and mounted
+/// again is a new row. INVALID_ARGUMENT for a page that is not a driver
+/// page, a key not mounted, one key for both ends, an unknown step, a step
+/// whose artboards are not the rows', a sleeping row, a unit that carries
+/// an instance, a flight record missing from the upper row, or a step
+/// already running; NULL_ARGUMENT for a NULL key or step name with a
+/// length.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step_begin_between(
+    player: *mut NuxPlayer,
+    outgoing_key: NuxByteView,
+    incoming_key: NuxByteView,
+    step_name: NuxStringView,
+) -> NuxStatus {
+    player_live_move_body(
+        player,
+        Request::BeginBetween(outgoing_key, incoming_key, step_name),
+    )
+}
+/// Land the step nux_player_step_begin_between began. Both keys and
+/// `step_name` must name it; INVALID_ARGUMENT otherwise, or when no such
+/// step is running.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step_end_between(
+    player: *mut NuxPlayer,
+    outgoing_key: NuxByteView,
+    incoming_key: NuxByteView,
+    step_name: NuxStringView,
+) -> NuxStatus {
+    player_live_move_body(
+        player,
+        Request::EndBetween(outgoing_key, incoming_key, step_name),
+    )
 }

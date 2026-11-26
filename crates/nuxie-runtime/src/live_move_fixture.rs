@@ -435,6 +435,14 @@ struct Options {
     /// keyed list "rows" of its own (rows of Screen A, none mounted) after
     /// its other objects. See `page_rows_screens_fixture`.
     page_rows: bool,
+    /// The page's list is a driver page's: keyed, named "rows", its rows
+    /// made from A (`rowArtboardId`) or B (a `KeyedRowArtboard`), marked
+    /// `isPageRows`, and bound to no model. See `driver_page_fixture`.
+    driver_page: bool,
+    /// With `two_versions`: A also holds flight records 21 to 24 and a
+    /// flight timeline, and the page steps `same` and `same.reverse` from A
+    /// to A. See `DriverPage::SameComponent`.
+    same_component: bool,
 }
 /// `fixture(2)` whose Unit model's default instance has `count` 9, while
 /// each slot's own authored instance keeps `count` 0.
@@ -2286,6 +2294,64 @@ pub fn page_rows_screens_fixture(record_free: bool, flagged: bool) -> Vec<u8> {
         },
     )
 }
+/// What a driver page holds: Screens A and B, rows of the page's keyed
+/// list "rows" (local id [`DRIVER_ROWS`]) that a driver mounts by key, from
+/// A ([`DRIVER_A`]) or B ([`DRIVER_B`]), with no model bound. The page's
+/// steps and the Screens' records are another fixture's.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DriverPage {
+    /// `two_version_fixture`'s: t1 from A to B and back, each flying A's
+    /// copy and B's in two flights, the records on B (11 to 14).
+    TwoVersions,
+    /// `flight_animation_fixture(FlightWindow::Whole)`'s: B's machine plays
+    /// its entrance, which keys t1's records 11 and 12.
+    Keyed,
+    /// `same_key_copies_fixture`'s: both copies on unit key 1, B's
+    /// entrance keying t1's crossfade.
+    SameKeyCopies,
+    /// `TwoVersions` with steps between two rows of A. Step `same`, from A
+    /// to A, flies unit key 1 with records 21 (the leaving copy's) and 22
+    /// (the arriving copy's); `same.reverse` flies it with 24 (leaving) and
+    /// 23 (arriving). A holds the four records, and its first animation,
+    /// "same flight", is `same`'s flight timeline: 21 fades from 1 to 0, 22
+    /// from 0 to 1, both progressing from 0 to 1 over a second. A's machine
+    /// plays it while its bool input "fly" is set, and otherwise nothing.
+    SameComponent,
+    /// `fixture(2)`'s: t1 and back each carry one instance (`transfers`).
+    Transfers,
+    /// `TwoVersions` with `transfers` set on units that name two flights:
+    /// an invalid unit.
+    InvalidUnit,
+    /// `TwoVersions` with two flight records keyed 2 on A.
+    DuplicateFlightKey,
+    /// `ordinary_fixture(2)`'s: no steps, no records and no flight keys.
+    RecordFree,
+}
+/// The driver page's list, as its root's local id.
+pub const DRIVER_ROWS: usize = 2;
+/// The artboards a driver page's rows are made from, as the file's
+/// artboard indices.
+pub const DRIVER_A: u32 = 1;
+pub const DRIVER_B: u32 = 2;
+/// A driver page (`isPageRows`) holding `kind`'s steps and Screens.
+pub fn driver_page_fixture(kind: DriverPage) -> Vec<u8> {
+    use DriverPage::*;
+    build(
+        2,
+        Options {
+            driver_page: true,
+            two_versions: !matches!(kind, Transfers | RecordFree),
+            ordinary: kind == RecordFree,
+            same_key_copies: kind == SameKeyCopies,
+            keyed: matches!(kind, Keyed | SameKeyCopies),
+            flight_animation: (kind == Keyed).then_some(FlightWindow::Whole),
+            same_component: kind == SameComponent,
+            mark: (kind == InvalidUnit).then_some(true),
+            invalid_plan: if kind == DuplicateFlightKey { 3 } else { 0 },
+            ..Options::default()
+        },
+    )
+}
 pub fn ordinary_fixture(rows: usize) -> Vec<u8> {
     build(
         rows,
@@ -2382,6 +2448,22 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
         );
     }
     assert!(!options.same_key_copies || options.two_versions);
+    // A driver page names its list "rows", which `page_rows` adds too, and
+    // binds it to nothing.
+    assert!(!options.driver_page || (!options.page_rows && rows == 2 && !options.empty_screens));
+    // The steps between rows of A take the page's local ids 7 to 10, and
+    // A's first animation and its machine.
+    if options.same_component {
+        assert!(
+            options.two_versions
+                && !options.same_key_copies
+                && !options.overlapping_units
+                && !options.page_unit
+                && !options.paint_list
+                && !options.follow_path
+                && !options.row_trigger
+        );
+    }
     // The unit key and definition offset of B's copy with two versions.
     let (second_key, second_board) = if options.same_key_copies {
         (1, 0)
@@ -2693,8 +2775,18 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
     if options.page_rows {
         screens.push(("isPageRows", B(true)));
     }
+    if options.driver_page {
+        screens = vec![
+            ("name", S("rows")),
+            ("parentId", U(1)),
+            ("rowArtboardId", U(u64::from(DRIVER_A))),
+            ("isPageRows", B(true)),
+        ];
+    }
     obj(&mut b, "ArtboardComponentList", &screens); // 2
-    bind(&mut b, 800, &[rows as u8 + 1, 0]);
+    if !options.driver_page {
+        bind(&mut b, 800, &[rows as u8 + 1, 0]);
+    }
     if rows > 1 && !options.ordinary {
         let mut step = vec![
             ("parentId", U(0)),
@@ -2771,6 +2863,36 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             unit.push(("transfers", B(true)));
         }
         obj(&mut b, "LiveStepUnit", &unit);
+    }
+    if options.same_component {
+        // Steps between two rows of A: `same` names A's first animation as
+        // its flight timeline.
+        for (id, name, leaving, arriving, timeline) in [
+            (7, "same", 21, 22, true),
+            (9, "same.reverse", 24, 23, false),
+        ] {
+            let mut step = vec![
+                ("parentId", U(0)),
+                ("name", S(name)),
+                ("fromArtboard", S("A")),
+                ("toArtboard", S("A")),
+            ];
+            if timeline {
+                step.push(("flightAnimationId", U(0)));
+            }
+            obj(&mut b, "LiveStep", &step); // 7, 9
+            obj(
+                &mut b,
+                "LiveStepUnit",
+                &[
+                    ("parentId", U(id)),
+                    ("incomingUnitKey", U(1)),
+                    ("outgoingUnitKey", U(1)),
+                    ("incomingFlightKey", U(arriving)),
+                    ("outgoingFlightKey", U(leaving)),
+                ],
+            ); // 8, 10
+        }
     }
     if options.overlapping_units {
         // Kinds 4 and 5 overlap one instance on purpose, so the overlap is
@@ -2905,6 +3027,17 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             ],
         );
     }
+    if options.driver_page {
+        // The list also makes rows from B.
+        obj(
+            &mut b,
+            "KeyedRowArtboard",
+            &[
+                ("parentId", U(DRIVER_ROWS as u64)),
+                ("artboardId", U(u64::from(DRIVER_B))),
+            ],
+        );
+    }
     if options.parity_counter {
         timeline(&mut b, "counter", 1, 13, 0.0, 100.0);
     }
@@ -2984,6 +3117,8 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
         // Step back's: its arriving copy's (key 13), then its leaving
         // copy's (key 14).
         let mut back_records = Vec::new();
+        // A's records of `same` and `same.reverse`: keys 21 to 24.
+        let mut same_records = Vec::new();
         if options.two_versions {
             for (j, version) in [1, 2, 1, 2].into_iter().enumerate() {
                 obj(
@@ -3012,6 +3147,18 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                     back_records.push(next);
                 }
                 next += 1;
+            }
+            // Steps `same` and `same.reverse`'s records, on A.
+            if options.same_component && i == 0 {
+                for key in 21..=24 {
+                    obj(
+                        &mut b,
+                        "LiveFlight",
+                        &[("parentId", U(0)), ("key", U(key)), ("sizeMode", U(1))],
+                    );
+                    same_records.push(next);
+                    next += 1;
+                }
             }
         } else if !options.ordinary {
             obj(
@@ -3168,7 +3315,41 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             let x = if i == 0 { 10.0 } else { 200.0 };
             timeline(&mut b, "pulse", 3, 13, x, x + 50.0);
         }
-        machine(&mut b, i == 1);
+        if !same_records.is_empty() {
+            // Step `same`'s flight timeline, A's first animation: the
+            // leaving copy's flight (key 21) fades from 1 to 0 and the
+            // arriving copy's (key 22) from 0 to 1, both progressing from 0
+            // to 1.
+            obj(
+                &mut b,
+                "LinearAnimation",
+                &[
+                    ("name", S("same flight")),
+                    ("fps", U(60)),
+                    ("duration", U(60)),
+                ],
+            );
+            for (record, fade) in same_records.iter().zip([(1.0, 0.0), (0.0, 1.0)]) {
+                obj(&mut b, "KeyedObject", &[("objectId", U(*record))]);
+                linear_track(&mut b, 62033, 0.0, 1.0);
+                linear_track(&mut b, 62036, fade.0, fade.1);
+            }
+            // A's machine plays it while "fly" is set: a host sets it on the
+            // row whose half carries the flight.
+            obj(&mut b, "StateMachine", &[("name", S("run"))]);
+            obj(&mut b, "StateMachineBool", &[("name", S("fly"))]);
+            obj(&mut b, "StateMachineLayer", &[("name", S("fly"))]);
+            obj(&mut b, "EntryState", &[]); // 0
+            obj(&mut b, "StateTransition", &[("stateToId", U(1))]);
+            obj(
+                &mut b,
+                "TransitionBoolCondition",
+                &[("inputId", U(0)), ("opValue", U(0))],
+            );
+            obj(&mut b, "AnimationState", &[("animationId", U(0))]); // 1
+        } else {
+            machine(&mut b, i == 1);
+        }
         if options.row_trigger {
             pulse_layer(&mut b, &[i as u8 + 1, 1], u64::from(i == 1));
         }

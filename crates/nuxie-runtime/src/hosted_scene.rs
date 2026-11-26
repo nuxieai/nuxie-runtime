@@ -90,8 +90,10 @@ impl SceneState {
         self.reconciled_revision.set(Some(revision));
     }
     pub(crate) fn new(root: CoreHandle, page: PageList) -> std::rc::Rc<Self> {
-        // A driver page's LiveStep records are ignored: its rows are no
-        // Screens a step names.
+        // A driver page names no Screen by artboard: a step names its rows
+        // by key, and the plan reads its LiveStep records. So no driver row
+        // is a Screen here, and none holds a carry host (`is_carry_host`):
+        // carrying an instance between rows comes later (4.5).
         let steps = if page.keyed {
             Vec::new()
         } else {

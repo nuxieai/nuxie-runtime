@@ -2277,6 +2277,172 @@ mod tests {
         }
     }
 
+    /// Mounts a driver page's rows "a", of A, and "b", of B, in its first
+    /// round 0, and records each answer.
+    unsafe extern "C" fn drive_between(
+        context: *mut c_void,
+        round: *const NuxPlayerDriverRound,
+        writer: *mut NuxSceneWriter,
+    ) -> NuxStatus {
+        use nuxie_runtime::live_move_fixture::{DRIVER_A, DRIVER_B, DRIVER_ROWS};
+        let answers = unsafe { &mut *context.cast::<Vec<NuxStatus>>() };
+        if unsafe { (*round).index } != 0 || !answers.is_empty() {
+            return NuxStatus::Ok;
+        }
+        let list = NuxSceneObject {
+            struct_size: sized::<NuxSceneObject>(),
+            local_id: DRIVER_ROWS,
+            path: std::ptr::null(),
+            path_len: 0,
+            row_keys: std::ptr::null(),
+            row_key_count: 0,
+        };
+        for (row, artboard) in [(b"a".as_slice(), DRIVER_A), (b"b".as_slice(), DRIVER_B)] {
+            let mut changed = false;
+            answers.push(unsafe {
+                nux_scene_writer_mount_row_from(writer, &list, key(row), artboard, &mut changed)
+            });
+        }
+        NuxStatus::Ok
+    }
+
+    /// Through the C edge, on a driver page: a named step begins and lands
+    /// between two rows named by key, and back again. A second begin, a
+    /// nameless row step while it runs, an end that names other rows or
+    /// another step, an end with no step running, a kind mismatch, one key
+    /// for both ends, a key not mounted and an unknown name return
+    /// INVALID_ARGUMENT, and a NULL key or name with a length NULL_ARGUMENT.
+    /// The nameless row step still runs beside it.
+    #[test]
+    fn steps_between_rows_through_the_c_edge() {
+        use crate::{nux_player_step_begin_between as begin, nux_player_step_end_between as end};
+        use nuxie_runtime::live_move_fixture::{DriverPage, driver_page_fixture};
+        let bytes = driver_page_fixture(DriverPage::TwoVersions);
+        let (file, instance, player) = open_player(&bytes);
+        let mut answers = Vec::<NuxStatus>::new();
+        let driver = NuxPlayerDriver {
+            struct_size: sized::<NuxPlayerDriver>(),
+            context: (&raw mut answers).cast(),
+            drive: Some(drive_between),
+            release: None,
+        };
+        let null = NuxByteView {
+            data: std::ptr::null(),
+            len: 1,
+        };
+        unsafe {
+            assert_eq!(nux_player_driver_set(player, &driver), NuxStatus::Ok);
+            step(player, &[]);
+            assert_eq!(nux_player_driver_clear(player), NuxStatus::Ok);
+        }
+        assert_eq!(answers, [NuxStatus::Ok, NuxStatus::Ok]);
+        unsafe {
+            assert_eq!(
+                begin(player, key(b"a"), key(b"b"), string("t1")),
+                NuxStatus::Ok
+            );
+            for (status, why) in [
+                (
+                    begin(player, key(b"a"), key(b"b"), string("t1")),
+                    "a step is running",
+                ),
+                (
+                    crate::nux_player_step_begin_row(player, key(b"b")),
+                    "a step is running",
+                ),
+                (
+                    end(player, key(b"b"), key(b"a"), string("t1")),
+                    "other rows",
+                ),
+                (
+                    end(player, key(b"a"), key(b"b"), string("back")),
+                    "another step",
+                ),
+                (
+                    crate::nux_player_step_end_row(player, key(b"b")),
+                    "not a row step",
+                ),
+            ] {
+                assert_eq!(status, NuxStatus::InvalidArgument, "{why}");
+            }
+            step(player, &[]);
+            assert_eq!(
+                end(player, key(b"a"), key(b"b"), string("t1")),
+                NuxStatus::Ok
+            );
+            for (status, why) in [
+                (
+                    end(player, key(b"a"), key(b"b"), string("t1")),
+                    "no step is running",
+                ),
+                (
+                    begin(player, key(b"b"), key(b"a"), string("t1")),
+                    "a kind mismatch",
+                ),
+                (
+                    begin(player, key(b"a"), key(b"a"), string("t1")),
+                    "one row for both ends",
+                ),
+                (
+                    begin(player, key(b"a"), key(b"gone"), string("t1")),
+                    "a key not mounted",
+                ),
+                (
+                    begin(player, key(b"a"), key(b"b"), string("nope")),
+                    "an unknown name",
+                ),
+            ] {
+                assert_eq!(status, NuxStatus::InvalidArgument, "{why}");
+            }
+            assert_eq!(
+                begin(player, null, key(b"b"), string("t1")),
+                NuxStatus::NullArgument
+            );
+            assert_eq!(
+                begin(player, key(b"a"), null, string("t1")),
+                NuxStatus::NullArgument
+            );
+            assert_eq!(
+                begin(
+                    player,
+                    key(b"a"),
+                    key(b"b"),
+                    NuxStringView {
+                        data: std::ptr::null(),
+                        len: 1,
+                    }
+                ),
+                NuxStatus::NullArgument
+            );
+            assert_eq!(
+                end(player, null, key(b"b"), string("t1")),
+                NuxStatus::NullArgument
+            );
+            assert_eq!(
+                crate::nux_player_step_begin_row(player, key(b"b")),
+                NuxStatus::Ok
+            );
+            step(player, &[]);
+            assert_eq!(
+                crate::nux_player_step_end_row(player, key(b"b")),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                begin(player, key(b"b"), key(b"a"), string("back")),
+                NuxStatus::Ok
+            );
+            step(player, &[]);
+            assert_eq!(
+                end(player, key(b"b"), key(b"a"), string("back")),
+                NuxStatus::Ok
+            );
+            step(player, &[]);
+            assert_eq!(crate::nux_player_free(player), NuxStatus::Ok);
+            assert_eq!(crate::nux_artboard_instance_free(instance), NuxStatus::Ok);
+            assert_eq!(crate::nux_file_free(file), NuxStatus::Ok);
+        }
+    }
+
     /// What the replacing driver does in its next round 0, and what it was
     /// told.
     #[derive(Default)]

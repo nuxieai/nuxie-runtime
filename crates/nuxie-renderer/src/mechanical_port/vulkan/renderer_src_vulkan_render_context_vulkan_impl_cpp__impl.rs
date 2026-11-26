@@ -239,6 +239,15 @@ impl RenderBufferContract for RenderBufferVulkanImpl {
         if let Some(buffer) = self.m_currentBuffer.take() {
             self.m_bufferPool.recycle(buffer);
         }
+        // Nuxie fix (UNIV-7146): a buffer of no bytes has no Vulkan buffer
+        // behind it (`vkutil::Buffer::init` makes none for size 0), so
+        // there is nothing to map or flush, and a mesh that names it is
+        // skipped at the draw for want of a current buffer. Upstream reaches
+        // `Buffer::contents()` here, whose assert is compiled out of its
+        // release builds and stops the process in this port.
+        if self.base.sizeInBytes() == 0 {
+            return core::ptr::null_mut();
+        }
         let buffer = self.m_bufferPool.acquire();
         let contents = buffer.contents().cast::<c_void>();
         *self.m_currentBuffer = Some(buffer);
@@ -246,6 +255,9 @@ impl RenderBufferContract for RenderBufferVulkanImpl {
     }
 
     fn onUnmap(&mut self) {
+        if self.base.sizeInBytes() == 0 {
+            return;
+        }
         self.m_currentBuffer
             .as_ref()
             .expect("mapped Vulkan render buffer")

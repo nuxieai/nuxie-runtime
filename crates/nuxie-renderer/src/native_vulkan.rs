@@ -756,6 +756,102 @@ mod tests {
         assert!(wrong.is_empty(), "{}", wrong.join("\n"));
     }
 
+    /// An image mesh whose triangle list is empty draws nothing and leaves
+    /// the device sound: a script that sorts a grid's triangles into two
+    /// lists draws both, and one is empty whenever nothing is lifted. Its
+    /// index buffer is zero bytes long, which has no Vulkan buffer behind
+    /// it. The mesh beside it, two triangles over the left half, still
+    /// draws its picture (UNIV-7146). Runs wherever a Vulkan device loads;
+    /// on a Mac, point `NUXIE_MOLTENVK_LIBRARY` at `libMoltenVK.dylib`.
+    #[test]
+    fn an_image_mesh_with_no_triangles_draws_nothing_beside_one_that_draws() {
+        const SIZE: u32 = 64;
+        const CLEAR: u32 = 0xff20_2020;
+        let _live_vulkan_test = lock_live_vulkan_test();
+        let Ok(mut factory) = NativeVulkanFactory::new(SIZE, SIZE) else {
+            return;
+        };
+        // One opaque green texel, premultiplied RGBA.
+        let image = factory
+            .upload_canonical_rgba8_premul_srgb(1, 1, 4, &[0, 255, 0, 255])
+            .expect("upload the picture");
+        let mut buffer = |kind: RenderBufferType, bytes: &[u8]| {
+            let mut buffer = factory.make_render_buffer(
+                kind,
+                RenderBufferFlags::MappedOnceAtInitialization,
+                bytes.len(),
+            );
+            buffer.map_mut().copy_from_slice(bytes);
+            buffer.unmap();
+            buffer
+        };
+        let floats = |values: &[f32]| -> Vec<u8> {
+            values
+                .iter()
+                .flat_map(|value| value.to_ne_bytes())
+                .collect()
+        };
+        let indices = |values: &[u16]| -> Vec<u8> {
+            values
+                .iter()
+                .flat_map(|value| value.to_ne_bytes())
+                .collect()
+        };
+        // The left half of the surface.
+        let vertices = buffer(
+            RenderBufferType::Vertex,
+            &floats(&[0.0, 0.0, 32.0, 0.0, 32.0, 64.0, 0.0, 64.0]),
+        );
+        let uvs = buffer(
+            RenderBufferType::Vertex,
+            &floats(&[0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]),
+        );
+        let quad = buffer(RenderBufferType::Index, &indices(&[0, 1, 2, 0, 2, 3]));
+        let none = buffer(RenderBufferType::Index, &[]);
+        let no_vertices = buffer(RenderBufferType::Vertex, &[]);
+        let mut frame = factory
+            .begin_frame(CLEAR, RenderMode::Msaa)
+            .expect("begin frame");
+        for (vertices, uvs, triangles, vertex_count, index_count) in [
+            (&vertices, &uvs, &none, 4, 0),
+            (&vertices, &uvs, &quad, 4, 6),
+            (&no_vertices, &no_vertices, &none, 0, 0),
+        ] {
+            frame.draw_image_mesh(
+                Some(image.as_ref()),
+                ImageSampler::LINEAR_CLAMP,
+                Some(vertices.as_ref()),
+                Some(uvs.as_ref()),
+                Some(triangles.as_ref()),
+                vertex_count,
+                index_count,
+                BlendMode::SrcOver,
+                1.0,
+            );
+        }
+        // The same script shades what it lifted with a gradient over a path
+        // of those triangles, which is empty too.
+        let mut empty = factory.make_render_path(RawPath::new(), FillRule::NonZero);
+        let gradient = factory.make_linear_gradient(
+            0.0,
+            0.0,
+            64.0,
+            0.0,
+            &[0xffff_0000, 0xff00_00ff],
+            &[0.0, 1.0],
+        );
+        let mut paint = factory.make_render_paint();
+        paint.shader(Some(gradient.as_ref()));
+        frame.draw_path(empty.as_mut(), paint.as_mut());
+        let pixels = frame.finish().expect("render and readback");
+        let at = |x: u32, y: u32| {
+            let i = ((y * SIZE + x) * 4) as usize;
+            [pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]]
+        };
+        assert_eq!(at(16, 32), [0, 255, 0, 255], "the mesh's picture");
+        assert_eq!(at(48, 32), [0x20, 0x20, 0x20, 0xff], "beside the mesh");
+    }
+
     #[test]
     fn direct_rect_draw_probe() {
         let _live_vulkan_test = lock_live_vulkan_test();

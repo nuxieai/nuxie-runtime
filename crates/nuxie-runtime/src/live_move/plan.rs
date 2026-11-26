@@ -710,20 +710,26 @@ fn flight_timeline(
     })
 }
 /// Every refusal [`take_off`] reads from the rows' own content, read before
-/// anything is flushed or marked: each unit's elements on their rows, an
-/// element named twice or inside another, an element that does not fly in
-/// place, each flight record in `records`, records on two artboards, and a
-/// flight timeline that names no animation. What depends on layout (a held
-/// element's parent, a resting size) is read at take-off, after the flush.
-/// A step between rows checks these first, so the flush never runs for a
-/// step its rows' content refuses.
+/// anything is flushed or marked, through take-off's own reads: each unit's
+/// elements on their rows, an element named twice or inside another, an
+/// element that does not fly in place, each flight record in `records` and
+/// its controls (`FlightFrame::check_controls`), records on two artboards,
+/// each end's parent and place (`in_place::end`), a zoomed pair's boxes, the
+/// rows' and the upper row's poses, and a flight timeline that names no
+/// animation. What depends on a laid-out size or a bound value (a held
+/// element's solved size, a nonzero box in Scale mode, a finite blended size
+/// or opacity) is read at take-off, after the flush. A step between rows
+/// checks these first, so the flush never runs for a step its rows' content
+/// refuses.
 fn check_rows(
     step: &Step,
     outgoing: &Screen,
     arriving: &Screen,
     records: &[&Screen],
 ) -> Result<()> {
-    use super::in_place::{Flying, is_inside};
+    use super::When;
+    use super::follow::FlightFrame;
+    use super::in_place::{Flying, InPlaceFlight, end, is_inside};
     let mut used = HashSet::new();
     let mut boards = HashSet::new();
     for unit in &step.units {
@@ -733,16 +739,36 @@ fn check_rows(
             used.insert(from.clone()) && used.insert(to.clone()),
             "overlapping flight owners"
         );
-        Flying::of(&from)?;
-        Flying::of(&to)?;
+        let (from_box, to_box) = (Flying::of(&from)?, Flying::of(&to)?);
+        end(&from_box)?;
+        end(&to_box)?;
         let keys: &[u32] = if unit.transfers() {
             &[unit.incoming_flight_key]
         } else {
             &[unit.outgoing_flight_key, unit.incoming_flight_key]
         };
         for key in keys {
-            boards.insert(flight_record(records, *key)?.0);
+            let (board, record) = flight_record(records, *key)?;
+            FlightFrame::check_controls(&InPlaceFlight::values_of(&record)?)?;
+            boards.insert(board);
         }
+        // A zoomed pair reads the leaving box as drawn and the arriving one
+        // at rest, and on Back where the arriving one rests.
+        if !unit.transfers()
+            && let Some(rule) = zoom::Rule::of(unit.read_zoom())
+        {
+            from_box.box_matrix(When::Live)?;
+            to_box.box_matrix(When::Rest)?;
+            if matches!(rule, zoom::Rule::Returning) {
+                to_box.place(When::Rest)?;
+            }
+        }
+    }
+    for board in [&outgoing.board, &arriving.board]
+        .into_iter()
+        .chain(&boards)
+    {
+        super::follow::draw_pose(board)?;
     }
     ensure!(
         boards.len() <= 1,

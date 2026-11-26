@@ -769,6 +769,41 @@ fn a_step_refused_with_layout_pending_leaves_the_page_usable() {
     assert!(!s.poisoned());
 }
 
+/// Proof 5, with a layout change pending and a control that is not finite:
+/// record 11, on "b", the upper row, fades by NaN. The root is resized, so a
+/// flush would lay the page out again: the step is refused before it, the
+/// page is not laid out by the refusal and stays usable. With the fade
+/// restored the same step begins and lands.
+#[test]
+fn a_step_with_a_nan_control_refused_with_layout_pending_leaves_the_page_usable() {
+    let mut s = DriverScene::new(DriverPage::TwoVersions, &[("a", A), ("b", B)]);
+    let record = records_of(&s.row("b"))
+        .into_iter()
+        .find(|record| key_of(record) == 11)
+        .expect("record 11 on the upper row");
+    let fade = val(&record, FADE);
+    set(&record, FADE, f32::NAN);
+    let root = s.root();
+    root.set_size(321.0, 654.0);
+    let serial = root.with_artboard(|b| b.change_serial());
+    assert_eq!(refused(s.begin("a", "b", "t1")), ErrorKind::InvalidArgument);
+    assert_eq!(
+        root.with_artboard(|b| b.change_serial()),
+        serial,
+        "the refusal flushes nothing"
+    );
+    assert!(s.lifted().is_empty());
+    assert!(!s.poisoned());
+
+    set(&record, FADE, fade);
+    s.begin("a", "b", "t1").expect("the step begins");
+    assert_eq!(s.lifted().len(), 2);
+    s.step(0.0);
+    s.end("a", "b", "t1").expect("the step lands");
+    assert!(s.lifted().is_empty());
+    assert!(!s.poisoned());
+}
+
 /// Proof 6. A component artboard of a driver page is checked as a Screen
 /// at import: a duplicate flight key refuses the file, and so does an
 /// invalid unit. A driver page with steps and no step running frames as a

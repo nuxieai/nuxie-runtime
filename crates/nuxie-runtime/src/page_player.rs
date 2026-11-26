@@ -149,6 +149,8 @@ pub enum Operation {
     Begin(String, Option<String>),
     End(String, Option<String>),
     Row(String, i32, bool),
+    /// Sleep or wake a row of a driver page's keyed list by its key.
+    KeyedRow(String, Vec<u8>, bool),
 }
 impl Operation {
     fn apply(self, root: &RuntimeArtboardInstanceHandle) -> Result<(), ErrorKind> {
@@ -168,6 +170,21 @@ impl Operation {
                     })
                     .ok_or(ErrorKind::InvalidArgument)?;
                 live_move::set_row_collapsed(&list, index, collapsed)
+                    .map_err(|_| ErrorKind::InvalidArgument)?;
+                moves.prepare(root)
+            }
+            Self::KeyedRow(name, key, collapsed) => {
+                moves
+                    .prepare(root)
+                    .map_err(|_| ErrorKind::InvalidArgument)?;
+                let list = root
+                    .with_artboard(|b| {
+                        b.find_handle::<source::artboard_component_list::ArtboardComponentList>(
+                            &name,
+                        )
+                    })
+                    .ok_or(ErrorKind::InvalidArgument)?;
+                live_move::set_keyed_row_collapsed(&list, &key, collapsed)
                     .map_err(|_| ErrorKind::InvalidArgument)?;
                 moves.prepare(root)
             }
@@ -1303,6 +1320,27 @@ impl PagePlayer {
         )
         .map(|_| ())
     }
+    /// Sleep or wake the row mounted by `key` on the keyed list named
+    /// `list`, a driver page's list (`isPageRows`).
+    pub fn set_keyed_row_collapsed(
+        &self,
+        artboard: &mut ArtboardInstance,
+        list: &str,
+        key: &[u8],
+        collapsed: bool,
+        subscriptions: &[RuntimeOwnedViewModelHandle],
+        effects: Option<&dyn Effects>,
+    ) -> Result<(), Error> {
+        self.run(
+            artboard,
+            &mut Playback::StaticArtboard,
+            Step::default(),
+            Some(Operation::KeyedRow(list.into(), key.to_vec(), collapsed)),
+            subscriptions,
+            effects,
+        )
+        .map(|_| ())
+    }
     fn run(
         &self,
         artboard: &mut ArtboardInstance,
@@ -1334,7 +1372,9 @@ impl PagePlayer {
 }
 
 impl PagePlayer {
-    /// Intrinsic height in points of the top expanded Screen at the page width.
+    /// Intrinsic height in points of the top expanded Screen at the page
+    /// width: the last awake row of the page's list, its `screens` list or a
+    /// driver page's keyed list.
     pub fn content_height(&self, artboard: &ArtboardInstance) -> Result<f32, Error> {
         use source::{
             artboard_component_list::ArtboardComponentList, layout_component::LayoutComponent,
@@ -1346,15 +1386,10 @@ impl PagePlayer {
         if root.with_artboard(|b| b.page_boundary.as_ref().is_some_and(|s| s.active.get())) {
             return failure(ErrorKind::ReentrantCall, "page occurrence is active");
         }
-        if !hosted_scene::enabled(&root) {
+        let Some(page) = hosted_scene::page_list(&root) else {
             return failure(ErrorKind::InvalidArgument, "root is not a page");
-        }
-        let list = root
-            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-            .ok_or_else(|| Error {
-                kind: ErrorKind::InvalidArgument,
-                message: "page has no screens".into(),
-            })?;
+        };
+        let list = page.list;
         let row = list
             .with_downcast_mut::<ArtboardComponentList, _>(|l| {
                 let index = l.ordered_list_indices().last().copied()?;

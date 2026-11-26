@@ -2315,6 +2315,95 @@ fn record_free_nonpage_refuses_sleep_and_cut_without_allocating() {
     assert_eq!(hosted_scene::bookkeeping_counts(), before);
 }
 
+/// A Rive-made `screens` page that also carries `isPageRows`, on its
+/// `screens` list and on a keyed list of its own, plays exactly as it does
+/// without the flag: it is a page through its `screens` list, a row sleeps
+/// and wakes by its place, the key call is refused (the `screens` list is
+/// not keyed), a step plays, and the content height and every draw are the
+/// same. Both the record-free `$nuxie.page` shape and a page with steps.
+#[test]
+fn a_screens_page_carrying_page_rows_plays_as_without_it() {
+    use page_player::{PagePlayer, Playback, Step};
+    fn run(bytes: &[u8], steps: bool) -> Vec<String> {
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let file = File::import(
+            bytes,
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let mut board = ArtboardInstance::from_native(file.clone(), 0).unwrap();
+        let root = board.native_handle();
+        let vm = file
+            .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+            .unwrap();
+        let vm = RuntimeOwnedViewModelHandle::from_native(file, vm).unwrap();
+        board.bind_owned_view_model_handle(vm.clone());
+        let mut machine = board.default_state_machine_instance().unwrap();
+        machine.bind_owned_view_model_handle(vm.clone());
+        let mut playback = Playback::StateMachine(Box::new(machine));
+        let player = PagePlayer::default();
+        let roots = std::slice::from_ref(&vm);
+        let mut log = Vec::new();
+        let mut frame = |board: &mut ArtboardInstance, log: &mut Vec<String>| {
+            let step = Step {
+                elapsed_seconds: 1.0 / 60.0,
+                ..Step::default()
+            };
+            let output = player.step(board, &mut playback, step, roots, None);
+            log.push(format!("step {:?}", output.map(|o| (o.dirty, o.settled))));
+            factory.borrow_mut().clear();
+            let mut renderer = factory.borrow().make_renderer();
+            board.draw(&mut renderer);
+            log.push(factory.borrow().canonical_recording().stream().to_owned());
+        };
+        frame(&mut board, &mut log);
+        log.push(format!("page {}", hosted_scene::enabled(&root)));
+        let screens = screens(&root).unwrap();
+        log.push(format!("screens {}", screens.len()));
+        let sleep = player.set_row_collapsed(&mut board, "screens", 1, true, roots, None);
+        log.push(format!("sleep {sleep:?}"));
+        frame(&mut board, &mut log);
+        let keyed = player.set_keyed_row_collapsed(&mut board, "screens", b"B", false, roots, None);
+        log.push(format!("keyed {:?}", keyed.map_err(|error| error.kind)));
+        let keyed = player.set_keyed_row_collapsed(&mut board, "rows", b"B", false, roots, None);
+        log.push(format!(
+            "other list {:?}",
+            keyed.map_err(|error| error.kind)
+        ));
+        let wake = player.set_row_collapsed(&mut board, "screens", 1, false, roots, None);
+        log.push(format!("wake {wake:?}"));
+        frame(&mut board, &mut log);
+        let name = steps.then_some("t1");
+        let begin = player.step_begin(&mut board, "B", name, roots, None);
+        log.push(format!("begin {begin:?}"));
+        for _ in 0..4 {
+            frame(&mut board, &mut log);
+        }
+        let end = player.step_end(&mut board, "B", name, roots, None);
+        log.push(format!("end {end:?}"));
+        frame(&mut board, &mut log);
+        log.push(format!("height {:?}", player.content_height(&board)));
+        log
+    }
+    for record_free in [true, false] {
+        let plain = run(
+            &fixture::page_rows_screens_fixture(record_free, false),
+            !record_free,
+        );
+        assert!(plain.contains(&"page true".to_owned()), "{record_free}");
+        assert!(plain.contains(&"sleep Ok(())".to_owned()), "{record_free}");
+        assert!(plain.contains(&"begin Ok(())".to_owned()), "{record_free}");
+        let flagged = run(
+            &fixture::page_rows_screens_fixture(record_free, true),
+            !record_free,
+        );
+        assert_eq!(flagged, plain, "record-free: {record_free}");
+    }
+}
+
 fn page_model(s: &Scene) -> RuntimeOwnedViewModelHandle {
     let model = s
         .root

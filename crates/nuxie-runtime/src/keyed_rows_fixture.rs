@@ -18,6 +18,9 @@
 //! [`Cards::WithBanner`] adds a second artboard the list declares for its
 //! rows through a `KeyedRowArtboard` child: the "Banner" (artboard 2), a 48
 //! point tall "Strip" box filled with [`BANNER_COLOR`].
+//!
+//! [`Cards::PageRows`] marks that list as the page's rows (`isPageRows`), so
+//! the record-free "Plans" root is a driver page.
 #![allow(dead_code)]
 use crate::live_move_fixture::{V, obj};
 use crate::source::drawable_flag::DrawableFlag;
@@ -126,6 +129,12 @@ pub enum Cards {
     /// A keyed list of cards, and a `KeyedRowArtboard` naming the banner
     /// artboard under the "Heading" box rather than under the list.
     MisplacedBanner,
+    /// [`Cards::WithBanner`] marked as the page's rows (`isPageRows`): the
+    /// "Plans" root is a driver page.
+    PageRows,
+    /// A list with no `rowArtboardId` that sets `isPageRows`, which counts
+    /// for nothing on a list that is not keyed.
+    PageRowsUnkeyed,
 }
 
 fn var(b: &mut Vec<u8>, mut n: u64) {
@@ -288,7 +297,10 @@ fn build(cards: Cards, script: Option<&[u8]>) -> Vec<u8> {
     use V::*;
     let opaque = u64::from(DrawableFlag::OPAQUE.0);
     let badges = cards == Cards::Badged;
-    let banners = matches!(cards, Cards::WithBanner | Cards::MisplacedBanner);
+    let banners = matches!(
+        cards,
+        Cards::WithBanner | Cards::MisplacedBanner | Cards::PageRows
+    );
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
         var(&mut b, n);
@@ -343,6 +355,11 @@ fn build(cards: Cards, script: Option<&[u8]>) -> Vec<u8> {
         | Cards::DeclaresMissing
         | Cards::MisplacedBanner => list.push(("rowArtboardId", U(u64::from(CARD_ARTBOARD)))),
         Cards::MissingArtboard => list.push(("rowArtboardId", U(9))),
+        Cards::PageRows => list.extend([
+            ("rowArtboardId", U(u64::from(CARD_ARTBOARD))),
+            ("isPageRows", B(true)),
+        ]),
+        Cards::PageRowsUnkeyed => list.push(("isPageRows", B(true))),
         Cards::Unkeyed => {}
     }
     obj(&mut b, "ArtboardComponentList", &list); // 9
@@ -365,7 +382,7 @@ fn build(cards: Cards, script: Option<&[u8]>) -> Vec<u8> {
         ); // 12 to 14
     }
     let declared = match cards {
-        Cards::WithBanner => Some((page::CARDS, BANNER_ARTBOARD)),
+        Cards::WithBanner | Cards::PageRows => Some((page::CARDS, BANNER_ARTBOARD)),
         Cards::DeclaresMissing => Some((page::CARDS, MISSING_ARTBOARD)),
         Cards::MisplacedBanner => Some((page::HEADING, BANNER_ARTBOARD)),
         _ => None,

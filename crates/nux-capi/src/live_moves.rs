@@ -6,6 +6,7 @@ pub(super) enum Request {
     Begin(NuxStringView, *const NuxStringView),
     End(NuxStringView, *const NuxStringView),
     Row(NuxStringView, u32, u8),
+    KeyedRow(NuxStringView, NuxByteView, u8),
 }
 use nuxie::page_player::Operation;
 impl Request {
@@ -41,6 +42,20 @@ impl Request {
                     row as i32,
                     collapsed != 0,
                 )
+            }
+            Self::KeyedRow(list, key, collapsed) => {
+                if collapsed > 1 {
+                    return Err(NuxStatus::InvalidArgument);
+                }
+                if key.data.is_null() && key.len != 0 {
+                    return Err(NuxStatus::NullArgument);
+                }
+                let key = if key.len == 0 {
+                    Vec::new()
+                } else {
+                    unsafe { std::slice::from_raw_parts(key.data, key.len) }.to_vec()
+                };
+                Operation::KeyedRow(with_utf8_view(list, str::to_owned)?, key, collapsed != 0)
             }
         })
     }
@@ -81,4 +96,20 @@ pub unsafe extern "C" fn nux_player_set_row_collapsed(
     collapsed: u8,
 ) -> NuxStatus {
     player_live_move_body(player, Request::Row(list_name, row_index, collapsed))
+}
+/// Collapse or wake the row mounted by `key` on a named keyed list that is
+/// the page's rows (`isPageRows`), as nux_player_set_row_collapsed does for
+/// a row by its index. collapsed is 0 or 1. The key's bytes are compared
+/// only for equality. Retains the row's playback, state and place. An
+/// unknown list, a list that is not keyed or not the page's, a key not
+/// mounted and a collapsed value past 1 return INVALID_ARGUMENT; a NULL key
+/// with a length returns NULL_ARGUMENT.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_set_keyed_row_collapsed(
+    player: *mut NuxPlayer,
+    list_name: NuxStringView,
+    key: NuxByteView,
+    collapsed: u8,
+) -> NuxStatus {
+    player_live_move_body(player, Request::KeyedRow(list_name, key, collapsed))
 }

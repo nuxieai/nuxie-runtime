@@ -10931,6 +10931,14 @@ impl CoreRegistry {
         {
             return crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::ID;
         }
+        // Nuxie ArtboardComponentList.isPageRows is a bool.
+        if property_key
+            == i32::from(
+                crate::mechanical_port::source::artboard_component_list::ArtboardComponentList::IS_PAGE_ROWS_PROPERTY_KEY,
+            )
+        {
+            return crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::ID;
+        }
         // Nuxie StateTransition.isHold is a bool.
         if property_key
             == i32::from(
@@ -22381,6 +22389,11 @@ impl crate::mechanical_port::source::core::CoreObject
         // Nuxie ArtboardComponentList.rowArtboardId (60024), a uint.
         if property_key == crate::mechanical_port::source::artboard_component_list::ArtboardComponentList::ROW_ARTBOARD_ID_PROPERTY_KEY {
             self.set_row_artboard_id(crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader));
+            return true;
+        }
+        // Nuxie ArtboardComponentList.isPageRows (60026), a bool.
+        if property_key == crate::mechanical_port::source::artboard_component_list::ArtboardComponentList::IS_PAGE_ROWS_PROPERTY_KEY {
+            self.set_is_page_rows(crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader));
             return true;
         }
         let mut base = std::mem::take(&mut self.base);

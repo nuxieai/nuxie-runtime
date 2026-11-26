@@ -4,7 +4,7 @@ UNIV-5289. How a published step moves matched elements between two Screens of a 
 
 The plan is in the RIV file. There is no JSON move-list API. A player reads the file's records, marks each matched element where it was authored, follows the two endpoints after its normal advance, and clears the marks at landing. One instance moves only where a step unit says it transfers (`transfers`); otherwise each Screen's own copy flies and nothing moves between Screens. Between steps every placement holds its own Screen's instance: when a transferred unit lands, the placement it left gets a fresh instance of its own, so a cut or a fade moves nothing. Each flight starts at its step's own first frame. All planned flights are checked before anything is marked or moved.
 
-The shared Rust page-player follow-up, record-free page opt-in, pending list edits and content-height query are documented in [page-player.md](page-player.md).
+The shared Rust page-player follow-up, record-free page opt-in, driver pages (a keyed list marked `isPageRows`), pending list edits and content-height query are documented in [page-player.md](page-player.md).
 
 ## Owners and integration
 
@@ -21,10 +21,10 @@ The shared Rust page-player follow-up, record-free page opt-in, pending list edi
 | `live_move/drawn.rs` | The one reader of where an element is drawn: `drawn(component, When)` gives the whole matrix from its content to the page's drawing space, in the order the draw applies it. `When::Live` is the draw-pose projection, on any component, a unit frame among them. `When::Rest` is that matrix corrected at each CSS level a timeline keys: layout as laid out when read, a static or bound value kept, and each keyed transform property at identity, so a key that ends off identity rests at identity. A level with a zero scale when read can't be corrected, and stays as it draws. The host's fit is outside this space. |
 | `css_layout/lift.rs`, `css_layout/flight_hold.rs` | The lift entry an upper Screen draws a copy from, and the layout hold of a copy in Layout mode. |
 | `css_layout/paint_order.rs`, `css_layout/hosted_frame.rs` | `place` puts each lift entry where its element paints on the upper Screen, after the CSS paint order sort. `frame_at_rest` is the one reader of a placement's frame for its layer and drawn box (`docs/CSS_LAYOUT.md`, 4.4). |
-| `live_move/collapse.rs` | Non-virtual row sleep through upstream component collapse, destination reconciliation, and wake. Item identity carries sleep across list reorders. |
-| `crates/nuxie-runtime/src/hosted_scene.rs` | The occurrence-owned hosted-instance index and its shared active-row projection. Membership stamps are scoped to the root instance. |
+| `live_move/collapse.rs` | Non-virtual row sleep through upstream component collapse, destination reconciliation, and wake, of a row of the page's list named by its index or, on a driver page, by its key. Item identity carries sleep across list reorders. |
+| `crates/nuxie-runtime/src/hosted_scene.rs` | The occurrence-owned hosted-instance index and its shared active-row projection, and the page's list (`PageList`: its `screens` list, or a driver page's keyed list marked `isPageRows`), chosen once at opt-in. Membership stamps are scoped to the root instance. |
 | `live_move/frame.rs`, `host_viewmodel/transactions.rs` | Active VM graph projection and a lazy rollback checkpoint for live-move frames. |
-| `crates/nux-capi/src/live_moves.rs`, `lib.rs::player_operation_body` | Decode the three live-move C calls and run them inside the same guarded mutation boundary as player steps. The generated header and portable v4 exports include them. |
+| `crates/nux-capi/src/live_moves.rs`, `lib.rs::player_operation_body` | Decode the four live-move C calls (begin, end, row sleep by index and by key) and run them inside the same guarded mutation boundary as player steps. The generated header and portable v4 exports include them. |
 | `crates/nux-capi/src/video.rs`, `player_view_models.rs` | Indexed video enumeration, constant-time occurrence lookup, and indexed bound-owner capture. |
 | `crates/nuxie-runtime/src/host_state_machine/nested_events.rs` | Event drains use the active row projection. This was the remaining step cost. |
 | `live_move_fixture.rs`, `live_move/device_fixture.rs` | Literal RIV builders, compiled only with `test-support`. Both crate test suites use them. |

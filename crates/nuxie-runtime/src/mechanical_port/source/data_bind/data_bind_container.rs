@@ -409,6 +409,20 @@ impl DataBindContainer {
             })
     }
 
+    /// The epoch that stamps current may-advance answers.
+    #[cfg(test)]
+    pub(crate) fn may_advance_epoch() -> u32 {
+        MAY_ADVANCE_EPOCH.load(Ordering::Relaxed)
+    }
+
+    /// `may_advance_data_binds`' answer while it is current. Asks no
+    /// converter, so it runs no callbacks.
+    pub(crate) fn cached_may_advance(&self) -> Option<bool> {
+        let state = self.0.borrow();
+        (state.may_advance_epoch == MAY_ADVANCE_EPOCH.load(Ordering::Relaxed))
+            .then_some(state.may_advance)
+    }
+
     pub fn may_advance_data_binds(&self) -> bool {
         let epoch = MAY_ADVANCE_EPOCH.load(Ordering::Relaxed);
         {

@@ -2,8 +2,8 @@
 //! This dedicated test binary isolates process-global File settings.
 #![cfg(feature = "luau-host")]
 
-use nuxie_scripting::luau::{Function, Table};
 use nuxie_runtime::File;
+use nuxie_scripting::luau::{Function, Table};
 use nuxie_scripting::vm::ScriptVm;
 
 #[test]

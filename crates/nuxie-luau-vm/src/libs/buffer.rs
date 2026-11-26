@@ -196,7 +196,9 @@ fn fast_read<const N: usize>(
     nparams: usize,
     conv: fn([u8; N]) -> Value,
 ) -> Option<usize> {
-    let (Value::Buffer(id), Value::Number(offset)) = (a0, a1) else { return None };
+    let (Value::Buffer(id), Value::Number(offset)) = (a0, a1) else {
+        return None;
+    };
     if nparams < 2 || nresults > 1 {
         return None;
     }
@@ -216,7 +218,9 @@ fn fast_write<const N: usize>(
     nparams: usize,
     conv: fn(Value) -> Option<[u8; N]>,
 ) -> Option<usize> {
-    let (Value::Buffer(id), Value::Number(offset)) = (a0, a1) else { return None };
+    let (Value::Buffer(id), Value::Number(offset)) = (a0, a1) else {
+        return None;
+    };
     if nparams < 3 || nresults > 0 {
         return None;
     }
@@ -228,8 +232,16 @@ fn fast_write<const N: usize>(
 
 macro_rules! fast_read_number {
     ($name:ident, $t:ty) => {
-        pub(crate) fn $name(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
-            fast_read(vm, ra, nresults, args, nparams, |b| Value::Number(f64::from(<$t>::from_le_bytes(b))))
+        pub(crate) fn $name(
+            vm: &mut Core,
+            ra: usize,
+            nresults: i32,
+            args: [Value; 3],
+            nparams: usize,
+        ) -> Option<usize> {
+            fast_read(vm, ra, nresults, args, nparams, |b| {
+                Value::Number(f64::from(<$t>::from_le_bytes(b)))
+            })
         }
     };
 }
@@ -246,7 +258,13 @@ fast_read_number!(fast_readf64, f64);
 /// The low `sizeof(T)` bytes of the number through `luai_num2unsigned`.
 macro_rules! fast_write_unsigned {
     ($name:ident, $t:ty) => {
-        pub(crate) fn $name(vm: &mut Core, _: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+        pub(crate) fn $name(
+            vm: &mut Core,
+            _: usize,
+            nresults: i32,
+            args: [Value; 3],
+            nparams: usize,
+        ) -> Option<usize> {
             fast_write(vm, nresults, args, nparams, |v| match v {
                 Value::Number(x) => Some((crate::libs::bit32::num2unsigned(x) as $t).to_le_bytes()),
                 _ => None,
@@ -259,14 +277,26 @@ fast_write_unsigned!(fast_writeu8, u8);
 fast_write_unsigned!(fast_writeu16, u16);
 fast_write_unsigned!(fast_writeu32, u32);
 
-pub(crate) fn fast_writef32(vm: &mut Core, _: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+pub(crate) fn fast_writef32(
+    vm: &mut Core,
+    _: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
     fast_write(vm, nresults, args, nparams, |v| match v {
         Value::Number(x) => Some((x as f32).to_le_bytes()),
         _ => None,
     })
 }
 
-pub(crate) fn fast_writef64(vm: &mut Core, _: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+pub(crate) fn fast_writef64(
+    vm: &mut Core,
+    _: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
     fast_write(vm, nresults, args, nparams, |v| match v {
         Value::Number(x) => Some(x.to_le_bytes()),
         _ => None,
@@ -274,12 +304,26 @@ pub(crate) fn fast_writef64(vm: &mut Core, _: usize, nresults: i32, args: [Value
 }
 
 /// `luauF_bufferreadlong` (`buffer.readinteger`).
-pub(crate) fn fast_readinteger(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
-    fast_read(vm, ra, nresults, args, nparams, |b| Value::Integer(i64::from_le_bytes(b)))
+pub(crate) fn fast_readinteger(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    fast_read(vm, ra, nresults, args, nparams, |b| {
+        Value::Integer(i64::from_le_bytes(b))
+    })
 }
 
 /// `luauF_bufferwritelong` (`buffer.writeinteger`): the integer type only.
-pub(crate) fn fast_writeinteger(vm: &mut Core, _: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+pub(crate) fn fast_writeinteger(
+    vm: &mut Core,
+    _: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
     fast_write(vm, nresults, args, nparams, |v| match v {
         Value::Integer(i) => Some(i.to_le_bytes()),
         _ => None,
@@ -376,7 +420,10 @@ fn bits_check(
         return Err(vm.lib_error("buffer access out of bounds"));
     }
     let start = bitoffset / 8;
-    let end = bitoffset.saturating_add(u64::from(bitcount)).saturating_add(7) / 8;
+    let end = bitoffset
+        .saturating_add(u64::from(bitcount))
+        .saturating_add(7)
+        / 8;
     Ok((bitoffset, bitcount, start as usize..end as usize))
 }
 

@@ -1072,7 +1072,10 @@ mod limit_tests {
              return moved[1004], moved[200004]",
         )
         .expect("runs");
-        assert_eq!(returned, vec![HostValue::Number(1.0), HostValue::Number(200.0)]);
+        assert_eq!(
+            returned,
+            vec![HostValue::Number(1.0), HostValue::Number(200.0)]
+        );
         assert!(vm.memory_bytes() <= limit, "{} bytes", vm.memory_bytes());
     }
 
@@ -1092,7 +1095,10 @@ mod limit_tests {
         let before = vm.memory_bytes();
         vm.collect();
         let after = vm.memory_bytes();
-        assert!(after + 8192 >= before, "{before} bytes before, {after} after");
+        assert!(
+            after + 8192 >= before,
+            "{before} bytes before, {after} after"
+        );
     }
 
     #[test]

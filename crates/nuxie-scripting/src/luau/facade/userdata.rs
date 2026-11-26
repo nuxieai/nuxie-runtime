@@ -640,9 +640,8 @@ impl<T: 'static> UserDataFields<T> for Collector<T> {
     where
         V: IntoLua + Clone + 'static,
     {
-        let callback: BoxedCallback = Box::new(move |lua, _loan, _args| {
-            value.clone().into_lua(lua)?.into_lua_multi(lua)
-        });
+        let callback: BoxedCallback =
+            Box::new(move |lua, _loan, _args| value.clone().into_lua(lua)?.into_lua_multi(lua));
         self.field(FieldKey::Name(name.into()), true, callback);
     }
 

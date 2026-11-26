@@ -2,12 +2,12 @@
 //! source, call functions, read results back, and bind Rust host functions.
 #![cfg(feature = "luau-host")]
 
-use nuxie_scripting::luau::{Function, Table, Value};
 use nuxie_render_api::{NullFactory, PersistentFactory};
 use nuxie_runtime::{
     File, NoopScriptHost, RuntimeFactoryHandle, ScriptDataConverterMethod, ScriptInstance,
     ScriptListenerActionMethod, ScriptListenerInvocation, ScriptPointerEventKind, ScriptValue,
 };
+use nuxie_scripting::luau::{Function, Table, Value};
 use nuxie_scripting::vm::{LuaScriptInstance, ScriptVm};
 
 #[test]
@@ -467,16 +467,44 @@ fn scripted_listener_prefers_perform_action_and_preserves_pointer_payload() {
         )
         .unwrap();
 
-    assert!(instance.table().unwrap().get::<bool>("actionCalled").unwrap());
-    assert!(!instance.table().unwrap().get::<bool>("legacyCalled").unwrap());
-    assert_eq!(instance.table().unwrap().get::<i64>("pointerId").unwrap(), 9);
+    assert!(
+        instance
+            .table()
+            .unwrap()
+            .get::<bool>("actionCalled")
+            .unwrap()
+    );
+    assert!(
+        !instance
+            .table()
+            .unwrap()
+            .get::<bool>("legacyCalled")
+            .unwrap()
+    );
     assert_eq!(
-        instance.table().unwrap().get::<String>("pointerType").unwrap(),
+        instance.table().unwrap().get::<i64>("pointerId").unwrap(),
+        9
+    );
+    assert_eq!(
+        instance
+            .table()
+            .unwrap()
+            .get::<String>("pointerType")
+            .unwrap(),
         "click"
     );
-    assert_eq!(instance.table().unwrap().get::<f64>("positionX").unwrap(), 20.0);
-    assert_eq!(instance.table().unwrap().get::<f64>("previousX").unwrap(), 10.0);
-    assert_eq!(instance.table().unwrap().get::<f64>("timeStamp").unwrap(), 0.25);
+    assert_eq!(
+        instance.table().unwrap().get::<f64>("positionX").unwrap(),
+        20.0
+    );
+    assert_eq!(
+        instance.table().unwrap().get::<f64>("previousX").unwrap(),
+        10.0
+    );
+    assert_eq!(
+        instance.table().unwrap().get::<f64>("timeStamp").unwrap(),
+        0.25
+    );
 }
 
 #[test]

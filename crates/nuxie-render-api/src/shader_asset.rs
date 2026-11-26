@@ -21,12 +21,11 @@ use sha2::{Digest, Sha256};
 use crate::{
     GpuCanvasAppleMetalShader, GpuCanvasShader, GpuCanvasShaderBinding,
     GpuCanvasShaderBindingReflection, GpuCanvasShaderBuiltin, GpuCanvasShaderEntry,
-    GpuCanvasShaderEntryReflection, GpuCanvasShaderInterfaceBinding,
-    GpuCanvasShaderInterfaceType, GpuCanvasShaderInterfaceVariable,
-    GpuCanvasShaderInterpolation, GpuCanvasShaderProvenance, GpuCanvasShaderResourceKind,
-    GpuCanvasShaderSampling, GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType,
-    GpuCanvasShaderTextureSamplerPair, GpuCanvasShaderTextureViewDimension,
-    GpuCanvasVulkanSpirVShader,
+    GpuCanvasShaderEntryReflection, GpuCanvasShaderInterfaceBinding, GpuCanvasShaderInterfaceType,
+    GpuCanvasShaderInterfaceVariable, GpuCanvasShaderInterpolation, GpuCanvasShaderProvenance,
+    GpuCanvasShaderResourceKind, GpuCanvasShaderSampling, GpuCanvasShaderStage,
+    GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureSamplerPair,
+    GpuCanvasShaderTextureViewDimension, GpuCanvasVulkanSpirVShader,
 };
 
 pub const RSTB_MAGIC: u32 = 0x5253_5442;
@@ -124,7 +123,9 @@ impl<'a> RstbIndex<'a> {
         for _ in 0..section_count {
             let tag = cursor.read_u8("section").map_err(|_| malformed())?;
             let length = usize::from(cursor.read_u16("section").map_err(|_| malformed())?);
-            let data = cursor.read_bytes(length, "section").map_err(|_| malformed())?;
+            let data = cursor
+                .read_bytes(length, "section")
+                .map_err(|_| malformed())?;
             match tag {
                 TEXTURE_SAMPLER_PAIR_SECTION => {
                     if let Some((&count, pairs)) = data.split_first() {
@@ -134,14 +135,21 @@ impl<'a> RstbIndex<'a> {
                                 pairs
                                     .chunks_exact(4)
                                     .filter_map(|pair| <[u8; 4]>::try_from(pair).ok())
-                                    .map(|[texture_group, texture_binding, sampler_group, sampler_binding]| {
-                                        GpuCanvasShaderTextureSamplerPair {
+                                    .map(
+                                        |[
                                             texture_group,
                                             texture_binding,
                                             sampler_group,
                                             sampler_binding,
-                                        }
-                                    }),
+                                        ]| {
+                                            GpuCanvasShaderTextureSamplerPair {
+                                                texture_group,
+                                                texture_binding,
+                                                sampler_group,
+                                                sampler_binding,
+                                            }
+                                        },
+                                    ),
                             );
                         }
                     }
@@ -358,7 +366,7 @@ impl<'a> Cursor<'a> {
         self.read_array(label).map(u32::from_le_bytes)
     }
 
-        fn read_u64(&mut self, label: &str) -> Result<u64> {
+    fn read_u64(&mut self, label: &str) -> Result<u64> {
         self.read_array(label).map(u64::from_le_bytes)
     }
 
@@ -436,7 +444,9 @@ pub fn decode_per_entry_glsl(
             )));
         }
         let source = std::str::from_utf8(source_bytes)
-            .map_err(|_| ShaderAssetError::new(format!("ShaderAsset '{name}' GLSL source is not UTF-8")))?
+            .map_err(|_| {
+                ShaderAssetError::new(format!("ShaderAsset '{name}' GLSL source is not UTF-8"))
+            })?
             .to_owned();
         if !source.starts_with("#version 300 es") {
             return Err(ShaderAssetError::new(format!(
@@ -597,7 +607,9 @@ pub fn decode_binding_map(name: &str, bytes: &[u8]) -> Result<Vec<GpuCanvasShade
     let group_size = usize::from(cursor.read_u16("binding-map group size")?);
     let group_count = usize::from(cursor.read_u16("binding-map group count")?);
     if group_count != 0 && group_size < 9 {
-        return Err(ShaderAssetError::new("binding-map group rows are too small"));
+        return Err(ShaderAssetError::new(
+            "binding-map group rows are too small",
+        ));
     }
     let required_bytes = entry_count
         .checked_mul(entry_size)
@@ -933,4 +945,3 @@ fn decode_texture_sample_type(name: &str, value: u8) -> Result<GpuCanvasShaderTe
         ))),
     }
 }
-

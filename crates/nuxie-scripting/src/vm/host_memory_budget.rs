@@ -725,7 +725,9 @@ mod binding_tests {
             .unwrap();
         vm.vm.lua().gc_collect().unwrap();
         assert_eq!(vm.used(), 16, "two stops of 8 bytes, kept by the paints");
-        vm.vm.eval::<()>("kept = paint.gradient paint = nil copy = nil").unwrap();
+        vm.vm
+            .eval::<()>("kept = paint.gradient paint = nil copy = nil")
+            .unwrap();
         vm.vm.lua().gc_collect().unwrap();
         assert_eq!(vm.used(), 16, "a gradient read back shares the charge");
         vm.vm.eval::<()>("kept = nil").unwrap();
@@ -752,7 +754,10 @@ mod binding_tests {
             .eval::<()>("derived = font:withOptions(nil, features)")
             .unwrap();
         let one = vm.used() - decoded;
-        assert!(one > 1000 * 8, "a derived font is charged its tables: {one}");
+        assert!(
+            one > 1000 * 8,
+            "a derived font is charged its tables: {one}"
+        );
         vm.refused(
             "held = {} \
              local ok, err = pcall(function() \
@@ -761,7 +766,11 @@ mod binding_tests {
         );
         vm.vm.eval::<()>("held = nil derived = nil").unwrap();
         vm.vm.lua().gc_collect().unwrap();
-        assert_eq!(vm.used(), decoded, "a collected variant gives its charge back");
+        assert_eq!(
+            vm.used(),
+            decoded,
+            "a collected variant gives its charge back"
+        );
     }
 
     // Codex review (lane H2): each variant kept its source's whole owner, so

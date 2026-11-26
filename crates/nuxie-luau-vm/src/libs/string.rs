@@ -9,9 +9,9 @@
 use crate::call::{CallMode, Outcome, Resume};
 use crate::error::{Throw, VmResult};
 use crate::host::HostError;
+use crate::hosted::Dispatch;
 use crate::libs::{append, check_buffer, strpack};
 use crate::meta::Meta;
-use crate::hosted::Dispatch;
 use crate::native::{Args, interruptible, plain, resumable};
 use crate::value::Value;
 use crate::vm::Core;
@@ -188,7 +188,9 @@ pub(crate) fn fast_byte(
     [a0, a1, a2]: [Value; 3],
     nparams: usize,
 ) -> Option<usize> {
-    let (Value::String(s), Value::Number(i)) = (a0, a1) else { return None };
+    let (Value::String(s), Value::Number(i)) = (a0, a1) else {
+        return None;
+    };
     if nparams < 2 {
         return None;
     }
@@ -232,7 +234,9 @@ pub(crate) fn fast_char(
     }
     let mut out = [0u8; 7];
     for (i, slot) in out.iter_mut().enumerate().take(nparams) {
-        let Value::Number(x) = crate::fastcall::arg(vm, ra, &args, i) else { return None };
+        let Value::Number(x) = crate::fastcall::arg(vm, ra, &args, i) else {
+            return None;
+        };
         *slot = u8::try_from(x as i32).ok()?;
     }
     let s = vm.heap.intern(out.get(..nparams)?).ok()?;
@@ -366,7 +370,9 @@ impl MatchState<'_> {
                 }
                 loop {
                     if p >= self.pat.len() {
-                        return Err(PatternError::Message("malformed pattern (missing ']')".to_owned()));
+                        return Err(PatternError::Message(
+                            "malformed pattern (missing ']')".to_owned(),
+                        ));
                     }
                     let c = byte_at(self.pat, p);
                     p = p.saturating_add(1);
@@ -472,7 +478,9 @@ impl MatchState<'_> {
                 b'%' if byte_at(self.pat, p.saturating_add(1)) == b'f' => {
                     p = p.saturating_add(2);
                     if byte_at(self.pat, p) != b'[' {
-                        return Err(PatternError::Message("missing '[' after '%f' in pattern".to_owned()));
+                        return Err(PatternError::Message(
+                            "missing '[' after '%f' in pattern".to_owned(),
+                        ));
                     }
                     let ep = self.class_end(p)?;
                     let previous = if s == 0 {
@@ -728,12 +736,7 @@ fn new_state<'a>(
 }
 
 /// C++ `str_find_aux`.
-fn find_aux(
-    vm: &mut Core,
-    host: &mut dyn Dispatch,
-    args: Args,
-    find: bool,
-) -> VmResult<usize> {
+fn find_aux(vm: &mut Core, host: &mut dyn Dispatch, args: Args, find: bool) -> VmResult<usize> {
     let s = check_bytes(vm, args, 1)?;
     let p = check_bytes(vm, args, 2)?;
     let ls = s.len();
@@ -773,9 +776,7 @@ fn find_aux(
     let mut s1 = start;
     loop {
         let mut ms = new_state(vm, host, &s, pat);
-        let res = ms
-            .do_match(s1, 0)
-            .map_err(|e| pattern_error(vm, e))?;
+        let res = ms.do_match(s1, 0).map_err(|e| pattern_error(vm, e))?;
         if let Some(e) = res {
             let caps = ms
                 .captures(vm, s1, e, !find)
@@ -808,7 +809,9 @@ fn match_(vm: &mut Core, host: &mut dyn Dispatch, args: Args) -> VmResult<usize>
 fn gmatch(vm: &mut Core, args: Args) -> VmResult<usize> {
     let s = vm.check_string(args, 1)?;
     let p = vm.check_string(args, 2)?;
-    let f = vm.new_builtin("", interruptible(gmatch_aux),
+    let f = vm.new_builtin(
+        "",
+        interruptible(gmatch_aux),
         &[Value::String(s), Value::String(p), Value::Number(0.0)],
     )?;
     vm.ret(&[f])
@@ -829,9 +832,7 @@ fn gmatch_aux(vm: &mut Core, host: &mut dyn Dispatch, _args: Args) -> VmResult<u
     let mut s1 = start;
     while s1 <= src.len() {
         let mut ms = new_state(vm, host, &src, &pat);
-        let res = ms
-            .do_match(s1, 0)
-            .map_err(|e| pattern_error(vm, e))?;
+        let res = ms.do_match(s1, 0).map_err(|e| pattern_error(vm, e))?;
         if let Some(e) = res {
             let next = if e == s1 { e.saturating_add(1) } else { e };
             vm.set_builtin_upval(2, Value::Number(next as f64));

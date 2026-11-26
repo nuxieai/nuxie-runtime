@@ -1,9 +1,9 @@
 //! ScriptedGPUCanvas backing and render-pass creation from lua_gpu.cpp.
 use super::pass::Pass;
 use super::*;
+use crate::luau::FromLua;
 use crate::vm::lua_canvas::allocate_script_render_canvas;
 use crate::vm::lua_image::ScriptedImage;
-use crate::luau::FromLua;
 use nuxie_render_api::{PersistentFactoryContext, RenderCanvasHandle};
 
 pub(crate) struct Canvas {
@@ -193,12 +193,18 @@ impl UserData for Canvas {
             this.satisfy_pending(lua)?;let resource=this.color_view.clone().ok_or_else(||Error::runtime("GPUCanvas:colorView() has no backing texture. Call resize(w, h) with non-zero dimensions first."))?;
             lua.create_userdata(TextureView {resource, retained_image:None, follows:None, charge: this.charge.clone()})
         });
-        methods.add_method_lent("beginRenderPass", |lua, this, mut loan, descriptor: Value| {
-            check_begin_pass(lua, "GPUCanvas")?;
-            let table = Table::from_lua(descriptor, lua)?;
-            let target = this.color_view.as_ref().map(|view| (view, this.charge.as_ref()));
-            begin_pass(lua, &mut loan, "GPUCanvas", target, false, &table)
-        });
+        methods.add_method_lent(
+            "beginRenderPass",
+            |lua, this, mut loan, descriptor: Value| {
+                check_begin_pass(lua, "GPUCanvas")?;
+                let table = Table::from_lua(descriptor, lua)?;
+                let target = this
+                    .color_view
+                    .as_ref()
+                    .map(|view| (view, this.charge.as_ref()));
+                begin_pass(lua, &mut loan, "GPUCanvas", target, false, &table)
+            },
+        );
     }
 }
 fn load_op(value: Option<String>) -> LoadOp {
@@ -343,10 +349,11 @@ pub(super) fn begin_pass(
         record_sample(view.sample_count()?, "depthStencil")?;
         depth_desc.depthLoadOp = load_op(checked_string(&entry, loan, "depthLoadOp")?);
         depth_desc.depthStoreOp=store_op(&checked_string(&entry, loan, "depthStoreOp")?.ok_or_else(||Error::runtime("beginRenderPass: depthStencil.depthStoreOp is required — use 'discard' for transient/MSAA depth or 'store' if you need to read it later"))?);
-        depth_desc.depthClearValue = match entry.get_with::<Value>(reborrow_loan(loan), "depthClearValue")? {
-            Value::Nil => 1.0,
-            value => number_value(lua, value, 0.0)? as f32,
-        };
+        depth_desc.depthClearValue =
+            match entry.get_with::<Value>(reborrow_loan(loan), "depthClearValue")? {
+                Value::Nil => 1.0,
+                value => number_value(lua, value, 0.0)? as f32,
+            };
         depth = Some(view);
     }
     if colors.is_empty() && depth.is_none() {
@@ -376,8 +383,7 @@ pub(super) fn begin_pass(
     };
     // `colors` holds at most four entries (the `1..=4` loop above), one per
     // attachment slot.
-    for (slot, (view, resolve, load, store, clear)) in
-        desc.colorAttachments.iter_mut().zip(&colors)
+    for (slot, (view, resolve, load, store, clear)) in desc.colorAttachments.iter_mut().zip(&colors)
     {
         *slot = ColorAttachment {
             view: view.as_ref().map(|view| &view.resource),

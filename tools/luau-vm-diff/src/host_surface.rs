@@ -126,11 +126,7 @@ pub fn install_nuxie(vm: &mut nuxie_luau_vm::Vm) -> Result<(), nuxie_luau_vm::Er
 
     let interrupts = Rc::new(Interrupts::default());
     let fired = Rc::clone(&interrupts);
-    vm.set_interrupt(move || {
-        fired
-            .fire()
-            .map_err(|()| HostError::raw("interrupted"))
-    });
+    vm.set_interrupt(move || fired.fire().map_err(|()| HostError::raw("interrupted")));
     let counted = Rc::clone(&interrupts);
     let count = vm.create_function("interruptcount", move |_, (): ()| {
         Ok(counted.count.get() as f64)
@@ -151,9 +147,7 @@ pub fn install_nuxie(vm: &mut nuxie_luau_vm::Vm) -> Result<(), nuxie_luau_vm::Er
         let table = ctx.create_table().map_err(HostError::from)?;
         for i in 1..=ctx.top() {
             let key = ctx.value(i as isize)?;
-            table
-                .raw_set(ctx, key, i as f64)
-                .map_err(HostError::from)?;
+            table.raw_set(ctx, key, i as f64).map_err(HostError::from)?;
         }
         ctx.push(table)?;
         Ok(1)

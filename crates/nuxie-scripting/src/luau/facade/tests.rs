@@ -61,7 +61,10 @@ fn other_errors_stay_flat() {
         .create_function(|_, ()| -> super::Result<()> { Err(Error::runtime("plain")) })
         .unwrap();
     let error = failing.call::<()>(()).unwrap_err();
-    assert!(matches!(&error, Error::RuntimeError(m) if m == "runtime error: plain"), "{error}");
+    assert!(
+        matches!(&error, Error::RuntimeError(m) if m == "runtime error: plain"),
+        "{error}"
+    );
 
     let table_error = lua.load("error({})").exec().unwrap_err();
     assert!(
@@ -252,11 +255,15 @@ fn a_module_error_is_classified_by_its_value() {
         let thread = lua.create_thread(body).unwrap();
         let top = RefCell::new(String::new());
         let error = thread
-            .resume_module::<super::Value, ()>("mod", || Ok(()), |thread| {
-                if let Ok(super::Value::String(s)) = thread.stack_value(-1) {
-                    *top.borrow_mut() = s.to_string_lossy();
-                }
-            })
+            .resume_module::<super::Value, ()>(
+                "mod",
+                || Ok(()),
+                |thread| {
+                    if let Ok(super::Value::String(s)) = thread.stack_value(-1) {
+                        *top.borrow_mut() = s.to_string_lossy();
+                    }
+                },
+            )
             .unwrap_err();
         (error, top.into_inner())
     };
@@ -270,7 +277,10 @@ fn a_module_error_is_classified_by_its_value() {
 
     let (error, top) = run("error({})");
     let unknown = "mod:1: unknown error while running module";
-    assert!(matches!(&error, Error::RuntimeError(m) if m == unknown), "{error}");
+    assert!(
+        matches!(&error, Error::RuntimeError(m) if m == unknown),
+        "{error}"
+    );
     assert_eq!(top, unknown);
 }
 

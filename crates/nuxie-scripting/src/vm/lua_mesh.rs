@@ -419,7 +419,9 @@ fn reserve_staging(
         .try_reserve_exact(target.saturating_sub(staged.len()))
         .is_err()
     {
-        charge.count.release(charge.instances.saturating_sub(instances));
+        charge
+            .count
+            .release(charge.instances.saturating_sub(instances));
         charge.instances = instances;
         // Lowering a charge always succeeds.
         charge.bytes.set(bytes)?;
@@ -430,9 +432,7 @@ fn reserve_staging(
 
 impl UserData for ScriptedImageMeshInstances {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method_mut("resize", |_, this, count: u32| {
-            this.resize(count as usize)
-        });
+        methods.add_method_mut("resize", |_, this, count: u32| this.resize(count as usize));
         methods.add_method_mut("set", |lua, this, values: MultiValue| {
             let value = |index| values.get(index).cloned().unwrap_or(Value::Nil);
             let index = u32::from_lua(value(0), lua)? as usize;

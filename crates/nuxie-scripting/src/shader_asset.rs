@@ -6,21 +6,20 @@
 //! `BindingMap` target 16 sidecar. Vulkan selects authored whole-module SPIR-V
 //! target 5 and its target 13 binding-map sidecar.
 
-#[cfg(any(feature = "android-authored-wgsl", test))]
-use nuxie_render_api::GpuCanvasVulkanSpirVShader;
 #[cfg(any(feature = "apple-authored-msl", test))]
 use nuxie_render_api::GpuCanvasAppleMetalShader;
-use nuxie_render_api::shader_asset::{
-    MAX_RSTB_BYTES, WEBGL2_BINDING_MAP_TARGET, WEBGL2_FRAGMENT_FIXUP_TARGET,
-    WEBGL2_SOURCE_TARGET, WEBGL2_VERTEX_FIXUP_TARGET, WGSL_BINDING_MAP_TARGET,
-    WGSL_SOURCE_TARGET, decode_binding_map, decode_per_entry_glsl, decode_whole_module_wgsl,
-    validate_gl_fixup,
-};
+#[cfg(any(feature = "android-authored-wgsl", test))]
+use nuxie_render_api::GpuCanvasVulkanSpirVShader;
 #[cfg(test)]
 use nuxie_render_api::shader_asset::{
     APPLE_METAL_BINDING_MAP_TARGET, APPLE_METAL_SOURCE_TARGET, SUPPLEMENTAL_REFLECTION_SECTION,
-    SUPPLEMENTAL_REFLECTION_VERSION, TEXTURE_SAMPLER_PAIR_SECTION,
-    VULKAN_SPIRV_BINDING_MAP_TARGET, VULKAN_SPIRV_SOURCE_TARGET,
+    SUPPLEMENTAL_REFLECTION_VERSION, TEXTURE_SAMPLER_PAIR_SECTION, VULKAN_SPIRV_BINDING_MAP_TARGET,
+    VULKAN_SPIRV_SOURCE_TARGET,
+};
+use nuxie_render_api::shader_asset::{
+    MAX_RSTB_BYTES, WEBGL2_BINDING_MAP_TARGET, WEBGL2_FRAGMENT_FIXUP_TARGET, WEBGL2_SOURCE_TARGET,
+    WEBGL2_VERTEX_FIXUP_TARGET, WGSL_BINDING_MAP_TARGET, WGSL_SOURCE_TARGET, decode_binding_map,
+    decode_per_entry_glsl, decode_whole_module_wgsl, validate_gl_fixup,
 };
 use nuxie_render_api::{
     GpuCanvasShader, GpuCanvasShaderArtifact, GpuCanvasShaderProfile, GpuCanvasShaderProvenance,
@@ -97,8 +96,7 @@ impl ShaderAsset {
         #[cfg(any(feature = "apple-authored-msl", test))]
         asset
             .with_downcast::<NativeShaderAsset, _>(|asset| {
-                nuxie_render_api::shader_asset::RstbIndex::parse(asset.encoded_payload())
-                    .map(drop)
+                nuxie_render_api::shader_asset::RstbIndex::parse(asset.encoded_payload()).map(drop)
             })
             .ok_or_else(|| Error::runtime("missing native ShaderAsset"))?
             .map_err(shader_error)?;
@@ -1185,7 +1183,11 @@ mod tests {
                     (WGSL_SOURCE_TARGET, u32::MAX as usize, 1),
                     (1, 3, source.len()),
                     (WGSL_SOURCE_TARGET, 3, source.len()),
-                    (WGSL_BINDING_MAP_TARGET, map_offset, IMPORTED_GPU_CANVAS_BINDING_MAP.len()),
+                    (
+                        WGSL_BINDING_MAP_TARGET,
+                        map_offset,
+                        IMPORTED_GPU_CANVAS_BINDING_MAP.len(),
+                    ),
                     (VULKAN_SPIRV_SOURCE_TARGET, 0, 0),
                 ],
                 &blob_data,
@@ -1215,8 +1217,7 @@ mod tests {
             assert_eq!(asset.texture_sampler_pairs(), index.texture_sampler_pairs());
             assert_eq!(&*asset.entry_bindings().unwrap(), index.entry_bindings());
         }
-        let out_of_range =
-            rstb_payload_with_blob(&[(WGSL_SOURCE_TARGET, 4, 1)], &[0, 0, 0, 0]);
+        let out_of_range = rstb_payload_with_blob(&[(WGSL_SOURCE_TARGET, 4, 1)], &[0, 0, 0, 0]);
         assert!(ShaderAsset::decode("index", &out_of_range).is_err());
         assert!(RstbIndex::parse(&out_of_range).is_err());
     }

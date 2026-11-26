@@ -113,15 +113,15 @@ impl NativeScriptViewModel {
 
 /// The properties a script sees on an instance of `model`.
 fn properties_of(model: &CoreHandle) -> BTreeMap<String, ScriptViewModelProperty> {
-        let properties = model
-            .with(|model| {
-                model
-                    .as_view_model()
-                    .map(|model| model.properties().to_vec())
-            })
-            .flatten()
-            .expect("native ViewModel definition");
-        properties.into_iter().filter_map(|property| {
+    let properties = model
+        .with(|model| {
+            model
+                .as_view_model()
+                .map(|model| model.properties().to_vec())
+        })
+        .flatten()
+        .expect("native ViewModel definition");
+    properties.into_iter().filter_map(|property| {
             let name = property.with(|property| property.as_view_model_property().map(|property| property.const_name().to_owned())).flatten()?;
             use ScriptViewModelProperty as Kind;
             let kind = match property.core_type()? {
@@ -845,7 +845,9 @@ impl ScriptViewModel {
                 continue;
             }
             let values = instance
-                .with_downcast::<ViewModelInstance, _>(|instance| instance.property_values().to_vec())
+                .with_downcast::<ViewModelInstance, _>(|instance| {
+                    instance.property_values().to_vec()
+                })
                 .unwrap_or_default();
             for value in values {
                 value.with_downcast_mut::<ViewModelInstanceString, _>(|string| {
@@ -937,8 +939,10 @@ impl ScriptViewModel {
             .unwrap_or_default()
             .iter()
             .map(|item| {
-                item.with_downcast::<ViewModelInstanceListItem, _>(|item| item.host_owner().cloned())
-                    .flatten()
+                item.with_downcast::<ViewModelInstanceListItem, _>(|item| {
+                    item.host_owner().cloned()
+                })
+                .flatten()
             })
             .collect()
     }
@@ -1149,8 +1153,14 @@ fn copy_shape_of(file: &File, source: CoreHandle, max_instances: usize) -> CopyS
             }
             let nested = value
                 .with(|value| {
-                    let index = value.as_view_model_instance_view_model()?.base.property_value();
-                    let property = value.as_view_model_instance_value()?.base.view_model_property_id();
+                    let index = value
+                        .as_view_model_instance_view_model()?
+                        .base
+                        .property_value();
+                    let property = value
+                        .as_view_model_instance_value()?
+                        .base
+                        .view_model_property_id();
                     Some((property as usize, index as usize))
                 })
                 .flatten();
@@ -1316,9 +1326,11 @@ mod copy_shape_tests {
                     let values = instance
                         .with_downcast::<ViewModelInstance, _>(|i| i.property_values().to_vec())?;
                     for value in values {
-                        let Some(id) = value.with_downcast::<ViewModelInstanceViewModel, _>(
-                            |value| value.base.view_model_property_id(),
-                        ) else {
+                        let Some(id) =
+                            value.with_downcast::<ViewModelInstanceViewModel, _>(|value| {
+                                value.base.view_model_property_id()
+                            })
+                        else {
                             continue;
                         };
                         let property = model

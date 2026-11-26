@@ -15,11 +15,11 @@ use nuxie_runtime::{
     ScriptedContextSource, ScriptedDataContextSource,
 };
 
-use super::lua_blob::{ScriptedBlob, ScriptedBlobAssets};
+use super::host_dispatch::patch_metatable_once;
 use super::host_memory_budget::HostMemoryCharge;
+use super::lua_blob::{ScriptedBlob, ScriptedBlobAssets};
 use super::lua_font::{ScriptedFont, create_asset_font};
 use super::lua_image::{ScriptedImage, create_asset_image};
-use super::host_dispatch::patch_metatable_once;
 use super::lua_main_ref::MainThreadRef;
 
 type ViewModelInstanceKey = (u8, usize, usize, u64);
@@ -552,8 +552,8 @@ mod instance_bytes {
     /// two handle slots of the list's vector (whose capacity at most
     /// doubles, and never exceeds the items ever made for it, which stay in
     /// the arena).
-    pub(super) const LIST_ITEM: usize = object::<ViewModelInstanceListItem>()
-        .saturating_add(2 * size_of::<std::rc::Rc<()>>());
+    pub(super) const LIST_ITEM: usize =
+        object::<ViewModelInstanceListItem>().saturating_add(2 * size_of::<std::rc::Rc<()>>());
     /// The most instances one estimate visits: it bounds the work, and a
     /// cycle a script made by assigning an instance into itself stops here.
     pub(super) const MAX_VISITED: usize = 4096;
@@ -589,9 +589,7 @@ mod instance_bytes {
             visited = visited.saturating_add(1);
             bytes = bytes.saturating_add(INSTANCE);
             for (name, kind) in model.properties() {
-                bytes = bytes
-                    .saturating_add(PROPERTY)
-                    .saturating_add(name.len());
+                bytes = bytes.saturating_add(PROPERTY).saturating_add(name.len());
                 match kind {
                     ScriptViewModelProperty::String => {
                         bytes = bytes.saturating_add(model.string(name).map_or(0, |s| s.len()));
@@ -1013,7 +1011,14 @@ fn create_property_userdata<T: UserData + WatchedProperty + 'static>(
 ) -> crate::luau::Result<AnyUserData> {
     let watch = Rc::clone(property.watch());
     let property = lua.create_userdata(property)?;
-    patch_property_userdata(lua, model, property, &watch, writable_value, mutating_methods)
+    patch_property_userdata(
+        lua,
+        model,
+        property,
+        &watch,
+        writable_value,
+        mutating_methods,
+    )
 }
 
 fn create_scripted_view_model_retained(
@@ -1198,7 +1203,10 @@ fn create_scripted_view_model_retained(
                 }
                 let args = args.into_vec();
                 let name = match args.as_slice() {
-                    [_, name @ (Value::String(_) | Value::Integer(_) | Value::Number(_))] => {
+                    [
+                        _,
+                        name @ (Value::String(_) | Value::Integer(_) | Value::Number(_)),
+                    ] => {
                         let value: crate::luau::LuaString = lua.unpack(name.clone())?;
                         Some(value.to_string_lossy())
                     }
@@ -1467,7 +1475,10 @@ fn add_property_listener(
             ));
         }
     };
-    push_listener(&watch.listeners, ScriptedListener::new(lua, callback, userdata)?)?;
+    push_listener(
+        &watch.listeners,
+        ScriptedListener::new(lua, callback, userdata)?,
+    )?;
     ScriptViewModelFrameContext::for_lua(lua).register_property_watch(watch);
     Ok(())
 }
@@ -1788,8 +1799,9 @@ impl UserData for ScriptedPropertyString {
             // byte grows to three.
             charge.set(value.len())?;
             let owner = HostOwnerToken::new(charge);
-            this.model
-                .defer_property_change_callbacks(|| this.model.set_string_owned(&this.name, &value, owner));
+            this.model.defer_property_change_callbacks(|| {
+                this.model.set_string_owned(&this.name, &value, owner)
+            });
             Ok(())
         });
     }
@@ -1865,10 +1877,7 @@ struct EnumValuesMetatablePatched;
 #[derive(Default)]
 struct PropertyListMetatablePatched;
 
-fn create_scripted_enum_values(
-    lua: &Lua,
-    values: Vec<String>,
-) -> crate::luau::Result<AnyUserData> {
+fn create_scripted_enum_values(lua: &Lua, values: Vec<String>) -> crate::luau::Result<AnyUserData> {
     let values = lua.create_userdata(ScriptedEnumValues { values })?;
     // The `__index` closure captures nothing, so one per VM serves every
     // value list.
@@ -2148,7 +2157,11 @@ impl UserData for ScriptedPropertyImage {
                         this.model.set_render_image(&this.name, Some(image))
                     });
                 }
-                _ => return Err(crate::luau::Error::runtime("expected Image userdata or nil")),
+                _ => {
+                    return Err(crate::luau::Error::runtime(
+                        "expected Image userdata or nil",
+                    ));
+                }
             }
             Ok(())
         });
@@ -2503,7 +2516,11 @@ impl UserData for ScriptedPropertyList {
             this.insert(lua, None, &model_from_table(&item)?)
         });
         methods.add_method("insert", |lua, this, (item, index): (Table, usize)| {
-            this.insert(lua, Some(index.saturating_sub(1)), &model_from_table(&item)?)
+            this.insert(
+                lua,
+                Some(index.saturating_sub(1)),
+                &model_from_table(&item)?,
+            )
         });
         methods.add_method("pop", |lua, this, ()| {
             let item = this
@@ -3094,49 +3111,66 @@ impl UserData for ScriptedContext {
         });
         // A descriptor's `__index` gets the loan of the call reading it, so
         // it can draw with the renderer of a draw that called this.
-        methods.add_method_lent("canvas", |lua, this, mut loan, descriptor: Option<Table>| {
-            this.require_live("canvas")?;
-            let bindings =
+        methods.add_method_lent(
+            "canvas",
+            |lua, this, mut loan, descriptor: Option<Table>| {
+                this.require_live("canvas")?;
+                let bindings =
                 super::lua_renderer_library::RendererBindings::for_lua(lua).ok_or_else(|| {
                     crate::luau::Error::runtime(
                         "context:canvas() requires a RenderContext — call setRenderContext() first",
                     )
                 })?;
-            let (width, height) = match descriptor {
-                Some(descriptor) => (
-                    descriptor
-                        .get_with::<Option<u32>>(crate::luau::reborrow_loan(&mut loan), "width")?
-                        .unwrap_or(0),
-                    descriptor
-                        .get_with::<Option<u32>>(crate::luau::reborrow_loan(&mut loan), "height")?
-                        .unwrap_or(0),
-                ),
-                None => (0, 0),
-            };
-            super::lua_canvas::ScriptedCanvas::create(lua, bindings, width, height)
-                .map(Value::UserData)
-        });
+                let (width, height) = match descriptor {
+                    Some(descriptor) => (
+                        descriptor
+                            .get_with::<Option<u32>>(
+                                crate::luau::reborrow_loan(&mut loan),
+                                "width",
+                            )?
+                            .unwrap_or(0),
+                        descriptor
+                            .get_with::<Option<u32>>(
+                                crate::luau::reborrow_loan(&mut loan),
+                                "height",
+                            )?
+                            .unwrap_or(0),
+                    ),
+                    None => (0, 0),
+                };
+                super::lua_canvas::ScriptedCanvas::create(lua, bindings, width, height)
+                    .map(Value::UserData)
+            },
+        );
         // A descriptor's `__index` gets the loan of the call reading it, so
         // it can draw with the renderer of a draw that called this.
-        methods.add_method_lent("gpuCanvas", |lua, this, mut loan, descriptor: Option<Table>| {
-            this.require_live("gpuCanvas")?;
-            let gpu_canvas = this
-                .gpu_canvas
-                .as_ref()
-                .ok_or_else(|| crate::luau::Error::runtime("GPU-canvas context is unavailable"))?;
-            let (width, height) = match descriptor {
-                Some(descriptor) => (
-                    descriptor
-                        .get_with::<Option<u32>>(crate::luau::reborrow_loan(&mut loan), "width")?
-                        .unwrap_or(0),
-                    descriptor
-                        .get_with::<Option<u32>>(crate::luau::reborrow_loan(&mut loan), "height")?
-                        .unwrap_or(0),
-                ),
-                None => (0, 0),
-            };
-            gpu_canvas.canvas_userdata_with_size(lua, width, height)
-        });
+        methods.add_method_lent(
+            "gpuCanvas",
+            |lua, this, mut loan, descriptor: Option<Table>| {
+                this.require_live("gpuCanvas")?;
+                let gpu_canvas = this.gpu_canvas.as_ref().ok_or_else(|| {
+                    crate::luau::Error::runtime("GPU-canvas context is unavailable")
+                })?;
+                let (width, height) = match descriptor {
+                    Some(descriptor) => (
+                        descriptor
+                            .get_with::<Option<u32>>(
+                                crate::luau::reborrow_loan(&mut loan),
+                                "width",
+                            )?
+                            .unwrap_or(0),
+                        descriptor
+                            .get_with::<Option<u32>>(
+                                crate::luau::reborrow_loan(&mut loan),
+                                "height",
+                            )?
+                            .unwrap_or(0),
+                    ),
+                    None => (0, 0),
+                };
+                gpu_canvas.canvas_userdata_with_size(lua, width, height)
+            },
+        );
         methods.add_method("pixelRatio", |lua, this, ()| {
             this.require_live("pixelRatio")?;
             Ok(super::script_pixel_ratio(lua))
@@ -3930,13 +3964,15 @@ mod tests {
         let later_file = duplicate_definitions_file([b"Dup", b"Dup"]);
         let first = first_file.view_model(0).unwrap();
         let mut vm = ScriptVm::new();
-        vm.set_view_models(nuxie_runtime::script_view_models(&first_file)).expect("set view models");
+        vm.set_view_models(nuxie_runtime::script_view_models(&first_file))
+            .expect("set view models");
         vm.install_rive_globals().unwrap();
         let original: Table = vm.lua().globals().get("Data").unwrap();
         // Reinitialization must restore the registry table even if the global
         // was replaced, and must not replace its already-installed definition.
         vm.lua().globals().set("Data", Value::Nil).unwrap();
-        vm.set_view_models(nuxie_runtime::script_view_models(&later_file)).expect("set view models");
+        vm.set_view_models(nuxie_runtime::script_view_models(&later_file))
+            .expect("set view models");
         let data: Table = vm.lua().globals().get("Data").unwrap();
         assert_eq!(data.to_pointer(), original.to_pointer());
         let definition: Table = data.get("Dup").unwrap();
@@ -4079,7 +4115,9 @@ mod tests {
         let lua = Lua::new();
         let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
         lua.globals().set("model", table).unwrap();
-        lua.globals().set("propertyName", property_name.clone()).unwrap();
+        lua.globals()
+            .set("propertyName", property_name.clone())
+            .unwrap();
         let (added, error): (i64, String) = lua
             .load(
                 "calls = 0\n\
@@ -5556,10 +5594,7 @@ mod tests {
         assert_eq!(budget_used(&lua), expected, "the arena keeps the instance");
         // Each instance is dropped at once, so the script never holds more
         // than one; the arena keeps every one.
-        refused_by_budget(
-            &lua,
-            "for i = 1, 100000 do local _ = Data[name].new() end",
-        );
+        refused_by_budget(&lua, "for i = 1, 100000 do local _ = Data[name].new() end");
     }
 
     // Lane H2, from H4's hostile corpus: a view model put in its own nested
@@ -5608,7 +5643,10 @@ mod tests {
         let template = model.named_instance(Some("Instance 1")).expect("template");
         let schema = super::instance_bytes::of(model);
         let copied = super::instance_bytes::of(&template);
-        assert!(copied > 4 * schema, "the template holds more than its shape");
+        assert!(
+            copied > 4 * schema,
+            "the template holds more than its shape"
+        );
 
         // Measured before the copy is made: a refused copy is never made
         // (the arena would keep it, uncharged).
@@ -5619,7 +5657,9 @@ mod tests {
 
         let lua = budget_lua(64 * 1024);
         install_data_global(&lua, &models).unwrap();
-        lua.load("kept = Data.MainVM.new('Instance 1')").exec().unwrap();
+        lua.load("kept = Data.MainVM.new('Instance 1')")
+            .exec()
+            .unwrap();
         assert_eq!(budget_used(&lua), copied);
     }
 
@@ -5648,15 +5688,21 @@ mod tests {
                     .with_downcast::<ViewModelInstance, _>(|i| i.property_values().to_vec())
                     .unwrap_or_default();
                 for value in values {
-                    if value.with_downcast::<ViewModelInstanceString, _>(|_| ()).is_some() {
+                    if value
+                        .with_downcast::<ViewModelInstanceString, _>(|_| ())
+                        .is_some()
+                    {
                         found.push(value);
                     } else if let Some(nested) = value
-                        .with(|v| v.as_view_model_instance_view_model()?.reference_view_model_instance())
+                        .with(|v| {
+                            v.as_view_model_instance_view_model()?
+                                .reference_view_model_instance()
+                        })
                         .flatten()
                     {
                         pending.push(nested);
-                    } else if let Some(items) = value
-                        .with_downcast::<ViewModelInstanceList, _>(|l| l.list_items().to_vec())
+                    } else if let Some(items) =
+                        value.with_downcast::<ViewModelInstanceList, _>(|l| l.list_items().to_vec())
                     {
                         pending.extend(items.iter().filter_map(|item| {
                             item.with_downcast::<ViewModelInstanceListItem, _>(
@@ -5681,7 +5727,9 @@ mod tests {
             let templates = file.with_file(|file| {
                 let mut templates = Vec::new();
                 for i in 0..file.view_model_count() {
-                    let Some(model) = file.view_model_handle(i) else { continue };
+                    let Some(model) = file.view_model_handle(i) else {
+                        continue;
+                    };
                     let Some((model_name, instances)) = model.with_downcast::<ViewModel, _>(|m| {
                         let all = (0..m.instance_count()).filter_map(|j| m.instance_at(j));
                         (m.base.name().to_owned(), all.collect::<Vec<_>>())
@@ -5689,9 +5737,11 @@ mod tests {
                         continue;
                     };
                     for instance in instances {
-                        let Some((name, values)) = instance.with_downcast::<ViewModelInstance, _>(
-                            |i| (i.base.name().to_owned(), i.property_values().to_vec()),
-                        ) else {
+                        let Some((name, values)) =
+                            instance.with_downcast::<ViewModelInstance, _>(|i| {
+                                (i.base.name().to_owned(), i.property_values().to_vec())
+                            })
+                        else {
                             continue;
                         };
                         for value in values {
@@ -5755,7 +5805,9 @@ mod tests {
         let made = budget_used(&lua);
         // The nested `child` (which holds a `SubChild`) becomes a bare
         // `SubChild`: the live graph is now smaller than the schema's.
-        lua.load("first:getViewModel('chi').value = Data.SubChild.new()").exec().unwrap();
+        lua.load("first:getViewModel('chi').value = Data.SubChild.new()")
+            .exec()
+            .unwrap();
         let before = budget_used(&lua);
         lua.load("second = first:new()").exec().unwrap();
         assert_eq!(budget_used(&lua) - before, made);
@@ -5828,7 +5880,11 @@ mod tests {
         lua.gc_collect().unwrap();
         assert_eq!(budget_used(&lua), 12 * per_item);
         assert_eq!(
-            model.list_item_host_owners(&list).iter().filter(|owner| owner.is_some()).count(),
+            model
+                .list_item_host_owners(&list)
+                .iter()
+                .filter(|owner| owner.is_some())
+                .count(),
             11,
         );
 
@@ -5848,12 +5904,20 @@ mod tests {
              end",
         );
         assert!(error.contains("host memory budget"));
-        assert_eq!(model.list_len(&list).unwrap(), len, "a refused push adds nothing");
+        assert_eq!(
+            model.list_len(&list).unwrap(),
+            len,
+            "a refused push adds nothing"
+        );
         refused_by_budget(
             &lua,
             "local list = model:getList(listName) list:insert(child, 1)",
         );
-        assert_eq!(model.list_len(&list).unwrap(), len, "a refused insert adds nothing");
+        assert_eq!(
+            model.list_len(&list).unwrap(),
+            len,
+            "a refused insert adds nothing"
+        );
     }
 
     // Inventory row 24: the Blob setter copied a script's bytes into the
@@ -5874,7 +5938,9 @@ mod tests {
             .exec()
             .unwrap();
         assert_eq!(budget_used(&lua), 1000);
-        lua.load("model[propertyName].value = 'abc'").exec().unwrap();
+        lua.load("model[propertyName].value = 'abc'")
+            .exec()
+            .unwrap();
         lua.gc_collect().unwrap();
         assert_eq!(budget_used(&lua), 3, "the replaced copy refunds");
         lua.load("kept = model[propertyName].value model[propertyName].value = nil")
@@ -5909,11 +5975,9 @@ mod tests {
         lua.globals().set("propertyName", name.clone()).unwrap();
         // Each assignment drops its property wrapper; the native property
         // keeps one blob at a time, so only the last is held.
-        lua.load(
-            "for i = 1, 100 do model[propertyName].value = buffer.create(1000) end",
-        )
-        .exec()
-        .unwrap();
+        lua.load("for i = 1, 100 do model[propertyName].value = buffer.create(1000) end")
+            .exec()
+            .unwrap();
         lua.load("model = nil").exec().unwrap();
         lua.gc_collect().unwrap();
         lua.gc_collect().unwrap();
@@ -6019,7 +6083,9 @@ mod tests {
         assert_eq!(used(), 0);
 
         // A face the host clears is refunded as it goes, read back or not.
-        lua.load("fontProperty.value = Font.decode(fontBytes)").exec().unwrap();
+        lua.load("fontProperty.value = Font.decode(fontBytes)")
+            .exec()
+            .unwrap();
         lua.gc_collect().unwrap();
         assert_eq!(used(), 226_004);
         native.set_font(&name, None);
@@ -6414,7 +6480,8 @@ mod tests {
             let bytes = std::fs::read(&fixture)
                 .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
             let file = native_test_file(&bytes);
-            vm.set_view_models(nuxie_runtime::script_view_models(&file)).expect("set view models");
+            vm.set_view_models(nuxie_runtime::script_view_models(&file))
+                .expect("set view models");
 
             let data: Table = vm.lua().globals().get("Data").expect("Data table");
             let model: Table = data.get("ProbeChipVM").expect("ProbeChipVM table");
@@ -7614,7 +7681,10 @@ mod enum_values_metatable_tests {
             let second: AnyUserData =
                 create_scripted_enum_values(&lua, vec!["c".into()]).expect("values");
             let after: Function = index_of.call(second.clone()).expect("index");
-            assert_eq!(before, after, "creating a value list replaced the shared __index");
+            assert_eq!(
+                before, after,
+                "creating a value list replaced the shared __index"
+            );
 
             let read: Function = lua
                 .load("return function(a, b) return a[2], b[1], a[3], #a, b[1.0] end")

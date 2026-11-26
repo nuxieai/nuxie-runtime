@@ -81,7 +81,11 @@ impl Frames {
     /// Removes the innermost frame and its pending entry, if it has one.
     pub(in crate::protocol) fn pop(&mut self) -> Option<(Frame, Option<Pending>)> {
         let frame = self.list.pop()?;
-        let pending = if frame.has(Frame::PENDING) { self.pending.pop() } else { None };
+        let pending = if frame.has(Frame::PENDING) {
+            self.pending.pop()
+        } else {
+            None
+        };
         Some((frame, pending))
     }
 
@@ -104,12 +108,12 @@ impl Frames {
 
     /// Keeps the outermost `len` frames, and their pending entries.
     pub(in crate::protocol) fn truncate(&mut self, len: usize) {
-        let flagged = self
-            .list
-            .get(len..)
-            .map_or(0, |gone| gone.iter().filter(|f| f.has(Frame::PENDING)).count());
+        let flagged = self.list.get(len..).map_or(0, |gone| {
+            gone.iter().filter(|f| f.has(Frame::PENDING)).count()
+        });
         self.list.truncate(len);
-        self.pending.truncate(self.pending.len().saturating_sub(flagged));
+        self.pending
+            .truncate(self.pending.len().saturating_sub(flagged));
     }
 
     /// The innermost frame's pending entry, if it has one.

@@ -76,7 +76,9 @@ fn is_ident(c: char) -> bool {
 fn names(line: &str, word: &str) -> bool {
     line.match_indices(word).any(|(at, _)| {
         let before = line.get(..at).and_then(|s| s.chars().next_back());
-        let after = line.get(at.saturating_add(word.len())..).and_then(|s| s.chars().next());
+        let after = line
+            .get(at.saturating_add(word.len())..)
+            .and_then(|s| s.chars().next());
         !before.is_some_and(is_ident) && !after.is_some_and(is_ident)
     })
 }
@@ -94,9 +96,11 @@ fn every_core_module_is_checked() -> Result<(), String> {
             let Some(rest) = line.strip_suffix(';') else {
                 continue;
             };
-            let Some(name) = rest.split_whitespace().last().filter(|_| {
-                rest.starts_with("mod ") || rest.contains(" mod ")
-            }) else {
+            let Some(name) = rest
+                .split_whitespace()
+                .last()
+                .filter(|_| rest.starts_with("mod ") || rest.contains(" mod "))
+            else {
                 continue;
             };
             if dir.is_empty() && NOT_CORE.contains(&name) {
@@ -104,7 +108,10 @@ fn every_core_module_is_checked() -> Result<(), String> {
             }
             let file = format!("{dir}{name}.rs");
             let dir_file = format!("{dir}{name}/mod.rs");
-            if !CORE.iter().any(|(path, _)| *path == file || *path == dir_file) {
+            if !CORE
+                .iter()
+                .any(|(path, _)| *path == file || *path == dir_file)
+            {
                 return Err(format!("core module `{dir}{name}` is not in CORE"));
             }
             declared = declared.saturating_add(1);
@@ -112,7 +119,10 @@ fn every_core_module_is_checked() -> Result<(), String> {
     }
     // One declaration per listed file: none is stale, and the parse saw them.
     if declared != CORE.len() {
-        return Err(format!("{declared} core modules declared, {} listed", CORE.len()));
+        return Err(format!(
+            "{declared} core modules declared, {} listed",
+            CORE.len()
+        ));
     }
     Ok(())
 }
@@ -133,7 +143,10 @@ fn the_core_never_names_the_embedding_layer() -> Result<(), String> {
     if found.is_empty() {
         Ok(())
     } else {
-        Err(format!("the core names the embedding layer:\n{}", found.join("\n")))
+        Err(format!(
+            "the core names the embedding layer:\n{}",
+            found.join("\n")
+        ))
     }
 }
 

@@ -313,7 +313,10 @@ fn shortest_digits(x: f64) -> (String, i32) {
     let (digits, exponent) = split_sci(&format!("{x:e}"));
     let len = digits.len();
     // Cheap filter: a tie needs a neighbouring candidate that round-trips.
-    let neighbours = [step_last(&digits, exponent, false), step_last(&digits, exponent, true)];
+    let neighbours = [
+        step_last(&digits, exponent, false),
+        step_last(&digits, exponent, true),
+    ];
     if !neighbours
         .iter()
         .flatten()
@@ -370,7 +373,11 @@ fn step_last(digits: &str, exponent: i32, up: bool) -> Option<(String, i32)> {
         if *d == wrap {
             *d = to;
         } else {
-            *d = if up { d.checked_add(1)? } else { d.checked_sub(1)? };
+            *d = if up {
+                d.checked_add(1)?
+            } else {
+                d.checked_sub(1)?
+            };
             break;
         }
     }
@@ -448,7 +455,10 @@ mod tests {
         assert_eq!(str2d(b" 10 "), Some(10.0));
         assert_eq!(str2d(b"0x10"), Some(16.0));
         assert_eq!(str2d(b"-0x1p4"), Some(-16.0));
-        assert_eq!(str2d(b"0x1000000000000000p-1100"), Some(f64::from_bits(1 << 34)));
+        assert_eq!(
+            str2d(b"0x1000000000000000p-1100"),
+            Some(f64::from_bits(1 << 34))
+        );
         assert_eq!(str2d(b"0x0p99999"), Some(0.0));
         assert_eq!(str2d(b"0x1p99999"), Some(f64::INFINITY));
         assert_eq!(str2d(b"0x1p-1074"), Some(f64::from_bits(1)));

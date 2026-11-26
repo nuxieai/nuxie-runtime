@@ -312,7 +312,8 @@ impl UserData for ScriptedArtboard {
                 let scripted_renderer = renderer.borrow::<ScriptedRenderer>()?;
                 #[cfg(feature = "tools")]
                 {
-                    scripted_renderer.with_renderer_mut(crate::luau::reborrow_loan(&mut loan), |_| Ok(()))?;
+                    scripted_renderer
+                        .with_renderer_mut(crate::luau::reborrow_loan(&mut loan), |_| Ok(()))?;
                     this.owner
                         .artboard
                         .retained_handle()
@@ -656,10 +657,7 @@ fn append_commands(path: &mut RawPath, added: &nuxie_render_api::RawPath) {
 }
 
 #[cfg(feature = "upstream-test-seams")]
-pub fn upstream_test_scripted_artboard_render(
-    bytes: &[u8],
-    bytecode: &[u8],
-) -> Result<Vec<u8>> {
+pub fn upstream_test_scripted_artboard_render(bytes: &[u8], bytecode: &[u8]) -> Result<Vec<u8>> {
     use nuxie_render_api::{PersistentFactory, SerializingFactory};
     use nuxie_runtime::{
         File, RuntimeFactoryHandle, RuntimeScriptingVmHandle, native_script_artboard,
@@ -702,7 +700,10 @@ pub fn upstream_test_scripted_artboard_render(
         let (scripted_renderer, mut scope) =
             ScriptedRenderer::create_call_scoped_userdata(&lua, &mut renderer, bindings.clone())?;
         render.call_lent::<()>(&mut scope, (userdata.clone(), scripted_renderer.clone()))?;
-        if !scripted_renderer.borrow::<ScriptedRenderer>()?.end(Some(&mut scope)) {
+        if !scripted_renderer
+            .borrow::<ScriptedRenderer>()?
+            .end(Some(&mut scope))
+        {
             return Err(Error::runtime("unbalanced scripted renderer"));
         }
     }
@@ -1259,9 +1260,14 @@ end
         use nuxie_runtime::mechanical_port::source::math::path_types::PathVerb;
         let lua = Lua::new();
         lua.globals()
-            .set("artboard", fixture_userdata(&lua, "fix_rectangle.riv", None))
+            .set(
+                "artboard",
+                fixture_userdata(&lua, "fix_rectangle.riv", None),
+            )
             .unwrap();
-        lua.load("artboard:advance(0) open = Path.new()").exec().unwrap();
+        lua.load("artboard:advance(0) open = Path.new()")
+            .exec()
+            .unwrap();
         let open: AnyUserData = lua.globals().get("open").unwrap();
         {
             let mut path = open.borrow_mut::<ScriptedPath>().unwrap();

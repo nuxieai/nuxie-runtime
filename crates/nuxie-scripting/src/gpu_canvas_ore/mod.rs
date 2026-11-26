@@ -1,12 +1,12 @@
 //! Live `src/lua/renderer/lua_gpu.cpp` owners at e949498e.
 //! These userdata issue ORE operations; the separate direct-host plan collector
 //! is not used to execute imported script GPU work.
-use crate::vm::RendererBindings;
-use crate::vm::host_memory_budget::HostMemoryCharge;
 use crate::luau::{
     AnyUserData, Buffer as LuaBuffer, Error, Loan, Lua, Result, Table, UserData, UserDataFields,
     UserDataMethods, Value, reborrow_loan,
 };
+use crate::vm::RendererBindings;
+use crate::vm::host_memory_budget::HostMemoryCharge;
 use nuxie_ore_metal::{context::ContextApi, gpu_resource::AnyResourceHandle, types::*};
 use nuxie_render_api::OreContextHandle;
 use std::{cell::RefCell, rc::Rc};
@@ -159,7 +159,11 @@ fn context(lua: &Lua) -> Result<OreContextHandle> {
 // Descriptor reads honor `__index`, and pass on the loan of the call that
 // reads them, so a metamethod reached during a draw can still draw.
 fn number(table: &Table, loan: &mut Loan<'_>, key: &str, default: f64) -> Result<f64> {
-    number_value(&table.lua(), table.get_with::<Value>(reborrow_loan(loan), key)?, default)
+    number_value(
+        &table.lua(),
+        table.get_with::<Value>(reborrow_loan(loan), key)?,
+        default,
+    )
 }
 fn number_value(lua: &Lua, value: Value, default: f64) -> Result<f64> {
     // lua_isnumber/lua_tonumber accept integral numbers and Lua numeric strings.
@@ -178,7 +182,10 @@ fn boolean(table: &Table, loan: &mut Loan<'_>, key: &str, default: bool) -> Resu
     })
 }
 pub(super) fn string(table: &Table, loan: &mut Loan<'_>, key: &str) -> Result<Option<String>> {
-    string_value(&table.lua(), table.get_with::<Value>(reborrow_loan(loan), key)?)
+    string_value(
+        &table.lua(),
+        table.get_with::<Value>(reborrow_loan(loan), key)?,
+    )
 }
 fn string_value(lua: &Lua, value: Value) -> Result<Option<String>> {
     if !matches!(

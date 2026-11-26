@@ -95,7 +95,10 @@ struct VmOwners(RefCell<Vec<WeakProcessorOwner>>);
 /// that are starting or running.
 fn live_processors(lua: &Lua, owner: &ProcessorOwner) -> usize {
     let mut owners = live_owners(lua);
-    if !owners.iter().any(|tracked| Rc::ptr_eq(&tracked.0, &owner.0)) {
+    if !owners
+        .iter()
+        .any(|tracked| Rc::ptr_eq(&tracked.0, &owner.0))
+    {
         owners.push(owner.clone());
     }
     owners.iter().fold(0usize, |count, owner| {
@@ -529,11 +532,8 @@ pub(super) fn install(lua: &Lua, audio: &Table) -> Result<()> {
                 Value::String(value) => value.as_bytes().to_vec(),
                 _ => return Err(Error::runtime("Blob.from expects a buffer or string")),
             };
-            let value = SharedBlob::with_budget(
-                &bytes,
-                shared_budget(lua)?,
-            )
-            .map_err(Error::runtime)?;
+            let value =
+                SharedBlob::with_budget(&bytes, shared_budget(lua)?).map_err(Error::runtime)?;
             lua.create_userdata(ScriptedBlob(Arc::new(value)))
         })?,
     )?;
@@ -542,11 +542,9 @@ pub(super) fn install(lua: &Lua, audio: &Table) -> Result<()> {
     region.raw_set(
         "create",
         lua.create_function(|lua, args: MultiValue| {
-            let value = SharedRegion::with_budget(
-                byte_capacity(&args, false)?,
-                shared_budget(lua)?,
-            )
-            .map_err(Error::runtime)?;
+            let value =
+                SharedRegion::with_budget(byte_capacity(&args, false)?, shared_budget(lua)?)
+                    .map_err(Error::runtime)?;
             lua.create_userdata(ScriptedRegion(Arc::new(value)))
         })?,
     )?;
@@ -555,11 +553,8 @@ pub(super) fn install(lua: &Lua, audio: &Table) -> Result<()> {
     ring.raw_set(
         "create",
         lua.create_function(|lua, args: MultiValue| {
-            let ring = SharedRing::with_budget(
-                byte_capacity(&args, false)?,
-                shared_budget(lua)?,
-            )
-            .map_err(Error::runtime)?;
+            let ring = SharedRing::with_budget(byte_capacity(&args, false)?, shared_budget(lua)?)
+                .map_err(Error::runtime)?;
             lua.create_userdata(ScriptedRing(Arc::new(ring)))
         })?,
     )?;
@@ -568,11 +563,9 @@ pub(super) fn install(lua: &Lua, audio: &Table) -> Result<()> {
     snapshot.raw_set(
         "create",
         lua.create_function(|lua, args: MultiValue| {
-            let snapshot = SharedSnapshot::with_budget(
-                byte_capacity(&args, true)?,
-                shared_budget(lua)?,
-            )
-            .map_err(Error::runtime)?;
+            let snapshot =
+                SharedSnapshot::with_budget(byte_capacity(&args, true)?, shared_budget(lua)?)
+                    .map_err(Error::runtime)?;
             lua.create_userdata(ScriptedSnapshot(Arc::new(snapshot)))
         })?,
     )?;

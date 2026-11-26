@@ -12,7 +12,7 @@
 use crate::error::VmResult;
 use crate::num::{num2str, str2d};
 use crate::value::{StrId, TableId, Value};
-use crate::vm::{Tm, Core};
+use crate::vm::{Core, Tm};
 
 /// An arithmetic operation (C++ `TMS` from `TM_ADD` to `TM_UNM`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

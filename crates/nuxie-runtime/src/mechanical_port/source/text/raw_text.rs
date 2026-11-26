@@ -12,8 +12,8 @@ use crate::mechanical_port::source::{
     shapes::paint::color::ColorInt,
     shapes::paint::shape_paint_path::ShapePaintPath,
     text_engine::{
-        Font, FontRef, GlyphLine, grown_bytes, vec_bytes, GlyphRun, OrderedLine, Paragraph, TextAlign, TextDirection,
-        TextOrigin, TextOverflow, TextSizing, TextWordBreak, TextWrap,
+        Font, FontRef, GlyphLine, GlyphRun, OrderedLine, Paragraph, TextAlign, TextDirection,
+        TextOrigin, TextOverflow, TextSizing, TextWordBreak, TextWrap, grown_bytes, vec_bytes,
     },
 };
 use nuxie_render_api::{FillRule, RenderPaint, RenderPaintStyle, Renderer};
@@ -83,7 +83,11 @@ fn admit_path_growth(
     let raw = path.mutable_raw_path();
     let (verb_capacity, point_capacity) = raw.capacity();
     // Adding a path backwards may emit one more verb than it has.
-    let verbs = raw.verbs().len().saturating_add(glyph.verbs().len()).saturating_add(1);
+    let verbs = raw
+        .verbs()
+        .len()
+        .saturating_add(glyph.verbs().len())
+        .saturating_add(1);
     let points = raw.points().len().saturating_add(glyph.points().len());
     if verbs <= verb_capacity && points <= point_capacity {
         return Ok(());
@@ -823,7 +827,9 @@ impl RawText {
                         .last()
                         .map_or(0, OrderedLine::heap_bytes)
                         .saturating_add(
-                            self.ellipsis_run.heap_bytes().saturating_sub(ellipsis_before),
+                            self.ellipsis_run
+                                .heap_bytes()
+                                .saturating_sub(ellipsis_before),
                         ),
                 )?;
                 self.line_directions.push(p.base_direction());
@@ -1008,11 +1014,31 @@ impl RawText {
     fn heap_parts(&self) -> Vec<(&'static str, usize)> {
         vec![
             ("styled", self.styled.heap_bytes()),
-            ("shape", self.shape.iter().fold(vec_bytes(&self.shape), |b, p| b + p.heap_bytes())),
-            ("lines", self.lines.iter().fold(vec_bytes(&self.lines), |b, l| b + vec_bytes(l))),
-            ("styles", self.styles.iter().fold(vec_bytes(&self.styles), |b, s| b + s.path.heap_bytes())),
+            (
+                "shape",
+                self.shape
+                    .iter()
+                    .fold(vec_bytes(&self.shape), |b, p| b + p.heap_bytes()),
+            ),
+            (
+                "lines",
+                self.lines
+                    .iter()
+                    .fold(vec_bytes(&self.lines), |b, l| b + vec_bytes(l)),
+            ),
+            (
+                "styles",
+                self.styles
+                    .iter()
+                    .fold(vec_bytes(&self.styles), |b, s| b + s.path.heap_bytes()),
+            ),
             ("render_styles", vec_bytes(&self.render_styles)),
-            ("ordered", self.ordered_lines.iter().fold(vec_bytes(&self.ordered_lines), |b, l| b + l.heap_bytes())),
+            (
+                "ordered",
+                self.ordered_lines
+                    .iter()
+                    .fold(vec_bytes(&self.ordered_lines), |b, l| b + l.heap_bytes()),
+            ),
             ("directions", vec_bytes(&self.line_directions)),
             ("glyph_counts", vec_bytes(&self.line_glyph_counts)),
             ("ellipsis", self.ellipsis_run.heap_bytes()),
@@ -1044,14 +1070,30 @@ mod layout_bound_tests {
         let font = roboto.clone();
         let ascii: Box<dyn Fn() -> RawText> = Box::new(move || {
             let mut t = text();
-            t.append("x".repeat(10_000), None, font.clone(), 16.0, -1.0, 0.0, 0xff000000);
+            t.append(
+                "x".repeat(10_000),
+                None,
+                font.clone(),
+                16.0,
+                -1.0,
+                0.0,
+                0xff000000,
+            );
             t
         });
         let font = roboto.clone();
         // Every word on its own line: each line copies the whole run.
         let wrapped: Box<dyn Fn() -> RawText> = Box::new(move || {
             let mut t = text();
-            t.append("ab ".repeat(300), None, font.clone(), 16.0, -1.0, 0.0, 0xff000000);
+            t.append(
+                "ab ".repeat(300),
+                None,
+                font.clone(),
+                16.0,
+                -1.0,
+                0.0,
+                0xff000000,
+            );
             t.set_sizing(TextSizing::AutoHeight);
             t.set_max_width(1.0);
             t
@@ -1061,14 +1103,30 @@ mod layout_bound_tests {
         let runs: Box<dyn Fn() -> RawText> = Box::new(move || {
             let mut t = text();
             for i in 0..2_000_u32 {
-                t.append("a", None, font.clone(), 16.0, -1.0, 0.0, 0xff000000 | (i & 1));
+                t.append(
+                    "a",
+                    None,
+                    font.clone(),
+                    16.0,
+                    -1.0,
+                    0.0,
+                    0xff000000 | (i & 1),
+                );
             }
             t
         });
         let font = roboto;
         let ellipsis: Box<dyn Fn() -> RawText> = Box::new(move || {
             let mut t = text();
-            t.append("abc ".repeat(500), None, font.clone(), 16.0, -1.0, 0.0, 0xff000000);
+            t.append(
+                "abc ".repeat(500),
+                None,
+                font.clone(),
+                16.0,
+                -1.0,
+                0.0,
+                0xff000000,
+            );
             t.set_sizing(TextSizing::Fixed);
             t.set_overflow(TextOverflow::Ellipsis);
             t.set_max_width(40.0);
@@ -1077,7 +1135,15 @@ mod layout_bound_tests {
         });
         let rtl: Box<dyn Fn() -> RawText> = Box::new(move || {
             let mut t = text();
-            t.append("سلام عليكم ".repeat(500), None, arabic.clone(), 16.0, -1.0, 0.0, 0xff000000);
+            t.append(
+                "سلام عليكم ".repeat(500),
+                None,
+                arabic.clone(),
+                16.0,
+                -1.0,
+                0.0,
+                0xff000000,
+            );
             t.set_sizing(TextSizing::AutoHeight);
             t.set_max_width(120.0);
             t
@@ -1156,8 +1222,14 @@ mod layout_bound_tests {
                  ({:.3} x held), glyph lookup {lookup} B",
                 admitted as f64 / held as f64
             );
-            assert!(admitted + lookup >= held, "{name}: admitted under what it holds");
-            assert!(admitted <= held.saturating_mul(2), "{name}: allowance past twice what it holds");
+            assert!(
+                admitted + lookup >= held,
+                "{name}: admitted under what it holds"
+            );
+            assert!(
+                admitted <= held.saturating_mul(2),
+                "{name}: allowance past twice what it holds"
+            );
         }
     }
 
@@ -1169,12 +1241,23 @@ mod layout_bound_tests {
         let laid_out = |count: u32| {
             let mut t = text();
             for i in 0..count {
-                t.append("a", None, roboto.clone(), 16.0, -1.0, 0.0, 0xff000000 | (i & 1));
+                t.append(
+                    "a",
+                    None,
+                    roboto.clone(),
+                    16.0,
+                    -1.0,
+                    0.0,
+                    0xff000000 | (i & 1),
+                );
             }
             t.lay_out_within(usize::MAX).expect("unbounded");
             t.heap_bytes()
         };
         let (small, large) = (laid_out(1_000), laid_out(4_000));
-        assert!(large < small * 5, "4x the runs held {large} B against {small} B");
+        assert!(
+            large < small * 5,
+            "4x the runs held {large} B against {small} B"
+        );
     }
 }

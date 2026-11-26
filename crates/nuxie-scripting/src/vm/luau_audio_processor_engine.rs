@@ -214,7 +214,8 @@ impl LogRing {
         {
             slot.store(*byte, Ordering::Relaxed);
         }
-        self.write.store(write.wrapping_add(record), Ordering::Release);
+        self.write
+            .store(write.wrapping_add(record), Ordering::Release);
     }
     fn has_lines(&self) -> bool {
         self.write.load(Ordering::Acquire) != self.read.load(Ordering::Acquire)
@@ -727,11 +728,7 @@ mod tests {
     fn processor_without_deadline(source: &str, input: SharedValue) -> Processor {
         processor_with_hard_blocks(source, input, 0)
     }
-    fn processor_with_hard_blocks(
-        source: &str,
-        input: SharedValue,
-        hard_blocks: u32,
-    ) -> Processor {
+    fn processor_with_hard_blocks(source: &str, input: SharedValue, hard_blocks: u32) -> Processor {
         let mut vm = Processor::new(
             shared(),
             "processor".into(),
@@ -778,7 +775,10 @@ mod tests {
         release.send(()).unwrap();
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
         while ran.load(Ordering::SeqCst) != 4 {
-            assert!(std::time::Instant::now() < deadline, "queued jobs did not run");
+            assert!(
+                std::time::Instant::now() < deadline,
+                "queued jobs did not run"
+            );
             std::thread::yield_now();
         }
         assert!(queue.submit(Box::new(|| {})).is_ok());
@@ -980,14 +980,7 @@ mod tests {
         broken.render(&mut out, 64, 0);
         assert!(out.iter().all(|v| *v == 0.0));
         assert!(broken.finished());
-        assert!(
-            broken
-                .shared()
-                .error
-                .get()
-                .unwrap()
-                .contains("budget")
-        );
+        assert!(broken.shared().error.get().unwrap().contains("budget"));
         good.render(&mut out, 64, 0);
         assert!(out.iter().all(|v| *v == 0.25));
         assert!(!good.finished());

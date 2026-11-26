@@ -21,7 +21,11 @@ fn fail(message: &str) -> Error {
 }
 
 fn check(condition: bool, message: &str) -> TestResult {
-    if condition { Ok(()) } else { Err(fail(message)) }
+    if condition {
+        Ok(())
+    } else {
+        Err(fail(message))
+    }
 }
 
 /// Counts its drops: a userdata destructor.
@@ -56,7 +60,10 @@ fn a_handle_keeps_its_object_alive_and_releases_it_on_drop() -> TestResult {
     let stats = vm.collect();
     check(stats.tables_freed == 2, "both tables freed after the drop")?;
     check(vm.live_handles() == 0, "no live handles")?;
-    check(vm.memory_bytes() <= baseline.saturating_add(64), "memory back to baseline")?;
+    check(
+        vm.memory_bytes() <= baseline.saturating_add(64),
+        "memory back to baseline",
+    )?;
     check(vm.accounting_drift() == 0, "no drift")
 }
 
@@ -71,7 +78,10 @@ fn a_collected_host_function_releases_its_closure_once() -> TestResult {
     })?;
     f.call::<(), ()>(&mut vm, ())?;
     check(captured.get() == 1, "the closure ran")?;
-    check(Rc::strong_count(&captured) == 2, "the store holds the closure")?;
+    check(
+        Rc::strong_count(&captured) == 2,
+        "the store holds the closure",
+    )?;
     drop(f);
     let stats = vm.collect();
     check(stats.functions_freed >= 1, "the native was freed")?;
@@ -117,16 +127,16 @@ fn dropped_handles_free_their_roots_before_the_next_handle() -> TestResult {
     for _ in 0..1000 {
         drop(vm.globals()?);
     }
-    check(vm.roots.live() <= before.saturating_add(1), "dropped handles' roots reused")?;
+    check(
+        vm.roots.live() <= before.saturating_add(1),
+        "dropped handles' roots reused",
+    )?;
     check(vm.live_handles() == 0, "no live handles")
 }
 
 /// A host function that drops `held`'s userdata handle, runs `collect` and
 /// records the destructor count `drops` shows when `collect` returns.
-fn collects_in_a_callback(
-    vm: &mut Vm,
-    collect: fn(&mut crate::HostCtx<'_>),
-) -> Result<u32, Error> {
+fn collects_in_a_callback(vm: &mut Vm, collect: fn(&mut crate::HostCtx<'_>)) -> Result<u32, Error> {
     let drops = Rc::new(Cell::new(0));
     let held = Rc::new(std::cell::RefCell::new(Some(
         vm.create_userdata(Tracked(Rc::clone(&drops)))?,
@@ -181,9 +191,15 @@ fn set_global_collects_what_a_dropped_handle_let_go() -> TestResult {
     })?;
     drop(vm.create_userdata_with_size(Tracked(Rc::clone(&drops)), 16 * 1024)?);
     for n in 0..1000u32 {
-        vm.set_global("s", crate::HostValue::String(format!("{n:0256}").into_bytes()))?;
+        vm.set_global(
+            "s",
+            crate::HostValue::String(format!("{n:0256}").into_bytes()),
+        )?;
     }
-    check(drops.get() == 1, "the dropped userdata was freed and its destructor ran")
+    check(
+        drops.get() == 1,
+        "the dropped userdata was freed and its destructor ran",
+    )
 }
 
 #[test]
@@ -222,7 +238,10 @@ fn tagged_userdata_get_the_tag_metatable() -> TestResult {
     let ud = vm.create_userdata_tagged([0f32; 16], 62)?;
     check(ud.tag(&vm)? == 62, "tag")?;
     let got = ud.metatable(&mut vm)?.ok_or_else(|| fail("metatable"))?;
-    check(vm.raw_equal(&Value::Table(got), &Value::Table(mt))?, "the tag's metatable")?;
+    check(
+        vm.raw_equal(&Value::Table(got), &Value::Table(mt))?,
+        "the tag's metatable",
+    )?;
     check(vm.create_userdata_tagged(0u8, 200).is_err(), "tag limit")
 }
 
@@ -236,7 +255,10 @@ fn typed_host_functions_convert_and_report_argument_errors() -> TestResult {
     check(sum == 5.0, "numeric strings convert")?;
     let err = add.call::<_, f64>(&mut vm, (1.0, "x"));
     match err {
-        Err(Error::Lua { kind: ErrorKind::Runtime, message }) => check(
+        Err(Error::Lua {
+            kind: ErrorKind::Runtime,
+            message,
+        }) => check(
             String::from_utf8_lossy(&message)
                 .ends_with("invalid argument #2 to 'add' (number expected, got string)"),
             "luaL_typeerror text",
@@ -260,9 +282,10 @@ fn host_errors_come_back_as_errors_with_their_status() -> TestResult {
     let mut vm = Vm::new()?;
     let raw = vm.create_host_function("raw", |_| Err(HostError::raw("plain")))?;
     match raw.call::<_, ()>(&mut vm, ()) {
-        Err(Error::Lua { kind: ErrorKind::Runtime, message }) => {
-            check(message == b"plain", "raw text")?
-        }
+        Err(Error::Lua {
+            kind: ErrorKind::Runtime,
+            message,
+        }) => check(message == b"plain", "raw text")?,
         other => return Err(fail(&format!("{other:?}"))),
     }
     let oom = vm.create_host_function("oom", |_| Err(HostError::memory()))?;
@@ -365,9 +388,10 @@ fn a_failing_thread_reports_its_error_and_status() -> TestResult {
     let body = vm.create_host_function("body", |_| Err(HostError::raw("boom")))?;
     let co = vm.create_thread(&body)?;
     match co.resume::<_, ()>(&mut vm, ()) {
-        Err(Error::Lua { kind: ErrorKind::Runtime, message }) => {
-            check(message == b"boom", "message")?
-        }
+        Err(Error::Lua {
+            kind: ErrorKind::Runtime,
+            message,
+        }) => check(message == b"boom", "message")?,
         other => return Err(fail(&format!("{other:?}"))),
     }
     check(co.status(&vm)? == ThreadState::Error, "error status")
@@ -487,7 +511,10 @@ fn handles_are_vm_scoped() -> TestResult {
         Err(Error::Host(m)) => check(m.contains("other than the one"), "wrong-VM text")?,
         other => return Err(fail(&format!("{other:?}"))),
     }
-    check(a.state_identity() != b.state_identity(), "identities differ")?;
+    check(
+        a.state_identity() != b.state_identity(),
+        "identities differ",
+    )?;
     // A handle made on a coroutine stays valid on the main thread.
     let made = Rc::new(Cell::new(false));
     let flag = Rc::clone(&made);
@@ -504,7 +531,10 @@ fn handles_are_vm_scoped() -> TestResult {
     a.collect();
     let t: Table = a.named_registry_value("made")?;
     let from: String = t.raw_get(&mut a, "from")?;
-    check(made.get() && from == "coroutine", "read from the main thread")
+    check(
+        made.get() && from == "coroutine",
+        "read from the main thread",
+    )
 }
 
 #[test]
@@ -575,9 +605,15 @@ fn values_coerce_as_the_c_api_does() -> TestResult {
         .coerce_string(&Value::Number(0.1))?
         .ok_or_else(|| fail("number to string"))?;
     check(s.to_str(&vm)? == "0.1", "%.14g")?;
-    check(vm.coerce_string(&Value::Boolean(true))?.is_none(), "no bool")?;
+    check(
+        vm.coerce_string(&Value::Boolean(true))?.is_none(),
+        "no bool",
+    )?;
     let s = vm.create_string("12.5")?;
-    check(vm.coerce_number(&Value::String(s))? == Some(12.5), "string to number")?;
+    check(
+        vm.coerce_number(&Value::String(s))? == Some(12.5),
+        "string to number",
+    )?;
     let b = vm.create_buffer_from(b"abcd")?;
     check(vm.objlen(&Value::Buffer(b.clone()))? == 4, "buffer objlen")?;
     b.with_bytes_mut(&mut vm, |bytes| {
@@ -588,7 +624,10 @@ fn values_coerce_as_the_c_api_does() -> TestResult {
     check(b.read_bytes(&vm, 0, 2)? == b"zb", "in place")?;
     check(b.read_bytes(&vm, 3, 2).is_err(), "out of bounds")?;
     let ud: AnyUserData = vm.create_userdata(1u8)?;
-    check(vm.to_pointer(&Value::UserData(ud.clone()))? != 0, "identity")?;
+    check(
+        vm.to_pointer(&Value::UserData(ud.clone()))? != 0,
+        "identity",
+    )?;
     let t = vm.create_table()?;
     let s = vm.tostring(&Value::Table(t))?.to_str(&vm)?;
     check(s.starts_with("table: "), "tostring")
@@ -610,9 +649,15 @@ fn a_key_stays_rooted_while_its_value_converts() -> TestResult {
         t.set(&mut vm, format!("set_{key}").as_str(), big.as_str())?;
         let _other = vm.create_string(format!("unrelated_{i}"))?;
         let raw: Option<String> = t.raw_get(&mut vm, key.as_str())?;
-        check(raw.map(|s| s.len()) == Some(big.len()), "raw_set key survives")?;
+        check(
+            raw.map(|s| s.len()) == Some(big.len()),
+            "raw_set key survives",
+        )?;
         let via_set: Option<String> = t.raw_get(&mut vm, format!("set_{key}").as_str())?;
-        check(via_set.map(|s| s.len()) == Some(big.len()), "set key survives")?;
+        check(
+            via_set.map(|s| s.len()) == Some(big.len()),
+            "set key survives",
+        )?;
         t.raw_set(&mut vm, key.as_str(), Value::Nil)?;
         t.raw_set(&mut vm, format!("set_{key}").as_str(), Value::Nil)?;
         vm.set_memory_limit(None);
@@ -632,10 +677,16 @@ fn call_yieldable_without_a_continuation_returns_the_call_results() -> TestResul
     check(got == 42.0, "relay returns the callee's result")?;
     let relay_pcall = vm.create_host_function("relay_pcall", |ctx| ctx.pcall_yieldable(1, -1))?;
     let got: (f64, Value) = relay_pcall.call(&mut vm, (double, 4.0))?;
-    check(got.0 == 8.0 && got.1.is_nil(), "pcall relay returns one result")?;
+    check(
+        got.0 == 8.0 && got.1.is_nil(),
+        "pcall relay returns one result",
+    )?;
     let fails = vm.create_host_function("fails", |_| Err(HostError::raw("boom")))?;
     let got: String = relay_pcall.call(&mut vm, (fails, 0.0))?;
-    check(got == "boom", "a failed protected call returns the error value")
+    check(
+        got == "boom",
+        "a failed protected call returns the error value",
+    )
 }
 
 /// Review round 1: native integers convert exactly; out-of-range numbers
@@ -645,7 +696,10 @@ fn integer_conversions_are_exact_and_range_checked() -> TestResult {
     use crate::FromLua;
     let mut vm = Vm::new()?;
     let exact = i64::from_lua(Value::Integer(9_007_199_254_740_993), &mut vm)?;
-    check(exact == 9_007_199_254_740_993, "i64 from an integer is exact")?;
+    check(
+        exact == 9_007_199_254_740_993,
+        "i64 from an integer is exact",
+    )?;
     check(
         u8::from_lua(Value::Integer(256), &mut vm).is_err(),
         "u8 from integer 256 fails",
@@ -662,8 +716,14 @@ fn integer_conversions_are_exact_and_range_checked() -> TestResult {
         u64::from_lua(Value::Number(2f64.powi(64)), &mut vm).is_err(),
         "u64 from 2^64 fails",
     )?;
-    check(u8::from_lua(Value::Number(255.9), &mut vm)? == 255, "u8 truncates")?;
-    check(u8::from_lua(Value::Number(-0.5), &mut vm)? == 0, "-0.5 truncates to 0")?;
+    check(
+        u8::from_lua(Value::Number(255.9), &mut vm)? == 255,
+        "u8 truncates",
+    )?;
+    check(
+        u8::from_lua(Value::Number(-0.5), &mut vm)? == 0,
+        "-0.5 truncates to 0",
+    )?;
     check(
         u8::from_lua(Value::Number(-1.0), &mut vm).is_err(),
         "u8 from -1 fails",
@@ -777,19 +837,34 @@ fn thread_stack_values_read_as_cpp_leaves_them() -> TestResult {
         matches!(&top, Value::Function(f) if vm.raw_equal(&Value::Function(f.clone()), &Value::Function(body.clone())).unwrap_or(false)),
         "a fresh thread holds its function",
     )?;
-    check(thread.stack_value(&mut vm, 5)?.is_nil(), "outside the stack is nil")?;
+    check(
+        thread.stack_value(&mut vm, 5)?.is_nil(),
+        "outside the stack is nil",
+    )?;
     check(thread.stack_value(&mut vm, 0)?.is_nil(), "index 0 is nil")?;
-    check(thread.resume::<_, ()>(&mut vm, ()).is_err(), "the body fails")?;
-    check(thread.status(&vm)? == ThreadState::Error, "dead with an error")?;
+    check(
+        thread.resume::<_, ()>(&mut vm, ()).is_err(),
+        "the body fails",
+    )?;
+    check(
+        thread.status(&vm)? == ThreadState::Error,
+        "dead with an error",
+    )?;
     for index in [-1, 1] {
         match thread.stack_value(&mut vm, index)? {
             Value::String(s) => check(s.as_bytes(&vm)? == b"boom", "the error is all there is")?,
             other => {
-                return Err(fail(&format!("expected the error string, got {}", other.type_name())));
+                return Err(fail(&format!(
+                    "expected the error string, got {}",
+                    other.type_name()
+                )));
             }
         }
     }
-    check(thread.stack_value(&mut vm, 2)?.is_nil(), "nothing above the error")
+    check(
+        thread.stack_value(&mut vm, 2)?.is_nil(),
+        "nothing above the error",
+    )
 }
 
 /// `resume` takes what a thread yields or returns, so a parked thread's
@@ -812,12 +887,18 @@ fn a_thread_that_yielded_or_returned_holds_nothing() -> TestResult {
     let yielded: f64 = co.resume(&mut vm, ())?;
     check(yielded == 7.0, "yielded")?;
     for index in [-1, 1, 2] {
-        check(co.stack_value(&mut vm, index)?.is_nil(), "a yielded thread holds nothing")?;
+        check(
+            co.stack_value(&mut vm, index)?.is_nil(),
+            "a yielded thread holds nothing",
+        )?;
     }
     let returned: f64 = co.resume(&mut vm, ())?;
     check(returned == 8.0, "returned")?;
     for index in [-1, 1] {
-        check(co.stack_value(&mut vm, index)?.is_nil(), "a finished thread holds nothing")?;
+        check(
+            co.stack_value(&mut vm, index)?.is_nil(),
+            "a finished thread holds nothing",
+        )?;
     }
     check(vm.accounting_drift() == 0, "no drift")
 }
@@ -873,12 +954,24 @@ fn a_kept_error_object_belongs_to_the_latest_failure() -> TestResult {
 
     check(raise.call::<_, ()>(&mut vm, ()).is_err(), "raise fails")?;
     check(plain.call::<_, ()>(&mut vm, ()).is_err(), "plain fails")?;
-    check(vm.take_error_object().is_none(), "the string error cleared it")?;
+    check(
+        vm.take_error_object().is_none(),
+        "the string error cleared it",
+    )?;
 
-    check(raise.call::<_, ()>(&mut vm, ()).is_err(), "raise fails again")?;
+    check(
+        raise.call::<_, ()>(&mut vm, ()).is_err(),
+        "raise fails again",
+    )?;
     let thread = vm.create_thread(&plain)?;
-    check(thread.resume::<_, ()>(&mut vm, ()).is_err(), "the thread fails")?;
-    check(vm.take_error_object().is_none(), "the thread's string error cleared it")?;
+    check(
+        thread.resume::<_, ()>(&mut vm, ()).is_err(),
+        "the thread fails",
+    )?;
+    check(
+        vm.take_error_object().is_none(),
+        "the thread's string error cleared it",
+    )?;
     check(vm.accounting_drift() == 0, "no drift")
 }
 
@@ -984,9 +1077,15 @@ fn a_loan_reaches_every_host_function_its_call_reaches() -> TestResult {
         "child:leaf",
         "outer-after",
     ];
-    check(out == expected, "every host function saw the loan, in order")?;
+    check(
+        out == expected,
+        "every host function saw the loan, in order",
+    )?;
     // Without a loan the same function sees none.
-    check(leaf.call::<_, ()>(&mut vm, ()).is_err(), "no loan without call_lent")?;
+    check(
+        leaf.call::<_, ()>(&mut vm, ()).is_err(),
+        "no loan without call_lent",
+    )?;
     check(vm.live_handles() > 0, "handles still held")
 }
 

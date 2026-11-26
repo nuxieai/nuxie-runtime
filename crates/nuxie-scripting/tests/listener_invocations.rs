@@ -1,11 +1,11 @@
 #![cfg(feature = "luau-host")]
 
-use nuxie_scripting::luau::Table;
 use nuxie_runtime::{
     NoopScriptHost, ScriptGamepadInputChange, ScriptGamepadMappingKind, ScriptGamepadSnapshot,
     ScriptInstance, ScriptListenerActionMethod, ScriptListenerInvocation, ScriptMethod,
     ScriptPointerEventKind, ScriptValue, ScriptedDrawablePointerHit,
 };
+use nuxie_scripting::luau::Table;
 use nuxie_scripting::vm::ScriptVm;
 
 fn call_listener(instance: &mut impl ScriptInstance, invocation: ScriptListenerInvocation) {

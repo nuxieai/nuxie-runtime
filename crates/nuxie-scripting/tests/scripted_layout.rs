@@ -1,6 +1,5 @@
 #![cfg(feature = "luau-host")]
 
-use nuxie_scripting::luau::{Function, Table, Value, Vector};
 use nuxie_render_api::{NullFactory, PersistentFactory, SerializingFactory};
 use nuxie_runtime::source::{
     core::CoreArena,
@@ -12,6 +11,7 @@ use nuxie_runtime::{
     File, NoopScriptHost, RuntimeFactoryHandle, ScriptInstance, ScriptMethod,
     ScriptOptionalMethodResult, ScriptValue,
 };
+use nuxie_scripting::luau::{Function, Table, Value, Vector};
 use nuxie_scripting::vm::{LuaScriptInstance, ScriptVm};
 use std::rc::Rc;
 

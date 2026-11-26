@@ -288,7 +288,12 @@ impl Core {
     fn push_thread_roots(&self, high: usize, roots: &mut Vec<Value>) {
         roots.extend(self.exec.stack.iter().take(high).copied());
         roots.extend(self.exec.frames.iter().map(|f| Value::Function(f.closure)));
-        roots.extend(self.exec.open_upvals.iter().map(|&(_, id)| Value::UpRef(id)));
+        roots.extend(
+            self.exec
+                .open_upvals
+                .iter()
+                .map(|&(_, id)| Value::UpRef(id)),
+        );
     }
 
     /// `Budget::used` minus the cost recounted from the arenas: zero
@@ -296,8 +301,7 @@ impl Core {
     /// for the differential harness, not API.
     #[doc(hidden)]
     pub fn accounting_drift(&self) -> i128 {
-        let objects =
-            (self.heap.total_bytes() as i128).saturating_sub(self.heap.recount() as i128);
+        let objects = (self.heap.total_bytes() as i128).saturating_sub(self.heap.recount() as i128);
         // The external part is the value stacks: the running thread's (in
         // the `Core`) and every parked one's, recounted from their lengths.
         let stacks = self

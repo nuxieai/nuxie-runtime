@@ -17,16 +17,15 @@
 //! the frame continues at the next one (C++ `luau_finishop`, which upstream
 //! needs only after a yield).
 
-
 use crate::bytecode::{insn_a, insn_b, insn_c, insn_d, insn_e, insn_op, op};
 use crate::call::{CallMode, Exit, Flow, Wait};
-use crate::hosted::Dispatch;
 use crate::error::VmResult;
+use crate::heap::Upval;
 use crate::heap::{Function, LuaClosure};
+use crate::hosted::Dispatch;
 use crate::meta::{Arith, ConcatStep, Meta, MetaCall, Post};
 use crate::native::NativeFn;
 use crate::value::{FnId, LU_TAG_ITERATOR, TableId, UdId, Value};
-use crate::heap::Upval;
 use crate::vm::{Core, Frame, MIN_STACK, WINDOW};
 
 /// The rest of an instruction that waits on a metamethod call: where its
@@ -700,21 +699,33 @@ impl Core {
                         let args = ([r!(b), r!(aux as u8), Value::Nil], 2);
                         sync_pc!();
                         pc = pc.saturating_add(1);
-                        fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| args)
+                        fastcall!(
+                            a,
+                            pc.saturating_add(usize::from(c)).saturating_sub(1),
+                            |_ra, _call| args
+                        )
                     }
                     op::FASTCALL2K => {
                         let aux = aux!();
                         let args = ([r!(b), kst!(aux), Value::Nil], 2);
                         sync_pc!();
                         pc = pc.saturating_add(1);
-                        fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| args)
+                        fastcall!(
+                            a,
+                            pc.saturating_add(usize::from(c)).saturating_sub(1),
+                            |_ra, _call| args
+                        )
                     }
                     op::FASTCALL3 => {
                         let aux = aux!();
                         let args = ([r!(b), r!(aux as u8), r!((aux >> 8) as u8)], 3);
                         sync_pc!();
                         pc = pc.saturating_add(1);
-                        fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| args)
+                        fastcall!(
+                            a,
+                            pc.saturating_add(usize::from(c)).saturating_sub(1),
+                            |_ra, _call| args
+                        )
                     }
                     op::LOADNIL => {
                         set_r!(a, Value::Nil);
@@ -777,7 +788,9 @@ impl Core {
                     // slot, so it is general.
                     op::GETUPVAL => {
                         let raw = match self.heap.function(closure) {
-                            Function::Lua(c) => c.upvals.get(usize::from(b)).copied().unwrap_or_default(),
+                            Function::Lua(c) => {
+                                c.upvals.get(usize::from(b)).copied().unwrap_or_default()
+                            }
                             Function::Native(_) => Value::Nil,
                         };
                         let v = match raw {
@@ -799,7 +812,9 @@ impl Core {
                     op::SETUPVAL => {
                         let v = r!(a);
                         let raw = match self.heap.function(closure) {
-                            Function::Lua(c) => c.upvals.get(usize::from(b)).copied().unwrap_or_default(),
+                            Function::Lua(c) => {
+                                c.upvals.get(usize::from(b)).copied().unwrap_or_default()
+                            }
                             Function::Native(_) => Value::Nil,
                         };
                         match raw {
@@ -1644,7 +1659,13 @@ impl Core {
                                 pc: pc.saturating_add(1),
                             };
                             let nresults = (aux & 0xff) as i32;
-                            self.wait_then_call(finish, call, 2, nresults, CallMode::CountedYieldable)?;
+                            self.wait_then_call(
+                                finish,
+                                call,
+                                2,
+                                nresults,
+                                CallMode::CountedYieldable,
+                            )?;
                             continue 'frame;
                         }
                     }

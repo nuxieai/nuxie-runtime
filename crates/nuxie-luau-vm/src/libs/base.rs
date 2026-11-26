@@ -14,7 +14,7 @@ use crate::heap::Function;
 use crate::meta::Meta;
 use crate::native::{Args, NativeFn, plain, resumable};
 use crate::value::Value;
-use crate::vm::{MULTRET, Core};
+use crate::vm::{Core, MULTRET};
 
 pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
     let globals = vm.exec.globals;
@@ -161,7 +161,11 @@ fn metatable_view(vm: &Core, v: Value) -> Value {
         return Value::Nil;
     };
     let protected = vm.heap.table(mt).get_str(vm.tm(crate::vm::Tm::Metatable));
-    if protected.is_nil() { Value::Table(mt) } else { protected }
+    if protected.is_nil() {
+        Value::Table(mt)
+    } else {
+        protected
+    }
 }
 
 fn getmetatable(vm: &mut Core, args: Args) -> VmResult<usize> {
@@ -218,7 +222,9 @@ pub(crate) fn fast_setmetatable(
     [a0, a1, _]: [Value; 3],
     nparams: usize,
 ) -> Option<usize> {
-    let (Value::Table(t), Value::Table(mt)) = (a0, a1) else { return None };
+    let (Value::Table(t), Value::Table(mt)) = (a0, a1) else {
+        return None;
+    };
     if nparams < 2 || nresults > 1 {
         return None;
     }
@@ -710,7 +716,12 @@ impl Protected {
         }
     }
 
-    pub(crate) fn resume(self, vm: &mut Resume<'_>, args: Args, outcome: Outcome) -> VmResult<usize> {
+    pub(crate) fn resume(
+        self,
+        vm: &mut Resume<'_>,
+        args: Args,
+        outcome: Outcome,
+    ) -> VmResult<usize> {
         let base = args.base;
         match (outcome, self.handler) {
             (Outcome::Ok, None) => {

@@ -120,7 +120,10 @@ pub(super) fn resolve_stage_entry(
         return Ok(None);
     }
     let (module, requested) = match value {
-        Value::Table(desc) => (desc.get_with::<Value>(reborrow_loan(loan), "module")?, string(&desc, loan, "entryPoint")?),
+        Value::Table(desc) => (
+            desc.get_with::<Value>(reborrow_loan(loan), "module")?,
+            string(&desc, loan, "entryPoint")?,
+        ),
         value => (value, None),
     };
     let shader = match module {

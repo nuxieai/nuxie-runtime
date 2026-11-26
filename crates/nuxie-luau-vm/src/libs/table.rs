@@ -9,7 +9,7 @@ use crate::meta::{Meta, Post};
 use crate::native::{Args, plain, resumable};
 use crate::table::{MAXSIZE, TableError};
 use crate::value::{TableId, Value};
-use crate::vm::{MIN_STACK, Tm, Core};
+use crate::vm::{Core, MIN_STACK, Tm};
 
 pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
     let t = vm.open_lib(
@@ -524,7 +524,11 @@ fn tmove(vm: &mut Core, args: Args) -> VmResult<usize> {
     let f = i64::from(vm.check_integer(args, 2)?);
     let e = i64::from(vm.check_integer(args, 3)?);
     let t = i64::from(vm.check_integer(args, 4)?);
-    let tt = if vm.arg_or_nil(args, 5).is_nil() { 1 } else { 5 };
+    let tt = if vm.arg_or_nil(args, 5).is_nil() {
+        1
+    } else {
+        5
+    };
     let dst = vm.check_table(args, tt)?;
     if e >= f {
         // All of these are `int` values in C++; in `i64` none of the
@@ -540,7 +544,11 @@ fn tmove(vm: &mut Core, args: Args) -> VmResult<usize> {
         if vm.heap.table(dst).readonly {
             return Err(readonly_error(vm));
         }
-        let max_elems = vm.heap.table(src).slot_count().max(vm.heap.table(dst).slot_count());
+        let max_elems = vm
+            .heap
+            .table(src)
+            .slot_count()
+            .max(vm.heap.table(dst).slot_count());
         let sparse = n > 32 && usize::try_from(n / 2).is_ok_and(|half| half > max_elems);
         let size = i64::try_from(vm.heap.table(dst).array().len()).unwrap_or(i64::MAX);
         let t1 = t.saturating_sub(1);

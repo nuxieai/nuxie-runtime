@@ -369,7 +369,9 @@ impl Core {
     pub(crate) fn with_limits_bare(mut limits: Limits) -> VmResult<Core> {
         // Slots are stored as `u32` (`Core::frameless`); one below the
         // maximum so a slot plus one still fits.
-        limits.max_stack_slots = limits.max_stack_slots.min(u32::MAX.saturating_sub(1) as usize);
+        limits.max_stack_slots = limits
+            .max_stack_slots
+            .min(u32::MAX.saturating_sub(1) as usize);
         let mut heap = Heap::new(limits.max_memory_bytes, limits.max_string_bytes);
         // The memory error message is the first string (heap.rs
         // `MEMORY_ERROR_MESSAGE`).
@@ -458,7 +460,10 @@ impl Core {
     /// `value`'s type name, interned (C++ `ttname`).
     #[inline]
     pub(crate) fn type_name_str(&self, value: Value) -> StrId {
-        self.type_names.get(value.type_index()).copied().unwrap_or_default()
+        self.type_names
+            .get(value.type_index())
+            .copied()
+            .unwrap_or_default()
     }
 
     // ---- stack -------------------------------------------------------
@@ -515,7 +520,9 @@ impl Core {
             physical,
             self.limits.max_stack_slots.saturating_add(WINDOW),
         );
-        let bytes = grown.saturating_sub(self.exec.stack.len()).saturating_mul(16);
+        let bytes = grown
+            .saturating_sub(self.exec.stack.len())
+            .saturating_mul(16);
         self.heap.charge_external(bytes)?;
         self.exec.stack.resize(grown, Value::Nil);
         Ok(())
@@ -541,7 +548,9 @@ impl Core {
             return Ok(());
         }
         let grown = grown_len(self.exec.stack.len(), len, self.limits.max_stack_slots);
-        let bytes = grown.saturating_sub(self.exec.stack.len()).saturating_mul(16);
+        let bytes = grown
+            .saturating_sub(self.exec.stack.len())
+            .saturating_mul(16);
         self.heap.charge_external(bytes)?;
         self.exec.stack.resize(grown, Value::Nil);
         Ok(())
@@ -875,7 +884,11 @@ impl Core {
 
     /// C++ `luaF_findupval`.
     pub(crate) fn find_upval(&mut self, slot: usize) -> VmResult<UpvalId> {
-        match self.exec.open_upvals.binary_search_by_key(&slot, |&(s, _)| s) {
+        match self
+            .exec
+            .open_upvals
+            .binary_search_by_key(&slot, |&(s, _)| s)
+        {
             Ok(i) => match self.exec.open_upvals.get(i) {
                 Some(&(_, id)) => Ok(id),
                 None => Err(self.heap.memory_error()),
@@ -897,7 +910,12 @@ impl Core {
     /// The common case, none, is one compare inline.
     #[inline]
     pub(crate) fn close_upvals(&mut self, level: usize) {
-        if self.exec.open_upvals.last().is_some_and(|&(slot, _)| slot >= level) {
+        if self
+            .exec
+            .open_upvals
+            .last()
+            .is_some_and(|&(slot, _)| slot >= level)
+        {
             self.close_upvals_from(level);
         }
     }

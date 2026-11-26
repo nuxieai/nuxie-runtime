@@ -140,7 +140,9 @@ fn fieldargs(vm: &mut Core, args: Args, farg: usize) -> VmResult<(u32, u32)> {
 
 /// C++ `mask(w)`: the low `w` bits, for `1 <= w <= 32`.
 fn mask(w: u32) -> u32 {
-    u32::MAX.checked_shr(NBITS.unsigned_abs().saturating_sub(w)).unwrap_or(0)
+    u32::MAX
+        .checked_shr(NBITS.unsigned_abs().saturating_sub(w))
+        .unwrap_or(0)
 }
 
 fn extract(vm: &mut Core, args: Args) -> VmResult<usize> {
@@ -191,41 +193,81 @@ fn fast_fold(
     op: fn(u32, u32) -> u32,
     out: fn(u32) -> Value,
 ) -> Option<usize> {
-    let [Value::Number(a1), Value::Number(a2), _] = args else { return None };
+    let [Value::Number(a1), Value::Number(a2), _] = args else {
+        return None;
+    };
     if nparams < 2 || nresults > 1 {
         return None;
     }
     let mut r = op(num2unsigned(a1), num2unsigned(a2));
     for i in 2..nparams {
-        let Value::Number(x) = arg(vm, ra, &args, i) else { return None };
+        let Value::Number(x) = arg(vm, ra, &args, i) else {
+            return None;
+        };
         r = op(r, num2unsigned(x));
     }
     vm.set(ra, out(r));
     Some(1)
 }
 
-pub(crate) fn fast_band(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+pub(crate) fn fast_band(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
     fast_fold(vm, ra, nresults, args, nparams, |a, b| a & b, number)
 }
 
-pub(crate) fn fast_bor(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+pub(crate) fn fast_bor(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
     fast_fold(vm, ra, nresults, args, nparams, |a, b| a | b, number)
 }
 
-pub(crate) fn fast_bxor(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+pub(crate) fn fast_bxor(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
     fast_fold(vm, ra, nresults, args, nparams, |a, b| a ^ b, number)
 }
 
-pub(crate) fn fast_btest(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
-    fast_fold(vm, ra, nresults, args, nparams, |a, b| a & b, |r| Value::Boolean(r != 0))
+pub(crate) fn fast_btest(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    fast_fold(
+        vm,
+        ra,
+        nresults,
+        args,
+        nparams,
+        |a, b| a & b,
+        |r| Value::Boolean(r != 0),
+    )
 }
 
 fast_number1!(fast_bnot, |x| number(!num2unsigned(x)));
 fast_number1!(fast_countlz, |x| number(num2unsigned(x).leading_zeros()));
 fast_number1!(fast_countrz, |x| number(num2unsigned(x).trailing_zeros()));
 fast_number1!(fast_byteswap, |x| number(num2unsigned(x).swap_bytes()));
-fast_number2!(fast_lrotate, |x, s| number(num2unsigned(x).rotate_left(s as i32 as u32)));
-fast_number2!(fast_rrotate, |x, s| number(num2unsigned(x).rotate_right(s as i32 as u32)));
+fast_number2!(fast_lrotate, |x, s| number(
+    num2unsigned(x).rotate_left(s as i32 as u32)
+));
+fast_number2!(fast_rrotate, |x, s| number(
+    num2unsigned(x).rotate_right(s as i32 as u32)
+));
 
 /// `luauF_lshift`, `rshift`, `arshift`: a count in `0..32` (read as
 /// unsigned, so a negative one falls through), applied by `op`.
@@ -237,7 +279,9 @@ fn fast_shift(
     nparams: usize,
     op: fn(u32, u32) -> u32,
 ) -> Option<usize> {
-    let (Value::Number(x), Value::Number(s)) = (a0, a1) else { return None };
+    let (Value::Number(x), Value::Number(s)) = (a0, a1) else {
+        return None;
+    };
     if nparams < 2 || nresults > 1 {
         return None;
     }
@@ -249,16 +293,36 @@ fn fast_shift(
     Some(1)
 }
 
-pub(crate) fn fast_lshift(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+pub(crate) fn fast_lshift(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
     fast_shift(vm, ra, nresults, args, nparams, |u, s| u.wrapping_shl(s))
 }
 
-pub(crate) fn fast_rshift(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+pub(crate) fn fast_rshift(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
     fast_shift(vm, ra, nresults, args, nparams, |u, s| u.wrapping_shr(s))
 }
 
-pub(crate) fn fast_arshift(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
-    fast_shift(vm, ra, nresults, args, nparams, |u, s| (u as i32).wrapping_shr(s) as u32)
+pub(crate) fn fast_arshift(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    fast_shift(vm, ra, nresults, args, nparams, |u, s| {
+        (u as i32).wrapping_shr(s) as u32
+    })
 }
 
 /// `!(0xfffffffe << (w - 1))`: the low `w` bits for `1 <= w <= 32`.
@@ -280,7 +344,9 @@ pub(crate) fn fast_extract(
     [a0, a1, a2]: [Value; 3],
     nparams: usize,
 ) -> Option<usize> {
-    let (Value::Number(x), Value::Number(f)) = (a0, a1) else { return None };
+    let (Value::Number(x), Value::Number(f)) = (a0, a1) else {
+        return None;
+    };
     if nparams < 2 || nresults > 1 {
         return None;
     }
@@ -312,7 +378,9 @@ pub(crate) fn fast_extractk(
     [a0, a1, _]: [Value; 3],
     nparams: usize,
 ) -> Option<usize> {
-    let (Value::Number(x), Value::Number(fw)) = (a0, a1) else { return None };
+    let (Value::Number(x), Value::Number(fw)) = (a0, a1) else {
+        return None;
+    };
     if nparams < 2 || nresults > 1 {
         return None;
     }
@@ -332,7 +400,9 @@ pub(crate) fn fast_replace(
     args: [Value; 3],
     nparams: usize,
 ) -> Option<usize> {
-    let [Value::Number(x), Value::Number(v), Value::Number(f)] = args else { return None };
+    let [Value::Number(x), Value::Number(v), Value::Number(f)] = args else {
+        return None;
+    };
     if nparams < 3 || nresults > 1 {
         return None;
     }
@@ -345,7 +415,9 @@ pub(crate) fn fast_replace(
         }
         1
     } else {
-        let Value::Number(w) = arg(vm, ra, &args, 3) else { return None };
+        let Value::Number(w) = arg(vm, ra, &args, 3) else {
+            return None;
+        };
         let w = w as i32;
         if !field_ok(f, w) {
             return None;

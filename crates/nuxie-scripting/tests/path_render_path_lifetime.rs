@@ -29,8 +29,10 @@ fn dirty_shared_path_rebuild_across_callbacks_in_one_frame_uses_a_fresh_render_p
         )
         .unwrap();
     let generator: nuxie_scripting::luau::Function = chunk.call(()).unwrap();
-    let first_table: nuxie_scripting::luau::Table = generator.call(nuxie_scripting::luau::Value::Nil).unwrap();
-    let second_table: nuxie_scripting::luau::Table = generator.call(nuxie_scripting::luau::Value::Nil).unwrap();
+    let first_table: nuxie_scripting::luau::Table =
+        generator.call(nuxie_scripting::luau::Value::Nil).unwrap();
+    let second_table: nuxie_scripting::luau::Table =
+        generator.call(nuxie_scripting::luau::Value::Nil).unwrap();
     let mut first_instance = vm.script_instance_from_table(first_table);
     let mut second_instance = vm.script_instance_from_table(second_table);
     let mut host = NoopScriptHost;

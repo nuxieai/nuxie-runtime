@@ -210,23 +210,23 @@ fn relaying_a_structured_error_keeps_one_layer() -> Result<()> {
 fn reentering_the_vm_in_a_loop_reaches_the_safepoint_cap() -> Result<()> {
     let vm = Rc::new(ScriptVm::new());
     ScriptVm::install_rive_globals(&vm)?;
-    assert!(!script_running(&vm.lua), "no script runs at the host's top level");
+    assert!(
+        !script_running(&vm.lua),
+        "no script runs at the host's top level"
+    );
     let entries = Rc::new(Cell::new(0usize));
     let reenter = {
         let vm = Rc::downgrade(&vm);
         let entries = Rc::clone(&entries);
-        vm.upgrade()
-            .unwrap()
-            .lua
-            .create_function(move |_, ()| {
-                let count = entries.get() + 1;
-                entries.set(count);
-                if count > 2 * SCRIPT_SAFEPOINTS_PER_CYCLE {
-                    return Err(Error::runtime("re-entry never reached the safepoint cap"));
-                }
-                let vm = vm.upgrade().ok_or_else(|| Error::runtime("no VM"))?;
-                vm.call_global::<()>("inner", ())
-            })?
+        vm.upgrade().unwrap().lua.create_function(move |_, ()| {
+            let count = entries.get() + 1;
+            entries.set(count);
+            if count > 2 * SCRIPT_SAFEPOINTS_PER_CYCLE {
+                return Err(Error::runtime("re-entry never reached the safepoint cap"));
+            }
+            let vm = vm.upgrade().ok_or_else(|| Error::runtime("no VM"))?;
+            vm.call_global::<()>("inner", ())
+        })?
     };
     vm.lua.globals().set("reenter", reenter)?;
     vm.lua
@@ -254,9 +254,7 @@ fn registration(name: &'static str, source: &str) -> (Vec<u8>, &'static str) {
     (crate::luau::compile(source.as_bytes()).unwrap(), name)
 }
 
-fn register_sources(
-    sources: &[(&'static str, &str)],
-) -> Vec<(bool, Option<String>)> {
+fn register_sources(sources: &[(&'static str, &str)]) -> Vec<(bool, Option<String>)> {
     let compiled: Vec<_> = sources
         .iter()
         .map(|(name, source)| registration(name, source))
@@ -273,7 +271,12 @@ fn register_sources(
     let vm = ScriptVm::new();
     native_registration::register(&vm, &scripts)
         .into_iter()
-        .map(|result| (result.completed, result.error.map(|error| error.to_string())))
+        .map(|result| {
+            (
+                result.completed,
+                result.error.map(|error| error.to_string()),
+            )
+        })
         .collect()
 }
 
@@ -333,7 +336,10 @@ fn a_real_require_cycle_keeps_the_cycle_error() {
     for (completed, error) in &results {
         assert!(!completed);
         assert!(
-            error.as_deref().unwrap().contains("cyclic script module dependency"),
+            error
+                .as_deref()
+                .unwrap()
+                .contains("cyclic script module dependency"),
             "{error:?}"
         );
     }

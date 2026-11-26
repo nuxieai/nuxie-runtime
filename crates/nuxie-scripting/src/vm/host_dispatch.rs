@@ -24,7 +24,11 @@ fn exports(lua: &Lua) -> Result<Table> {
 /// `__index` that returns `methods[key]` when it is present and otherwise
 /// calls `fallback(self, key)`. `methods` must hold only keys whose
 /// `fallback` answer is that same entry.
-pub(super) fn methods_first_index(lua: &Lua, methods: &Table, fallback: Function) -> Result<Function> {
+pub(super) fn methods_first_index(
+    lua: &Lua,
+    methods: &Table,
+    fallback: Function,
+) -> Result<Function> {
     let make: Function = exports(lua)?.get("methodsFirst")?;
     super::embedded_chunk::call(lua, &make, (methods.clone(), fallback))
 }
@@ -120,13 +124,17 @@ mod method_dispatch_tests {
         let methods = lua.create_table();
         let method = lua.create_function(|_, ()| Ok(1)).expect("method");
         methods.set("lineTo", method.clone()).expect("method entry");
-        let index =
-            methods_first_index(&lua, &methods, recording_fallback(&lua, seen.clone())).expect("index");
+        let index = methods_first_index(&lua, &methods, recording_fallback(&lua, seen.clone()))
+            .expect("index");
         assert_eq!(super::function_source(&lua, &index), "nuxie_host_dispatch");
 
         let found: Function = index.call((Value::Nil, "lineTo")).expect("method lookup");
         assert_eq!(found, method);
-        assert!(seen.borrow().is_empty(), "method lookup reached the host: {:?}", seen.borrow());
+        assert!(
+            seen.borrow().is_empty(),
+            "method lookup reached the host: {:?}",
+            seen.borrow()
+        );
 
         let numeric: String = index.call((Value::Nil, 1)).expect("numeric key");
         let missing: String = index.call((Value::Nil, "missing")).expect("unknown name");
@@ -134,7 +142,9 @@ mod method_dispatch_tests {
         assert_eq!(missing, "fallback:missing");
         assert_eq!(*seen.borrow(), ["Integer(1)", "missing"]);
 
-        let error = index.call::<Value>((Value::Nil, true)).expect_err("fallback error");
+        let error = index
+            .call::<Value>((Value::Nil, true))
+            .expect_err("fallback error");
         assert!(error.to_string().contains("bad key"), "{error}");
     }
 
@@ -149,10 +159,16 @@ mod method_dispatch_tests {
             recording_fallback(&lua, others.clone()),
         )
         .expect("index");
-        for key in [Value::Integer(2), Value::Number(2.5), Value::Number(f64::NAN)] {
+        for key in [
+            Value::Integer(2),
+            Value::Number(2.5),
+            Value::Number(f64::NAN),
+        ] {
             index.call::<String>((Value::Nil, key)).expect("number key");
         }
-        index.call::<String>((Value::Nil, "length")).expect("string key");
+        index
+            .call::<String>((Value::Nil, "length"))
+            .expect("string key");
         assert_eq!(numbers.borrow().len(), 3);
         assert_eq!(*others.borrow(), ["length"]);
     }
@@ -236,7 +252,16 @@ mod method_dispatch_tests {
             .expect("vector script");
         assert_eq!(
             observed,
-            ["nuxie_host_dispatch", "true", "5", "3", "4", "3", "false", "true"]
+            [
+                "nuxie_host_dispatch",
+                "true",
+                "5",
+                "3",
+                "4",
+                "3",
+                "false",
+                "true"
+            ]
         );
     }
 }

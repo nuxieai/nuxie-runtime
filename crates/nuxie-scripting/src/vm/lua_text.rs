@@ -24,8 +24,8 @@ use nuxie_runtime::{
             raw_text::{LayoutRefused, RawText},
         },
         text_engine::{
-            GlyphRenderKind, GlyphRun, OrderedLine, TextDirection, TextOrigin,
-            TextOverflow, TextSizing, TextWordBreak, TextWrap,
+            GlyphRenderKind, GlyphRun, OrderedLine, TextDirection, TextOrigin, TextOverflow,
+            TextSizing, TextWordBreak, TextWrap,
         },
     },
 };
@@ -1215,7 +1215,9 @@ mod budget_tests {
         }
         let full = slots();
         vm.vm
-            .eval::<()>("text:append('b', {font = font, paint = paint, foregroundColor = 0xff000001})")
+            .eval::<()>(
+                "text:append('b', {font = font, paint = paint, foregroundColor = 0xff000001})",
+            )
             .unwrap();
         assert_eq!(slots(), full, "the reused style takes no slot");
     }

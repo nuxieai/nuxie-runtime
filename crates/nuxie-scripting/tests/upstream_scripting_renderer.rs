@@ -1,8 +1,8 @@
 //! One-for-one ports of `tests/unit_tests/runtime/scripting/scripting_renderer_test.cpp`.
 #![cfg(all(feature = "luau-host", feature = "upstream-test-seams"))]
 
-use nuxie_scripting::luau::{Function, Table};
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
+use nuxie_scripting::luau::{Function, Table};
 use nuxie_scripting::vm::ScriptVm;
 
 mod support;

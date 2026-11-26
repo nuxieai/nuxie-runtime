@@ -5,6 +5,7 @@ mod reset;
 pub use crate::FieldText;
 pub use driver::*;
 
+use crate::mechanical_port::source::animation::state_machine_instance::FieldTextWindow;
 use crate::source::input::focusable::{Key, KeyModifiers};
 use crate::*;
 use std::{
@@ -412,6 +413,20 @@ impl PagePlayer {
         let mut focus_input_results = Vec::with_capacity(prepared.focus_inputs.len());
         let mut state_changes = Vec::new();
         let mut reported_events = Vec::new();
+        // One bound covers the field text the step's reports copy, as one
+        // budget covers the step's result: its input, its advance and its
+        // driver's rounds, with the reports carried in from the last step
+        // counted first.
+        let carried_field_text = self.undelivered_reports.try_borrow().map_or(0, |reports| {
+            reports
+                .iter()
+                .filter_map(|event| event.field_text.as_ref())
+                .fold(0usize, |total, text| {
+                    total.saturating_add(text.as_bytes().len())
+                })
+        });
+        let field_text =
+            FieldTextWindow::open(MAX_PLAYER_STEP_RESULT_BYTES.saturating_sub(carried_field_text));
         let script_transaction = effects.map(Effects::begin);
         if let (Some(policy), Some(capture)) = (policy, change_capture.as_ref()) {
             policy.prepare_capture(capture);
@@ -611,7 +626,8 @@ impl PagePlayer {
             state_changes.len(),
         )
         .map_err(budget_error)?;
-        let mut events = own_reported_events(reported_events, &mut budget).map_err(budget_error)?;
+        let mut events = own_dispatched_events(reported_events, &mut budget, &field_text)
+            .map_err(budget_error)?;
         // The driver's rounds run here, after the advance and before the
         // step's result is assembled. What each output does with them:
         // - events: each round's reports are appended (`drive`).
@@ -644,6 +660,7 @@ impl PagePlayer {
                     playback,
                     &mut events,
                     &mut budget,
+                    &field_text,
                 );
                 match drive {
                     Ok(drive) => {
@@ -1131,7 +1148,7 @@ impl PagePlayer {
     /// step's reports; each settle's reports are appended to it. `budget` is
     /// the step's, with the advance's reports already charged: the reports
     /// carried from the last step and each settle's are charged to it before
-    /// the driver sees them.
+    /// the driver sees them. `field_text` is the step's field text bound.
     fn drive(
         &self,
         driver: &mut dyn HostDriver,
@@ -1139,6 +1156,7 @@ impl PagePlayer {
         playback: &mut Playback,
         events: &mut Vec<OwnedPlayerEvent>,
         budget: &mut StepEventBudget,
+        field_text: &FieldTextWindow,
     ) -> Result<Drive, Error> {
         let mut first_reports = std::mem::take(
             &mut *self
@@ -1206,7 +1224,8 @@ impl PagePlayer {
             })?;
             drive.changed |= changed;
             round_start = events.len();
-            events.extend(own_reported_events(reported, budget).map_err(budget_error)?);
+            events
+                .extend(own_dispatched_events(reported, budget, field_text).map_err(budget_error)?);
             if drive.rounds == MAX_DRIVER_ROUNDS {
                 drive.cut_off = true;
                 if let Ok(mut undelivered) = self.undelivered_reports.try_borrow_mut() {
@@ -1609,15 +1628,23 @@ impl StepEventBudget {
             let bytes = |value: &Option<Box<[u8]>>| value.as_deref().map_or(0, <[u8]>::len);
             self.admit_event(
                 event.context.as_ref(),
-                [bytes(&event.name), bytes(&event.url), bytes(&event.target)]
-                    .into_iter()
-                    .chain(event.properties.iter().flat_map(|property| {
-                        let value = match &property.value {
-                            OwnedPlayerEventPropertyValue::String(value) => value.len(),
-                            _ => 0,
-                        };
-                        [bytes(&property.name), value]
-                    })),
+                [
+                    bytes(&event.name),
+                    bytes(&event.url),
+                    bytes(&event.target),
+                    event
+                        .field_text
+                        .as_ref()
+                        .map_or(0, |text| text.as_bytes().len()),
+                ]
+                .into_iter()
+                .chain(event.properties.iter().flat_map(|property| {
+                    let value = match &property.value {
+                        OwnedPlayerEventPropertyValue::String(value) => value.len(),
+                        _ => 0,
+                    };
+                    [bytes(&property.name), value]
+                })),
             )?;
         }
         Ok(())
@@ -1630,6 +1657,22 @@ fn owned_bytes(value: &[u8]) -> Box<[u8]> {
 
 fn optional_owned_bytes(value: Option<&str>) -> Option<Box<[u8]>> {
     value.map(|value| owned_bytes(value.as_bytes()))
+}
+
+/// Own a batch of the step's own reports. A report that came past the step's
+/// field text bound ends the step as one past its budget does.
+fn own_dispatched_events(
+    reported: Vec<StateMachineReportedEvent>,
+    budget: &mut StepEventBudget,
+    field_text: &FieldTextWindow,
+) -> Result<Vec<OwnedPlayerEvent>, BudgetFailure> {
+    if field_text.withheld() {
+        return Err((
+            ErrorKind::LimitExceeded,
+            "runtime event bytes exceed step bound",
+        ));
+    }
+    own_reported_events(reported, budget)
 }
 
 /// Own a batch of reports, charged to the step's `budget` first.
@@ -1735,3 +1778,40 @@ impl std::fmt::Display for Error {
     }
 }
 impl std::error::Error for Error {}
+
+#[cfg(test)]
+mod budget_tests {
+    use super::*;
+
+    fn carried(field_text: &str) -> OwnedPlayerEvent {
+        OwnedPlayerEvent {
+            context: None,
+            source_artboard_global_id: None,
+            view_model_instance_id: None,
+            event_local_index: 0,
+            event_core_type: 0,
+            name: None,
+            url: None,
+            target: None,
+            seconds_delay: 0.0,
+            properties: Vec::new(),
+            listener_target_local_id: None,
+            field_text: Some(FieldText::new(field_text)),
+        }
+    }
+
+    #[test]
+    fn a_carried_reports_field_text_is_charged_to_the_next_step() {
+        let mut budget = StepEventBudget::new(0, 0, 0).unwrap();
+        let text = "a".repeat(MAX_PLAYER_STEP_RESULT_BYTES);
+        assert_eq!(
+            budget.admit_owned(&[carried(&text)]).err(),
+            Some((
+                ErrorKind::LimitExceeded,
+                "runtime event bytes exceed step bound"
+            ))
+        );
+        let mut budget = StepEventBudget::new(0, 0, 0).unwrap();
+        assert_eq!(budget.admit_owned(&[carried("ada")]), Ok(()));
+    }
+}

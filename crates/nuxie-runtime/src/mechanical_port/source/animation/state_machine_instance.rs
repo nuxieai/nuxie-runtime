@@ -197,19 +197,20 @@ pub struct EventReport {
     pub listener_target: Option<u32>,
     /// The text in the field the reporting listener is on, as it stood when
     /// the event was reported. `None` when the listener's target is not a
-    /// text field, or no listener reported the event.
+    /// text field, or no listener reported the event, or the report came
+    /// past its step's field text bound (`FieldTextWindow`).
     pub field_text: Option<FieldText>,
 }
 
 /// A text field's text, as a report carries it. It can hold a password, so
 /// its `Debug` names only its length: no log, debug print or snapshot that
-/// formats a report writes the text.
+/// formats a report writes the text. Copies of one report share one text.
 #[derive(Clone, Default, PartialEq, Eq)]
-pub struct FieldText(String);
+pub struct FieldText(Rc<str>);
 
 impl FieldText {
-    pub fn new(text: String) -> Self {
-        Self(text)
+    pub fn new(text: &str) -> Self {
+        Self(Rc::from(text))
     }
 
     pub fn as_str(&self) -> &str {
@@ -224,6 +225,74 @@ impl FieldText {
 impl std::fmt::Debug for FieldText {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "FieldText(<redacted, {} bytes>)", self.0.len())
+    }
+}
+
+#[derive(Clone, Copy)]
+struct FieldTextAllowance {
+    remaining: usize,
+    withheld: bool,
+}
+
+thread_local! {
+    // The field text this thread's reports may still copy while a player
+    // step's window is open; `None` outside one.
+    static FIELD_TEXT_ALLOWANCE: Cell<Option<FieldTextAllowance>> = const { Cell::new(None) };
+}
+
+/// A player step's bound on the field text its reports copy, open for the
+/// whole step: its input, its advance and its driver's rounds. While it is
+/// open, the reports made on this thread, in any machine, copy at most
+/// `bytes` of field text in all. A report past that copies none and the
+/// window records it, so the step ends over its bound, as a step whose
+/// reports are past its result budget does. Outside a window a report copies
+/// its field's text whole.
+pub struct FieldTextWindow {
+    outer: Option<FieldTextAllowance>,
+}
+
+impl FieldTextWindow {
+    pub fn open(bytes: usize) -> Self {
+        let allowance = FieldTextAllowance {
+            remaining: bytes,
+            withheld: false,
+        };
+        Self {
+            outer: FIELD_TEXT_ALLOWANCE.with(|cell| cell.replace(Some(allowance))),
+        }
+    }
+
+    /// Whether a report since the window opened came past its bound and
+    /// copied none of its field's text.
+    pub fn withheld(&self) -> bool {
+        FIELD_TEXT_ALLOWANCE.with(|cell| cell.get().is_some_and(|allowance| allowance.withheld))
+    }
+
+    /// A copy of `text` for a report, charged to the open window.
+    fn copy(text: &str) -> Option<FieldText> {
+        FIELD_TEXT_ALLOWANCE.with(|cell| {
+            let Some(mut allowance) = cell.get() else {
+                return Some(FieldText::new(text));
+            };
+            let copied = match allowance.remaining.checked_sub(text.len()) {
+                Some(remaining) if !allowance.withheld => {
+                    allowance.remaining = remaining;
+                    Some(FieldText::new(text))
+                }
+                _ => {
+                    allowance.withheld = true;
+                    None
+                }
+            };
+            cell.set(Some(allowance));
+            copied
+        })
+    }
+}
+
+impl Drop for FieldTextWindow {
+    fn drop(&mut self) {
+        FIELD_TEXT_ALLOWANCE.with(|cell| cell.set(self.outer));
     }
 }
 
@@ -7160,14 +7229,16 @@ impl StateMachineInstance {
     }
 
     /// The text of the field the performing listener is on, read now, so a
-    /// report carries the text as it stands when the event is reported.
+    /// report carries the text as it stands when the event is reported. A
+    /// player step's `FieldTextWindow` bounds the copies.
     fn performing_listener_field_text(&self) -> Option<FieldText> {
         self.resolve_artboard_object(self.performing_listener_target?)?
             .with(|target| {
                 target
                     .as_text_input()
-                    .map(|field| FieldText::new(field.base.text().to_owned()))
+                    .map(|field| FieldTextWindow::copy(field.base.text()))
             })
+            .flatten()
             .flatten()
     }
 

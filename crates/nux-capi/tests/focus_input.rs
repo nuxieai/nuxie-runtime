@@ -577,7 +577,10 @@ fn copied_field_text(scene: &Harness, result: &ResultView) -> String {
 #[test]
 fn a_driver_report_carries_its_fields_text() {
     let scene = Harness::new(
-        &fixture::text_field_listeners(include_bytes!("../../../fixtures/fonts/roboto-input.ttf")),
+        &fixture::text_field_listeners(
+            include_bytes!("../../../fixtures/fonts/roboto-input.ttf"),
+            1,
+        ),
         None,
         false,
     );

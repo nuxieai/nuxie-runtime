@@ -828,7 +828,7 @@ mod tests {
             }],
             view_model_instance_id: None,
             listener_target_local_id: Some(9),
-            field_text: Some(FieldText::new("ada".to_owned())),
+            field_text: Some(FieldText::new("ada")),
         };
         let unheard = OwnedPlayerEvent {
             context: None,

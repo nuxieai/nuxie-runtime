@@ -157,9 +157,9 @@ pub fn key_moves_focus() -> Vec<u8> {
 
 /// A single line text field (object 1, named "Field", empty) set in `font`,
 /// that can take focus and is a semantic text field. A text listener on it
-/// fires `change` (object 5), as does a keyboard listener on Backspace,
-/// pressed or held with no modifiers.
-pub fn text_field_listeners(font: &[u8]) -> Vec<u8> {
+/// fires `change` (object 5) `fires` times, and a keyboard listener on
+/// Backspace, pressed or held with no modifiers, fires it once.
+pub fn text_field_listeners(font: &[u8], fires: usize) -> Vec<u8> {
     let mut bytes = b"RIVE".to_vec();
     for value in [7, 0, 9658, 0] {
         push_var_uint(&mut bytes, value);
@@ -206,9 +206,11 @@ pub fn text_field_listeners(font: &[u8]) -> Vec<u8> {
         push_uint(bytes, "StateMachineListener", "targetId", 1);
         push_uint(bytes, "StateMachineListenerSingle", "listenerTypeValue", 8);
     });
-    push_object(&mut bytes, "ListenerFireEvent", |bytes| {
-        push_uint(bytes, "ListenerFireEvent", "eventId", 5);
-    });
+    for _ in 0..fires {
+        push_object(&mut bytes, "ListenerFireEvent", |bytes| {
+            push_uint(bytes, "ListenerFireEvent", "eventId", 5);
+        });
+    }
     push_object(&mut bytes, "StateMachineListenerSingle", |bytes| {
         push_uint(bytes, "StateMachineListener", "targetId", 1);
         push_uint(bytes, "StateMachineListenerSingle", "listenerTypeValue", 15);

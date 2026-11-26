@@ -11,8 +11,9 @@ use std::rc::Rc;
 
 use super::*;
 use crate::page_player::{
-    self, DriverFault, DriverRound, ErrorKind, HostDriver, MAX_DRIVER_ROUNDS, OwnedPlayerEvent,
-    PagePlayer, Playback, Pointer, PointerKind, SceneObject, SceneWriteError, SceneWriter, Step,
+    self, DriverFault, DriverRound, ErrorKind, FocusInput, HostDriver, MAX_DRIVER_ROUNDS,
+    OwnedPlayerEvent, PagePlayer, Playback, Pointer, PointerKind, SceneObject, SceneWriteError,
+    SceneWriter, Step,
 };
 use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
 use crate::source::generated::text::text_value_run_base::TextValueRunBase;
@@ -111,6 +112,23 @@ impl Played {
             &[],
             None,
         )
+    }
+
+    /// One frame carrying these focus inputs, in order.
+    fn focus_step(&mut self, focus_inputs: Vec<FocusInput>) -> Output {
+        self.player
+            .step(
+                &mut self.board,
+                &mut self.playback,
+                Step {
+                    focus_inputs,
+                    elapsed_seconds: FRAME,
+                    ..Step::default()
+                },
+                &[],
+                None,
+            )
+            .expect("the step")
     }
 
     /// A press and release at a point, in one frame.
@@ -641,6 +659,198 @@ fn reset_returns_typed_text_to_the_written_text() {
     assert_ne!(text(), "hi there", "typed into the field");
     played.tap(50.0, 60.0);
     assert_eq!(text(), "hi there");
+}
+
+/// A page holding a single line field, empty to start, and a button at
+/// (0, 40). The
+/// field's text listeners fire their events; its keyboard listeners on
+/// Backspace and Delete (pressed or held, no modifiers) fire "change", and one
+/// on Enter (pressed, no modifiers) fires "submit". The button's click fires
+/// "tap".
+fn typing_page(text_listeners: Vec<&'static str>) -> Scene {
+    use crate::source::input::focusable::Key;
+    let key = |key: Key| u64::from(key.raw());
+    scene(
+        (400.0, 300.0),
+        css(
+            "Page",
+            [width(400.0), height(300.0)].concat(),
+            vec![
+                B {
+                    single_line: true,
+                    text_listeners,
+                    key_listeners: vec![
+                        (key(Key::BACKSPACE), 0, 3, "change"),
+                        (key(Key::DELETE), 0, 3, "change"),
+                        (key(Key::ENTER), 0, 1, "submit"),
+                    ],
+                    ..field_box(true, None, "")
+                },
+                B {
+                    listener: Some("tap"),
+                    opaque: true,
+                    ..css("Button", [width(100.0), height(40.0)].concat(), vec![])
+                },
+            ],
+        ),
+    )
+}
+
+fn typed(text: &str) -> FocusInput {
+    FocusInput::Text(text.to_owned())
+}
+
+fn pressed(key: crate::source::input::focusable::Key, modifiers: u32, repeat: bool) -> FocusInput {
+    FocusInput::Key {
+        key,
+        modifiers: crate::source::input::focusable::KeyModifiers::from_raw(modifiers),
+        pressed: true,
+        repeat,
+    }
+}
+
+/// The field's text, as the field holds it.
+fn field_text(played: &Played) -> String {
+    use crate::source::generated::text::text_input_base::TextInputBase;
+    CoreRegistry::get_string_handle(
+        &played.f.object("Field"),
+        i32::from(TextInputBase::TEXT_PROPERTY_KEY),
+    )
+    .expect("the field's text")
+}
+
+/// A field focused by a tap, with a driver logging every report it is
+/// handed.
+fn focused_typing_page(
+    text_listeners: Vec<&'static str>,
+) -> (Played, Rc<RefCell<Vec<OwnedPlayerEvent>>>) {
+    let mut played = Played::new(typing_page(text_listeners));
+    played.settle();
+    played.tap(90.0, 20.0);
+    assert!(
+        played
+            .f
+            .object("Field")
+            .with_downcast(crate::source::text::text_input::TextInput::is_focused)
+            .expect("a live field"),
+        "the tap focuses the field"
+    );
+    let reports = Rc::new(RefCell::new(Vec::new()));
+    let log = reports.clone();
+    played.drive(move |round, _| log.borrow_mut().extend(round.reports.iter().cloned()));
+    (played, reports)
+}
+
+/// A text listener on a field runs its actions, as upstream's runs them: the
+/// field inserts the text once, first, and then the listener reports. A
+/// delete is a key, so it reaches the keyboard listeners; a caret move and
+/// select all report nothing; Enter reports once per press, not while held.
+/// Two edits in one step report twice.
+#[test]
+fn a_text_listener_on_a_field_reports_each_edit() {
+    use crate::source::input::focusable::Key;
+    let system = if cfg!(target_os = "windows") { 2 } else { 8 };
+    let (mut played, reports) = focused_typing_page(vec!["change"]);
+    let take = |played: &mut Played, inputs: Vec<FocusInput>| {
+        played.focus_step(inputs);
+        let taken = std::mem::take(&mut *reports.borrow_mut());
+        (names(&taken), field_text(played))
+    };
+    let change = || vec!["change".to_owned()];
+    let nothing = Vec::<String>::new;
+
+    assert_eq!(
+        take(&mut played, vec![typed("ada")]),
+        (change(), "ada".to_owned())
+    );
+    assert_eq!(
+        take(&mut played, vec![pressed(Key::BACKSPACE, 0, false)]),
+        (change(), "ad".to_owned())
+    );
+    assert_eq!(
+        take(&mut played, vec![pressed(Key::LEFT, 0, false)]),
+        (nothing(), "ad".to_owned()),
+        "a caret move"
+    );
+    assert_eq!(
+        take(&mut played, vec![pressed(Key::DELETE, 0, false)]),
+        (change(), "a".to_owned())
+    );
+    assert_eq!(
+        take(&mut played, vec![pressed(Key::A, system, false)]),
+        (nothing(), "a".to_owned()),
+        "select all"
+    );
+    assert_eq!(
+        take(&mut played, vec![typed("bea")]),
+        (change(), "bea".to_owned())
+    );
+    assert_eq!(
+        take(&mut played, vec![pressed(Key::ENTER, 0, false)]),
+        (vec!["submit".to_owned()], "bea".to_owned())
+    );
+    assert_eq!(
+        take(&mut played, vec![pressed(Key::ENTER, 0, true)]),
+        (nothing(), "bea".to_owned()),
+        "a held Enter"
+    );
+    assert_eq!(
+        take(&mut played, vec![typed("x"), typed("y")]),
+        (
+            vec!["change".to_owned(), "change".to_owned()],
+            "beaxy".to_owned()
+        ),
+        "two edits in one step"
+    );
+}
+
+/// Two text listeners on one field both run, and the field inserts the text
+/// once.
+#[test]
+fn two_text_listeners_on_a_field_both_run_and_the_text_goes_in_once() {
+    let (mut played, reports) = focused_typing_page(vec!["change", "typed"]);
+    played.focus_step(vec![typed("a")]);
+    assert_eq!(names(&reports.borrow()), ["change", "typed"]);
+    assert_eq!(field_text(&played), "a");
+}
+
+/// A driver writing the field's text fires none of its listeners.
+#[test]
+fn a_driver_writing_a_fields_text_fires_no_listener() {
+    use crate::source::generated::text::text_input_base::TextInputBase;
+    let (mut played, reports) = focused_typing_page(vec!["change"]);
+    let field = SceneObject::root(played.local_id(&played.f.object("Field")));
+    let written = Rc::new(RefCell::new(false));
+    let once = written.clone();
+    let log = reports.clone();
+    played.drive(move |round, scene| {
+        log.borrow_mut().extend(round.reports.iter().cloned());
+        if !once.replace(true) {
+            assert_eq!(
+                scene.set_text(&field, TextInputBase::TEXT_PROPERTY_KEY, "written"),
+                Ok(true)
+            );
+        }
+    });
+    let output = played.step(FRAME, vec![]);
+    assert!(*written.borrow());
+    assert_eq!(field_text(&played), "written");
+    assert!(output.events.is_empty(), "{:?}", names(&output.events));
+    assert!(
+        reports.borrow().is_empty(),
+        "{:?}",
+        names(&reports.borrow())
+    );
+    // A focused field's caret blinks, so the player never settles; a few
+    // more frames report nothing either.
+    for _ in 0..3 {
+        played.step(FRAME, vec![]);
+    }
+    assert!(
+        reports.borrow().is_empty(),
+        "{:?}",
+        names(&reports.borrow())
+    );
 }
 
 /// What one step's result may hold in owned bytes (`page_player`'s bound).

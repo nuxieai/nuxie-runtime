@@ -817,20 +817,41 @@ impl FocusData {
     }
 
     pub fn text_input_occurrence(owner: &CoreHandle, text: &str) -> bool {
-        let listeners = owner
+        let (listeners, text_target) = owner
             .with_downcast_mut::<Self, _>(|owner| {
                 owner
                     .text_input_listeners
                     .erase_if(|listener| !RuntimeKeyboardListenerHandle::is_alive(listener));
-                owner.text_input_listeners.snapshot()
+                let target = if !owner.text_input_listeners.empty() {
+                    owner.component().parent_handle()
+                } else {
+                    None
+                };
+                (owner.text_input_listeners.snapshot(), target)
             })
             .expect("live FocusData");
+        // The same shape as key_input_occurrence: a TextInput inserts the text
+        // once, before every listener on it, with FocusData released, and only
+        // when a text listener opted it into text. Then every listener runs its
+        // actions, as peers; a claim stops ancestor bubbling, not dispatch to
+        // peers on this node.
+        let mut claimed = text_target
+            .and_then(|target| {
+                target
+                    .with_mut(|target| {
+                        target
+                            .as_text_input_mut()
+                            .map(|text_input| text_input.text_input(text))
+                    })
+                    .flatten()
+            })
+            .unwrap_or(false);
         for listener in listeners {
             if listener.text_input(text) {
-                return true;
+                claimed = true;
             }
         }
-        false
+        claimed
     }
 
     pub fn gamepad_dispatch_occurrence(

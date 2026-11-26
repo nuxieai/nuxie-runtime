@@ -417,6 +417,7 @@ fn write_status(error: SceneWriteError) -> NuxStatus {
         SceneWriteError::UnknownProperty
         | SceneWriteError::InvalidValue
         | SceneWriteError::NotKeyedList
+        | SceneWriteError::NotRowArtboard
         | SceneWriteError::KeyExists
         | SceneWriteError::PlaceOutOfRange
         | SceneWriteError::NotReplaceable => NuxStatus::InvalidArgument,
@@ -711,6 +712,28 @@ pub unsafe extern "C" fn nux_scene_writer_mount_row(
     ffi_guard(NuxStatus::RuntimeError, || {
         with_row(writer, list, key, out_changed, |scene, list, key| {
             scene.mount_row(list, key)
+        })
+    })
+}
+
+/// Mount a row by `key` at the end of the keyed list `list`, as
+/// `nux_scene_writer_mount_row` does, made from `artboard`: an index into the
+/// file's artboards that the list declares, its row artboard or one of its
+/// further declared artboards. `out_changed`, when not NULL, receives true.
+/// NOT_FOUND for a list that is not found, or a declared artboard the file
+/// does not have; INVALID_ARGUMENT for an object that is not a keyed list,
+/// an artboard the list does not declare, or a key already mounted there.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_scene_writer_mount_row_from(
+    writer: *mut NuxSceneWriter,
+    list: *const NuxSceneObject,
+    key: NuxByteView,
+    artboard: u32,
+    out_changed: *mut bool,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        with_row(writer, list, key, out_changed, |scene, list, key| {
+            scene.mount_row_from(list, key, artboard)
         })
     })
 }
@@ -1507,6 +1530,146 @@ mod tests {
                 i32::from(WIDTH)
             ),
             Some(120.0)
+        );
+        unsafe {
+            assert_eq!(crate::nux_player_free(player), NuxStatus::Ok);
+            assert_eq!(crate::nux_artboard_instance_free(instance), NuxStatus::Ok);
+            assert_eq!(crate::nux_file_free(file), NuxStatus::Ok);
+        }
+    }
+
+    /// Mount rows from each artboard the list declares, and from ones it
+    /// does not.
+    unsafe fn mount_declared(rows: &mut Rows, writer: *mut NuxSceneWriter) {
+        use nuxie::keyed_rows_fixture::{BANNER_ARTBOARD, CARD_ARTBOARD, MISSING_ARTBOARD};
+        let (_, _, list) = cards_list();
+        unsafe {
+            answer_rows(rows, "mount from the card", |changed| {
+                nux_scene_writer_mount_row_from(writer, &list, key(b"card"), CARD_ARTBOARD, changed)
+            });
+            answer_rows(rows, "mount from the banner", |changed| {
+                nux_scene_writer_mount_row_from(
+                    writer,
+                    &list,
+                    key(b"banner"),
+                    BANNER_ARTBOARD,
+                    changed,
+                )
+            });
+            answer_rows(rows, "mount from the page", |changed| {
+                nux_scene_writer_mount_row_from(writer, &list, key(b"page"), 0, changed)
+            });
+            answer_rows(rows, "mount from past the artboards", |changed| {
+                nux_scene_writer_mount_row_from(
+                    writer,
+                    &list,
+                    key(b"gone"),
+                    MISSING_ARTBOARD,
+                    changed,
+                )
+            });
+            answer_rows(rows, "mount from the row artboard", |changed| {
+                nux_scene_writer_mount_row(writer, &list, key(b"plain"), changed)
+            });
+        }
+    }
+
+    /// Through the C edge: a keyed list that declares the card and the
+    /// banner mounts a row from each; an artboard it does not declare is
+    /// refused with INVALID_ARGUMENT and mounts nothing; the plain mount
+    /// still makes a card.
+    #[test]
+    fn mount_row_from_through_the_c_edge() {
+        use nuxie::keyed_rows_fixture::{
+            BANNER_ARTBOARD, CARD_ARTBOARD, Cards, keyed_plans_fixture, page,
+        };
+        use nuxie::runtime::artboard_component_list::ArtboardComponentList;
+        let bytes = keyed_plans_fixture(Cards::WithBanner);
+        let mut file = std::ptr::null_mut();
+        let mut instance = std::ptr::null_mut();
+        let mut player = std::ptr::null_mut();
+        unsafe {
+            assert_eq!(
+                crate::nux_file_import(
+                    bytes.as_ptr(),
+                    bytes.len(),
+                    &crate::NuxRenderCallbacks::default(),
+                    &mut file
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                crate::nux_artboard_instance_new(file, 0, &mut instance),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                crate::nux_player_new_default(instance, &mut player),
+                NuxStatus::Ok
+            );
+        }
+        let mut rows = Rows {
+            next: Some(mount_declared),
+            ..Rows::default()
+        };
+        let driver = NuxPlayerDriver {
+            struct_size: sized::<NuxPlayerDriver>(),
+            context: (&raw mut rows).cast(),
+            drive: Some(drive_rows),
+            release: None,
+        };
+        unsafe {
+            assert_eq!(nux_player_driver_set(player, &driver), NuxStatus::Ok);
+            step(player, &[]);
+            assert_eq!(nux_player_driver_clear(player), NuxStatus::Ok);
+        }
+        assert_eq!(
+            rows.answers,
+            [
+                ("mount from the card", NuxStatus::Ok, true),
+                ("mount from the banner", NuxStatus::Ok, true),
+                ("mount from the page", NuxStatus::InvalidArgument, false),
+                (
+                    "mount from past the artboards",
+                    NuxStatus::InvalidArgument,
+                    false
+                ),
+                ("mount from the row artboard", NuxStatus::Ok, true),
+            ]
+        );
+        let occurrence = unsafe { &*player }.artboard.instance.borrow();
+        let (page_board, file_handle) = (occurrence.native_handle(), occurrence.native_file());
+        drop(occurrence);
+        let list = page_board
+            .with_artboard(|board| board.objects()[page::CARDS].clone())
+            .expect("the list");
+        let sources = list
+            .with_downcast::<ArtboardComponentList, _>(|list| {
+                list.row_keys()
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, key)| {
+                        let source = list
+                            .artboard_instance(index as i32)
+                            .expect("a laid out row")
+                            .with_artboard(|row| row.artboard_source_handle())
+                            .expect("the row's source");
+                        (String::from_utf8_lossy(key).into_owned(), source)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .expect("the list");
+        let artboard = |index: u32| {
+            file_handle
+                .with_file(|file| file.artboard_at_source(index as usize))
+                .expect("a file artboard")
+        };
+        assert_eq!(
+            sources,
+            [
+                ("card".to_owned(), artboard(CARD_ARTBOARD)),
+                ("banner".to_owned(), artboard(BANNER_ARTBOARD)),
+                ("plain".to_owned(), artboard(CARD_ARTBOARD)),
+            ]
         );
         unsafe {
             assert_eq!(crate::nux_player_free(player), NuxStatus::Ok);

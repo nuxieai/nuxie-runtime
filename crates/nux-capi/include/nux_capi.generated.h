@@ -3700,6 +3700,21 @@ NuxStatus nux_scene_writer_mount_row(struct NuxSceneWriter *writer,
                                      bool *out_changed);
 
 /**
+ * Mount a row by `key` at the end of the keyed list `list`, as
+ * `nux_scene_writer_mount_row` does, made from `artboard`: an index into the
+ * file's artboards that the list declares, its row artboard or one of its
+ * further declared artboards. `out_changed`, when not NULL, receives true.
+ * NOT_FOUND for a list that is not found, or a declared artboard the file
+ * does not have; INVALID_ARGUMENT for an object that is not a keyed list,
+ * an artboard the list does not declare, or a key already mounted there.
+ */
+NuxStatus nux_scene_writer_mount_row_from(struct NuxSceneWriter *writer,
+                                          const struct NuxSceneObject *list,
+                                          struct NuxByteView key,
+                                          uint32_t artboard,
+                                          bool *out_changed);
+
+/**
  * Move the row mounted by `key` to `place` among the keyed list's rows, 0
  * being the first; the other rows keep their order, and the row keeps its
  * instance and all its state. `out_changed`, when not NULL, receives

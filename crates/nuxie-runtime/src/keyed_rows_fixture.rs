@@ -14,6 +14,10 @@
 //!
 //! [`scripted_keyed_plans_fixture`] adds a scripted drawable to the card, so
 //! each row runs its own instance of one script.
+//!
+//! [`Cards::WithBanner`] adds a second artboard the list declares for its
+//! rows through a `KeyedRowArtboard` child: the "Banner" (artboard 2), a 48
+//! point tall "Strip" box filled with [`BANNER_COLOR`].
 #![allow(dead_code)]
 use crate::live_move_fixture::{V, obj};
 use crate::source::drawable_flag::DrawableFlag;
@@ -48,6 +52,26 @@ pub mod card {
     /// In [`Cards::DescribedLine`] only: the scrolled line's semantic data.
     pub const LINE_SEMANTICS: usize = 28;
 }
+
+/// The banner's local ids, in [`Cards::WithBanner`] and
+/// [`Cards::MisplacedBanner`].
+pub mod banner {
+    pub const STRIP: usize = 2;
+    pub const STRIP_COLOR: usize = 5;
+}
+
+/// The card artboard's index in the file's artboards: the list's
+/// `rowArtboardId`.
+pub const CARD_ARTBOARD: u32 = 1;
+/// The banner artboard's index in the file's artboards, in
+/// [`Cards::WithBanner`] and [`Cards::MisplacedBanner`].
+pub const BANNER_ARTBOARD: u32 = 2;
+/// An index past the file's artboards.
+pub const MISSING_ARTBOARD: u32 = 9;
+/// The banner strip's color, as the file writes it.
+pub const BANNER_COLOR: u32 = 0xff99_3366;
+/// The banner's height.
+pub const BANNER_HEIGHT: f32 = 48.0;
 
 /// The badge's local ids, in [`Cards::Badged`].
 pub mod badge {
@@ -91,6 +115,17 @@ pub enum Cards {
     /// A keyed list of cards whose scrolled "Line" has semantic data, a
     /// text labeled [`LINE_LABEL`].
     DescribedLine,
+    /// A keyed list of cards that also declares the banner artboard
+    /// ([`BANNER_ARTBOARD`]) for its rows, through a `KeyedRowArtboard`
+    /// child.
+    WithBanner,
+    /// A keyed list of cards that also declares, through a
+    /// `KeyedRowArtboard` child, an artboard the file does not have
+    /// ([`MISSING_ARTBOARD`]).
+    DeclaresMissing,
+    /// A keyed list of cards, and a `KeyedRowArtboard` naming the banner
+    /// artboard under the "Heading" box rather than under the list.
+    MisplacedBanner,
 }
 
 fn var(b: &mut Vec<u8>, mut n: u64) {
@@ -253,6 +288,7 @@ fn build(cards: Cards, script: Option<&[u8]>) -> Vec<u8> {
     use V::*;
     let opaque = u64::from(DrawableFlag::OPAQUE.0);
     let badges = cards == Cards::Badged;
+    let banners = matches!(cards, Cards::WithBanner | Cards::MisplacedBanner);
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
         var(&mut b, n);
@@ -300,7 +336,12 @@ fn build(cards: Cards, script: Option<&[u8]>) -> Vec<u8> {
     text(&mut b, "Title", page::HEADING, 4, TITLE, 20.0); // 4 to 8
     let mut list = vec![("name", S("Cards")), ("parentId", U(0))];
     match cards {
-        Cards::Keyed | Cards::Badged | Cards::DescribedLine => list.push(("rowArtboardId", U(1))),
+        Cards::Keyed
+        | Cards::Badged
+        | Cards::DescribedLine
+        | Cards::WithBanner
+        | Cards::DeclaresMissing
+        | Cards::MisplacedBanner => list.push(("rowArtboardId", U(u64::from(CARD_ARTBOARD)))),
         Cards::MissingArtboard => list.push(("rowArtboardId", U(9))),
         Cards::Unkeyed => {}
     }
@@ -322,6 +363,22 @@ fn build(cards: Cards, script: Option<&[u8]>) -> Vec<u8> {
             "LayoutComponentStyle",
             &[("parentId", U(parent as u64))],
         ); // 12 to 14
+    }
+    let declared = match cards {
+        Cards::WithBanner => Some((page::CARDS, BANNER_ARTBOARD)),
+        Cards::DeclaresMissing => Some((page::CARDS, MISSING_ARTBOARD)),
+        Cards::MisplacedBanner => Some((page::HEADING, BANNER_ARTBOARD)),
+        _ => None,
+    };
+    if let Some((parent, artboard)) = declared {
+        obj(
+            &mut b,
+            "KeyedRowArtboard",
+            &[
+                ("parentId", U(parent as u64)),
+                ("artboardId", U(u64::from(artboard))),
+            ],
+        ); // 15
     }
     obj(
         &mut b,
@@ -540,6 +597,47 @@ fn build(cards: Cards, script: Option<&[u8]>) -> Vec<u8> {
             ); // 6, 7
         }
         obj(&mut b, "StateMachine", &[("name", S("badge"))]);
+        layer(&mut b, false);
+    }
+
+    if banners {
+        // Banner.
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S("Banner")),
+                ("width", F(280.0)),
+                ("height", F(BANNER_HEIGHT)),
+                ("styleId", U(6)),
+            ],
+        ); // 0
+        record(&mut b, 0, None, None); // 1
+        obj(
+            &mut b,
+            "LayoutComponent",
+            &[
+                ("name", S("Strip")),
+                ("parentId", U(0)),
+                ("styleId", U(7)),
+                ("drawableFlags", U(opaque)),
+            ],
+        ); // 2
+        record(&mut b, banner::STRIP, Some(280.0), Some(BANNER_HEIGHT)); // 3
+        obj(&mut b, "Fill", &[("parentId", U(banner::STRIP as u64))]); // 4
+        obj(
+            &mut b,
+            "SolidColor",
+            &[("parentId", U(4)), ("colorValue", Color(BANNER_COLOR))],
+        ); // 5
+        for parent in [0, banner::STRIP] {
+            obj(
+                &mut b,
+                "LayoutComponentStyle",
+                &[("parentId", U(parent as u64))],
+            ); // 6, 7
+        }
+        obj(&mut b, "StateMachine", &[("name", S("banner"))]);
         layer(&mut b, false);
     }
     b

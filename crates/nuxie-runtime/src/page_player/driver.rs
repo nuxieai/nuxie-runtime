@@ -108,9 +108,12 @@ pub enum SceneWriteError {
     /// A row operation named an object that is not a keyed list: not a list,
     /// or a list whose record names no artboard for keyed rows.
     NotKeyedList,
-    /// The keyed list's record names an artboard the file does not have, so
-    /// no row can be mounted.
+    /// The artboard a mount names, which the keyed list declares, is not one
+    /// the file has, so no row can be made from it.
     NoRowArtboard,
+    /// A mount named an artboard the keyed list does not declare for its
+    /// rows: neither its `rowArtboardId` nor a `KeyedRowArtboard` child's.
+    NotRowArtboard,
     /// A row with this key is already mounted in the list.
     KeyExists,
     /// No row with this key is mounted in the list.
@@ -129,6 +132,7 @@ impl From<KeyedRowRefusal> for SceneWriteError {
         match refusal {
             KeyedRowRefusal::NotKeyed => Self::NotKeyedList,
             KeyedRowRefusal::NoRowArtboard => Self::NoRowArtboard,
+            KeyedRowRefusal::NotRowArtboard => Self::NotRowArtboard,
             KeyedRowRefusal::KeyExists => Self::KeyExists,
             KeyedRowRefusal::KeyNotFound => Self::KeyNotFound,
             KeyedRowRefusal::PlaceOutOfRange => Self::PlaceOutOfRange,
@@ -476,13 +480,40 @@ impl<'a> SceneWriter<'a> {
     }
 
     /// Mount a row by `key` at the end of the keyed list `list`: a fresh
-    /// instance of the list's row artboard with its machine at entry and the
-    /// file's values. An object inside the row can be written in the same
-    /// round. Always a change.
+    /// instance of the list's row artboard (its `rowArtboardId`) with its
+    /// machine at entry and the file's values. An object inside the row can
+    /// be written in the same round. Always a change.
     pub fn mount_row(&mut self, list: &SceneObject, key: &[u8]) -> Result<bool, SceneWriteError> {
         let handle = self.keyed_list(list)?;
-        ArtboardComponentList::mount_keyed_row_occurrence(&handle, key)?;
-        self.row_changed(handle);
+        let artboard = handle
+            .with_downcast::<ArtboardComponentList, _>(ArtboardComponentList::row_artboard_id)
+            .ok_or(SceneWriteError::NotKeyedList)?;
+        self.mount_keyed_row(handle, key, artboard)
+    }
+
+    /// Mount a row by `key` at the end of the keyed list `list`, as
+    /// [`Self::mount_row`] does, made from `artboard`, an index into the
+    /// file's artboards that the list declares: its `rowArtboardId` or a
+    /// `KeyedRowArtboard` child's. An artboard the list does not declare is
+    /// refused with [`SceneWriteError::NotRowArtboard`]. Always a change.
+    pub fn mount_row_from(
+        &mut self,
+        list: &SceneObject,
+        key: &[u8],
+        artboard: u32,
+    ) -> Result<bool, SceneWriteError> {
+        let handle = self.keyed_list(list)?;
+        self.mount_keyed_row(handle, key, artboard)
+    }
+
+    fn mount_keyed_row(
+        &mut self,
+        list: CoreHandle,
+        key: &[u8],
+        artboard: u32,
+    ) -> Result<bool, SceneWriteError> {
+        ArtboardComponentList::mount_keyed_row_occurrence(&list, key, artboard)?;
+        self.row_changed(list);
         Ok(true)
     }
 

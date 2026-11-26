@@ -11,7 +11,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use super::*;
-use crate::keyed_rows_fixture::{self as fixture, Cards, badge, card, page};
+use crate::keyed_row_artboard::KeyedRowArtboard;
+use crate::keyed_rows_fixture::{self as fixture, Cards, badge, banner, card, page};
 use crate::source::artboard::Artboard;
 use crate::source::artboard_component_list::ArtboardComponentList;
 use crate::source::semantic::semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager};
@@ -1014,4 +1015,377 @@ fn a_lists_row_artboard_is_fixed_once_the_instance_is_made() {
     );
     CoreRegistry::set_uint_handle(&list, i32::from(ROW_ARTBOARD), 1);
     assert_eq!(row_artboard(&list), (false, u32::MAX));
+}
+
+/// Mount a row for each key, from the artboard beside it, in one round of
+/// one step.
+fn mount_from(played: &mut Played, rows: &[(&'static str, u32)]) {
+    let rows = rows.to_vec();
+    write_once(played, move |scene| {
+        for (key, artboard) in rows {
+            assert_eq!(
+                scene.mount_row_from(&cards(), key.as_bytes(), artboard),
+                Ok(true)
+            );
+        }
+    });
+    played.step(FRAME, vec![]);
+}
+
+/// The plans screen whose list also declares the banner, with a row mounted
+/// from the artboard beside each key, settled.
+fn played_with_banner(rows: &[(&'static str, u32)]) -> Played {
+    let mut played = played(Cards::WithBanner);
+    mount_from(&mut played, rows);
+    played.frames_until_settled();
+    played
+}
+
+/// The file's artboard at `index`, as a row's source.
+fn file_artboard(played: &Played, index: u32) -> CoreHandle {
+    played
+        .f
+        ._file
+        .with_file(|file| file.artboard_at_source(index as usize))
+        .expect("a file artboard")
+}
+
+/// The artboard the row mounted by `key` was made from.
+fn source_of(played: &Played, key: &str) -> CoreHandle {
+    row_of(played, key)
+        .with_artboard(|row| row.artboard_source_handle())
+        .expect("the row's source")
+}
+
+/// The banner strip's color in the row mounted by `key`.
+fn strip_color(played: &Played, key: &str) -> u32 {
+    CoreRegistry::get_color_handle(
+        &row_object(played, key, banner::STRIP_COLOR),
+        i32::from(SolidColorBase::COLOR_VALUE_PROPERTY_KEY),
+    )
+    .expect("the strip's color") as u32
+}
+
+/// How many text draws (the heading's and the cards', all painted
+/// 0xff112233) the frame makes before it draws the banner strip, and in all.
+fn texts_before_banner(played: &Played) -> (usize, usize) {
+    let lines = drawn_paths(&played.f);
+    let text = |line: &String| line.contains("color=0xff112233");
+    let strip = format!("color=0x{:08x}", fixture::BANNER_COLOR);
+    let at = lines
+        .iter()
+        .position(|line| line.contains(&strip))
+        .unwrap_or_else(|| panic!("the strip is drawn:\n{}", lines.join("\n")));
+    (
+        lines[..at].iter().filter(|line| text(line)).count(),
+        lines.iter().filter(|line| text(line)).count(),
+    )
+}
+
+/// A keyed list that declares the card and the banner holds rows of both:
+/// each row is an instance of the artboard its mount named, and sits in the
+/// column at its height. Moving the banner first puts it first in layout and
+/// in the draw, and removing the card leaves the banner alone between the
+/// heading and the footer.
+#[test]
+fn a_keyed_list_holds_rows_of_two_declared_artboards() {
+    let mut played = played_with_banner(&[
+        ("card", fixture::CARD_ARTBOARD),
+        ("banner", fixture::BANNER_ARTBOARD),
+    ]);
+    assert_eq!(keys(&played), ["card", "banner"]);
+    assert_eq!(laid_out_keys(&played), ["card", "banner"]);
+    assert_eq!(
+        source_of(&played, "card"),
+        file_artboard(&played, fixture::CARD_ARTBOARD)
+    );
+    assert_eq!(
+        source_of(&played, "banner"),
+        file_artboard(&played, fixture::BANNER_ARTBOARD)
+    );
+    let (card_top, card_height) = row_frame(&played, "card");
+    let (banner_top, banner_height) = row_frame(&played, "banner");
+    assert!(card_height > 100.0, "a card's height: {card_height}");
+    assert!(
+        near(banner_height, fixture::BANNER_HEIGHT),
+        "{banner_height}"
+    );
+    assert!(near(card_top, fixture::HEADING_HEIGHT), "{card_top}");
+    assert!(near(banner_top, fixture::HEADING_HEIGHT + card_height));
+    assert!(near(
+        footer_top(&played),
+        fixture::HEADING_HEIGHT + card_height + fixture::BANNER_HEIGHT
+    ));
+    let (title_and_card, all_texts) = texts_before_banner(&played);
+    assert_eq!(title_and_card, all_texts, "the banner draws after the card");
+
+    write_once(&played, |scene| {
+        assert_eq!(scene.move_row(&cards(), b"banner", 0), Ok(true));
+    });
+    played.step(FRAME, vec![]);
+    assert_eq!(keys(&played), ["banner", "card"]);
+    assert_eq!(laid_out_keys(&played), ["banner", "card"]);
+    assert!(near(
+        row_frame(&played, "banner").0,
+        fixture::HEADING_HEIGHT
+    ));
+    assert!(near(
+        row_frame(&played, "card").0,
+        fixture::HEADING_HEIGHT + fixture::BANNER_HEIGHT
+    ));
+    let (title, texts) = texts_before_banner(&played);
+    assert_eq!(texts, all_texts);
+    assert!(title < title_and_card, "the banner draws before the card");
+
+    write_once(&played, |scene| {
+        assert_eq!(scene.remove_row(&cards(), b"card"), Ok(true));
+    });
+    played.step(FRAME, vec![]);
+    assert_eq!(keys(&played), ["banner"]);
+    assert_eq!(laid_out_keys(&played), ["banner"]);
+    assert!(near(
+        footer_top(&played),
+        fixture::HEADING_HEIGHT + fixture::BANNER_HEIGHT
+    ));
+    assert_eq!(texts_before_banner(&played), (title, title));
+}
+
+/// A write through a row's path lands in that row only. The card's run and
+/// the banner's strip color share a local id, and each row resolves it in
+/// its own artboard: a text written into a card row reaches its run, a
+/// color written into the banner row its strip, and the same id written
+/// with the other kind into the other row is refused and changes nothing.
+#[test]
+fn a_write_through_each_rows_path_lands_in_that_row_only() {
+    assert_eq!(card::RUN, banner::STRIP_COLOR);
+    let mut played = played_with_banner(&[
+        ("a", fixture::CARD_ARTBOARD),
+        ("b", fixture::BANNER_ARTBOARD),
+        ("c", fixture::CARD_ARTBOARD),
+    ]);
+    let run_a = in_row(&played, "a", card::RUN);
+    let strip_b = in_row(&played, "b", banner::STRIP_COLOR);
+    let run_b = in_row(&played, "b", card::RUN);
+    let strip_c = in_row(&played, "c", banner::STRIP_COLOR);
+    let answers = Rc::new(RefCell::new(Vec::new()));
+    let log = answers.clone();
+    write_once(&played, move |scene| {
+        log.borrow_mut().extend([
+            scene.set_text(&run_a, TextValueRunBase::TEXT_PROPERTY_KEY, "Chosen"),
+            scene.set_color(
+                &strip_b,
+                SolidColorBase::COLOR_VALUE_PROPERTY_KEY,
+                0xffaa_0000,
+            ),
+            scene.set_text(&run_b, TextValueRunBase::TEXT_PROPERTY_KEY, "x"),
+            scene.set_color(
+                &strip_c,
+                SolidColorBase::COLOR_VALUE_PROPERTY_KEY,
+                0xff00_aa00,
+            ),
+        ]);
+    });
+    played.step(FRAME, vec![]);
+    assert_eq!(
+        *answers.borrow(),
+        [
+            Ok(true),
+            Ok(true),
+            Err(SceneWriteError::UnknownProperty),
+            Err(SceneWriteError::UnknownProperty),
+        ]
+    );
+    assert_eq!(run_text(&played, "a"), "Chosen");
+    assert_eq!(run_text(&played, "c"), fixture::RUN_TEXT);
+    assert_eq!(strip_color(&played, "b"), 0xffaa_0000);
+}
+
+/// A mount that names an artboard the list does not declare is refused
+/// with `NotRowArtboard` and changes nothing: the page's own artboard and
+/// an index past the file's artboards on a list that declares the banner,
+/// and the banner on a list that declares only the card. A list that
+/// declares an artboard the file does not have refuses a mount from it with
+/// `NoRowArtboard`, and still mounts from its row artboard.
+#[test]
+fn a_mount_from_an_artboard_the_list_does_not_declare_is_refused() {
+    let mut declared = played_with_banner(&[("a", fixture::CARD_ARTBOARD)]);
+    let frame = row_frame(&declared, "a");
+    let footer = footer_top(&declared);
+    let answers = Rc::new(RefCell::new(Vec::new()));
+    let log = answers.clone();
+    write_once(&declared, move |scene| {
+        log.borrow_mut().extend([
+            scene.mount_row_from(&cards(), b"x", 0),
+            scene.mount_row_from(&cards(), b"x", fixture::MISSING_ARTBOARD),
+            scene.mount_row_from(&cards(), b"x", u32::MAX),
+        ]);
+        assert_eq!(scene.changes(), 0);
+    });
+    let output = declared.step(FRAME, vec![]);
+    assert_eq!(*answers.borrow(), [Err(SceneWriteError::NotRowArtboard); 3]);
+    assert_eq!(output.driver_rounds, 1);
+    assert_eq!(keys(&declared), ["a"]);
+    assert_eq!(laid_out_keys(&declared), ["a"]);
+    assert_eq!(row_frame(&declared, "a"), frame);
+    assert_eq!(footer_top(&declared), footer);
+
+    let mut cards_only = played_with(&[]);
+    let answers = Rc::new(RefCell::new(Vec::new()));
+    let log = answers.clone();
+    write_once(&cards_only, move |scene| {
+        log.borrow_mut()
+            .push(scene.mount_row_from(&cards(), b"x", fixture::BANNER_ARTBOARD));
+        assert_eq!(scene.changes(), 0);
+    });
+    cards_only.step(FRAME, vec![]);
+    assert_eq!(*answers.borrow(), [Err(SceneWriteError::NotRowArtboard)]);
+    assert!(keys(&cards_only).is_empty());
+
+    let mut missing = played(Cards::DeclaresMissing);
+    let answers = Rc::new(RefCell::new(Vec::new()));
+    let log = answers.clone();
+    write_once(&missing, move |scene| {
+        log.borrow_mut().extend([
+            scene.mount_row_from(&cards(), b"x", fixture::MISSING_ARTBOARD),
+            scene.mount_row_from(&cards(), b"y", fixture::CARD_ARTBOARD),
+        ]);
+    });
+    missing.step(FRAME, vec![]);
+    assert_eq!(
+        *answers.borrow(),
+        [Err(SceneWriteError::NoRowArtboard), Ok(true)]
+    );
+    assert_eq!(keys(&missing), ["y"]);
+}
+
+/// A mount from the list's `rowArtboardId` is a plain mount: two screens,
+/// one mounting through `mount_row` and one through `mount_row_from` with
+/// the card's index, hold the same rows of the same artboard, laid out and
+/// drawn the same. On a list that also declares the banner, `mount_row`
+/// still mounts a card.
+#[test]
+fn a_mount_from_the_row_artboard_is_a_plain_mount() {
+    let plain = played_with(&["a", "b"]);
+    let mut chosen = played(Cards::Keyed);
+    mount_from(
+        &mut chosen,
+        &[("a", fixture::CARD_ARTBOARD), ("b", fixture::CARD_ARTBOARD)],
+    );
+    chosen.frames_until_settled();
+    assert_eq!(keys(&chosen), keys(&plain));
+    assert_eq!(laid_out_keys(&chosen), laid_out_keys(&plain));
+    for key in ["a", "b"] {
+        assert_eq!(row_frame(&chosen, key), row_frame(&plain, key));
+        assert_eq!(
+            source_of(&chosen, key),
+            file_artboard(&chosen, fixture::CARD_ARTBOARD)
+        );
+    }
+    assert_eq!(footer_top(&chosen), footer_top(&plain));
+    assert_eq!(drawn_paths(&chosen.f), drawn_paths(&plain.f));
+
+    let mut with_banner = played(Cards::WithBanner);
+    mount(&mut with_banner, &["a"]);
+    assert_eq!(
+        source_of(&with_banner, "a"),
+        file_artboard(&with_banner, fixture::CARD_ARTBOARD)
+    );
+}
+
+/// A reset that names a keyed list rebuilds each row from the artboard it
+/// was made from: the banner row is a fresh banner, holding the file's
+/// color, and the card row a fresh card, each under its key and in its
+/// place.
+#[test]
+fn a_reset_of_a_keyed_list_rebuilds_each_row_from_its_own_artboard() {
+    let mut played = played_with_banner(&[
+        ("a", fixture::CARD_ARTBOARD),
+        ("b", fixture::BANNER_ARTBOARD),
+    ]);
+    let run = in_row(&played, "a", card::RUN);
+    let strip = in_row(&played, "b", banner::STRIP_COLOR);
+    write_once(&played, move |scene| {
+        assert_eq!(
+            scene.set_text(&run, TextValueRunBase::TEXT_PROPERTY_KEY, "Chosen"),
+            Ok(true)
+        );
+        assert_eq!(
+            scene.set_color(
+                &strip,
+                SolidColorBase::COLOR_VALUE_PROPERTY_KEY,
+                0xffaa_0000
+            ),
+            Ok(true)
+        );
+    });
+    played.step(FRAME, vec![]);
+    played.frames_until_settled();
+    assert_eq!(strip_color(&played, "b"), 0xffaa_0000);
+    let frames = [row_frame(&played, "a"), row_frame(&played, "b")];
+    let old_a = row_of(&played, "a").downgrade();
+    let old_b = row_of(&played, "b").downgrade();
+
+    write_once(&played, |scene| {
+        assert_eq!(scene.reset(&cards()), Ok(true));
+    });
+    played.step(FRAME, vec![]);
+    played.frames_until_settled();
+    assert!(old_a.upgrade().is_none() && old_b.upgrade().is_none());
+    assert_eq!(keys(&played), ["a", "b"]);
+    assert_eq!(
+        source_of(&played, "a"),
+        file_artboard(&played, fixture::CARD_ARTBOARD)
+    );
+    assert_eq!(
+        source_of(&played, "b"),
+        file_artboard(&played, fixture::BANNER_ARTBOARD)
+    );
+    assert_eq!(run_text(&played, "a"), fixture::RUN_TEXT);
+    assert_eq!(strip_color(&played, "b"), fixture::BANNER_COLOR);
+    assert_eq!([row_frame(&played, "a"), row_frame(&played, "b")], frames);
+}
+
+/// A `KeyedRowArtboard` is a declaration of its parent list. Under the
+/// list, the list (and each instance of the artboard that holds it) declares
+/// its artboard; under anything else it is refused at import, so the file
+/// holds no such record and the list declares only its row artboard.
+#[test]
+fn a_keyed_row_artboard_outside_a_list_is_refused_at_import() {
+    let declarations = |played: &Played| {
+        let source = file_artboard(played, 0);
+        let in_file = source
+            .with_downcast::<Artboard, _>(|board| {
+                board.find_all_handles::<KeyedRowArtboard>().len()
+            })
+            .expect("the page");
+        let in_instance = played
+            .f
+            .artboard
+            .with_artboard(|board| board.find_all_handles::<KeyedRowArtboard>().len());
+        let declares = list(played)
+            .with_downcast::<ArtboardComponentList, _>(|list| {
+                list.declares_row_artboard(fixture::BANNER_ARTBOARD)
+            })
+            .expect("the list");
+        (in_file, in_instance, declares)
+    };
+    let declared = played(Cards::WithBanner);
+    assert_eq!(declarations(&declared), (1, 1, true));
+
+    let mut misplaced = played(Cards::MisplacedBanner);
+    assert_eq!(declarations(&misplaced), (0, 0, false));
+    let answers = Rc::new(RefCell::new(Vec::new()));
+    let log = answers.clone();
+    write_once(&misplaced, move |scene| {
+        log.borrow_mut().extend([
+            scene.mount_row_from(&cards(), b"x", fixture::BANNER_ARTBOARD),
+            scene.mount_row(&cards(), b"y"),
+        ]);
+    });
+    misplaced.step(FRAME, vec![]);
+    assert_eq!(
+        *answers.borrow(),
+        [Err(SceneWriteError::NotRowArtboard), Ok(true)]
+    );
+    assert_eq!(keys(&misplaced), ["y"]);
 }

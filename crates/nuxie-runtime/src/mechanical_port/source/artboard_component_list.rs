@@ -204,12 +204,19 @@ pub struct ArtboardComponentList {
     /// the artboard a keyed list's rows are made from. `u32::MAX` when the
     /// record does not set it, and then the list is not keyed.
     row_artboard_id: u32,
+    /// Nuxie `KeyedRowArtboard` children (60003): the further artboards a
+    /// keyed list's rows may be made from, by their index in the file's
+    /// artboards. With `row_artboard_id` they are the list's declared set.
+    declared_row_artboards: Vec<u32>,
     /// A keyed list's rows in the order the host's operations left them. A
     /// row mounted this round is here and in the instance maps before the
     /// round commits the order into `list_items`.
     keyed_rows: Vec<CoreHandle>,
     /// The key each keyed row was mounted by, by its list item.
     keyed_row_keys: CoreHandleMap<Box<[u8]>>,
+    /// The artboard each keyed row was made from, by its list item, kept
+    /// until the row is discarded.
+    keyed_row_sources: CoreHandleMap<CoreHandle>,
     /// Whether `keyed_rows` has changed since the list last took it.
     keyed_rows_pending: bool,
     /// List items of keyed rows the last list change discarded, released
@@ -223,8 +230,10 @@ pub struct ArtboardComponentList {
 pub(crate) enum KeyedRowRefusal {
     /// The list's record sets no `rowArtboardId`.
     NotKeyed,
-    /// The list's `rowArtboardId` names no artboard of the file.
+    /// The declared artboard the mount names is not one of the file's.
     NoRowArtboard,
+    /// The mount names an artboard the list does not declare.
+    NotRowArtboard,
     /// A row with this key is already mounted.
     KeyExists,
     /// No row with this key is mounted.
@@ -280,8 +289,10 @@ impl Default for ArtboardComponentList {
             provider_state: LayoutNodeProviderState::default(),
             constrainable_list_state: ConstrainableListState::default(),
             row_artboard_id: u32::MAX,
+            declared_row_artboards: Vec::new(),
             keyed_rows: Vec::new(),
             keyed_row_keys: CoreHandleMap::default(),
+            keyed_row_sources: CoreHandleMap::default(),
             keyed_rows_pending: false,
             keyed_discarded: Vec::new(),
         }
@@ -461,6 +472,7 @@ impl ArtboardComponentList {
     fn clear_keyed_rows(&mut self) {
         self.keyed_rows.clear();
         self.keyed_row_keys.clear();
+        self.keyed_row_sources.clear();
         self.keyed_rows_pending = false;
         self.keyed_discarded.clear();
     }
@@ -712,9 +724,9 @@ impl ArtboardComponentList {
     }
 
     pub fn find_artboard(&mut self, list_item: &CoreHandle) -> Option<CoreHandle> {
-        // Nuxie: every row of a keyed list is made from the record's artboard.
+        // Nuxie: a keyed row is made from the artboard its mount chose.
         if self.is_keyed() {
-            return self.keyed_row_artboard();
+            return self.keyed_row_sources.get(list_item).cloned();
         }
         let view_model_id = list_item
             .with_downcast::<ViewModelInstanceListItem, _>(|item| item.view_model_instance())
@@ -1384,6 +1396,7 @@ impl ArtboardComponentList {
                 if keyed {
                     // Nuxie: a keyed row that goes is discarded, never pooled.
                     self.dispose_list_item(item);
+                    self.keyed_row_sources.remove(item);
                     self.keyed_discarded.push(item.clone());
                 } else if virtualized {
                     self.dispose_list_item(item);
@@ -2591,6 +2604,9 @@ impl ArtboardComponentList {
         let mut cloned = self.base.clone_into(&mut ArtboardComponentList::default());
         cloned.set_file(self.file());
         cloned.set_row_artboard_id(self.row_artboard_id());
+        cloned
+            .declared_row_artboards
+            .clone_from(&self.declared_row_artboards);
         cloned
     }
 
@@ -3824,8 +3840,10 @@ impl std::ops::DerefMut for ArtboardComponentList {
 
 /// Nuxie keyed rows. A list whose record sets `rowArtboardId` takes its rows
 /// from a host, which mounts, removes and moves each row by a key of bytes.
-/// Each row is a fresh instance of the record's artboard with its machine,
-/// kept under one bare list item (a list item with no view model instance)
+/// Each row is a fresh instance, with its machine, of an artboard the list
+/// declares: `rowArtboardId` or a `KeyedRowArtboard` child's. The row keeps
+/// the artboard it was made from for as long as it lives. It is kept under
+/// one bare list item (a list item with no view model instance)
 /// that the list makes for the key and never hands out. A removed row is
 /// discarded, never pooled. A row's instance and machine live until it is
 /// removed, so a moved row keeps all its state.
@@ -3850,11 +3868,27 @@ impl ArtboardComponentList {
         self.row_artboard_id != u32::MAX
     }
 
-    /// The artboard a keyed list's rows are made from, as an index into the
-    /// file's artboards, as `ArtboardListMapRule.artboardId` names one.
-    fn keyed_row_artboard(&self) -> Option<CoreHandle> {
+    /// Add `artboard` to the artboards the list declares for keyed rows, as
+    /// a `KeyedRowArtboard` child does.
+    pub(crate) fn declare_row_artboard(&mut self, artboard: u32) {
+        if !self.declared_row_artboards.contains(&artboard) {
+            self.declared_row_artboards.push(artboard);
+        }
+    }
+
+    /// Whether a keyed list declares `artboard`, an index into the file's
+    /// artboards, for its rows: its `rowArtboardId` or a `KeyedRowArtboard`
+    /// child's.
+    pub fn declares_row_artboard(&self, artboard: u32) -> bool {
+        self.is_keyed()
+            && (artboard == self.row_artboard_id || self.declared_row_artboards.contains(&artboard))
+    }
+
+    /// The file's artboard at `artboard`, as `ArtboardListMapRule.artboardId`
+    /// names one.
+    fn file_artboard(&self, artboard: u32) -> Option<CoreHandle> {
         let artboards = self.file.as_ref()?.with_file(File::artboards)?;
-        artboards.get(self.row_artboard_id as usize).cloned()
+        artboards.get(artboard as usize).cloned()
     }
 
     /// The keys of a keyed list's rows, in their current order.
@@ -3922,11 +3956,13 @@ impl ArtboardComponentList {
     }
 
     /// Mount a row by `key` at the end of a keyed list: a fresh instance of
-    /// the row artboard with its machine, hosted at once. The list takes the
-    /// new row into its order when the round commits.
+    /// the declared artboard at `artboard` (an index into the file's
+    /// artboards) with its machine, hosted at once. The list takes the new
+    /// row into its order when the round commits.
     pub(crate) fn mount_keyed_row_occurrence(
         owner: &CoreHandle,
         key: &[u8],
+        artboard: u32,
     ) -> Result<(), KeyedRowRefusal> {
         let source = owner
             .with_downcast::<Self, _>(|list| {
@@ -3936,7 +3972,10 @@ impl ArtboardComponentList {
                 if list.keyed_row_item(key).is_some() {
                     return Err(KeyedRowRefusal::KeyExists);
                 }
-                list.keyed_row_artboard()
+                if !list.declares_row_artboard(artboard) {
+                    return Err(KeyedRowRefusal::NotRowArtboard);
+                }
+                list.file_artboard(artboard)
                     .ok_or(KeyedRowRefusal::NoRowArtboard)
             })
             .unwrap_or(Err(KeyedRowRefusal::NotKeyed))?;
@@ -3950,6 +3989,7 @@ impl ArtboardComponentList {
             list.artboard_instances_map
                 .insert(item.clone(), artboard.clone());
             list.keyed_row_keys.insert(item.clone(), key.into());
+            list.keyed_row_sources.insert(item.clone(), source);
             list.keyed_rows.push(item.clone());
             list.keyed_rows_pending = true;
         });
@@ -3997,6 +4037,7 @@ impl ArtboardComponentList {
                     return Ok(None);
                 }
                 list.remove_artboard(item.clone());
+                list.keyed_row_sources.remove(&item);
                 Ok(Some(item))
             })
             .unwrap_or(Err(KeyedRowRefusal::NotKeyed))?;

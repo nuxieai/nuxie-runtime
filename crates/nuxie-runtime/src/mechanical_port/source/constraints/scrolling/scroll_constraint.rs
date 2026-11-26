@@ -1439,9 +1439,8 @@ impl ScrollConstraint {
     /// right, also in a right-to-left viewport). It starts from where the
     /// content is going (the effective offset, the target while it
     /// settles), is clamped as `scroll_by` clamps, without the drag
-    /// multiplier, and moves through `scroll_to_position`: animated with
-    /// physics, at once without. False, and nothing called, when the clamp
-    /// leaves the content where it is going.
+    /// multiplier, and moves through `host_scroll_to_position`. False, and
+    /// nothing called, when the clamp leaves the content where it is going.
     pub fn scroll_content_by(&mut self, physical: Vec2D) -> bool {
         let logical = self.logical_scroll_delta(physical);
         let current = Vec2D::new(
@@ -1463,8 +1462,37 @@ impl ScrollConstraint {
         if target == current {
             return false;
         }
+        self.host_scroll_to_position(target, true)
+    }
+    /// Nuxie: a host's move of the content to `target`, an offset in the
+    /// scroller's own space. It goes through `scroll_to_position`, which
+    /// animates with physics that takes a target (elastic) when `animate`
+    /// is set. Upstream's `ScrollPhysics::scrollToPosition` is empty and
+    /// clamped physics does not override it, so there `scroll_to_position`
+    /// moves nothing. When the physics is not animating to a target
+    /// afterwards (clamped, or `animate` unset, for a player whose time does
+    /// not pass), a host move stops it and sets the offset at once, as
+    /// `scroll_to_position` does with no physics. `scroll_to_position`
+    /// itself stays upstream's for its focus caller. True when the
+    /// effective offset (the target while it settles) changed.
+    pub fn host_scroll_to_position(&mut self, target: Vec2D, animate: bool) -> bool {
+        let before = Vec2D::new(
+            self.effective_scroll_offset_x(),
+            self.effective_scroll_offset_y(),
+        );
         self.scroll_to_position(target.x, target.y);
-        true
+        let takes_target = self.with_physics(|physics| {
+            animate && physics.is_running() && (physics.has_target_x() || physics.has_target_y())
+        });
+        if takes_target == Some(false) {
+            self.stop_physics();
+            self.set_authored_scroll_offset_x(target.x);
+            self.set_authored_scroll_offset_y(target.y);
+        }
+        Vec2D::new(
+            self.effective_scroll_offset_x(),
+            self.effective_scroll_offset_y(),
+        ) != before
     }
     /// Nuxie: how far the content has moved from its start and the most it
     /// can, on each axis, in the scroller's own points: at or above 0, from

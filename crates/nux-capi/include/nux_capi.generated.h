@@ -3045,8 +3045,11 @@ NuxStatus nux_player_queue_semantic_action(struct NuxPlayer *player,
  * scrollers and the used components and list rows hosting it included,
  * moves by the smallest amount that shows it, as the engine's own focus
  * reveal moves them (snapped where a scroller snaps). Nothing is focused
- * and no listener hears it. A scroller with physics animates there; one
- * without moves at once. Either way a capture taken after the next
+ * and no listener hears it. A scroller with physics that animates to a
+ * target (elastic) animates there; one without physics, or with physics
+ * that cannot (clamped), moves at once, and on a static player
+ * (`nux_player_new_static`), whose steps pass no time, every scroller
+ * moves at once. Either way a capture taken after the next
  * presented step reports the scroller's target in its region's scroll,
  * though the node's box shows where it is drawn, in flight until the move
  * settles; the step's scheduling stays unsettled until then.
@@ -3078,9 +3081,11 @@ NuxStatus nux_player_reveal_semantic_node(struct NuxPlayer *player,
  * scroller. A move along an axis the region does not scroll is ignored.
  * It starts from where the content is going (the region's scroll), is
  * clamped to the region's range, and moves as a reveal does: animated
- * with physics, at once without. `out_moved` is false when the clamp
- * leaves it where it is going, so at an end a move further past it answers
- * false. A move invalidates the capture; no move leaves it valid.
+ * with elastic physics, at once otherwise. Only a state-machine player
+ * lists regions, so on any other a region returns NOT_FOUND. `out_moved`
+ * is false when the clamp leaves it where it is going, so at an end a
+ * move further past it answers false. A move invalidates the capture; no
+ * move leaves it valid.
  *
  * Stale captures return HANDLE_MISMATCH; a region past the capture's
  * `scroll_region_count` returns NOT_FOUND; a delta that is not finite

@@ -7,8 +7,8 @@
 //! left, as the compiler writes one (relative, its overflow scrolling),
 //! scrolling a "Content" box 300 points long. Each labeled box is a button:
 //! a box with a `SemanticData` of role button and that label, whose
-//! semantic tap fires an event. A page's scroll constraints have upstream's elastic physics when
-//! the fixture is built with physics, and none otherwise.
+//! semantic tap fires an event. A page's scroll constraints share the fixture's one physics
+//! object, upstream's elastic or clamped, or have none.
 //!
 //! The [`Page`] variants place the buttons; each lists its own positions.
 //! Artboard 1, "Row" (200 by 40), is the keyed list's row, a [`ROW_BUTTON`]
@@ -273,6 +273,7 @@ struct Board {
     styled: Vec<usize>,
     /// Each labeled box, whose semantic tap fires an event.
     buttons: Vec<usize>,
+    /// Whether the file has a physics object, local id 0 of the backboard's.
     physics: bool,
 }
 
@@ -457,18 +458,30 @@ fn var(b: &mut Vec<u8>, mut n: u64) {
     b.push(n as u8);
 }
 
-/// The file of `page`, its scroll constraints with elastic physics when
-/// `physics` is set.
-pub fn scroll_reveal_fixture(page: Page, physics: bool) -> Vec<u8> {
+/// The scroll physics of a fixture's scroll constraints.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Physics {
+    None,
+    /// Animates to a target (`ElasticScrollPhysics`).
+    Elastic,
+    /// Has no `scrollToPosition` of its own (`ClampedScrollPhysics`).
+    Clamped,
+}
+
+/// The file of `page`, its scroll constraints with `physics`.
+pub fn scroll_reveal_fixture(page: Page, kind: Physics) -> Vec<u8> {
     use V::*;
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
         var(&mut b, n);
     }
     obj(&mut b, "Backboard", &[]);
-    if physics {
-        obj(&mut b, "ElasticScrollPhysics", &[]);
+    match kind {
+        Physics::None => {}
+        Physics::Elastic => obj(&mut b, "ElasticScrollPhysics", &[]),
+        Physics::Clamped => obj(&mut b, "ClampedScrollPhysics", &[]),
     }
+    let physics = kind != Physics::None;
     write_artboard(&mut b, "Page", 320.0, 400.0, &[page_items(page)], physics);
     write_artboard(
         &mut b,

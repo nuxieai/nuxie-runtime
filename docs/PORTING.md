@@ -1912,7 +1912,18 @@ offset while measuring the node where it is drawn.
 A region move adds the caller's delta, mapped by `logical_scroll_delta`, to
 the effective offset, clamps it as `ScrollConstraint::scrollBy` does (without
 the drag multiplier) and calls `scrollToPosition`
-(`src/constraints/scrolling/scroll_constraint.cpp`). Tracking:
+(`src/constraints/scrolling/scroll_constraint.cpp`).
+
+Both host calls move each scroller through `host_scroll_to_position`, a
+Nuxie wrapper around `scrollToPosition`. Upstream's
+`ScrollPhysics::scrollToPosition` is an empty virtual and
+`ClampedScrollPhysics` does not override it, so under clamped physics
+upstream's call moves nothing, and so does upstream's focus reveal. The
+wrapper notices that the physics is not animating to a target, stops it and
+sets the offset at once, as `scrollToPosition` does with no physics. It does
+the same on a static player, whose steps advance by no time, so an animated
+move would never arrive there. `scrollToPosition` and focus reveal keep
+upstream's behaviour. Tracking:
 [UNIV-6334](https://universe.basis.dev/issue/UNIV-6334).
 The capture keeps each region's constraint beside its view, at most 256.
 Upstream's focus reveal, `requestSemanticFocus` and the wheel are unchanged.

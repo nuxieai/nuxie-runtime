@@ -113,6 +113,13 @@ impl Plan {
         }
         if let Some(list) = driver_list {
             self.rows.clear();
+            // With no step running and nothing in the air, nothing can
+            // cancel, so the rows are not walked.
+            if self.active.is_none() && self.lifted.is_empty() {
+                self.index.active(root);
+                self.revision = Some(revision);
+                return Ok(());
+            }
             let mounted = page_rows(&list);
             let has = |item: &CoreHandle| mounted.iter().any(|(row, _)| row == item);
             // A row step cancels when a row it names leaves the page's list,
@@ -1153,19 +1160,16 @@ fn step_row(list: &CoreHandle, key: &[u8], end: &str) -> Result<(usize, CoreHand
     Ok((place, item, board.core_handle()))
 }
 /// The rows of a driver page's list, asleep ones included, in the list's
-/// order: each row's list item and its artboard.
+/// order: each row's list item and its artboard, in one pass.
 fn page_rows(list: &CoreHandle) -> Vec<(CoreHandle, CoreHandle)> {
-    let rows = list
-        .with_downcast::<ArtboardComponentList, _>(|list| {
-            list.row_keys()
-                .into_iter()
-                .filter_map(|key| list.keyed_row(key))
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    rows.into_iter()
-        .map(|(item, board)| (item, board.core_handle()))
-        .collect()
+    #[cfg(feature = "test-support")]
+    crate::hosted_scene::record_walk(crate::hosted_scene::Walk::PageRows);
+    list.with_downcast::<ArtboardComponentList, _>(|list| {
+        list.keyed_rows()
+            .map(|(item, board)| (item.clone(), board.core_handle()))
+            .collect()
+    })
+    .unwrap_or_default()
 }
 /// A row of a driver page as a step reads it: its elements by flight key
 /// and its flight records, from its own instance. Two rows of one artboard

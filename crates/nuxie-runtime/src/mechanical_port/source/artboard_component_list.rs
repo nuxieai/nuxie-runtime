@@ -3922,6 +3922,17 @@ impl ArtboardComponentList {
             .collect()
     }
 
+    /// Each keyed row in its current order, a row mounted this round
+    /// included: its list item and its artboard, in one pass.
+    pub(crate) fn keyed_rows(
+        &self,
+    ) -> impl Iterator<Item = (&CoreHandle, &RuntimeArtboardInstanceHandle)> {
+        self.keyed_rows
+            .iter()
+            .filter(|item| self.keyed_row_keys.contains_key(item))
+            .filter_map(|item| Some((item, self.artboard_instances_map.get(item)?)))
+    }
+
     /// The list item of the keyed row mounted by `key`, a row mounted this
     /// round included. A key removed and mounted again names a new item.
     pub(crate) fn keyed_row_item(&self, key: &[u8]) -> Option<CoreHandle> {

@@ -652,6 +652,9 @@ pub enum Walk {
     /// A component list bringing its rows up to date after its items
     /// changed: its layout children, membership and focus rows.
     ListRows,
+    /// A step plan's walk over a driver page's rows, to find a step's end
+    /// or a flying copy's row that left.
+    PageRows,
 }
 #[cfg(feature = "test-support")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -673,6 +676,7 @@ pub struct WalkCounts {
     pub loan_row: u64,
     pub membership_flush: u64,
     pub list_rows: u64,
+    pub page_rows: u64,
 }
 #[cfg(feature = "test-support")]
 thread_local! { static COUNTS: Cell<Option<WalkCounts>> = const { Cell::new(None) }; }
@@ -708,6 +712,7 @@ pub fn record_walk(walk: Walk) {
                 Walk::LoanRow => &mut c.loan_row,
                 Walk::MembershipFlush => &mut c.membership_flush,
                 Walk::ListRows => &mut c.list_rows,
+                Walk::PageRows => &mut c.page_rows,
             };
             *target += 1;
             v.set(Some(c));

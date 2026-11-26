@@ -563,6 +563,28 @@ impl TextInput {
     pub(crate) fn live_move_typed_text(&self) -> Option<String> {
         self.user_edited_text.then(|| self.base.text().to_owned())
     }
+    /// Nuxie: where the caret stands, counted from the end of the shown
+    /// text, and whether it was placed, for a host's text write to put back
+    /// with `restore_caret_from_end`.
+    pub(crate) fn caret_from_end(&self) -> (u32, bool) {
+        let length = self.raw_text_input.length() as u32;
+        let caret = self
+            .raw_text_input
+            .cursor()
+            .end()
+            .code_point_index()
+            .min(length);
+        (length - caret, self.caret_placed)
+    }
+    /// Nuxie: puts the caret back as `caret_from_end` read it, clamped to the
+    /// start of the text; a selection collapses to it.
+    pub(crate) fn restore_caret_from_end(&mut self, (from_end, placed): (u32, bool)) {
+        let length = self.raw_text_input.length() as u32;
+        self.raw_text_input
+            .place_caret(length.saturating_sub(from_end));
+        self.caret_placed = placed;
+        self.mark_paint_dirty();
+    }
     pub fn text_changed(&mut self) {
         self.user_edited_text = false;
         self.source_text = self.base.text().to_owned();

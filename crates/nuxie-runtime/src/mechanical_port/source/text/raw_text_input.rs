@@ -1347,6 +1347,13 @@ impl RawTextInput {
         self.capture_journal_entry(starting_cursor);
     }
 
+    /// Nuxie: a caret with no selection at `index`, clamped to the text.
+    pub(crate) fn place_caret(&mut self, index: u32) {
+        let index = index.min(self.length() as u32);
+        self.ideal_cursor_x = -1.0;
+        self.set_cursor(Cursor::collapsed(CursorPosition::unresolved(index)));
+    }
+
     pub fn length(&self) -> usize {
         if self.empty() { 0 } else { self.text.len() - 1 }
     }

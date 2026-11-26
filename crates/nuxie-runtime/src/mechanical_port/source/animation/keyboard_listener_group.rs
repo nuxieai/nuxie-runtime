@@ -255,23 +255,16 @@ impl KeyboardListenerGroup {
     }
 
     pub fn text_input(&mut self, text: &str) -> bool {
-        if let Some(parent) = focus_parent(&self.focus_data) {
-            let result = parent.with_mut(|parent| {
-                if let Some(text_input) = parent.as_text_input_mut() {
-                    return Some(text_input.text_input(text));
-                }
-                None
-            });
-            if let Some(Some(result)) = result {
-                return result;
-            }
-            if self.listener.is_none()
-                && parent
-                    .with(|parent| parent.as_scripted_drawable().is_some())
-                    .unwrap_or(false)
-            {
-                return ScriptedDrawable::text_input_occurrence(&parent, text);
-            }
+        // A TextInput's own insert runs from FocusData::text_input_occurrence,
+        // once, ahead of the listeners on it. Each listener here only runs its
+        // own actions.
+        if self.listener.is_none()
+            && let Some(parent) = focus_parent(&self.focus_data)
+            && parent
+                .with(|parent| parent.as_scripted_drawable().is_some())
+                .unwrap_or(false)
+        {
+            return ScriptedDrawable::text_input_occurrence(&parent, text);
         }
         if let Some(listener) = self.listener.as_ref() {
             self.machine.with_instance_mut(|machine| {

@@ -194,6 +194,15 @@ struct B {
     nested_scroller: bool,
     /// A text input as this box's content, focusable through its FocusData.
     text_input: bool,
+    /// The text input is a single line, which leaves Enter to its listeners.
+    single_line: bool,
+    /// Text listeners on the text input itself, each firing an event of its
+    /// name.
+    text_listeners: Vec<&'static str>,
+    /// Keyboard listeners on the text input itself: a key, its exact
+    /// modifiers and its phases (1 down, 2 repeat, 4 up), firing an event of
+    /// this name.
+    key_listeners: Vec<(u64, u64, u64, &'static str)>,
     /// The text input's text.
     text: &'static str,
     /// A Text as this box's content, of a link run and then plain words, each
@@ -349,9 +358,9 @@ enum Entry<'a> {
     Image(&'static str, u64),
     /// A Text with no runs.
     EmptyText(u64),
-    /// A TextInput named "Field" with its text, and the FocusData and text
-    /// style in it.
-    TextInput(u64, &'static str),
+    /// A TextInput named "Field" with its text, single line when true, and
+    /// the FocusData and text style in it.
+    TextInput(u64, &'static str, bool),
     /// A Text with the opaque flag.
     OpaqueText(u64),
     /// A TextValueRun of a text in a Text, its style's object, and the name
@@ -638,7 +647,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             entries.push(Entry::NestedMachine(slots(entries)));
         }
         if node.text_input {
-            entries.push(Entry::TextInput(index, node.text));
+            entries.push(Entry::TextInput(index, node.text, node.single_line));
             let input = slots(entries);
             entries.push(Entry::FocusData(input));
             entries.push(Entry::TextStyle(input));
@@ -740,15 +749,35 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             parent,
         ));
     }
-    // Each listened box's object and its event's, which follows the boxes.
+    // Each listened box's object and its event's, which follows the boxes,
+    // with a keyboard listener's key, modifiers and phases.
     let mut listened = Vec::new();
+    let mut listened_boxes = Vec::new();
     let mut index = 0u64;
     for entry in &entries {
         if matches!(entry, Entry::Bind(..) | Entry::Keys(..)) {
             continue;
         }
         index += 1;
+        if let Entry::TextInput(parent, _, _) = entry
+            && let Some((_, node)) = listened_boxes
+                .iter()
+                .find(|(box_index, _): &&(u64, &B)| box_index == parent)
+        {
+            for event in &node.text_listeners {
+                listened.push((index, ListenerType::TextInput, *event, None));
+            }
+            for &(key, modifiers, phases, event) in &node.key_listeners {
+                listened.push((
+                    index,
+                    ListenerType::Keyboard,
+                    event,
+                    Some((key, modifiers, phases)),
+                ));
+            }
+        }
         if let Entry::Box(node, _) = entry {
+            listened_boxes.push((index, *node));
             for (kind, event) in [
                 (ListenerType::Click, node.listener),
                 (ListenerType::DragEnd, node.drag_end_first_listener),
@@ -760,12 +789,12 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                 (ListenerType::DragEnd, node.drag_end_listener),
             ] {
                 if let Some(event) = event {
-                    listened.push((index, kind, event));
+                    listened.push((index, kind, event, None));
                 }
             }
         }
         if let Entry::Run(_, _, _, Some(event)) = entry {
-            listened.push((index, ListenerType::Click, *event));
+            listened.push((index, ListenerType::Click, *event, None));
         }
     }
     // The first ScrollConstraint's object, which a scroll bar refers to.
@@ -782,9 +811,9 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         }
     }
     let mut listeners = Vec::new();
-    for (target, kind, event) in listened {
+    for (target, kind, event, keys) in listened {
         entries.push(Entry::Event(event));
-        listeners.push((target, kind, slots(&entries)));
+        listeners.push((target, kind, slots(&entries), keys));
     }
     // Styles follow every other object: the artboard's, then one per box.
     let first_style = slots(&entries) + 1;
@@ -1082,13 +1111,16 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                     .string(ComponentBase::NAME_PROPERTY_KEY, "Note")
                     .end();
             }
-            Entry::TextInput(parent, text) => {
+            Entry::TextInput(parent, text, single_line) => {
                 use crate::source::generated::text::text_input_base::TextInputBase;
                 riv.object(TextInputBase::TYPE_KEY)
                     .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
                     .string(ComponentBase::NAME_PROPERTY_KEY, "Field")
-                    .string(TextInputBase::TEXT_PROPERTY_KEY, text)
-                    .end();
+                    .string(TextInputBase::TEXT_PROPERTY_KEY, text);
+                if *single_line {
+                    riv.bool(TextInputBase::MULTILINE_PROPERTY_KEY, false);
+                }
+                riv.end();
             }
             Entry::OpaqueText(parent) => {
                 riv.object(crate::source::generated::text::text_base::TextBase::TYPE_KEY)
@@ -1236,16 +1268,31 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             state_machine_listener_base::StateMachineListenerBase,
         };
         riv.object(StateMachineBase::TYPE_KEY).end();
-        for (target, kind, event) in listeners {
+        for (target, kind, event, keys) in listeners {
+            use crate::source::generated::{
+                animation::listener_types::listener_input_type_keyboard_base::ListenerInputTypeKeyboardBase,
+                inputs::keyboard_input_base::KeyboardInputBase,
+            };
             riv.object(StateMachineListenerBase::TYPE_KEY)
                 .uint(StateMachineListenerBase::TARGET_ID_PROPERTY_KEY, target)
                 .end();
-            riv.object(ListenerInputTypeBase::TYPE_KEY)
-                .uint(
-                    ListenerInputTypeBase::LISTENER_TYPE_VALUE_PROPERTY_KEY,
-                    kind as u64,
-                )
-                .end();
+            riv.object(if keys.is_some() {
+                ListenerInputTypeKeyboardBase::TYPE_KEY
+            } else {
+                ListenerInputTypeBase::TYPE_KEY
+            })
+            .uint(
+                ListenerInputTypeBase::LISTENER_TYPE_VALUE_PROPERTY_KEY,
+                kind as u64,
+            )
+            .end();
+            if let Some((key, modifiers, phases)) = keys {
+                riv.object(KeyboardInputBase::TYPE_KEY)
+                    .uint(KeyboardInputBase::KEY_TYPE_PROPERTY_KEY, key)
+                    .uint(KeyboardInputBase::MODIFIERS_PROPERTY_KEY, modifiers)
+                    .uint(KeyboardInputBase::KEY_PHASE_PROPERTY_KEY, phases)
+                    .end();
+            }
             riv.object(ListenerFireEventBase::TYPE_KEY)
                 .uint(ListenerFireEventBase::EVENT_ID_PROPERTY_KEY, event)
                 .end();

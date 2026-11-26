@@ -637,18 +637,11 @@ pub unsafe extern "C" fn nux_player_semantic_snapshot(
                 .unwrap_or(0)
             })
             .collect();
-        // Only a state-machine player sends a step's pointers on:
-        // `PagePlayer::operation` applies them in its `Playback::StateMachine`
-        // arm and answers any other playback with no hit. Restated, because
-        // that arm binds the machine and offers no predicate to share.
-        let Ok(takes_pointers) = player
-            .instance
-            .try_borrow()
-            .map(|instance| matches!(&*instance, PlayerInstance::StateMachine(_)))
-        else {
-            return NuxStatus::ReentrantCall;
+        let lists_regions = match takes_pointers(player) {
+            Ok(takes) => takes,
+            Err(status) => return status,
         };
-        let regions = if takes_pointers {
+        let regions = if lists_regions {
             // Past the region limit, or a viewport's clips past the geometry
             // budget: the capture fails as a node's geometry fails it above.
             match ScrollRegions::collect(&artboard.core_handle()) {
@@ -910,9 +903,26 @@ pub unsafe extern "C" fn nux_player_queue_semantic_action(
     })
 }
 
+/// Whether `player` sends a step's pointers on, and so lists scroll
+/// regions: only a state-machine player does. `PagePlayer::operation`
+/// applies pointers in its `Playback::StateMachine` arm and answers any
+/// other playback with no hit. Restated, because that arm binds the machine
+/// and offers no predicate to share. REENTRANT_CALL while the player is in
+/// use.
+fn takes_pointers(player: &NuxPlayer) -> Result<bool, NuxStatus> {
+    player
+        .instance
+        .try_borrow()
+        .map(|instance| matches!(&*instance, PlayerInstance::StateMachine(_)))
+        .map_err(|_| NuxStatus::ReentrantCall)
+}
+
 /// Run `move_content` on a presented capture's occurrence and fold whether
 /// it moved anything into presentation: a move invalidates the capture, and
-/// no move leaves it valid. The next render revision is checked first, so
+/// no move leaves it valid. A capture is keyed by the occurrence, which
+/// every player over one artboard instance shares, so it may have been
+/// taken by another player than `player`: `move_content` acts as `player`,
+/// the one the call was sent to, never as the capture's taker. The next render revision is checked first, so
 /// a move is never made that could not be presented.
 unsafe fn move_presented_content(
     player: *mut NuxPlayer,
@@ -958,7 +968,8 @@ unsafe fn move_presented_content(
 /// target (elastic) animates there; one without physics, or with physics
 /// that cannot (clamped), moves at once, and on a static player
 /// (`nux_player_new_static`), whose steps pass no time, every scroller
-/// moves at once. Either way a capture taken after the next
+/// moves at once, also with a capture another player over the same
+/// artboard instance took. Either way a capture taken after the next
 /// presented step reports the scroller's target in its region's scroll,
 /// though the node's box shows where it is drawn, in flight until the move
 /// settles; the step's scheduling stays unsettled until then.
@@ -1003,7 +1014,9 @@ pub unsafe extern "C" fn nux_player_reveal_semantic_node(
                 return Err(NuxStatus::NotFound);
             }
             // A static player advances by no time on each step, so a move
-            // it animated would never arrive; it moves at once instead.
+            // it animated would never arrive; it moves at once instead. The
+            // player read is the one the call was sent to, also with a
+            // capture another player took.
             let animate = !matches!(
                 &*player
                     .instance
@@ -1024,7 +1037,8 @@ pub unsafe extern "C" fn nux_player_reveal_semantic_node(
 /// It starts from where the content is going (the region's scroll), is
 /// clamped to the region's range, and moves as a reveal does: animated
 /// with elastic physics, at once otherwise. Only a state-machine player
-/// lists regions, so on any other a region returns NOT_FOUND. `out_moved`
+/// lists regions, so on any other a region returns NOT_FOUND, also with a
+/// capture another player over the same artboard instance took. `out_moved`
 /// is false when the clamp leaves it where it is going, so at an end a
 /// move further past it answers false. A move invalidates the capture; no
 /// move leaves it valid.
@@ -1049,7 +1063,13 @@ pub unsafe extern "C" fn nux_player_scroll_region_by(
             return NuxStatus::InvalidArgument;
         }
         unsafe {
-            move_presented_content(player, snapshot, out_moved, |_, snapshot| {
+            move_presented_content(player, snapshot, out_moved, |player, snapshot| {
+                // Another player's capture validates here too (it is keyed
+                // by the shared occurrence); a player that lists no regions
+                // has none to move, whoever took the capture.
+                if !takes_pointers(player)? {
+                    return Err(NuxStatus::NotFound);
+                }
                 let constraint = snapshot
                     .region_constraints
                     .get(region as usize)

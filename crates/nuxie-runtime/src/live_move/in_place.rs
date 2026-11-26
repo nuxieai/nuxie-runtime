@@ -799,7 +799,7 @@ impl InPlaceFlight {
         self
     }
 
-    fn values_of(record: &CoreHandle) -> Result<Values> {
+    pub(super) fn values_of(record: &CoreHandle) -> Result<Values> {
         record
             .with_downcast::<LiveFlight, _>(|record| record.values.clone())
             .ok_or_else(|| anyhow::anyhow!("flight record retired"))

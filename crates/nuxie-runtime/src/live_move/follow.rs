@@ -98,6 +98,7 @@ impl FlightFrame {
     /// One read of a flight record's controls, with its two ends' sizes `a`
     /// and `b` blended at its progress.
     pub(super) fn read(values: &super::records::Values, a: Vec2D, b: Vec2D) -> Result<Self> {
+        Self::check_controls(values)?;
         let (progress, path_x, path_y, fade, corners, shadow) = (
             values.progress,
             values.path_x,
@@ -105,15 +106,6 @@ impl FlightFrame {
             values.fade,
             values.corners,
             values.shadow,
-        );
-        ensure!(
-            progress.is_finite()
-                && path_x.is_finite()
-                && path_y.is_finite()
-                && fade.is_finite()
-                && corners.iter().all(|corner| corner.is_finite())
-                && shadow.iter().all(|value| value.is_finite()),
-            "non-finite flight controls"
         );
         let t = progress.clamp(0.0, 1.0);
         let mix = |a: f32, b: f32| a + (b - a) * t;
@@ -135,6 +127,21 @@ impl FlightFrame {
                 .then_some(corners),
             shadow: flight_shadow(shadow),
         })
+    }
+
+    /// What [`Self::read`] refuses in a record's controls alone, before any
+    /// end is read: a control that is not finite.
+    pub(super) fn check_controls(values: &super::records::Values) -> Result<()> {
+        ensure!(
+            values.progress.is_finite()
+                && values.path_x.is_finite()
+                && values.path_y.is_finite()
+                && values.fade.is_finite()
+                && values.corners.iter().all(|corner| corner.is_finite())
+                && values.shadow.iter().all(|value| value.is_finite()),
+            "non-finite flight controls"
+        );
+        Ok(())
     }
 
     /// The blend of two ends' sizes at this frame's progress.

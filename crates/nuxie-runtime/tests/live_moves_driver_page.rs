@@ -733,6 +733,42 @@ fn refusals_mark_nothing() {
     assert_eq!(refused(begin), ErrorKind::InvalidArgument);
 }
 
+/// Proof 5, with a layout change pending. With "b" first, "a" is the upper
+/// row and holds none of t1's records. The root is resized, so a flush
+/// would lay the page out again: the step is refused before it, the page
+/// is not laid out by the refusal and stays usable. Moved below "a", "b"
+/// is the upper row, and the same step begins and lands.
+#[test]
+fn a_step_refused_with_layout_pending_leaves_the_page_usable() {
+    let mut s = DriverScene::new(DriverPage::TwoVersions, &[("b", B), ("a", A)]);
+    let root = s.root();
+    root.set_size(321.0, 654.0);
+    let serial = root.with_artboard(|b| b.change_serial());
+    assert_eq!(refused(s.begin("a", "b", "t1")), ErrorKind::InvalidArgument);
+    assert_eq!(
+        root.with_artboard(|b| b.change_serial()),
+        serial,
+        "the refusal flushes nothing"
+    );
+    assert!(s.lifted().is_empty());
+    assert!(!s.poisoned());
+
+    s.write(|scene| {
+        assert_eq!(scene.move_row(&rows_list(), b"b", 1), Ok(true));
+    });
+    s.step(0.0);
+    assert_eq!(s.keys(), ["a", "b"]);
+    s.begin("a", "b", "t1").expect("the step begins");
+    let upper = records_of(&s.row("b"));
+    let flights = s.lifted();
+    assert_eq!(flights.len(), 2);
+    assert!(flights.iter().all(|(_, _, record)| upper.contains(record)));
+    s.step(0.0);
+    s.end("a", "b", "t1").expect("the step lands");
+    assert!(s.lifted().is_empty());
+    assert!(!s.poisoned());
+}
+
 /// Proof 6. A component artboard of a driver page is checked as a Screen
 /// at import: a duplicate flight key refuses the file, and so does an
 /// invalid unit. A driver page with steps and no step running frames as a

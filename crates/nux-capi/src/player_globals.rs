@@ -55,7 +55,7 @@ pub unsafe extern "C" fn nux_player_set_global_view_model(
             let Ok(mut selected) = player.instance.try_borrow_mut() else {
                 return NuxStatus::ReentrantCall;
             };
-            let PlayerInstance::StateMachine(machine) = &mut *selected else {
+            let Playback::StateMachine(machine) = &mut *selected else {
                 return NuxStatus::NotFound;
             };
             let Ok(mut globals) = player.global_view_models.values.try_borrow_mut() else {

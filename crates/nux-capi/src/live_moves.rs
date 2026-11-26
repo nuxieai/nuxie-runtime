@@ -7,9 +7,9 @@ pub(super) enum Request {
     End(NuxStringView, *const NuxStringView),
     Row(NuxStringView, u32, u8),
 }
-use nuxie::page_player::Operation as Prepared;
+use nuxie::page_player::Operation;
 impl Request {
-    pub(super) fn prepare(self) -> Result<Prepared, NuxStatus> {
+    pub(super) fn prepare(self) -> Result<Operation, NuxStatus> {
         fn names(
             incoming: NuxStringView,
             name: *const NuxStringView,
@@ -26,17 +26,17 @@ impl Request {
         Ok(match self {
             Self::Begin(incoming, name) => {
                 let (incoming, name) = names(incoming, name)?;
-                Prepared::Begin(incoming, name)
+                Operation::Begin(incoming, name)
             }
             Self::End(incoming, name) => {
                 let (incoming, name) = names(incoming, name)?;
-                Prepared::End(incoming, name)
+                Operation::End(incoming, name)
             }
             Self::Row(list, row, collapsed) => {
                 if collapsed > 1 || row > i32::MAX as u32 {
                     return Err(NuxStatus::InvalidArgument);
                 }
-                Prepared::Row(
+                Operation::Row(
                     with_utf8_view(list, str::to_owned)?,
                     row as i32,
                     collapsed != 0,

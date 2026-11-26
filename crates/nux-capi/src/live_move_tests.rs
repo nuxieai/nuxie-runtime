@@ -85,6 +85,34 @@ fn page_player_published_emits_initial_presentation() {
                     == b"vm_runtime_root_scr_screens_semits"
             })
             .expect("published emits schema");
+        // The emits row's nested view model that owns the `goals` list, found
+        // by structure in the catalog.
+        let properties: Vec<_> = (0..info.property_count)
+            .map(|index| {
+                let mut property = NuxViewModelPropertyView::default();
+                assert_eq!(
+                    nux_view_model_catalog_property(catalog, index, &mut property),
+                    NuxStatus::Ok
+                );
+                let name =
+                    std::slice::from_raw_parts(property.name.data.cast::<u8>(), property.name.len);
+                (
+                    property.schema_index,
+                    property.referenced_schema_index,
+                    std::str::from_utf8(name).unwrap().to_owned(),
+                )
+            })
+            .collect();
+        let goals_path = properties
+            .iter()
+            .filter(|(schema, referenced, _)| *schema == row_schema && *referenced != usize::MAX)
+            .find_map(|(_, referenced, name)| {
+                properties
+                    .iter()
+                    .any(|(schema, _, goals)| schema == referenced && goals == "goals")
+                    .then(|| format!("{name}/goals"))
+            })
+            .expect("the emits row's nested view model with goals");
         let mut row = ptr::null_mut();
         assert_eq!(
             nux_view_model_instance_new_schema_default(scene.file, row_schema, &mut row),
@@ -93,12 +121,7 @@ fn page_player_published_emits_initial_presentation() {
         for index in 0..3 {
             let mut goal = ptr::null_mut();
             assert_eq!(
-                nux_view_model_instance_list_item_acquire(
-                    row,
-                    view("experience/goals"),
-                    index,
-                    &mut goal
-                ),
+                nux_view_model_instance_list_item_acquire(row, view(&goals_path), index, &mut goal),
                 NuxStatus::Ok,
                 "published goals defaults must remain populated"
             );
@@ -913,7 +936,8 @@ fn live_moves_record_free_media_queries_keep_no_live_cache_round6() {
 #[test]
 fn live_moves_rebind_default_page_then_step_does_not_poison_round7() {
     unsafe {
-        let mut scene = LiveScene::from_bytes(&nuxie_runtime::live_move::device_fixture::device_fixture(2));
+        let mut scene =
+            LiveScene::from_bytes(&nuxie_runtime::live_move::device_fixture::device_fixture(2));
         for _ in 0..2 {
             let mut replacement = ptr::null_mut();
             assert_eq!(
@@ -1192,7 +1216,8 @@ return function() return {value=0,last=0,atSource=false,update=update} end"#;
 unsafe fn detached_row_write_case(remove_before_write: bool, step_after_remove: bool) {
     use crate::data_binding::*;
     unsafe {
-        let scene = LiveScene::from_bytes(&nuxie_runtime::live_move::device_fixture::device_fixture(2));
+        let scene =
+            LiveScene::from_bytes(&nuxie_runtime::live_move::device_fixture::device_fixture(2));
         let mut row = ptr::null_mut();
         let mut live = ptr::null_mut();
         assert_eq!(
@@ -1362,7 +1387,8 @@ fn live_moves_detached_row_late_write_after_previous_step() {
 fn live_moves_native_typing_requires_a_fresh_presented_snapshot() {
     use nuxie::runtime::{focus_data::FocusData, semantic::semantic_data::SemanticData};
     unsafe {
-        let scene = LiveScene::from_bytes(&nuxie_runtime::live_move::device_fixture::device_fixture(2));
+        let scene =
+            LiveScene::from_bytes(&nuxie_runtime::live_move::device_fixture::device_fixture(2));
         assert_eq!(nux_player_enable_semantics(scene.player), NuxStatus::Ok);
         let root = (&(*scene.player).artboard)
             .instance
@@ -2873,7 +2899,7 @@ fn in_place_live_moves_semantic_snapshot_keeps_one_field_and_focus() {
 
 #[test]
 fn in_place_live_moves_sleep_wake_and_hidden_transfers_keep_sdk_identities_round4() {
-    use nuxie::{live_move, runtime::semantic::semantic_data::SemanticData};
+    use nuxie::runtime::semantic::semantic_data::SemanticData;
     unsafe {
         let scene = carry_page(fixture::InPlaceCarry::TransferVideo);
         let root = page_root(&scene);
@@ -2951,13 +2977,13 @@ fn in_place_live_moves_sleep_wake_and_hidden_transfers_keep_sdk_identities_round
         // Step incoming Screens must be awake. Exercise the transport seam for
         // an attachment into a sleeping destination instead: A's placement,
         // while A sleeps.
-        live_move::carry(&b[0], &a[0], false).unwrap();
+        nuxie::live_move::carry(&b[0], &a[0], false).unwrap();
         check(false);
         sleep(0, 0);
         check(true);
         sleep(0, 1);
         check(false);
-        live_move::carry(&a[0], &b[0], false).unwrap();
+        nuxie::live_move::carry(&a[0], &b[0], false).unwrap();
         check(true);
         scene.close();
     }

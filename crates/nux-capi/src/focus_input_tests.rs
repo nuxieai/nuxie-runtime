@@ -39,7 +39,7 @@ fn invalid_focus_batch_preserves_the_earlier_bool_input() {
         };
         let read_bool = || {
             let instance = (*player).instance.borrow();
-            let PlayerInstance::StateMachine(machine) = &*instance else {
+            let Playback::StateMachine(machine) = &*instance else {
                 panic!("state machine");
             };
             machine.get_bool("bool").unwrap().bool_value().unwrap()

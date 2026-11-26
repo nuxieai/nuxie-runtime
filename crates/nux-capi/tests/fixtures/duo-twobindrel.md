@@ -1,6 +1,6 @@
 # Duo twobindrel fixture
 
-`duo-twobindrel.nux` is Duolingo's Duo, rebuilt as a Nuxie Experience: a
+`duo-twobindrel.nux` is Duolingo's Duo, rebuilt in Nuxie: a
 question Screen and a lesson Screen joined by a Magic Move that transfers Duo
 and the progress bar, both marked transferable, and flies the Continue
 button's two copies. `live_moves_carried_binds.rs` plays it through the C API
@@ -13,9 +13,8 @@ It was published at nuxie-dev `4859f66572da4ad8954549d65b9f195d0730ca0e` with
 this repository at `42f21c6fe437a4a8f863f247928ebf478f97a0c1`. That compiler
 flies elements in place: it writes each step unit's `transfers`, flight records
 and no slot records. The source folder
-is the Magic Move handoff's
-`references/duolingo-duo/ours-levi-read/take-1/variants/twobindrel/experience`
-with `"transferable": true` in `components/duo-mascot/frame.json` and
+is the `twobindrel` variant under the Magic Move handoff's
+`references/duolingo-duo/ours-levi-read/take-1/variants/`, with `"transferable": true` in `components/duo-mascot/frame.json` and
 `components/lesson-progress/frame.json`, as Duo's own folder marks them (a
 copy is at `runs/m4-next/unit22/runtime-pr/duo-twobindrel-marked`). The
 variant is Duo's folder with two changes:
@@ -26,14 +25,10 @@ variant is Duo's folder with two changes:
 - `.option-text` on the question Screen has `position: relative`, so the
   option words show.
 
-Regenerate in nuxie-dev with
-
-```sh
-bash tools/nuxie-editor/scripts/bazel.sh run -p experience-editor-bridge \
-  --example publish_folder -- <folder> <out dir>
-```
-
-and copy `<out dir>/screen.riv` here.
+Regenerate in nuxie-dev by running the editor bridge crate's
+`publish_folder` example through `tools/nuxie-editor/scripts/bazel.sh` with
+the folder and an output directory, and copy `screen.riv` from that output
+here.
 
 What the tests rely on:
 

@@ -913,7 +913,7 @@ fn takes_pointers(player: &NuxPlayer) -> Result<bool, NuxStatus> {
     player
         .instance
         .try_borrow()
-        .map(|instance| matches!(&*instance, PlayerInstance::StateMachine(_)))
+        .map(|instance| matches!(&*instance, Playback::StateMachine(_)))
         .map_err(|_| NuxStatus::ReentrantCall)
 }
 
@@ -1022,7 +1022,7 @@ pub unsafe extern "C" fn nux_player_reveal_semantic_node(
                     .instance
                     .try_borrow()
                     .map_err(|_| NuxStatus::ReentrantCall)?,
-                PlayerInstance::StaticArtboard
+                Playback::StaticArtboard
             );
             Ok(semantic_reveal(&node, animate))
         })

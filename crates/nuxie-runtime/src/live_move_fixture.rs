@@ -5365,7 +5365,7 @@ pub fn form_script_page_fixture(payload: &[u8], rows: usize) -> Vec<u8> {
             ],
         );
     }
-    obj(&mut b, "ViewModel", &[("name", S("Experience"))]);
+    obj(&mut b, "ViewModel", &[("name", S("Answers"))]);
     obj(
         &mut b,
         "ViewModelPropertyViewModel",
@@ -5387,7 +5387,7 @@ pub fn form_script_page_fixture(payload: &[u8], rows: usize) -> Vec<u8> {
         obj(
             &mut b,
             "ViewModelPropertyViewModel",
-            &[("name", S("experience")), ("viewModelReferenceId", U(2))],
+            &[("name", S("answers")), ("viewModelReferenceId", U(2))],
         );
         obj(&mut b, "ViewModelPropertyNumber", &[("name", S("mode"))]);
         obj(

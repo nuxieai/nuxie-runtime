@@ -6,7 +6,7 @@ use super::*;
 // The helper the scripted-resource compiler emits for
 // `nuxie.responses.set(context, field, value)`, kept here as its contract with
 // the checked-write module. One line, as the compiler emits it.
-const RESPONSES_SET: &str = r#"local responses = {}; responses.set = function(context, field, value) local screen = context:viewModel(); if screen == nil then error("nuxie.responses.set needs the script's context") end; if type(field) ~= "string" or #field > 4096 then error("nuxie.responses.set field must be a form.field string of at most 4096 UTF-8 bytes") end; local form, name = string.match(field, "^([^.]+)%.([^.]+)$"); if not form or string.find(field, "[/%z]") then error("nuxie.responses.set field must name a form and field") end; local answer = "experience/responses:" .. form .. "/" .. name; if value == nil or type(value) == "table" then local options = module.listValues(screen, answer, "value"); if options == nil then if value ~= nil then error("nuxie.responses.set choices need a several-choice answer") end; return module.set(screen, answer, nil) end; local chosen = {}; if value ~= nil then local count = 0; for key, option in pairs(value) do if type(option) ~= "string" then error("nuxie.responses.set choices must be option names") end; count = count + 1; chosen[option] = true end; for key in pairs(value) do if type(key) ~= "number" or key % 1 ~= 0 or key < 1 or key > count then error("nuxie.responses.set choices must be a list of option names") end end end; local writes = {}; for index, option in ipairs(options) do local hex = string.gsub(option, ".", function(byte) return string.format("%02x", string.byte(byte)) end); writes[index] = {root = screen, path = "experience/responses:" .. form .. "/option:" .. name .. ":" .. hex .. "/picked", value = chosen[option] == true}; chosen[option] = nil end; if next(chosen) ~= nil then error("nuxie.responses.set choices must name options of this answer") end; return module.setAll(writes) end; return module.set(screen, answer, value) end"#;
+const RESPONSES_SET: &str = r#"local responses = {}; responses.set = function(context, field, value) local screen = context:viewModel(); if screen == nil then error("nuxie.responses.set needs the script's context") end; if type(field) ~= "string" or #field > 4096 then error("nuxie.responses.set field must be a form.field string of at most 4096 UTF-8 bytes") end; local form, name = string.match(field, "^([^.]+)%.([^.]+)$"); if not form or string.find(field, "[/%z]") then error("nuxie.responses.set field must name a form and field") end; local answer = "answers/responses:" .. form .. "/" .. name; if value == nil or type(value) == "table" then local options = module.listValues(screen, answer, "value"); if options == nil then if value ~= nil then error("nuxie.responses.set choices need a several-choice answer") end; return module.set(screen, answer, nil) end; local chosen = {}; if value ~= nil then local count = 0; for key, option in pairs(value) do if type(option) ~= "string" then error("nuxie.responses.set choices must be option names") end; count = count + 1; chosen[option] = true end; for key in pairs(value) do if type(key) ~= "number" or key % 1 ~= 0 or key < 1 or key > count then error("nuxie.responses.set choices must be a list of option names") end end end; local writes = {}; for index, option in ipairs(options) do local hex = string.gsub(option, ".", function(byte) return string.format("%02x", string.byte(byte)) end); writes[index] = {root = screen, path = "answers/responses:" .. form .. "/option:" .. name .. ":" .. hex .. "/picked", value = chosen[option] == true}; chosen[option] = nil end; if next(chosen) ~= nil then error("nuxie.responses.set choices must name options of this answer") end; return module.setAll(writes) end; return module.set(screen, answer, value) end"#;
 
 // Each Screen's `mode` picks what its tap does.
 const FORM_SCRIPT: &str = r#"
@@ -35,21 +35,21 @@ return function(context)
    assert(not ok and string.find(tostring(message), 'NotFound'), tostring(message))
    assert(loose.title.value == before)
   elseif mode == 7 then
-   local ok, message = pcall(module.set, {}, 'experience/responses:form/title', 'row-a')
+   local ok, message = pcall(module.set, {}, 'answers/responses:form/title', 'row-a')
    assert(not ok and string.find(tostring(message), 'checked root must be a name or a view model'), tostring(message))
   elseif mode == 8 then
    local other = context:rootViewModel().screens[2]
    local ok, rule = module.setAll({
-    {root = other, path = 'experience/responses:form/option:field:78/picked', value = true},
-    {root = other, path = 'experience/responses:form/option:field:79/picked', value = true}})
+    {root = other, path = 'answers/responses:form/option:field:78/picked', value = true},
+    {root = other, path = 'answers/responses:form/option:field:79/picked', value = true}})
    assert(not ok and rule == 'one-choice', tostring(rule))
-   ok, rule = module.set(other, 'experience/responses:form/title', 'nope')
+   ok, rule = module.set(other, 'answers/responses:form/title', 'nope')
    assert(not ok and rule == 'allowed-title', tostring(rule))
-   ok, rule = module.set(other, 'experience/responses:form/title', 'row-b')
+   ok, rule = module.set(other, 'answers/responses:form/title', 'row-b')
    assert(ok and rule == nil, tostring(rule))
   elseif mode == 9 then
    local other = context:rootViewModel().screens[2]
-   assert(module.set(other, 'experience/responses:form/title', 'row-a'))
+   assert(module.set(other, 'answers/responses:form/title', 'row-a'))
    error('abort row')
   end
   module.command('row-action', {mode = mode})
@@ -168,7 +168,7 @@ fn form_screen(scene: &LiveScene, index: usize) -> RuntimeOwnedViewModelHandle {
 }
 
 fn form_picks(screen: &RuntimeOwnedViewModelHandle) -> [bool; 2] {
-    let path = "experience/responses:form/field";
+    let path = "answers/responses:form/field";
     [0, 1].map(|index| {
         screen
             .list_item_by_property_name_path(path, index)
@@ -182,7 +182,7 @@ fn form_picks(screen: &RuntimeOwnedViewModelHandle) -> [bool; 2] {
 fn form_title(screen: &RuntimeOwnedViewModelHandle) -> Vec<u8> {
     screen
         .borrow()
-        .string_value_by_property_name_path("experience/responses:form/title")
+        .string_value_by_property_name_path("answers/responses:form/title")
         .unwrap()
         .to_vec()
 }

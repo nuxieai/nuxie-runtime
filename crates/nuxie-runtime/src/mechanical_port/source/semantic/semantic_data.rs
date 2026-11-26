@@ -82,7 +82,9 @@ pub struct SemanticData {
     pub base: SemanticDataBase,
     semantic_node: Option<SemanticNodeRef>,
     semantic_listeners: Vec<SemanticListenerRef>,
-    bounds_retry_pending: bool,
+    // Nuxie: the last artboard frame (`Artboard::frames_advanced`) in which
+    // empty bounds are retried; `None` when no retry is pending.
+    bounds_retry_until: Option<u64>,
     owner_hidden: bool,
 }
 
@@ -92,7 +94,7 @@ impl Default for SemanticData {
             base: SemanticDataBase::default(),
             semantic_node: None,
             semantic_listeners: Vec::new(),
-            bounds_retry_pending: false,
+            bounds_retry_until: None,
             owner_hidden: false,
         }
     }
@@ -248,7 +250,7 @@ impl SemanticData {
         }
         self.semantic_node = Some(node.clone());
         self.apply_inferred_semantics_if_needed();
-        self.bounds_retry_pending = true;
+        self.arm_bounds_retry();
         self.update_world_bounds();
         node
     }
@@ -450,11 +452,26 @@ impl SemanticData {
         if self.is_excluded_from_semantic_tree() {
             return;
         }
-        self.bounds_retry_pending = true;
+        self.arm_bounds_retry();
         self.update_world_bounds();
         self.component_mut()
             .add_dirt(ComponentDirt::WORLD_TRANSFORM, false);
         self.apply_inferred_semantics_if_needed();
+    }
+
+    /// The artboard frames this record's artboard has advanced, 0 without
+    /// an artboard.
+    fn frames_advanced(&self) -> u64 {
+        self.component()
+            .artboard_handle()
+            .and_then(|artboard| artboard.with_downcast::<Artboard, _>(Artboard::frames_advanced))
+            .unwrap_or(0)
+    }
+
+    /// Upstream's `m_boundsRetryPending = true`: empty bounds are retried
+    /// until the end of the next frame the artboard advances.
+    fn arm_bounds_retry(&mut self) {
+        self.bounds_retry_until = Some(self.frames_advanced() + 1);
     }
 
     fn update_world_bounds(&mut self) {
@@ -465,12 +482,26 @@ impl SemanticData {
             return;
         };
         let bounds = semantic_bounds(Some(&parent));
-        if bounds.is_empty_or_nan() && self.bounds_retry_pending {
+        if bounds.is_empty_or_nan()
+            && self
+                .bounds_retry_until
+                .is_some_and(|until| self.frames_advanced() <= until)
+        {
+            // Nuxie: the record's update can run before its shape's path is
+            // built in the same update pass, and nothing marks the record
+            // again once the path is built, so empty bounds are read again
+            // on the next update. Upstream retries for as long as the bounds
+            // stay empty, so a record over a box that stays empty (a text
+            // with no words) is dirtied on every update and its page never
+            // settles (UNIV-7008). Here the retry ends with the next frame
+            // the artboard advances, whose update passes (at most the
+            // settle loop's) have built the paths; a later update keeps the
+            // bounds, empty or not.
             self.component_mut()
                 .add_dirt(ComponentDirt::WORLD_TRANSFORM, false);
             return;
         }
-        self.bounds_retry_pending = false;
+        self.bounds_retry_until = None;
         let Some(node) = &self.semantic_node else {
             return;
         };
@@ -840,6 +871,10 @@ impl Drop for SemanticData {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "semantic_bounds_retry_tests.rs"]
+mod semantic_bounds_retry_tests;
 
 #[cfg(test)]
 mod inference_tests {

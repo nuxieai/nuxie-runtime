@@ -16,6 +16,7 @@ resolved explicitly.
 - VideoAsset: type 60000; properties 60000–60002.
 - Video: type 60001; properties 60003–60021.
 - TextStyleDecoration: type 60002; property 60022.
+- KeyedRowArtboard: type 60003; property 60025.
 - StateTransition (upstream type 65, augmented by `state_transition_hold.json`): property 60023.
 - ArtboardComponentList (upstream type 559, augmented by `artboard_component_list_rows.json`): property 60024.
 - LayoutCssStyle: type 61000; properties 61000–61082, 61099–61100 and 61106–61108.
@@ -85,6 +86,19 @@ and moves them by key (docs/page-player.md, Host driver). An id that names
 no artboard leaves the list keyed and empty: every mount is refused. It is a
 uint, unset at -1 (the largest uint), not an upstream `Id`. Readers without it
 skip it and see an empty list.
+
+KeyedRowArtboard (60003), from `keyed_row_artboard.json`, is a child of a
+keyed list and declares one more artboard its rows may be made from: its
+`artboardId` (60025) names it by its index in the file's artboards, as
+`rowArtboardId` does. The list's declared set is its `rowArtboardId` and each
+child's `artboardId`; a host mounting a row names which of them the row is
+made from (docs/page-player.md, Host driver), and a list with no children
+makes every row from `rowArtboardId`. Under any parent other than an
+ArtboardComponentList the record is refused at import. Upstream chooses a
+row's artboard through `ArtboardListMapRule`, keyed by the item's view model;
+a keyed list has no view models, so it declares the set instead. It is a
+uint, unset at -1. Readers without the type skip the record and mount rows of
+`rowArtboardId` only.
 
 The CSS layout, box paint and text records (LayoutCssStyle, BoxBorder,
 BoxGradient, BoxShadow, BoxPaint, TextStyleCssText)

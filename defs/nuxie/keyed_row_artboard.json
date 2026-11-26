@@ -1,0 +1,18 @@
+{
+  "name": "KeyedRowArtboard",
+  "key": {
+    "int": 60003,
+    "string": "keyedrowartboard"
+  },
+  "extends": "component.json",
+  "properties": {
+    "artboardId": {
+      "type": "uint",
+      "key": {
+        "int": 60025
+      },
+      "initialValue": "-1",
+      "description": "Nuxie keyed rows. One more artboard a keyed list's rows may be made from, as an index into the file's artboards (as rowArtboardId names one). A child of the keyed ArtboardComponentList; refused under any other parent. Readers without the type skip the record and mount rows of rowArtboardId only."
+    }
+  }
+}

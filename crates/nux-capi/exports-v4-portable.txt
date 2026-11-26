@@ -113,6 +113,7 @@ nux_player_video_set_loop_range
 nux_player_video_step
 nux_player_visit_videos
 nux_scene_writer_mount_row
+nux_scene_writer_mount_row_from
 nux_scene_writer_move_row
 nux_scene_writer_remove_row
 nux_scene_writer_replace_instance

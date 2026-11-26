@@ -3049,7 +3049,8 @@ NuxStatus nux_player_queue_semantic_action(struct NuxPlayer *player,
  * target (elastic) animates there; one without physics, or with physics
  * that cannot (clamped), moves at once, and on a static player
  * (`nux_player_new_static`), whose steps pass no time, every scroller
- * moves at once. Either way a capture taken after the next
+ * moves at once, also with a capture another player over the same
+ * artboard instance took. Either way a capture taken after the next
  * presented step reports the scroller's target in its region's scroll,
  * though the node's box shows where it is drawn, in flight until the move
  * settles; the step's scheduling stays unsettled until then.
@@ -3082,7 +3083,8 @@ NuxStatus nux_player_reveal_semantic_node(struct NuxPlayer *player,
  * It starts from where the content is going (the region's scroll), is
  * clamped to the region's range, and moves as a reveal does: animated
  * with elastic physics, at once otherwise. Only a state-machine player
- * lists regions, so on any other a region returns NOT_FOUND. `out_moved`
+ * lists regions, so on any other a region returns NOT_FOUND, also with a
+ * capture another player over the same artboard instance took. `out_moved`
  * is false when the clamp leaves it where it is going, so at an end a
  * move further past it answers false. A move invalidates the capture; no
  * move leaves it valid.

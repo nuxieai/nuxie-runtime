@@ -436,6 +436,58 @@ fn a_static_player_reveals_at_once() {
     assert_eq!(still.reveal(&capture, bottom), (NuxStatus::Ok, false));
 }
 
+/// A capture is keyed by the artboard occurrence, which every player over
+/// one artboard instance shares, so a state-machine player's capture, with
+/// its region, also validates for a static player over the same instance.
+/// Each call acts as the player it is sent to. A region move sent to the
+/// static player returns NOT_FOUND, as a static player lists no regions,
+/// and moves nothing, so the capture stays valid. A reveal sent to it takes
+/// the static player's way and moves at once: one step of the other player
+/// draws the button where it rests, where an animated move would still be
+/// in flight (`a_reveal_animates_the_box_until_the_button_shows`).
+#[test]
+fn another_players_capture_acts_as_the_receiving_player() {
+    let scene = Host::new(Page::Buttons, Physics::Elastic);
+    let mut still = ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_player_new_static(scene.instance, &mut still) },
+        NuxStatus::Ok
+    );
+    let capture = scene.capture().expect("a capture");
+    assert_eq!(capture.info().scroll_region_count, 1);
+    assert_eq!(
+        unsafe { nux_player_validate_semantic_snapshot(still, capture.0) },
+        NuxStatus::Ok,
+        "the capture validates for the static player"
+    );
+    let mut moved = true;
+    assert_eq!(
+        unsafe { nux_player_scroll_region_by(still, capture.0, 0, 0.0, -80.0, &mut moved) },
+        NuxStatus::NotFound
+    );
+    assert!(!moved);
+    assert_eq!(
+        unsafe { nux_player_validate_semantic_snapshot(scene.player, capture.0) },
+        NuxStatus::Ok,
+        "nothing moved"
+    );
+
+    let mut moved = false;
+    let bottom = capture.node(BOTTOM).id;
+    assert_eq!(
+        unsafe { nux_player_reveal_semantic_node(still, capture.0, bottom, &mut moved) },
+        NuxStatus::Ok
+    );
+    assert!(moved);
+    drop(capture);
+    scene.present();
+    let capture = scene.capture().expect("a capture");
+    assert_eq!(node_box(&capture.node(BOTTOM)), [0.0, 60.0, 100.0, 100.0]);
+    drop(capture);
+    assert!(scene.present().settled, "nothing left to animate");
+    assert_eq!(unsafe { nux_player_free(still) }, NuxStatus::Ok);
+}
+
 /// A button already in view moves nothing: the call answers false and the
 /// capture stays valid.
 #[test]

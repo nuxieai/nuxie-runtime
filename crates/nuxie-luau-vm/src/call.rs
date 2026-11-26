@@ -49,15 +49,15 @@
 //! which the collector roots. It may hold slot numbers, counters and plain
 //! data (`gsub`'s output bytes).
 
+use crate::bytecode::Proto;
 use crate::error::{ErrorKind, Throw, VmResult};
+use crate::frames::Pending;
 use crate::heap::Function;
-use crate::hosted::Dispatch;
 use crate::host::{CallStatus, HostError, HostErrorKind};
+use crate::hosted::Dispatch;
 use crate::native::{Args, HostFnId, NativeFn};
 use crate::thread::ThreadId;
-use crate::bytecode::Proto;
 use crate::value::{FnId, ProtoId, Value};
-use crate::frames::Pending;
 use crate::vm::{Core, Frame, MIN_STACK, Tm};
 
 /// How a callee finished, as its caller's continuation sees it.
@@ -107,7 +107,9 @@ pub(crate) enum LibCont {
     Format(Box<crate::libs::string::FormatCont>),
     /// The requested call's results, from slot `from` up, are the
     /// native's results (the embedding layer's userdata dispatchers).
-    Results { from: usize },
+    Results {
+        from: usize,
+    },
     /// A continuation outside the core's libraries (the embedding
     /// layer's): plain code and one slot.
     Slot {
@@ -607,7 +609,9 @@ impl Core {
         };
         let top = base.saturating_add(maxstack);
         self.fill_nil(base.saturating_add(numparams), top);
-        self.exec.frames.push(Frame::lua(func, base, top, nresults, id, proto_id));
+        self.exec
+            .frames
+            .push(Frame::lua(func, base, top, nresults, id, proto_id));
         self.exec.top = top;
         Ok(())
     }
@@ -639,7 +643,10 @@ impl Core {
         // As `enter_lua`, so the stack limit binds at the same depth; the
         // register window is physical only.
         self.ensure_frame(
-            argtop.wrapping_add(numparams).wrapping_add(maxstack).wrapping_add(MIN_STACK),
+            argtop
+                .wrapping_add(numparams)
+                .wrapping_add(maxstack)
+                .wrapping_add(MIN_STACK),
             base,
         )?;
         // `enter_lua` nils the missing parameters, then every register
@@ -677,7 +684,10 @@ impl Core {
             let from = first.saturating_sub(func);
             let copy = n.min(want);
             for i in 0..copy {
-                let v = slots.get(from.saturating_add(i)).copied().unwrap_or_default();
+                let v = slots
+                    .get(from.saturating_add(i))
+                    .copied()
+                    .unwrap_or_default();
                 if let Some(slot) = slots.get_mut(i) {
                     *slot = v;
                 }
@@ -876,7 +886,11 @@ impl Core {
         }
         let f = self.exec.frames.last()?;
         let numparams = usize::from(self.heap.proto(f.proto()?).numparams);
-        let n = f.base().checked_sub(f.func())?.checked_sub(1)?.checked_sub(numparams)?;
+        let n = f
+            .base()
+            .checked_sub(f.func())?
+            .checked_sub(1)?
+            .checked_sub(numparams)?;
         Some((f.base().saturating_sub(n), n))
     }
 

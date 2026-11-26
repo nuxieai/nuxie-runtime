@@ -15962,8 +15962,20 @@ fn taffy_css_style(css: &str) -> taffy::Style {
             "padding" => style.padding = Rect::length(px(value)),
             "border-width" => style.border = Rect::length(px(value)),
             "border-style" => {}
-            "margin-top" => style.margin.top = if value == "auto" { auto() } else { length(px(value)) },
-            "margin-left" => style.margin.left = if value == "auto" { auto() } else { length(px(value)) },
+            "margin-top" => {
+                style.margin.top = if value == "auto" {
+                    auto()
+                } else {
+                    length(px(value))
+                }
+            }
+            "margin-left" => {
+                style.margin.left = if value == "auto" {
+                    auto()
+                } else {
+                    length(px(value))
+                }
+            }
             "margin-right" => style.margin.right = length(px(value)),
             "margin-bottom" => style.margin.bottom = length(px(value)),
             _ => panic!("no such property in this helper: {name}"),
@@ -23081,7 +23093,10 @@ fn css_picture_stretch_height_counts_like_a_percentage_where_chrome_omits_it() {
     let rows: Vec<(&str, &str, &str, &str)> = TAFFY_FORK_CHROME_PICTURE_STRETCH_ROWS
         .iter()
         .map(|(name, root_css, nodes, chrome, fork)| {
-            assert_ne!(chrome, fork, "{name}: no longer differs from Chrome, move it to a Chrome table");
+            assert_ne!(
+                chrome, fork,
+                "{name}: no longer differs from Chrome, move it to a Chrome table"
+            );
             (*name, *root_css, *nodes, *fork)
         })
         .collect();
@@ -23094,7 +23109,10 @@ fn css_stretch_height_in_a_column_item_resolves_where_chrome_leaves_it() {
     let rows: Vec<(&str, &str, &str, &str)> = TAFFY_FORK_STRETCH_IN_COLUMN_ITEM_ROWS
         .iter()
         .map(|(name, root_css, nodes, chrome, fork)| {
-            assert_ne!(chrome, fork, "{name}: no longer differs from Chrome, move it to a Chrome table");
+            assert_ne!(
+                chrome, fork,
+                "{name}: no longer differs from Chrome, move it to a Chrome table"
+            );
             (*name, *root_css, *nodes, *fork)
         })
         .collect();

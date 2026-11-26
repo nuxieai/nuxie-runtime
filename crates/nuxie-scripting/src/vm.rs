@@ -91,15 +91,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::luau::{
+    AnyUserData, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, Thread, Value,
+    Vector as LuaVector, VmState,
+};
 pub use bytecode::BytecodeValidationError;
 use bytecode::validate_luau_bytecode;
 use logging_scripting_context::{LoggingScriptingContext, LoggingScriptingContextLua};
 use lua_math::install_math_globals;
 use lua_rive_base::install_host_print;
-use crate::luau::{
-    AnyUserData, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, Thread, Value,
-    Vector as LuaVector, VmState,
-};
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
 use nuxie_runtime::{
     PreparedScriptArtboard, RuntimeScriptProgram, ScriptArtboard, ScriptAssetRegistration,
@@ -121,8 +121,8 @@ use crate::gpu_canvas::{
     RegisteredGpuCanvasShaderAsset,
 };
 
-pub use logging_scripting_context::{ScriptingLogLevel, ScriptingLogSink};
 pub use crate::luau::{Error, Result};
+pub use logging_scripting_context::{ScriptingLogLevel, ScriptingLogSink};
 pub use resource_limits::{ScriptResourceGuard, ScriptResourceLimit};
 
 /// The view model behind a script's view-model table, such as the one
@@ -256,13 +256,18 @@ fn require_registered_module(
     let path = ctx.check_string(1)?;
     // Both names are read as C strings (up to the first NUL), as upstream does.
     let path = path.split(|&b| b == 0).next().unwrap_or_default().to_vec();
-    let requiring = requiring.split(|&b| b == 0).next().unwrap_or_default().to_vec();
+    let requiring = requiring
+        .split(|&b| b == 0)
+        .next()
+        .unwrap_or_default()
+        .to_vec();
     let modules: vm::Table = ctx.named_registry_value("_MODULES")?;
     let module: vm::Value = modules.get(ctx, path.as_slice())?;
     if module.is_nil() {
         // Installed only for File's registration pass; indexed by the
         // requiring chunk, matching recordMissingDependency.
-        let dependencies: vm::Value = ctx.named_registry_value("_RIVE_REGISTRATION_DEPENDENCIES")?;
+        let dependencies: vm::Value =
+            ctx.named_registry_value("_RIVE_REGISTRATION_DEPENDENCIES")?;
         if let vm::Value::Table(dependencies) = dependencies {
             let entry: vm::Value = dependencies.get(ctx, requiring.as_slice())?;
             if let vm::Value::Table(entry) = entry {
@@ -2204,7 +2209,9 @@ impl ScriptVm {
         let host_memory_error =
             host_memory_budget::HostMemoryBudget::install(&lua, DEFAULT_SCRIPT_HOST_MEMORY_BYTES)
                 .err()
-                .map(|error| format!("failed to configure the script VM host memory budget: {error}"));
+                .map(|error| {
+                    format!("failed to configure the script VM host memory budget: {error}")
+                });
         let blob_assets = lua_blob::ScriptedBlobAssets::install(&lua);
         let audio_assets = lua_audio::ScriptedAudioAssets::install(&lua);
         #[cfg(feature = "tools")]
@@ -5354,7 +5361,10 @@ mod context_init_tests {
         instance
             .prepare_init_retry_with_factory(&mut factory)
             .expect("recreate script lifetime");
-        assert_eq!(instance.table().unwrap().get::<i64>("generation").unwrap(), 2);
+        assert_eq!(
+            instance.table().unwrap().get::<i64>("generation").unwrap(),
+            2
+        );
         lua.gc_collect().expect("collect with live replacement");
         assert!(
             lua.load("return weakTables[2] ~= nil")
@@ -5728,7 +5738,9 @@ mod context_init_tests {
             .call_global::<()>("spin", ())
             .expect_err("a script callback stays bounded");
         assert!(
-            error.to_string().contains("exceeded 8 interrupt safepoints"),
+            error
+                .to_string()
+                .contains("exceeded 8 interrupt safepoints"),
             "{error}"
         );
     }
@@ -5873,7 +5885,10 @@ mod context_init_tests {
         instance
             .prepare_init_retry_with_factory(&mut factory)
             .expect("recreate script lifetime");
-        assert_eq!(instance.table().unwrap().get::<i64>("generation").unwrap(), 2);
+        assert_eq!(
+            instance.table().unwrap().get::<i64>("generation").unwrap(),
+            2
+        );
         assert!(
             instance
                 .call_init_with_factory(&mut host, &mut factory)
@@ -5949,13 +5964,21 @@ mod bytecode_validation_tests {
         let bytecode = include_bytes!(concat!(env!("OUT_DIR"), "/promise-library.luau-bytecode"));
         validate_luau_bytecode(bytecode).expect("the unpatched chunk validates");
         assert_eq!(nuxie_luau_vm::BYTECODE_VERSION_MAX, 11);
-        for (version, named) in [(12, "cost model"), (13, "double-precision vector constants")] {
+        for (version, named) in [
+            (12, "cost model"),
+            (13, "double-precision vector constants"),
+        ] {
             let mut patched = bytecode.to_vec();
             patched[0] = version;
             let error = validate_luau_bytecode(&patched)
                 .expect_err("the safe VM's product validator rejects v12 and v13")
                 .to_string();
-            assert!(error.contains(&format!("bytecode version {version} is outside supported range 3..=11")), "{error}");
+            assert!(
+                error.contains(&format!(
+                    "bytecode version {version} is outside supported range 3..=11"
+                )),
+                "{error}"
+            );
             assert!(error.contains(named), "{error}");
         }
     }

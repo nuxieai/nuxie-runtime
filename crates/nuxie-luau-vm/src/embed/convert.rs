@@ -13,12 +13,12 @@
 //! numeric strings convert. Strings follow `lua_tolstring`: numbers convert
 //! with `%.14g` (seam row R31).
 
-use crate::error::Error;
+use super::compat::Vm;
 use super::handle::{
     AnyUserData, Buffer, Function, LightUserData, LuaString, MultiValue, Table, Thread, Value,
 };
 use super::run::HostValue;
-use super::compat::Vm;
+use crate::error::Error;
 use crate::hosted::LoanFamily;
 
 /// A Rust value that becomes one Lua value.
@@ -321,7 +321,10 @@ impl IntoLuaMulti for MultiValue {
 }
 
 impl FromLuaMulti for MultiValue {
-    fn from_lua_multi<L: LoanFamily>(values: MultiValue, _: &mut Vm<L>) -> Result<MultiValue, Error> {
+    fn from_lua_multi<L: LoanFamily>(
+        values: MultiValue,
+        _: &mut Vm<L>,
+    ) -> Result<MultiValue, Error> {
         Ok(values)
     }
 }

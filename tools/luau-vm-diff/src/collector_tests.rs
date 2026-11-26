@@ -448,4 +448,3 @@ fn dead_stack_slots_do_not_root_reused_ids() {
     let returned = run(&mut vm, &source);
     assert_eq!(returned, vec![HostValue::Number(0.0)]);
 }
-

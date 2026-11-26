@@ -1274,7 +1274,11 @@ fn a_cancel_puts_every_instance_back_before_the_next_frame() {
     s.advance(0.1);
     let (list, a) = screens_item(&s, 0);
     ArtboardComponentList::update_list_occurrence(&list, &[a]);
-    assert_eq!(holds(&s.s), Some(leaving.clone()), "back before any plan call");
+    assert_eq!(
+        holds(&s.s),
+        Some(leaving.clone()),
+        "back before any plan call"
+    );
     s.moves.after_advance(&s.root).unwrap();
     assert_eq!(holds(&s.s), Some(leaving));
     assert!(
@@ -8143,7 +8147,11 @@ mod drawn {
             writes(r, &[(PROGRESS, 1.0), (FADE, 0.0)]);
         }
         s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
-        reads(&leaving, "back's leaving copy", &[(PROGRESS, 0.0), (FADE, 1.0)]);
+        reads(
+            &leaving,
+            "back's leaving copy",
+            &[(PROGRESS, 0.0), (FADE, 1.0)],
+        );
         reads(&held, "back's held copy", &[(PROGRESS, 0.0), (FADE, 1.0)]);
 
         // A transferred flight: nothing keys its fade, so it keeps the
@@ -8152,7 +8160,11 @@ mod drawn {
         let flight = record(&s, 2);
         writes(&flight, &[(PROGRESS, 0.6)]);
         s.begin();
-        reads(&flight, "the transferred flight", &[(PROGRESS, 0.0), (FADE, 1.0)]);
+        reads(
+            &flight,
+            "the transferred flight",
+            &[(PROGRESS, 0.0), (FADE, 1.0)],
+        );
 
         // A zero-length flight begins at its end; a delayed window at its
         // first keys.

@@ -363,7 +363,8 @@ impl ProtoTable {
     fn put(&mut self, id: u32, proto: Proto) {
         let index = id as usize;
         if self.protos.len() <= index {
-            self.protos.resize_with(index.saturating_add(1), Proto::default);
+            self.protos
+                .resize_with(index.saturating_add(1), Proto::default);
         }
         if let Some(slot) = self.protos.get_mut(index) {
             *slot = proto;
@@ -1250,9 +1251,7 @@ impl Heap {
         let weak = std::mem::take(&mut self.gc.weak);
         let mut work = 0usize;
         for &id in &weak {
-            let shrink = self
-                .table_mode(self.tables.get(id).meta)
-                .contains(&b's');
+            let shrink = self.table_mode(self.tables.get(id).meta).contains(&b's');
             let Heap {
                 tables,
                 functions,

@@ -1702,9 +1702,7 @@ frame\n";
         let mut paint = factory.make_render_paint();
         paint.color(paint_color);
         let shader = gradient.map(|gradient| match gradient {
-            Gradient::Linear => {
-                factory.make_linear_gradient(0.0, 0.0, 1.0, 0.0, &STOPS, &OFFSETS)
-            }
+            Gradient::Linear => factory.make_linear_gradient(0.0, 0.0, 1.0, 0.0, &STOPS, &OFFSETS),
             Gradient::Radial => factory.make_radial_gradient(0.0, 0.0, 1.0, &STOPS, &OFFSETS),
         });
         paint.shader(shader.as_deref());
@@ -1816,11 +1814,7 @@ frame\n";
     fn an_image_above_1_under_a_scope_below_1_refuses() {
         const SAMPLER: &str = "{wrapX=0,wrapY=0,filter=0,key=0}";
         let refused = [Err(IMAGE_ABOVE_ONE)];
-        reads_or_refuses(
-            &[StreamOp::ModulateOpacity(0.5), image(1.5)],
-            &[],
-            &refused,
-        );
+        reads_or_refuses(&[StreamOp::ModulateOpacity(0.5), image(1.5)], &[], &refused);
         reads_or_refuses(
             &lines(&[
                 "modulateOpacity opacity=0.5",

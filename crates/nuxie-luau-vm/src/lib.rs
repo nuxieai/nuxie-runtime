@@ -62,24 +62,24 @@ mod libs;
 mod limits;
 mod meta;
 mod native;
-mod roots;
-mod stack;
 mod num;
 mod protocol;
+mod roots;
+mod stack;
 use protocol::{call, frames, interp, thread};
 mod table;
 mod userdata;
 mod value;
 mod vm;
 
-pub use embed::{
-    AnyUserData, Buffer, DirectField, FromLua, FromLuaMulti, Function, HostContFn, HostCtx,
-    HostFn, HostValue, IntoLua, IntoLuaMulti, InterruptFn, LightUserData, LuaString, MultiValue,
-    RegistryKey, RunState, StackInfo, Table, Thread, ThreadState, UserDataType, Value, Vm,
-};
 /// The bytecode versions this VM loads (`bytecode` module docs): hosts that
 /// validate bytecode before loading it admit the same range.
 pub use bytecode::{VERSION_MAX as BYTECODE_VERSION_MAX, VERSION_MIN as BYTECODE_VERSION_MIN};
+pub use embed::{
+    AnyUserData, Buffer, DirectField, FromLua, FromLuaMulti, Function, HostContFn, HostCtx, HostFn,
+    HostValue, InterruptFn, IntoLua, IntoLuaMulti, LightUserData, LuaString, MultiValue,
+    RegistryKey, RunState, StackInfo, Table, Thread, ThreadState, UserDataType, Value, Vm,
+};
 /// The bytecode format as plain data: opcode numbers and lengths, the checked
 /// op byte to [`Opcode`](bytecode_format::Opcode) conversion, and the
 /// constant, type and feedback tags the loader reads. Hosts that inspect

@@ -23,7 +23,7 @@ use nuxie_render_stream::{frame_draws, Canvas, FrameDraw, StreamOp};
 use nuxie_runtime::group_opacity_fixture::{
     bind_page, screen_row, set_row_opacity, Block, Host, Item, Overflow, Page, Scene, Unit,
 };
-use nuxie_runtime::live_move::{LiveMoves, records::LiveFlight};
+use nuxie_runtime::live_move::{records::LiveFlight, LiveMoves};
 use nuxie_runtime::mechanical_port::source::{
     artboard::FlightClip,
     generated::{
@@ -808,7 +808,7 @@ struct ZoomStage {
 }
 impl ZoomStage {
     fn new(own_opacity: f32) -> Self {
-        use nuxie_runtime::live_move_fixture::{PaintCase, ZoomCase, css_paint_fixture_in_place};
+        use nuxie_runtime::live_move_fixture::{css_paint_fixture_in_place, PaintCase, ZoomCase};
         let (context, _, _) = observing_factory(1, 1);
         context
             .borrow()

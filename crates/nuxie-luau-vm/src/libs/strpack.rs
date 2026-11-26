@@ -207,8 +207,16 @@ fn pad(vm: &Core, out: &mut Vec<u8>, n: usize) -> VmResult<()> {
 fn packint(out: &mut [u8; 16], n: u64, little: bool, size: usize, neg: bool) {
     let mut n = n;
     for i in 0..size {
-        let idx = if little { i } else { size.saturating_sub(1).saturating_sub(i) };
-        let byte = if neg && i >= SZINT as usize { 0xFF } else { (n & 0xFF) as u8 };
+        let idx = if little {
+            i
+        } else {
+            size.saturating_sub(1).saturating_sub(i)
+        };
+        let byte = if neg && i >= SZINT as usize {
+            0xFF
+        } else {
+            (n & 0xFF) as u8
+        };
         if let Some(slot) = out.get_mut(idx) {
             *slot = byte;
         }
@@ -360,7 +368,11 @@ fn unpackint(
     signed: bool,
 ) -> VmResult<u64> {
     let byte = |i: usize| -> u8 {
-        let idx = if little { i } else { size.saturating_sub(1).saturating_sub(i) };
+        let idx = if little {
+            i
+        } else {
+            size.saturating_sub(1).saturating_sub(i)
+        };
         data.get(at.saturating_add(idx)).copied().unwrap_or(0)
     };
     let limit = size.min(SZINT as usize);
@@ -374,12 +386,16 @@ fn unpackint(
             res = (res ^ mask).wrapping_sub(mask);
         }
     } else if size > SZINT as usize {
-        let mask = if !signed || (res as i64) >= 0 { 0 } else { 0xFF };
+        let mask = if !signed || (res as i64) >= 0 {
+            0
+        } else {
+            0xFF
+        };
         for i in limit..size {
             if byte(i) != mask {
-                return Err(vm.lib_error(format!(
-                    "{size}-byte integer does not fit into Lua Integer"
-                )));
+                return Err(
+                    vm.lib_error(format!("{size}-byte integer does not fit into Lua Integer"))
+                );
             }
         }
     }
@@ -395,7 +411,10 @@ pub(crate) fn unpack(vm: &mut Core, args: Args) -> VmResult<usize> {
     // The vendored `posrelat`, then `- 1`, clamped at 0.
     let ld_i = i64::try_from(ld).unwrap_or(i64::MAX);
     let rel = if init < 0 {
-        i64::from(init).saturating_add(ld_i).saturating_add(1).max(0)
+        i64::from(init)
+            .saturating_add(ld_i)
+            .saturating_add(1)
+            .max(0)
     } else {
         i64::from(init)
     };
@@ -460,7 +479,9 @@ pub(crate) fn unpack(vm: &mut Core, args: Args) -> VmResult<usize> {
                     return Err(vm.arg_error(2, "data string too short"));
                 }
                 let start = pos.saturating_add(sz);
-                let s = data.get(start..start.saturating_add(len)).unwrap_or_default();
+                let s = data
+                    .get(start..start.saturating_add(len))
+                    .unwrap_or_default();
                 let id = vm.heap.intern(s)?;
                 vm.push(Value::String(id))?;
                 count = count.saturating_add(1);

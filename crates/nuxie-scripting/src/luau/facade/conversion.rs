@@ -798,7 +798,7 @@ impl FromLua for char {
                     from: other.type_name(),
                     to: "char".to_string(),
                     message: Some("expected string or integer".to_string()),
-                })
+                });
             }
         }
         if let Value::Integer(_) | Value::Number(_) = value {
@@ -860,7 +860,7 @@ impl FromLua for std::ffi::CString {
                     from: other.type_name(),
                     to: "CString".to_string(),
                     message: None,
-                })
+                });
             }
         };
         std::ffi::CString::new(bytes).map_err(|e| Error::FromLuaConversionError {

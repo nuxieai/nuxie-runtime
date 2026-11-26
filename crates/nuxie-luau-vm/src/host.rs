@@ -43,7 +43,10 @@ impl HostError {
 
     /// An error whose value is exactly `message`.
     pub fn raw(message: impl Into<String>) -> HostError {
-        HostError(HostErrorKind::Raw(message.into().into_bytes(), ErrorKind::Runtime))
+        HostError(HostErrorKind::Raw(
+            message.into().into_bytes(),
+            ErrorKind::Runtime,
+        ))
     }
 
     /// An error whose value is exactly these bytes.
@@ -88,7 +91,11 @@ impl std::fmt::Debug for HostError {
         match &self.0 {
             HostErrorKind::Message(m) => write!(f, "HostError({m:?})"),
             HostErrorKind::Raw(m, kind) => {
-                write!(f, "HostError::raw({:?}, {kind:?})", String::from_utf8_lossy(m))
+                write!(
+                    f,
+                    "HostError::raw({:?}, {kind:?})",
+                    String::from_utf8_lossy(m)
+                )
             }
             HostErrorKind::Throw(_) => f.write_str("HostError(<lua error>)"),
             HostErrorKind::Value(v) => write!(f, "HostError::from_value({})", v.type_name()),
@@ -167,4 +174,3 @@ pub enum GcTune {
     /// Step size in KiB (C++ `gcstepsize >> 10`, default 1).
     StepSize,
 }
-

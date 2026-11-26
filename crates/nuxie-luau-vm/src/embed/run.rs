@@ -12,13 +12,13 @@
 
 use std::rc::Rc;
 
-use super::compat::{Compat, HostFn, Vm};
-use crate::hosted::LoanFamily;
 use super::HostCtx;
+use super::compat::{Compat, HostFn, Vm};
 use crate::call::{CallMode, Exit, Saved};
 use crate::error::{Error, LoadError, Throw};
 use crate::heap::{CollectStats, Function};
 use crate::host::{GcTune, HostError};
+use crate::hosted::LoanFamily;
 use crate::limits::Limits;
 use crate::thread::ThreadStatus;
 use crate::value::Value;
@@ -100,7 +100,11 @@ impl<L: LoanFamily> HostCtx<'_, L> {
     /// returns normally leaves the VM as it found it.
     pub fn tostring_value(&mut self, n: usize) -> Result<Vec<u8>, HostError> {
         let v = self.vm.arg_or_nil(self.args, n);
-        let (depth, top, saved) = (self.vm.frames_observed().len(), self.vm.exec.top, self.vm.saved_calls());
+        let (depth, top, saved) = (
+            self.vm.frames_observed().len(),
+            self.vm.exec.top,
+            self.vm.saved_calls(),
+        );
         let loan = crate::hosted::reborrow::<Compat<L>>(&mut self.loan);
         match self.vm.tostring_value(v, loan) {
             Ok(id) => Ok(self.vm.heap.str_bytes(id).to_vec()),

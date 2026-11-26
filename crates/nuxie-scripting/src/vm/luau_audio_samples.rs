@@ -45,7 +45,10 @@ impl PcmStreamDescriptor {
         (self.channels as usize)
             .checked_mul(self.chunk_frames as usize)
             .and_then(|n| n.checked_mul(4))
-            .filter(|n| n.checked_add(HEADER_BYTES).is_some_and(|n| n <= MAX_SHARED_BYTES))
+            .filter(|n| {
+                n.checked_add(HEADER_BYTES)
+                    .is_some_and(|n| n <= MAX_SHARED_BYTES)
+            })
             .ok_or_else(|| "PCM stream chunk too large".into())
     }
     pub fn record_capacity(&self) -> Result<usize, String> {
@@ -262,7 +265,9 @@ impl RecordHeader {
 /// The first `len` items of `slice`, or all of it when it is shorter.
 pub(super) fn prefix_mut<T>(slice: &mut [T], len: usize) -> &mut [T] {
     let len = len.min(slice.len());
-    slice.split_at_mut_checked(len).map_or(&mut [], |(head, _)| head)
+    slice
+        .split_at_mut_checked(len)
+        .map_or(&mut [], |(head, _)| head)
 }
 /// The first `len` items of `slice`, or all of it when it is shorter.
 pub(super) fn prefix<T>(slice: &[T], len: usize) -> &[T] {

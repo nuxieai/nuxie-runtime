@@ -157,13 +157,11 @@ fn set_value(
         ScriptValue::Number(_) => ScriptValue::Number(checked_number(lua, value)? as f32 as f64),
         ScriptValue::String(_) => match String::from_utf8(charged_string(lua, charge, value)?) {
             Ok(value) => ScriptValue::String(value),
-            Err(error) => {
-                ScriptValue::CoreString(ScriptCoreString::from_bytes(error.into_bytes()))
-            }
+            Err(error) => ScriptValue::CoreString(ScriptCoreString::from_bytes(error.into_bytes())),
         },
-        ScriptValue::CoreString(_) => {
-            ScriptValue::CoreString(ScriptCoreString::from_bytes(charged_string(lua, charge, value)?))
-        }
+        ScriptValue::CoreString(_) => ScriptValue::CoreString(ScriptCoreString::from_bytes(
+            charged_string(lua, charge, value)?,
+        )),
         ScriptValue::Bool(_) => match value {
             Value::Boolean(value) => ScriptValue::Bool(value),
             value => {

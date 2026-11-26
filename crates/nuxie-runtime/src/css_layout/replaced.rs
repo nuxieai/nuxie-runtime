@@ -126,10 +126,7 @@ pub(crate) fn resolve_replaced_size(
     // compressible replaced elements; Chrome).
     let width_is_compressible = style.size.width.into_raw().uses_percentage()
         || style.max_size.width.into_raw().uses_percentage();
-    if width_is_compressible
-        && known.width.is_none()
-        && input.parent_size.width == Some(0.0)
-    {
+    if width_is_compressible && known.width.is_none() && input.parent_size.width == Some(0.0) {
         let width = min.width.min(size.width);
         size = Size {
             width,

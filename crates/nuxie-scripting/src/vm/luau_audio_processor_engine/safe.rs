@@ -209,20 +209,14 @@ impl AudioHost {
 /// What both kinds of host function context offer the shared helpers.
 trait Lane {
     fn split(&mut self) -> (Stack<'_>, &mut AudioHost);
-    fn push_host_function(&mut self, name: &str, id: HostFnId, data: u32)
-    -> Result<(), HostError>;
+    fn push_host_function(&mut self, name: &str, id: HostFnId, data: u32) -> Result<(), HostError>;
 }
 
 impl Lane for PlainCtx<'_, AudioHost> {
     fn split(&mut self) -> (Stack<'_>, &mut AudioHost) {
         PlainCtx::split(self)
     }
-    fn push_host_function(
-        &mut self,
-        name: &str,
-        id: HostFnId,
-        data: u32,
-    ) -> Result<(), HostError> {
+    fn push_host_function(&mut self, name: &str, id: HostFnId, data: u32) -> Result<(), HostError> {
         PlainCtx::push_host_function(self, name, id, data)
     }
 }
@@ -231,12 +225,7 @@ impl Lane for HostedCtx<'_, AudioHost> {
     fn split(&mut self) -> (Stack<'_>, &mut AudioHost) {
         HostedCtx::split(self)
     }
-    fn push_host_function(
-        &mut self,
-        name: &str,
-        id: HostFnId,
-        data: u32,
-    ) -> Result<(), HostError> {
+    fn push_host_function(&mut self, name: &str, id: HostFnId, data: u32) -> Result<(), HostError> {
         HostedCtx::push_host_function(self, name, id, data)
     }
 }
@@ -244,9 +233,10 @@ impl Lane for HostedCtx<'_, AudioHost> {
 /// `raw.rs`'s `diagnostic`: the error string on top, else `fallback`.
 fn diagnostic(stack: &Stack<'_>, fallback: &str) -> String {
     match stack.type_of(-1) {
-        Some(Type::String) => stack
-            .string(-1)
-            .map_or_else(|| fallback.into(), |s| String::from_utf8_lossy(s).into_owned()),
+        Some(Type::String) => stack.string(-1).map_or_else(
+            || fallback.into(),
+            |s| String::from_utf8_lossy(s).into_owned(),
+        ),
         _ => fallback.into(),
     }
 }
@@ -361,12 +351,10 @@ impl SafeProcessor {
         let entries = install(&mut vm).map_err(|e| e.message())?;
         vm.host_mut().entries = Some(entries);
         vm.set_interrupt_enabled(true);
-        let result = vm
-            .enter(|ctx| globals(ctx, entries))
-            .and_then(|()| {
-                vm.sandbox_globals();
-                vm.enter(|ctx| start(ctx, &name, &input, sample_rate, channels, max_frames))
-            });
+        let result = vm.enter(|ctx| globals(ctx, entries)).and_then(|()| {
+            vm.sandbox_globals();
+            vm.enter(|ctx| start(ctx, &name, &input, sample_rate, channels, max_frames))
+        });
         let (object, process, output) =
             result.map_err(|e| lua_message(&e, "audio processor initialization failed"))?;
         if let Some(error) = vm.host().failure.as_ref() {
@@ -554,16 +542,14 @@ impl AudioRenderer for SafeProcessor {
 // ---- setup -------------------------------------------------------------------
 
 fn install(vm: &mut HostedVm<AudioHost>) -> Result<Entries, Error> {
-    let mut plain =
-        |f: HostPlainPtr<AudioHost>| vm.add_host_fn(HostEntry::Plain(f), false);
+    let mut plain = |f: HostPlainPtr<AudioHost>| vm.add_host_fn(HostEntry::Plain(f), false);
     let sample_rate = plain(processor_sample_rate)?;
     let channels = plain(processor_channels)?;
     // A reader's natives own its slot: the collector lists them when it frees
     // them, and `release_native` drops the reader.
     let pcm_read_into = vm.add_host_fn(HostEntry::Plain(pcm_read_into), true)?;
     let pcm_field = vm.add_host_fn(HostEntry::Plain(pcm_field), true)?;
-    let mut plain =
-        |f: HostPlainPtr<AudioHost>| vm.add_host_fn(HostEntry::Plain(f), false);
+    let mut plain = |f: HostPlainPtr<AudioHost>| vm.add_host_fn(HostEntry::Plain(f), false);
     let shared_field = plain(shared_field)?;
     let blob_read = plain(blob_read)?;
     let blob_to_buffer = plain(blob_to_buffer)?;
@@ -578,9 +564,21 @@ fn install(vm: &mut HostedVm<AudioHost>) -> Result<Entries, Error> {
     let snapshot_publish = plain(snapshot_publish)?;
     let snapshot_latest = plain(snapshot_latest)?;
     // Full, not plain: it reclaims freed readers through the VM first.
-    let stream_reader = vm.add_host_fn(HostEntry::Full { f: pcm_reader, k: None }, false)?;
+    let stream_reader = vm.add_host_fn(
+        HostEntry::Full {
+            f: pcm_reader,
+            k: None,
+        },
+        false,
+    )?;
     let print = vm.add_host_fn(HostEntry::Full { f: print, k: None }, false)?;
-    let require = vm.add_host_fn(HostEntry::Full { f: require, k: None }, false)?;
+    let require = vm.add_host_fn(
+        HostEntry::Full {
+            f: require,
+            k: None,
+        },
+        false,
+    )?;
     Ok(Entries {
         print,
         require,
@@ -956,7 +954,13 @@ fn processor_channels(ctx: &mut PlainCtx<'_, AudioHost>) -> Result<usize, HostEr
 
 fn pcm_reader(ctx: &mut HostedCtx<'_, AudioHost>) -> Result<usize, HostError> {
     let (mut stack, host) = ctx.split();
-    let value = read(&mut stack, host, 1, &mut BTreeSet::new(), &mut SharedValueBudget::default())?;
+    let value = read(
+        &mut stack,
+        host,
+        1,
+        &mut BTreeSet::new(),
+        &mut SharedValueBudget::default(),
+    )?;
     let descriptor = PcmStreamDescriptor::from_shared(&value).map_err(|e| host_error(host, &e))?;
     // The reader's record buffer is charged before it is allocated, and any
     // growth of the slot list with it; a full budget is an ordinary error the
@@ -1133,7 +1137,11 @@ fn region_atomic(ctx: &mut PlainCtx<'_, AudioHost>, operation: u8) -> Result<usi
         0 => region.atomic_load(offset),
         1 => region.atomic_store(offset, value),
         2 => region.atomic_add(offset, value),
-        _ => region.atomic_cas(offset, value, index_argument(&stack, 4, u32::MAX as f64)? as u32),
+        _ => region.atomic_cas(
+            offset,
+            value,
+            index_argument(&stack, 4, u32::MAX as f64)? as u32,
+        ),
     };
     match result {
         Ok(value) => stack.push_number(value as f64)?,
@@ -1167,7 +1175,13 @@ fn ring_send(ctx: &mut PlainCtx<'_, AudioHost>) -> Result<usize, HostError> {
         return Err(error("audio processor channel is not a ring"));
     };
     let (mut stack, host) = ctx.split();
-    let value = read(&mut stack, host, 2, &mut BTreeSet::new(), &mut SharedValueBudget::default())?;
+    let value = read(
+        &mut stack,
+        host,
+        2,
+        &mut BTreeSet::new(),
+        &mut SharedValueBudget::default(),
+    )?;
     match ring.send_from_processor(value) {
         Ok(ok) => stack.push_boolean(ok)?,
         Err(e) => return Err(host_error(host, &e)),
@@ -1245,7 +1259,13 @@ fn snapshot_publish(ctx: &mut PlainCtx<'_, AudioHost>) -> Result<usize, HostErro
         return Err(error("audio processor channel is not a snapshot"));
     };
     let (mut stack, host) = ctx.split();
-    let value = read(&mut stack, host, 2, &mut BTreeSet::new(), &mut SharedValueBudget::default())?;
+    let value = read(
+        &mut stack,
+        host,
+        2,
+        &mut BTreeSet::new(),
+        &mut SharedValueBudget::default(),
+    )?;
     match snapshot.publish_from_processor(value) {
         Ok(ok) => stack.push_boolean(ok)?,
         Err(e) => return Err(host_error(host, &e)),

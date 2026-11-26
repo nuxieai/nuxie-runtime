@@ -364,7 +364,10 @@ fn host_module(lua: &Lua, host: HostCommandHost) -> Result<Table> {
     // table one entry at a time (see `table_value`). It lives in the
     // registry: a host closure that held the handle would keep the VM alive.
     // A later install keeps the builtin the first one took.
-    if lua.named_registry_value::<Option<Function>>(BUILTIN_NEXT)?.is_none() {
+    if lua
+        .named_registry_value::<Option<Function>>(BUILTIN_NEXT)?
+        .is_none()
+    {
         let next: Function = lua.globals().get("next")?;
         lua.set_named_registry_value(BUILTIN_NEXT, next)?;
     }
@@ -504,8 +507,7 @@ fn table_value(table: Table, depth: usize, conversion: &mut Conversion) -> Resul
         // entries as they admit, instead of after a copy of all of them.
         let mut cursor = Value::Nil;
         loop {
-            let (key, value): (Value, Value) =
-                conversion.next.call((table.clone(), cursor))?;
+            let (key, value): (Value, Value) = conversion.next.call((table.clone(), cursor))?;
             if key.is_nil() {
                 break;
             }

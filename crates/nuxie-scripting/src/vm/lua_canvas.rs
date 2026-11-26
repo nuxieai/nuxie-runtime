@@ -12,9 +12,9 @@ use nuxie_render_api::{
 };
 
 use super::lua_image::ScriptedImage;
-use crate::gpu_canvas::ore::{GpuCharge, canvas_bytes, charge_gpu_bytes, check_gpu_size};
 use super::lua_renderer::ScriptedRenderer;
 use super::lua_renderer_library::RendererBindings;
+use crate::gpu_canvas::ore::{GpuCharge, canvas_bytes, charge_gpu_bytes, check_gpu_size};
 
 pub(super) struct ScriptedCanvas {
     bindings: RendererBindings,
@@ -138,7 +138,10 @@ impl ScriptedCanvas {
         lua.create_userdata(canvas)
     }
 
-    fn set_backing(&mut self, (canvas, image, charge): (RenderCanvasHandle, AnyUserData, GpuCharge)) {
+    fn set_backing(
+        &mut self,
+        (canvas, image, charge): (RenderCanvasHandle, AnyUserData, GpuCharge),
+    ) {
         self.image = Some(image);
         self.charge = Some(charge);
         self.canvas = Some(canvas);
@@ -1124,7 +1127,8 @@ mod tests {
         vm.install_render_factory(&mut factory).unwrap();
         vm.install_rive_globals().unwrap();
         let base = host_bytes_used(&vm);
-        let canvas = ScriptedCanvas::create(vm.lua(), vm.renderer_bindings.clone(), 100, 50).unwrap();
+        let canvas =
+            ScriptedCanvas::create(vm.lua(), vm.renderer_bindings.clone(), 100, 50).unwrap();
         vm.lua().globals().set("canvas", canvas).unwrap();
         assert_eq!(host_bytes_used(&vm) - base, 100 * 50 * 4);
         vm.lua()
@@ -1137,7 +1141,10 @@ mod tests {
             100 * 50 * 4 + 10 * 10 * 4,
             "the old image keeps the old backing"
         );
-        vm.lua().load("image = nil canvas:resize(0, 0)").exec().unwrap();
+        vm.lua()
+            .load("image = nil canvas:resize(0, 0)")
+            .exec()
+            .unwrap();
         vm.lua().gc_collect().unwrap();
         assert_eq!(host_bytes_used(&vm), base);
 
@@ -1159,10 +1166,17 @@ mod tests {
                 ))
                 .eval()
                 .unwrap();
-            assert!(failed && message.contains("host memory budget"), "{resize}: {message}");
+            assert!(
+                failed && message.contains("host memory budget"),
+                "{resize}: {message}"
+            );
         }
         assert_eq!(
-            events.borrow().iter().filter(|event| event.starts_with("allocate")).count(),
+            events
+                .borrow()
+                .iter()
+                .filter(|event| event.starts_with("allocate"))
+                .count(),
             2,
             "a refused charge never reaches the factory"
         );

@@ -2534,7 +2534,13 @@ mod tests {
             crate::host_viewmodel::HostOwnerToken::from_arc(Arc::clone(&owner)),
         )
         .expect("fixture font decodes");
-        let variant = font.with_options(&[], &[Feature { tag: KERN_TAG, value: 0 }]);
+        let variant = font.with_options(
+            &[],
+            &[Feature {
+                tag: KERN_TAG,
+                value: 0,
+            }],
+        );
         drop(font);
         assert_eq!(Arc::strong_count(&owner), 2, "the variant keeps the owner");
         // An owned variant keeps the bytes' owner beside its own, and a
@@ -2547,12 +2553,24 @@ mod tests {
             crate::host_viewmodel::HostOwnerToken::from_arc(Arc::clone(&own)),
         );
         drop(variant);
-        assert_eq!(Arc::strong_count(&owner), 2, "the owned variant keeps the bytes' owner");
+        assert_eq!(
+            Arc::strong_count(&owner),
+            2,
+            "the owned variant keeps the bytes' owner"
+        );
         let next = owned.with_options(&[], &[]);
-        assert_eq!(Arc::strong_count(&own), 2, "only the owned variant keeps its own");
+        assert_eq!(
+            Arc::strong_count(&own),
+            2,
+            "only the owned variant keeps its own"
+        );
         drop(owned);
         assert_eq!(Arc::strong_count(&own), 1);
-        assert_eq!(Arc::strong_count(&owner), 2, "its variant keeps the bytes' owner");
+        assert_eq!(
+            Arc::strong_count(&owner),
+            2,
+            "its variant keeps the bytes' owner"
+        );
         drop(next);
         assert_eq!(Arc::strong_count(&owner), 1);
     }
@@ -2565,15 +2583,25 @@ mod tests {
         for round in 0..6_u32 {
             let count = 1_usize << (2 * round);
             let features: Vec<_> = (0..count as u32)
-                .map(|tag| Feature { tag: tag.wrapping_mul(2_654_435_761), value: 1 })
+                .map(|tag| Feature {
+                    tag: tag.wrapping_mul(2_654_435_761),
+                    value: 1,
+                })
                 .collect();
             let coords: Vec<_> = (0..count as u32)
-                .map(|axis| Coord { axis: axis.wrapping_add(round << 24), value: 1.0 })
+                .map(|axis| Coord {
+                    axis: axis.wrapping_add(round << 24),
+                    value: 1.0,
+                })
                 .collect();
             let hb = current.as_any().downcast_ref::<HbFont>().unwrap();
             let bound = hb.variant_bytes_bound(coords.len(), features.len());
             let next = hb.with_options(&coords, &features);
-            let held = next.as_any().downcast_ref::<HbFont>().unwrap().option_bytes();
+            let held = next
+                .as_any()
+                .downcast_ref::<HbFont>()
+                .unwrap()
+                .option_bytes();
             assert!(held <= bound, "round {round}: holds {held} > bound {bound}");
             current = next;
         }

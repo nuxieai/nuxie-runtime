@@ -69,9 +69,19 @@ impl Shared {
     /// [`Lua`] is gone). Handles that outlive it report the VM dropped.
     fn close(&self) {
         self.closed.set(true);
-        let vm = self.slot.try_borrow_mut().ok().and_then(|mut slot| slot.take());
-        let spares = self.spares.try_borrow_mut().map(|mut s| std::mem::take(&mut *s));
-        let app_data = self.app_data.try_borrow_mut().map(|mut a| std::mem::take(&mut *a));
+        let vm = self
+            .slot
+            .try_borrow_mut()
+            .ok()
+            .and_then(|mut slot| slot.take());
+        let spares = self
+            .spares
+            .try_borrow_mut()
+            .map(|mut s| std::mem::take(&mut *s));
+        let app_data = self
+            .app_data
+            .try_borrow_mut()
+            .map(|mut a| std::mem::take(&mut *a));
         let metatables = self
             .userdata_metatables
             .try_borrow_mut()
@@ -364,7 +374,10 @@ impl Lua {
     }
 
     pub fn create_string(&self, s: impl AsRef<[u8]>) -> LuaString {
-        match self.0.with_vm(|vm| vm.create_string(s.as_ref()).map_err(Error::from_vm)) {
+        match self
+            .0
+            .with_vm(|vm| vm.create_string(s.as_ref()).map_err(Error::from_vm))
+        {
             Ok(h) => LuaString::wrap(self, h),
             Err(e) => LuaString::failed(self, e),
         }
@@ -496,8 +509,7 @@ impl Lua {
                 match env {
                     Some(env) => {
                         env.set_safeenv(vm, true).map_err(Error::from_vm)?;
-                        vm.create_thread_with_env(raw, &env)
-                            .map_err(Error::from_vm)
+                        vm.create_thread_with_env(raw, &env).map_err(Error::from_vm)
                     }
                     None => vm.create_thread(raw).map_err(Error::from_vm),
                 }
@@ -506,7 +518,10 @@ impl Lua {
     }
 
     pub fn current_thread(&self) -> Thread {
-        match self.0.with_vm(|vm| vm.current_thread().map_err(Error::from_vm)) {
+        match self
+            .0
+            .with_vm(|vm| vm.current_thread().map_err(Error::from_vm))
+        {
             Ok(t) => Thread::wrap(self, t),
             Err(e) => Thread::failed(self, e),
         }
@@ -910,7 +925,10 @@ impl Lua {
 /// `luaL`'s `short_src` for a chunk name: `=name` and `@name` lose their
 /// marker; source text becomes `[string "..."]`.
 fn short_src(source: &str) -> String {
-    if let Some(rest) = source.strip_prefix('=').or_else(|| source.strip_prefix('@')) {
+    if let Some(rest) = source
+        .strip_prefix('=')
+        .or_else(|| source.strip_prefix('@'))
+    {
         rest.to_owned()
     } else {
         let first_line = source.lines().next().unwrap_or_default();
@@ -1006,9 +1024,11 @@ impl Scope {
         }
         self.lua.create_callback_function(
             "luaur-rt-callback",
-            Box::new(move |lua, loan, args| match &*slot.try_borrow().map_err(|_| Error::RecursiveMutCallback)? {
-                Some(callback) => callback(lua, loan, args),
-                None => Err(Error::CallbackDestructed),
+            Box::new(move |lua, loan, args| {
+                match &*slot.try_borrow().map_err(|_| Error::RecursiveMutCallback)? {
+                    Some(callback) => callback(lua, loan, args),
+                    None => Err(Error::CallbackDestructed),
+                }
             }),
         )
     }

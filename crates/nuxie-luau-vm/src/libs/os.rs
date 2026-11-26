@@ -71,7 +71,11 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     let y = if m <= 2 { y.saturating_sub(1) } else { y };
     let era = y.div_euclid(400);
     let yoe = y.rem_euclid(400);
-    let mp = if m > 2 { m.saturating_sub(3) } else { m.saturating_add(9) };
+    let mp = if m > 2 {
+        m.saturating_sub(3)
+    } else {
+        m.saturating_add(9)
+    };
     let doy = mp
         .saturating_mul(153)
         .saturating_add(2)
@@ -290,9 +294,7 @@ fn getfield(vm: &mut Core, t: TableId, key: &str, default: i32) -> VmResult<i64>
     match vm.to_number(v) {
         // `lua_tointeger`: `luai_num2int`, a cast to `int`.
         Some(x) => Ok(i64::from(x as i32)),
-        None if default < 0 => {
-            Err(vm.lib_error(format!("field '{key}' missing in date table")))
-        }
+        None if default < 0 => Err(vm.lib_error(format!("field '{key}' missing in date table"))),
         None => Ok(i64::from(default)),
     }
 }

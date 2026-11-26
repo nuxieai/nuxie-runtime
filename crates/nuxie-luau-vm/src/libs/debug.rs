@@ -16,7 +16,6 @@
 //! `append` as it grows); `info` pushes only existing strings and numbers,
 //! plus the short source, which it interns (charged by `Heap::intern`).
 
-
 use crate::error::VmResult;
 use crate::heap::Function;
 use crate::libs::append;
@@ -52,7 +51,9 @@ fn chunkid(source: &[u8]) -> Vec<u8> {
             if srclen <= IDSIZE {
                 rest.to_vec()
             } else {
-                rest.get(..IDSIZE.saturating_sub(1)).unwrap_or(rest).to_vec()
+                rest.get(..IDSIZE.saturating_sub(1))
+                    .unwrap_or(rest)
+                    .to_vec()
             }
         }
         Some((b'@', rest)) => {
@@ -61,7 +62,11 @@ fn chunkid(source: &[u8]) -> Vec<u8> {
             } else {
                 let tail = IDSIZE.saturating_sub(4);
                 let mut out = b"...".to_vec();
-                out.extend_from_slice(source.get(srclen.saturating_sub(tail)..).unwrap_or_default());
+                out.extend_from_slice(
+                    source
+                        .get(srclen.saturating_sub(tail)..)
+                        .unwrap_or_default(),
+                );
                 out
             }
         }
@@ -113,7 +118,10 @@ impl Core {
             Function::Native(_) => b"[C]".to_vec(),
             Function::Lua(l) => {
                 let proto = self.heap.proto(l.proto_id);
-                let source = proto.source.map(|s| self.heap.str_bytes(s)).unwrap_or_default();
+                let source = proto
+                    .source
+                    .map(|s| self.heap.str_bytes(s))
+                    .unwrap_or_default();
                 chunkid(source)
             }
         }
@@ -183,7 +191,13 @@ fn info(vm: &mut Core, args: Args) -> VmResult<usize> {
         (vm.info_at_level(thread, level), options)
     } else if let (0, Value::Function(f)) = (arg, first) {
         let options = vm.check_string(args, 2)?;
-        (Some(Info { func: f, frame: None }), options)
+        (
+            Some(Info {
+                func: f,
+                frame: None,
+            }),
+            options,
+        )
     } else {
         return Err(vm.arg_error(arg.saturating_add(1), "function or level expected"));
     };
@@ -191,7 +205,10 @@ fn info(vm: &mut Core, args: Args) -> VmResult<usize> {
         return Ok(0);
     };
     let options = vm.heap.str_rc(options);
-    let end = options.iter().position(|&b| b == 0).unwrap_or(options.len());
+    let end = options
+        .iter()
+        .position(|&b| b == 0)
+        .unwrap_or(options.len());
     let mut occurs = [false; 26];
     let mut results = Vec::new();
     for &ch in options.get(..end).unwrap_or_default() {

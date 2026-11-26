@@ -363,11 +363,7 @@ impl Core {
     /// C++ `lua_yield` for the top `n` values; the native on top is
     /// `coroutine.yield` or a host function, and the thread may yield.
     /// `cont`, if any, runs when the thread is resumed.
-    pub(crate) fn yield_thread(
-        &mut self,
-        n: usize,
-        cont: Option<Cont>,
-    ) -> VmResult<Flow> {
+    pub(crate) fn yield_thread(&mut self, n: usize, cont: Option<Cont>) -> VmResult<Flow> {
         let first = self.exec.top.saturating_sub(n);
         if let Some(pending) = self.exec.frames.top_pending_or_insert() {
             pending.wait = match cont {

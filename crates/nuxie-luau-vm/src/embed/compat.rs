@@ -26,10 +26,10 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use super::DirectFields;
+use super::HostCtx;
 use super::handle::{Handle, ReleaseQueue};
 use crate::error::{Error, VmResult};
 use crate::heap::{Function, NativeClosure};
-use super::HostCtx;
 use crate::host::{CallStatus, HostError};
 use crate::hosted::{Host, HostEntry, HostedVm, LoanFamily, NoLoan};
 use crate::native::{HostFnId, NativeFn};
@@ -43,7 +43,8 @@ pub type HostFn<L = NoLoan> = dyn Fn(&mut HostCtx<'_, L>) -> Result<usize, HostE
 /// A host function's continuation (C++ `lua_Continuation`): runs when a
 /// call it requested returns (or, for a protected call, fails), or when a
 /// yield it made is resumed.
-pub type HostContFn<L = NoLoan> = dyn Fn(&mut HostCtx<'_, L>, CallStatus) -> Result<usize, HostError>;
+pub type HostContFn<L = NoLoan> =
+    dyn Fn(&mut HostCtx<'_, L>, CallStatus) -> Result<usize, HostError>;
 
 /// The host's interrupt callback (C++ `lua_callbacks()->interrupt`, GC
 /// steps excluded): asked at every VM safepoint and pattern step; an error
@@ -281,7 +282,9 @@ impl<L: LoanFamily> Vm<L> {
             vm.compat_entry(CONT),
         );
         if ids != fixed {
-            return Err(Error::Host("internal error: host entries out of place".to_owned()));
+            return Err(Error::Host(
+                "internal error: host entries out of place".to_owned(),
+            ));
         }
         Ok(vm)
     }

@@ -1477,7 +1477,11 @@ impl GpuCanvasContextBindings {
         }
     }
 
-    pub(crate) fn shader_userdata(&self, lua: &crate::luau::Lua, name: String) -> Result<MultiValue> {
+    pub(crate) fn shader_userdata(
+        &self,
+        lua: &crate::luau::Lua,
+        name: String,
+    ) -> Result<MultiValue> {
         let shader = match self
             .shaders
             .shader(lua, &name, self.renderer_bindings.as_ref())
@@ -2337,8 +2341,7 @@ impl GpuCanvasBytecodeProgram {
             let expected = (image.width as usize)
                 .checked_mul(image.height as usize)
                 .and_then(|pixels| pixels.checked_mul(4));
-            let valid =
-                image.width != 0 && image.height != 0 && expected == Some(image.rgba.len());
+            let valid = image.width != 0 && image.height != 0 && expected == Some(image.rgba.len());
             let Some(bytes_per_row) = image.width.checked_mul(4).filter(|_| valid) else {
                 return Err(Error::runtime(format!(
                     "snapshot image '{}' must be {}x{} RGBA8 pixels",

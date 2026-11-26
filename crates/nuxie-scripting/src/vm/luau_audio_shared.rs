@@ -177,7 +177,11 @@ struct Holds {
     _charge: Option<Charge>,
 }
 impl Holds {
-    fn new(values: Vec<SharedValue>, budget: &Arc<SharedBudget>, extra: usize) -> Result<Self, String> {
+    fn new(
+        values: Vec<SharedValue>,
+        budget: &Arc<SharedBudget>,
+        extra: usize,
+    ) -> Result<Self, String> {
         let bytes = values
             .capacity()
             .saturating_mul(std::mem::size_of::<SharedValue>())
@@ -845,10 +849,16 @@ mod tests {
         // Raw PCM records travel in rings too; reading one as a shared value
         // must fail the message, never the thread.
         let ring = SharedRing::new(1 << 12).unwrap();
-        assert!(ring.write_record(&nested_arrays(MAX_SHARED_DEPTH + 1)).unwrap());
+        assert!(
+            ring.write_record(&nested_arrays(MAX_SHARED_DEPTH + 1))
+                .unwrap()
+        );
         assert!(ring.send(SharedValue::Number(1.0)).unwrap());
         assert!(ring.try_receive().is_err());
-        assert!(matches!(ring.try_receive(), Ok(Some(SharedValue::Number(1.0)))));
+        assert!(matches!(
+            ring.try_receive(),
+            Ok(Some(SharedValue::Number(1.0)))
+        ));
     }
     #[test]
     fn ring_byte_capacity_includes_framing_and_preserves_fifo() {
@@ -1090,7 +1100,11 @@ mod tests {
             .map(|_| Arc::new(SharedSnapshot::with_budget(16, budget.clone()).unwrap()))
             .collect();
         for pair in links.windows(2) {
-            assert!(pair[0].publish(SharedValue::Snapshot(pair[1].clone())).unwrap());
+            assert!(
+                pair[0]
+                    .publish(SharedValue::Snapshot(pair[1].clone()))
+                    .unwrap()
+            );
         }
         let mut links = links.into_iter();
         let head = links.next().unwrap();
@@ -1109,12 +1123,17 @@ mod tests {
         let ring = SharedRing::with_budget(4096, budget.clone()).unwrap();
         let snapshot = SharedSnapshot::with_budget(4096, budget.clone()).unwrap();
         let blob = Arc::new(SharedBlob::with_budget(&[1, 2, 3], budget.clone()).unwrap());
-        let handles = || SharedValue::Array((0..100).map(|_| SharedValue::Blob(blob.clone())).collect());
+        let handles =
+            || SharedValue::Array((0..100).map(|_| SharedValue::Blob(blob.clone())).collect());
         let bytes = || lock(&budget.state).bytes;
         let held = 100 * std::mem::size_of::<SharedValue>();
         let base = bytes();
         assert!(ring.send(handles()).unwrap());
-        assert!(bytes() - base >= held + RING_HOLDS_ENTRY_BYTES, "{}", bytes() - base);
+        assert!(
+            bytes() - base >= held + RING_HOLDS_ENTRY_BYTES,
+            "{}",
+            bytes() - base
+        );
         assert!(ring.receive().is_some());
         assert_eq!(bytes(), base);
         assert!(snapshot.publish(handles()).unwrap());
@@ -1129,9 +1148,16 @@ mod tests {
         let ring = SharedRing::with_budget(4096, budget.clone()).unwrap();
         let snapshot = SharedSnapshot::with_budget(1024, budget.clone()).unwrap();
         let blob = Arc::new(SharedBlob::with_budget(&[1, 2, 3], budget.clone()).unwrap());
-        let handles = SharedValue::Array((0..100).map(|_| SharedValue::Blob(blob.clone())).collect());
-        assert_eq!(ring.send(handles.clone()).unwrap_err(), "shared memory budget exceeded");
-        assert_eq!(snapshot.publish(handles).unwrap_err(), "shared memory budget exceeded");
+        let handles =
+            SharedValue::Array((0..100).map(|_| SharedValue::Blob(blob.clone())).collect());
+        assert_eq!(
+            ring.send(handles.clone()).unwrap_err(),
+            "shared memory budget exceeded"
+        );
+        assert_eq!(
+            snapshot.publish(handles).unwrap_err(),
+            "shared memory budget exceeded"
+        );
         assert_eq!(ring.used(), 0);
         assert!(snapshot.latest().is_none());
     }
@@ -1142,12 +1168,19 @@ mod tests {
         let second = Arc::new(SharedSnapshot::new(16).unwrap());
         assert!(second.publish(SharedValue::Snapshot(first)).unwrap());
         let third = Arc::new(SharedSnapshot::new(16).unwrap());
-        assert!(third.publish(SharedValue::Snapshot(second.clone())).unwrap());
+        assert!(
+            third
+                .publish(SharedValue::Snapshot(second.clone()))
+                .unwrap()
+        );
         drop(third);
         let Some((_, SharedValue::Snapshot(first))) = second.latest() else {
             panic!("the second snapshot lost its publication");
         };
-        assert!(matches!(first.latest(), Some((1, SharedValue::Number(3.0)))));
+        assert!(matches!(
+            first.latest(),
+            Some((1, SharedValue::Number(3.0)))
+        ));
     }
 }
 

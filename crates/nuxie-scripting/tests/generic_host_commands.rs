@@ -294,7 +294,8 @@ fn a_huge_payload_table_is_walked_only_as_far_as_the_node_budget() {
         .exec()
         .expect("counting next");
     let limits = HostCommandLimits::default();
-    let host = HostCommandHost::install(&vm, "bridge", limits).expect("generic host module installs");
+    let host =
+        HostCommandHost::install(&vm, "bridge", limits).expect("generic host module installs");
     vm.lua()
         .load("next = nil")
         .exec()

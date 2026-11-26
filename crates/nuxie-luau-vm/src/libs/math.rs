@@ -206,13 +206,17 @@ fn fast_fold(
     nparams: usize,
     keep: fn(f64, f64) -> bool,
 ) -> Option<usize> {
-    let [Value::Number(a1), Value::Number(a2), _] = args else { return None };
+    let [Value::Number(a1), Value::Number(a2), _] = args else {
+        return None;
+    };
     if nparams < 2 || nresults > 1 {
         return None;
     }
     let mut r = if keep(a2, a1) { a2 } else { a1 };
     for i in 2..nparams {
-        let Value::Number(x) = arg(vm, ra, &args, i) else { return None };
+        let Value::Number(x) = arg(vm, ra, &args, i) else {
+            return None;
+        };
         if keep(x, r) {
             r = x;
         }
@@ -221,11 +225,23 @@ fn fast_fold(
     Some(1)
 }
 
-pub(crate) fn fast_min(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+pub(crate) fn fast_min(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
     fast_fold(vm, ra, nresults, args, nparams, |x, m| x < m)
 }
 
-pub(crate) fn fast_max(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+pub(crate) fn fast_max(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
     fast_fold(vm, ra, nresults, args, nparams, |x, m| x > m)
 }
 
@@ -256,7 +272,9 @@ pub(crate) fn fast_clamp(
     args: [Value; 3],
     nparams: usize,
 ) -> Option<usize> {
-    let [Value::Number(v), Value::Number(lo), Value::Number(hi)] = args else { return None };
+    let [Value::Number(v), Value::Number(lo), Value::Number(hi)] = args else {
+        return None;
+    };
     if nparams < 3 || nresults > 1 {
         return None;
     }
@@ -385,7 +403,9 @@ pub(crate) fn fast_lerp(
     args: [Value; 3],
     nparams: usize,
 ) -> Option<usize> {
-    let [Value::Number(a), Value::Number(b), Value::Number(t)] = args else { return None };
+    let [Value::Number(a), Value::Number(b), Value::Number(t)] = args else {
+        return None;
+    };
     if nparams < 3 || nresults > 1 {
         return None;
     }
@@ -521,7 +541,11 @@ fn perlin(x: f32, y: f32, z: f32) -> f32 {
     let b = perm(xi.wrapping_add(1)).wrapping_add(yi) & 255;
     let ba = perm(b).wrapping_add(zi) & 255;
     let bb = perm(b.wrapping_add(1)).wrapping_add(zi) & 255;
-    let la = plerp(u, grad(perm(aa), xf, yf, zf), grad(perm(ba), xf - 1.0, yf, zf));
+    let la = plerp(
+        u,
+        grad(perm(aa), xf, yf, zf),
+        grad(perm(ba), xf - 1.0, yf, zf),
+    );
     let lb = plerp(
         u,
         grad(perm(ab), xf, yf - 1.0, zf),

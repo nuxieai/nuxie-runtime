@@ -244,8 +244,8 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         let (vertex_shader, vertex) =
             resolve_stage_entry(&table, loan, "vertex", ShaderStage::vertex)?
                 .ok_or_else(|| Error::runtime("GPUPipeline.new: 'vertex' is required"))?;
-        let mut fragment =
-            resolve_stage_entry(&table, loan, "fragment", ShaderStage::fragment)?.map(|(_, entry)| entry);
+        let mut fragment = resolve_stage_entry(&table, loan, "fragment", ShaderStage::fragment)?
+            .map(|(_, entry)| entry);
         let layouts: Table = table.get_with(reborrow_loan(loan), "vertexLayout")?;
         let mut owned_attributes = Vec::new();
         let mut strides = Vec::new();
@@ -392,32 +392,33 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         desc.stencilBack = stencil(optional_table(&table, loan, "stencilBack")?, loan)?;
         desc.stencilReadMask = number(&table, loan, "stencilReadMask", 255.0)? as u8;
         desc.stencilWriteMask = number(&table, loan, "stencilWriteMask", 255.0)? as u8;
-        let (layouts, auto) = if let Some(layouts) = optional_table(&table, loan, "bindGroupLayouts")? {
-            if layouts.raw_len() > kMaxBindGroups as usize {
-                return Err(Error::runtime(
-                    "GPUPipeline.new: bindGroupLayouts count exceeds maximum",
-                ));
-            }
-            let mut values = Vec::with_capacity(layouts.raw_len());
-            for index in 1..=layouts.raw_len() {
-                let data: AnyUserData = layouts.raw_get(index)?;
-                values.push(Some(data.borrow::<Layout>()?.clone()));
-            }
-            (values, false)
-        } else {
-            (
-                auto_layouts(
-                    &mut *context.borrow_mut(),
-                    desc.vertexModule
-                        .and_then(|module| module.shaderModuleBase()),
-                    desc.vertexEntryPoint,
-                    desc.fragmentModule
-                        .and_then(|module| module.shaderModuleBase()),
-                    desc.fragmentEntryPoint,
-                )?,
-                true,
-            )
-        };
+        let (layouts, auto) =
+            if let Some(layouts) = optional_table(&table, loan, "bindGroupLayouts")? {
+                if layouts.raw_len() > kMaxBindGroups as usize {
+                    return Err(Error::runtime(
+                        "GPUPipeline.new: bindGroupLayouts count exceeds maximum",
+                    ));
+                }
+                let mut values = Vec::with_capacity(layouts.raw_len());
+                for index in 1..=layouts.raw_len() {
+                    let data: AnyUserData = layouts.raw_get(index)?;
+                    values.push(Some(data.borrow::<Layout>()?.clone()));
+                }
+                (values, false)
+            } else {
+                (
+                    auto_layouts(
+                        &mut *context.borrow_mut(),
+                        desc.vertexModule
+                            .and_then(|module| module.shaderModuleBase()),
+                        desc.vertexEntryPoint,
+                        desc.fragmentModule
+                            .and_then(|module| module.shaderModuleBase()),
+                        desc.fragmentEntryPoint,
+                    )?,
+                    true,
+                )
+            };
         let layout_refs: Vec<_> = layouts
             .iter()
             .map(|layout| layout.as_ref().map(|layout| &layout.resource))

@@ -180,7 +180,10 @@ fn cyield(vm: &mut Vm) -> Result<(), Error> {
         |ctx, _| {
             check(ctx.top() == 13, "3 original arguments and 10 return values")?;
             for _ in 0..9 {
-                check(matches!(ctx.value(-1)?, Value::Nil), "padding results are nil")?;
+                check(
+                    matches!(ctx.value(-1)?, Value::Nil),
+                    "padding results are nil",
+                )?;
                 ctx.pop(1)?;
             }
             let x: f64 = ctx.get(-1)?;
@@ -281,7 +284,9 @@ const INT64_TAG: u8 = 1;
 /// as upstream).
 fn get_int64(ctx: &mut HostCtx<'_>, n: usize) -> Result<i64, HostError> {
     if let Some(cell) = ctx.to_userdata_tagged::<i64>(n, INT64_TAG) {
-        let value = *cell.try_borrow().map_err(|_| HostError::raw("int64 already borrowed"))?;
+        let value = *cell
+            .try_borrow()
+            .map_err(|_| HostError::raw("int64 already borrowed"))?;
         return Ok(value);
     }
     let value = ctx.value(n as isize)?;
@@ -302,7 +307,9 @@ fn push_int64(ctx: &mut HostCtx<'_>, value: i64) -> Result<usize, HostError> {
     Ok(1)
 }
 
-fn int64_field(ctx: &mut HostCtx<'_>) -> Result<(std::rc::Rc<std::cell::RefCell<i64>>, String), HostError> {
+fn int64_field(
+    ctx: &mut HostCtx<'_>,
+) -> Result<(std::rc::Rc<std::cell::RefCell<i64>>, String), HostError> {
     let Some(cell) = ctx.to_userdata_tagged::<i64>(1, INT64_TAG) else {
         return Err(ctx.type_error(1, "userdata"));
     };
@@ -320,7 +327,9 @@ fn userdata(vm: &mut Vm) -> Result<(), Error> {
     let index = vm.create_host_function("", |ctx| {
         let (cell, name) = int64_field(ctx)?;
         if name == "value" {
-            let value = *cell.try_borrow().map_err(|_| HostError::raw("int64 already borrowed"))?;
+            let value = *cell
+                .try_borrow()
+                .map_err(|_| HostError::raw("int64 already borrowed"))?;
             ctx.push(value as f64)?;
             return Ok(1);
         }
@@ -331,7 +340,9 @@ fn userdata(vm: &mut Vm) -> Result<(), Error> {
         let (cell, name) = int64_field(ctx)?;
         if name == "value" {
             let value = ctx.check_number(3)?;
-            *cell.try_borrow_mut().map_err(|_| HostError::raw("int64 already borrowed"))? = value as i64;
+            *cell
+                .try_borrow_mut()
+                .map_err(|_| HostError::raw("int64 already borrowed"))? = value as i64;
             return Ok(0);
         }
         Err(HostError::new(format!("unknown field {name}")))
@@ -359,9 +370,15 @@ fn userdata(vm: &mut Vm) -> Result<(), Error> {
         ("__mul", |a, b| Ok(a.wrapping_mul(b))),
         // __div truncates; __idiv floors through doubles (upstream's test
         // semantics).
-        ("__div", |a, b| a.checked_div(b).ok_or_else(|| HostError::raw("int64 division by zero"))),
+        ("__div", |a, b| {
+            a.checked_div(b)
+                .ok_or_else(|| HostError::raw("int64 division by zero"))
+        }),
         ("__idiv", |a, b| Ok((a as f64 / b as f64).floor() as i64)),
-        ("__mod", |a, b| a.checked_rem(b).ok_or_else(|| HostError::raw("int64 division by zero"))),
+        ("__mod", |a, b| {
+            a.checked_rem(b)
+                .ok_or_else(|| HostError::raw("int64 division by zero"))
+        }),
         ("__pow", |a, b| Ok((a as f64).powf(b as f64) as i64)),
     ];
     for (event, op) in arith {
@@ -430,7 +447,11 @@ fn vector(vm: &mut Vm) -> Result<(), Error> {
                 let dot = ctx.create_host_function("Dot", vector_dot)?;
                 ctx.push(dot)?;
             }
-            _ => return Err(HostError::new(format!("{name} is not a valid member of vector"))),
+            _ => {
+                return Err(HostError::new(format!(
+                    "{name} is not a valid member of vector"
+                )));
+            }
         }
         Ok(1)
     })?;
@@ -442,7 +463,9 @@ fn vector(vm: &mut Vm) -> Result<(), Error> {
             _ => {}
         }
         let name: String = ctx.get(1)?;
-        Err(HostError::new(format!("{name} is not a valid method of vector")))
+        Err(HostError::new(format!(
+            "{name} is not a valid method of vector"
+        )))
     })?;
     mt.raw_set(vm, "__namecall", namecall)?;
     mt.set_readonly(vm, true)?;
@@ -482,7 +505,10 @@ fn vec2_get(ctx: &mut HostCtx<'_>, n: usize) -> Result<Vec2, HostError> {
     }
 }
 
-fn vec2_cell(ctx: &mut HostCtx<'_>, n: usize) -> Result<std::rc::Rc<std::cell::RefCell<Vec2>>, HostError> {
+fn vec2_cell(
+    ctx: &mut HostCtx<'_>,
+    n: usize,
+) -> Result<std::rc::Rc<std::cell::RefCell<Vec2>>, HostError> {
     match ctx.to_userdata_tagged::<Vec2>(n, TAG_VEC2) {
         Some(cell) => Ok(cell),
         None => Err(ctx.type_error(n, "userdata")),
@@ -498,7 +524,10 @@ fn vec2_push(ctx: &mut HostCtx<'_>, v: Vec2) -> Result<usize, HostError> {
 
 /// `lua_vertex_get`: `lua_touserdatatagged`, else `luaL_typeerror(idx,
 /// "vertex")`.
-fn vertex_cell(ctx: &mut HostCtx<'_>, n: usize) -> Result<std::rc::Rc<std::cell::RefCell<Vertex>>, HostError> {
+fn vertex_cell(
+    ctx: &mut HostCtx<'_>,
+    n: usize,
+) -> Result<std::rc::Rc<std::cell::RefCell<Vertex>>, HostError> {
     match ctx.to_userdata_tagged::<Vertex>(n, TAG_VERTEX) {
         Some(cell) => Ok(cell),
         None => Err(ctx.type_error(n, "vertex")),
@@ -520,7 +549,13 @@ fn vec2_binary(op: Vec2Op) -> impl Fn(&mut HostCtx<'_>) -> Result<usize, HostErr
     move |ctx| {
         let a = vec2_get(ctx, 1)?;
         let b = vec2_get(ctx, 2)?;
-        vec2_push(ctx, Vec2 { x: op(a.x, b.x), y: op(a.y, b.y) })
+        vec2_push(
+            ctx,
+            Vec2 {
+                x: op(a.x, b.x),
+                y: op(a.y, b.y),
+            },
+        )
     }
 }
 
@@ -538,10 +573,20 @@ fn userdata_helpers(vm: &mut Vm) -> Result<(), Error> {
             "Magnitude" => ctx.push(f64::from((v.x * v.x + v.y * v.y).sqrt()))?,
             "Unit" => {
                 let inv = 1.0 / (v.x * v.x + v.y * v.y).sqrt();
-                return vec2_push(ctx, Vec2 { x: v.x * inv, y: v.y * inv });
+                return vec2_push(
+                    ctx,
+                    Vec2 {
+                        x: v.x * inv,
+                        y: v.y * inv,
+                    },
+                );
             }
             "sizeof" => ctx.push(std::mem::size_of::<Vec2>() as f64)?,
-            _ => return Err(HostError::new(format!("{name} is not a valid member of vector"))),
+            _ => {
+                return Err(HostError::new(format!(
+                    "{name} is not a valid member of vector"
+                )));
+            }
         }
         Ok(1)
     })?;
@@ -554,7 +599,11 @@ fn userdata_helpers(vm: &mut Vm) -> Result<(), Error> {
         match name.as_str() {
             "X" => v.x = value,
             "Y" => v.y = value,
-            _ => return Err(HostError::new(format!("{name} is not a writable member of vec2"))),
+            _ => {
+                return Err(HostError::new(format!(
+                    "{name} is not a writable member of vec2"
+                )));
+            }
         }
         Ok(0)
     })?;
@@ -589,7 +638,9 @@ fn userdata_helpers(vm: &mut Vm) -> Result<(), Error> {
             }
         }
         let name: String = ctx.get(1)?;
-        Err(HostError::new(format!("{name} is not a valid method of vector")))
+        Err(HostError::new(format!(
+            "{name} is not a valid method of vector"
+        )))
     })?;
     mt.raw_set(vm, "__namecall", namecall)?;
     let ops: [(&str, Vec2Op); 4] = [
@@ -611,7 +662,13 @@ fn userdata_helpers(vm: &mut Vm) -> Result<(), Error> {
     let ctor = vm.create_host_function("vec2", |ctx| {
         let x = ctx.check_number(1)?;
         let y = ctx.check_number(2)?;
-        vec2_push(ctx, Vec2 { x: x as f32, y: y as f32 })
+        vec2_push(
+            ctx,
+            Vec2 {
+                x: x as f32,
+                y: y as f32,
+            },
+        )
     })?;
     set_global(vm, "vec2", ctor)?;
 
@@ -624,9 +681,21 @@ fn userdata_helpers(vm: &mut Vm) -> Result<(), Error> {
         match name.as_str() {
             "pos" => ctx.push(v.pos)?,
             "normal" => ctx.push(v.normal)?,
-            "uv" => return vec2_push(ctx, Vec2 { x: v.uv[0], y: v.uv[1] }),
+            "uv" => {
+                return vec2_push(
+                    ctx,
+                    Vec2 {
+                        x: v.uv[0],
+                        y: v.uv[1],
+                    },
+                );
+            }
             "sizeof" => ctx.push(std::mem::size_of::<Vertex>() as f64)?,
-            _ => return Err(HostError::new(format!("{name} is not a valid member of vertex"))),
+            _ => {
+                return Err(HostError::new(format!(
+                    "{name} is not a valid member of vertex"
+                )));
+            }
         }
         Ok(1)
     })?;
@@ -647,7 +716,11 @@ fn userdata_helpers(vm: &mut Vm) -> Result<(), Error> {
                 let uv = vec2_get(ctx, 3)?;
                 cell.try_borrow_mut().map_err(|_| borrowed())?.uv = [uv.x, uv.y];
             }
-            _ => return Err(HostError::new(format!("{name} is not a writable member of vertex"))),
+            _ => {
+                return Err(HostError::new(format!(
+                    "{name} is not a writable member of vertex"
+                )));
+            }
         }
         Ok(0)
     })?;
@@ -660,7 +733,9 @@ fn userdata_helpers(vm: &mut Vm) -> Result<(), Error> {
             }
         }
         let name: String = ctx.get(1)?;
-        Err(HostError::new(format!("{name} is not a valid method of vertex")))
+        Err(HostError::new(format!(
+            "{name} is not a valid method of vertex"
+        )))
     })?;
     mt.raw_set(vm, "__namecall", namecall)?;
     mt.set_readonly(vm, true)?;
@@ -668,7 +743,14 @@ fn userdata_helpers(vm: &mut Vm) -> Result<(), Error> {
         let pos = ctx.check_vector(1)?;
         let normal = ctx.check_vector(2)?;
         let uv = vec2_get(ctx, 3)?;
-        vertex_push(ctx, Vertex { pos, normal, uv: [uv.x, uv.y] })
+        vertex_push(
+            ctx,
+            Vertex {
+                pos,
+                normal,
+                uv: [uv.x, uv.y],
+            },
+        )
     })?;
     set_global(vm, "vertex", ctor)?;
     // "check that metatables are correctly pinned"

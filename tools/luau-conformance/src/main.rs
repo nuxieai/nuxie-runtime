@@ -178,8 +178,7 @@ fn run(options: &RunOptions) -> Result<ExitCode, String> {
                     let Some(name) = selected.get(index) else {
                         break;
                     };
-                    let result =
-                        run_child(&exe, &corpus.join(name), timeout, stack_mib, verbose);
+                    let result = run_child(&exe, &corpus.join(name), timeout, stack_mib, verbose);
                     if sender.send((index, result)).is_err() {
                         break;
                     }

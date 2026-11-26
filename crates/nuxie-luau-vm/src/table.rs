@@ -431,7 +431,10 @@ impl Table {
             return None;
         }
         let i = self.find_str(key)?;
-        self.nodes.get_mut(i).map(|n| &mut n.val).filter(|v| !v.is_nil())
+        self.nodes
+            .get_mut(i)
+            .map(|n| &mut n.val)
+            .filter(|v| !v.is_nil())
     }
 
     /// A key the table has no slot for, checked for insertion (C++

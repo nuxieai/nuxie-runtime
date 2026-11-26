@@ -1,7 +1,7 @@
 //! Literal native-Luau cases from runtime/scripting/scripting_text_test.cpp at db31ea87.
 #![cfg(all(feature = "luau-host", feature = "upstream-test-seams"))]
-use nuxie_scripting::luau::{Function, Table, Value};
 use nuxie_render_api::{PersistentFactory, SerializingFactory};
+use nuxie_scripting::luau::{Function, Table, Value};
 use nuxie_scripting::vm::ScriptVm;
 use nuxie_sriv::{compare_sriv, parse_sriv};
 use std::path::PathBuf;

@@ -50,10 +50,10 @@ mod handles;
 mod loan;
 mod multi;
 mod state;
-mod userdata;
-mod value;
 #[cfg(all(test, feature = "compiler"))]
 mod tests;
+mod userdata;
+mod value;
 
 pub use error::{CallbackCause, Error, ExternalError, ExternalResult, Result};
 pub use handles::{Buffer, Function, LuaString, Table, Thread, ThreadStatus};
@@ -64,8 +64,7 @@ pub use state::{
     WeakLua, luau_direct_field_get, set_luau_direct_field_get,
 };
 pub use userdata::{
-    AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMethods, UserDataRef,
-    UserDataRefMut,
+    AnyUserData, MetaMethod, UserData, UserDataFields, UserDataMethods, UserDataRef, UserDataRefMut,
 };
 pub use value::{Integer, LightUserData, Nil, Number, Value, Vector};
 

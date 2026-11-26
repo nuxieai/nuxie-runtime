@@ -182,8 +182,8 @@ fn gradient_stops(
 #[cfg(all(test, feature = "compiler"))]
 mod upstream_gradient_tests {
     use super::ScriptedGradient;
-    use crate::vm::ScriptVm;
     use crate::luau::AnyUserData;
+    use crate::vm::ScriptVm;
     use nuxie_render_api::{NullFactory, PersistentFactory};
 
     // tests/unit_tests/runtime/scripting/scripting_gradient_test.cpp, 36780f92.

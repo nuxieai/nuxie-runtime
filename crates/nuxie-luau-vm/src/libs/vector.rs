@@ -45,7 +45,11 @@ fn map(v: V3, f: impl Fn(f32) -> f32) -> V3 {
 fn create(vm: &mut Core, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
     let y = vm.check_number(args, 2)?;
-    let z = if args.nargs >= 3 { vm.check_number(args, 3)? } else { 0.0 };
+    let z = if args.nargs >= 3 {
+        vm.check_number(args, 3)?
+    } else {
+        0.0
+    };
     ret_v(vm, [x as f32, y as f32, z as f32])
 }
 
@@ -244,7 +248,9 @@ macro_rules! fast_vector2 {
             [a0, a1, _]: [Value; 3],
             nparams: usize,
         ) -> Option<usize> {
-            let (Value::Vector(a), Value::Vector(b)) = (a0, a1) else { return None };
+            let (Value::Vector(a), Value::Vector(b)) = (a0, a1) else {
+                return None;
+            };
             if nparams < 2 || nresults > 1 {
                 return None;
             }
@@ -286,7 +292,9 @@ pub(crate) fn fast_create(
     [a0, a1, a2]: [Value; 3],
     nparams: usize,
 ) -> Option<usize> {
-    let (Value::Number(x), Value::Number(y)) = (a0, a1) else { return None };
+    let (Value::Number(x), Value::Number(y)) = (a0, a1) else {
+        return None;
+    };
     if nparams < 2 || nresults > 1 {
         return None;
     }
@@ -326,7 +334,9 @@ pub(crate) fn fast_clamp(
     args: [Value; 3],
     nparams: usize,
 ) -> Option<usize> {
-    let [Value::Vector(v), Value::Vector(lo), Value::Vector(hi)] = args else { return None };
+    let [Value::Vector(v), Value::Vector(lo), Value::Vector(hi)] = args else {
+        return None;
+    };
     if nparams < 3 || nresults > 1 {
         return None;
     }
@@ -351,7 +361,9 @@ fn fast_fold(
     nparams: usize,
     keep: fn(f32, f32) -> bool,
 ) -> Option<usize> {
-    let [Value::Vector(mut r), Value::Vector(b), _] = args else { return None };
+    let [Value::Vector(mut r), Value::Vector(b), _] = args else {
+        return None;
+    };
     if nparams < 2 || nresults > 1 {
         return None;
     }
@@ -364,18 +376,32 @@ fn fast_fold(
     };
     fold(b);
     for i in 2..nparams {
-        let Value::Vector(c) = arg(vm, ra, &args, i) else { return None };
+        let Value::Vector(c) = arg(vm, ra, &args, i) else {
+            return None;
+        };
         fold(c);
     }
     vm.set(ra, Value::Vector(r));
     Some(1)
 }
 
-pub(crate) fn fast_min(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+pub(crate) fn fast_min(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
     fast_fold(vm, ra, nresults, args, nparams, |b, r| b < r)
 }
 
-pub(crate) fn fast_max(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+pub(crate) fn fast_max(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
     fast_fold(vm, ra, nresults, args, nparams, |b, r| b > r)
 }
 
@@ -396,13 +422,21 @@ fast_vector2!(fast_rive_distance, |a, b| {
 fast_vector2!(fast_rive_distance_squared, |a, b| {
     Value::Number(f64::from(length_squared_fused(difference(a, b))))
 });
-fast_vector1!(fast_rive_length_squared, |v| Value::Number(f64::from(length_squared_fused(v))));
+fast_vector1!(fast_rive_length_squared, |v| Value::Number(f64::from(
+    length_squared_fused(v)
+)));
 fast_vector1!(fast_rive_normalize, |v| {
     let len_sq = length_squared_fused(v);
-    let inv = if len_sq > 0.0 { 1.0 / len_sq.sqrt() } else { 1.0 };
+    let inv = if len_sq > 0.0 {
+        1.0 / len_sq.sqrt()
+    } else {
+        1.0
+    };
     Value::Vector(map(v, |c| c * inv))
 });
-fast_vector2!(fast_rive_cross, |a, b| Value::Number(f64::from(a[0].mul_add(b[1], -(a[1] * b[0])))));
+fast_vector2!(fast_rive_cross, |a, b| Value::Number(f64::from(
+    a[0].mul_add(b[1], -(a[1] * b[0]))
+)));
 fast_vector_vvn!(fast_rive_scale_and_add, |a, b, s| [
     b[0].mul_add(s, a[0]),
     b[1].mul_add(s, a[1]),

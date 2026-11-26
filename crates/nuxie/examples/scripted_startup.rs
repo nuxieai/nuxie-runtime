@@ -18,8 +18,7 @@
 //! names there predate the Phase 3 flip).
 use anyhow::{Context, Result, bail};
 use nuxie::{
-    FileImportLimits, PersistentFactory, ScriptExecutionLimits, ScriptVm,
-    import_unsigned_scripted,
+    FileImportLimits, PersistentFactory, ScriptExecutionLimits, ScriptVm, import_unsigned_scripted,
 };
 use nuxie_render_api::SerializingFactory;
 use std::time::Instant;

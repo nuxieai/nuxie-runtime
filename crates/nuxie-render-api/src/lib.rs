@@ -38,7 +38,6 @@ pub mod serialize_ops;
 pub mod serialized_replay;
 mod serializing;
 pub mod shader_asset;
-pub use shader_asset::ShaderAssetError;
 pub use aabb::{AABBi16, AABBu16, Aabb, AabbInteger, AabbScalarBounds, IntegerAabb, TypedAabb};
 pub use nuxie_audio::{AudioDecodeError, AudioSource};
 pub use nuxie_ore_metal::context::FrameDescriptor as OreFrameDescriptor;
@@ -47,6 +46,7 @@ pub use routing::{
     canvas_texture_info, canvas_texture_owner,
 };
 pub use serializing::{SerializingFactory, SerializingRenderer};
+pub use shader_asset::ShaderAssetError;
 
 // C++ owns this counter on Artboard, but its SerializingFactory also advances
 // it from the renderer utility layer. The Rust crate split keeps the shared

@@ -42,7 +42,11 @@ pub static SHARED_WORDS: [AtomicU32; 16] = [
 
 /// `__bench_atomic_load(index)`: word `index`, 0 when out of range.
 fn shared_word(index: f64) -> f64 {
-    let word = if index >= 0.0 { SHARED_WORDS.get(index as usize) } else { None };
+    let word = if index >= 0.0 {
+        SHARED_WORDS.get(index as usize)
+    } else {
+        None
+    };
     word.map_or(0.0, |w| f64::from(w.load(Ordering::SeqCst)))
 }
 
@@ -161,7 +165,11 @@ fn nuxie_compile(source: &str) -> Result<Vec<u8>, String> {
     }
 }
 
-fn nuxie_run(chunk_name: &str, source: &str, output: Arc<Mutex<Vec<String>>>) -> Result<(), String> {
+fn nuxie_run(
+    chunk_name: &str,
+    source: &str,
+    output: Arc<Mutex<Vec<String>>>,
+) -> Result<(), String> {
     use nuxie_luau_vm::{HostError, HostValue, Vm};
 
     let message = |error: nuxie_luau_vm::Error| error.message();

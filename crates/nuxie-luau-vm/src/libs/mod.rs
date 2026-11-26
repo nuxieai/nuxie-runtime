@@ -9,9 +9,9 @@
 
 pub(crate) mod base;
 pub(crate) mod bit32;
-pub(crate) mod debug;
 pub(crate) mod buffer;
 pub(crate) mod coroutine;
+pub(crate) mod debug;
 pub(crate) mod integer;
 pub(crate) mod math;
 pub(crate) mod os;
@@ -21,7 +21,6 @@ pub(crate) mod strpack;
 pub(crate) mod table;
 pub(crate) mod utf8;
 pub(crate) mod vector;
-
 
 use crate::error::{Throw, VmResult};
 use crate::heap::{Function, NativeClosure};
@@ -165,7 +164,8 @@ impl Core {
         if size > LUAI_MAXCSTACK || used.saturating_add(size) > LUAI_MAXCSTACK {
             return false;
         }
-        self.ensure_stack(self.exec.top.saturating_add(size)).is_ok()
+        self.ensure_stack(self.exec.top.saturating_add(size))
+            .is_ok()
     }
 
     /// Pushes results for a builtin and returns their count.

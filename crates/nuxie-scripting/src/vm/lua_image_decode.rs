@@ -7,7 +7,9 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::luau::{AnyUserData, Buffer, Lua, RegistryKey, Result, Value};
-use nuxie_image_codec::{DecodedImageRgba, decode_image_rgba, decoded_rgba_len, preflight_encoded_image};
+use nuxie_image_codec::{
+    DecodedImageRgba, decode_image_rgba, decoded_rgba_len, preflight_encoded_image,
+};
 use nuxie_runtime::{
     WorkCallbacks, WorkCancellationHandle, WorkPool, WorkTask, get_global_work_pool,
 };
@@ -533,9 +535,14 @@ mod tests {
             .eval()
             .unwrap();
         assert!(failed);
-        assert!(error.contains("at most 16 images may be decoding at once"), "{error}");
+        assert!(
+            error.contains("at most 16 images may be decoding at once"),
+            "{error}"
+        );
         drain_work(&lua);
-        lua.load("context:decodeImage(buffer.create(4))").exec().unwrap();
+        lua.load("context:decodeImage(buffer.create(4))")
+            .exec()
+            .unwrap();
         drain_work(&lua);
     }
 
@@ -555,7 +562,9 @@ mod tests {
             .unwrap();
         assert!(failed);
         assert!(error.contains("64-byte host memory budget"), "{error}");
-        lua.load("context:decodeImage(buffer.create(40))").exec().unwrap();
+        lua.load("context:decodeImage(buffer.create(40))")
+            .exec()
+            .unwrap();
         assert_eq!(budget.used(), 40);
         drain_work(&lua);
         assert_eq!(budget.used(), 0);

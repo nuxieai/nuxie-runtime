@@ -7,7 +7,9 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::luau::{Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
+use crate::luau::{
+    Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods, Value,
+};
 use nuxie_runtime::{AudioEngine, AudioSound, AudioSource, RuntimeAudioAssetOwners};
 
 struct ScriptedAudioSource(Arc<AudioSource>);

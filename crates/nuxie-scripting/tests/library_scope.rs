@@ -1,7 +1,7 @@
 #![cfg(feature = "luau-host")]
 
-use nuxie_scripting::luau::{Table, Value};
 use nuxie_binary::read_runtime_file_with_scripting;
+use nuxie_scripting::luau::{Table, Value};
 use nuxie_scripting::vm::ScriptVm;
 
 fn table(value: Value) -> Table {

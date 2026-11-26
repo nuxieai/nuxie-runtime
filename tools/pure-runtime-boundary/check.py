@@ -313,12 +313,13 @@ PORTABLE_ABI_FACADE_FILE_MODULE_SYMBOLS = {
         "live_move": {"LiveMoves", "carry", "records", "screens"},
         "page_player": {"Effects", "PagePlayer", "Step", "seconds_since_event"},
     },
-    # A host's player driver: the page player's driver round, its writer and
-    # the objects and rows it names.
+    # A host's player driver: the page player's driver round, its writer,
+    # the objects and rows it names, and a report's field text.
     "crates/nux-capi/src/player_driver.rs": {
         "page_player": {
             "DriverFault",
             "DriverRound",
+            "FieldText",
             "HostDriver",
             "MAX_DRIVER_ROUNDS",
             "OwnedPlayerEvent",

@@ -1780,6 +1780,21 @@ upstream path and pixels.
   `deferred::gm::image_rect_edges` and
   `deferred::gm::group_opacity_pixel::a_*_screen_that_fades_as_one_picture_reads_one_fade_at_its_edges`
   pin this on Metal; no test draws it on WebGPU or Vulkan.
+- **vulkan-buffer-of-no-bytes**
+  ([UNIV-7146](https://universe.basis.dev/issue/UNIV-7146)): upstream's
+  `RenderBufferVulkanImpl::onMap` (`renderer/src/vulkan/render_context_vulkan_impl.cpp`)
+  acquires a buffer from its pool and returns `vkutil::Buffer::contents()`, and
+  `onUnmap` flushes it. A buffer of no bytes has no Vulkan buffer behind it
+  (`Buffer::init` makes none for size 0), so `contents()` trips its assert and
+  the flush has no allocation. Upstream compiles the assert out of release
+  builds; in this port it stopped the process, which is how a script that drew
+  an image mesh with an empty `TriangleBuffer` took down a Vulkan host. Nuxie's
+  `onMap` returns null and `onUnmap` does nothing for such a buffer, as the
+  shared buffer handle already expects, and the mesh draw that names it is
+  skipped at the flush for want of a current buffer, so it draws nothing, as
+  on Metal, WebGPU and WebGL2. No picture changes.
+  `native_vulkan::tests::an_image_mesh_with_no_triangles_draws_nothing_beside_one_that_draws`
+  pins this wherever a Vulkan device loads.
 
 ## Named driver workarounds
 

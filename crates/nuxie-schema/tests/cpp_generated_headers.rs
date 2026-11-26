@@ -247,6 +247,7 @@ fn nuxie_definitions_stay_out_of_the_cpp_registry() {
             ("Video", 60001),
             ("TextStyleDecoration", 60002),
             ("KeyedRowArtboard", 60003),
+            ("SpringInterpolator", 60004),
             ("LayoutCssStyle", 61000),
             ("BoxBorder", 61001),
             ("BoxGradient", 61002),

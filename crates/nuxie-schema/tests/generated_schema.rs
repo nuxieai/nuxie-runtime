@@ -17,8 +17,9 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // adds LayoutCssStyle, BoxBorder, BoxGradient, BoxShadow and BoxPaint
     // (61000 to 61005, including TextStyleCssText, docs/CSS_LAYOUT.md).
     // Live-move records add LiveStep, LiveStepUnit and LiveFlight
-    // (62001–62003). Keyed lists add KeyedRowArtboard (60003).
-    assert_eq!(DEFINITIONS.len(), 376);
+    // (62001–62003). Keyed lists add KeyedRowArtboard (60003), and spring
+    // easings SpringInterpolator (60004).
+    assert_eq!(DEFINITIONS.len(), 377);
     assert!(definition_by_name("Folder").is_none());
     assert!(definition_by_type_key(102).is_none());
     assert_eq!(
@@ -59,8 +60,9 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // stored but not read by CSS-mode layout.
     // StateTransition's isHold (60023) and ArtboardComponentList's
     // rowArtboardId (60024) and isPageRows (60026) are Nuxie augmentations,
-    // and KeyedRowArtboard adds its artboardId (60025).
-    assert_eq!(runtime_property_count, 837);
+    // and KeyedRowArtboard adds its artboardId (60025). SpringInterpolator
+    // adds its kind and strength (60027, 60028).
+    assert_eq!(runtime_property_count, 839);
 
     let animatable_property_count = DEFINITIONS
         .iter()
@@ -104,8 +106,9 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // rowArtboardId (60024), Nuxie augmentations, are described, and so are LiveStep's flightAnimationId (62030) and LiveStepUnit's
     // transfers (62029), LiveFlight's key and sizeMode (62031, 62032), and
     // upstream 515eb61d's aspectRatioAxisValue (546), KeyedRowArtboard's
-    // artboardId (60025) and ArtboardComponentList's isPageRows (60026).
-    assert_eq!(described_property_count, 593);
+    // artboardId (60025) and ArtboardComponentList's isPageRows (60026), and
+    // SpringInterpolator's kind and strength (60027, 60028).
+    assert_eq!(described_property_count, 595);
 }
 
 #[test]

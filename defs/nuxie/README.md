@@ -17,6 +17,7 @@ resolved explicitly.
 - Video: type 60001; properties 60003–60021.
 - TextStyleDecoration: type 60002; property 60022.
 - KeyedRowArtboard: type 60003; property 60025.
+- SpringInterpolator: type 60004; properties 60027–60028.
 - StateTransition (upstream type 65, augmented by `state_transition_hold.json`): property 60023.
 - ArtboardComponentList (upstream type 559, augmented by `artboard_component_list_rows.json`): properties 60024 and 60026.
 - LayoutCssStyle: type 61000; properties 61000–61082, 61099–61100 and 61106–61108.
@@ -110,6 +111,19 @@ row's artboard through `ArtboardListMapRule`, keyed by the item's view model;
 a keyed list has no view models, so it declares the set instead. It is a
 uint, unset at -1. Readers without the type skip the record and mount rows of
 `rowArtboardId` only.
+
+SpringInterpolator (60004), from `spring_interpolator.json`, is a keyframe
+interpolator beside upstream's cubic and elastic ones: a key's
+`interpolatorId` names it as it names an ElasticInterpolator, and anything
+else that takes an interpolator takes it too. Its `kind` (60027) is 0 for
+`spring` (a critically damped step on smoothstepped time) and 1 for `bouncy`
+(an underdamped step), and its `strength` (60028) is the strength p from 0 to
+1, 0.6 by default. The two curves are written out in the property
+descriptions; both are worked in 64-bit floats and end exactly on the next
+key's value. Upstream has no closed form for either: its elastic ring halves
+every tenth of the segment whatever the strength, and its only other route is
+a ScriptedInterpolator, which needs scripting in the build. Readers without
+the type skip the record, and the key plays linearly.
 
 The CSS layout, box paint and text records (LayoutCssStyle, BoxBorder,
 BoxGradient, BoxShadow, BoxPaint, TextStyleCssText)

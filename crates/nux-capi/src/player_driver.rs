@@ -978,10 +978,12 @@ mod tests {
     /// leads nowhere are refused and change nothing.
     #[test]
     fn a_scene_object_path_writes_one_use_and_an_old_size_writes_the_page() {
-        use nuxie_runtime::occurrence_fixture::{PageMachine, RUN_TEXT, card, page, two_uses_fixture};
         use nuxie::runtime::{
             generated::core_registry::CoreRegistry, layout_component::LayoutComponent,
             nested_artboard_layout::NestedArtboardLayout,
+        };
+        use nuxie_runtime::occurrence_fixture::{
+            PageMachine, RUN_TEXT, card, page, two_uses_fixture,
         };
         let bytes = two_uses_fixture(PageMachine::OneLayer);
         let mut file = std::ptr::null_mut();
@@ -1349,11 +1351,11 @@ mod tests {
     /// nothing.
     #[test]
     fn row_calls_and_row_keys_through_the_c_edge() {
-        use nuxie_runtime::keyed_rows_fixture::{Cards, RUN_TEXT, card, keyed_plans_fixture, page};
         use nuxie::runtime::{
             artboard_component_list::ArtboardComponentList, generated::core_registry::CoreRegistry,
             layout_component::LayoutComponent,
         };
+        use nuxie_runtime::keyed_rows_fixture::{Cards, RUN_TEXT, card, keyed_plans_fixture, page};
         let bytes = keyed_plans_fixture(Cards::Keyed);
         let mut file = std::ptr::null_mut();
         let mut instance = std::ptr::null_mut();
@@ -1562,8 +1564,10 @@ mod tests {
     /// not there and a null host are refused.
     #[test]
     fn a_host_is_given_a_fresh_instance_through_the_c_edge() {
-        use nuxie_runtime::occurrence_fixture::{DOT_TRAVEL, PageMachine, card, page, two_uses_fixture};
         use nuxie::runtime::generated::core_registry::CoreRegistry;
+        use nuxie_runtime::occurrence_fixture::{
+            DOT_TRAVEL, PageMachine, card, page, two_uses_fixture,
+        };
         const X: u16 = 13;
         let bytes = two_uses_fixture(PageMachine::OneLayer);
         let mut file = std::ptr::null_mut();

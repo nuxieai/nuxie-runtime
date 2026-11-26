@@ -23,7 +23,7 @@ fn import_upstream() -> *mut NuxFile {
 fn native_global(player: *mut NuxPlayer, name: &str) -> Option<(usize, usize, u64)> {
     let player = unsafe { &*player };
     let instance = player.instance.borrow();
-    let PlayerInstance::StateMachine(machine) = &*instance else {
+    let Playback::StateMachine(machine) = &*instance else {
         panic!("state machine");
     };
     machine

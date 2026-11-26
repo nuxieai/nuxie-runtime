@@ -761,11 +761,7 @@ pub enum NuxPlayerKind {
     LinearAnimation = 2,
 }
 
-use nuxie::page_player::{
-    FocusInput as PreparedFocusInput, Input as PlannedPlayerInput, Playback as PlayerInstance,
-    Pointer as PreparedPlayerPointer, PointerKind as PreparedPointerKind,
-    Step as PreparedPlayerOperation,
-};
+use nuxie::page_player::{FocusInput, Input, Playback, Pointer, PointerKind, Step};
 fn page_status(kind: nuxie::page_player::ErrorKind) -> NuxStatus {
     use nuxie::page_player::ErrorKind;
     match kind {
@@ -784,7 +780,7 @@ pub struct NuxPlayer {
     // Status-only operations use the ordinary mutation boundary. Their script
     // outputs remain player-owned until an externally returned step result.
     page_player: nuxie::page_player::PagePlayer,
-    instance: RefCell<PlayerInstance>,
+    instance: RefCell<Playback>,
     observed_view_model_binding_revision: Cell<u64>,
     artboard: Rc<ArtboardOccurrence>,
     owner_thread: ThreadId,
@@ -3103,7 +3099,7 @@ pub unsafe extern "C" fn nux_state_machine_instance_new_default(
 
 fn publish_player(
     artboard: &NuxArtboardInstance,
-    player: PlayerInstance,
+    player: Playback,
     selection_index: usize,
     selection_name: &str,
     out_player: *mut *mut NuxPlayer,
@@ -3170,7 +3166,7 @@ pub unsafe extern "C" fn nux_player_new_default(
                 return NuxStatus::RuntimeError;
             };
             (
-                PlayerInstance::StateMachine(Box::new(machine)),
+                Playback::StateMachine(Box::new(machine)),
                 index,
                 artboard.state_machine_name_at(index),
             )
@@ -3180,12 +3176,12 @@ pub unsafe extern "C" fn nux_player_new_default(
                 return NuxStatus::RuntimeError;
             };
             (
-                PlayerInstance::LinearAnimation(Box::new(animation)),
+                Playback::LinearAnimation(Box::new(animation)),
                 index,
                 artboard.animation_name_at(index),
             )
         } else {
-            (PlayerInstance::StaticArtboard, usize::MAX, String::new())
+            (Playback::StaticArtboard, usize::MAX, String::new())
         };
         drop(artboard);
         publish_player(instance, player, index, &name, out_player)
@@ -3210,7 +3206,7 @@ pub unsafe extern "C" fn nux_player_new_static(
         };
         publish_player(
             instance,
-            PlayerInstance::StaticArtboard,
+            Playback::StaticArtboard,
             usize::MAX,
             "",
             out_player,
@@ -3254,7 +3250,7 @@ pub unsafe extern "C" fn nux_player_new_state_machine_named(
             drop(artboard);
             publish_player(
                 instance,
-                PlayerInstance::StateMachine(Box::new(machine)),
+                Playback::StateMachine(Box::new(machine)),
                 index,
                 name,
                 out_player,
@@ -3302,7 +3298,7 @@ pub unsafe extern "C" fn nux_player_new_linear_animation_named(
             drop(artboard);
             publish_player(
                 instance,
-                PlayerInstance::LinearAnimation(Box::new(animation)),
+                Playback::LinearAnimation(Box::new(animation)),
                 index,
                 name,
                 out_player,
@@ -3334,9 +3330,9 @@ pub unsafe extern "C" fn nux_player_info(
             return NuxStatus::ReentrantCall;
         };
         let kind = match &*player_instance {
-            PlayerInstance::StaticArtboard => NuxPlayerKind::StaticArtboard,
-            PlayerInstance::StateMachine(_machine) => NuxPlayerKind::StateMachine,
-            PlayerInstance::LinearAnimation(_animation) => NuxPlayerKind::LinearAnimation,
+            Playback::StaticArtboard => NuxPlayerKind::StaticArtboard,
+            Playback::StateMachine(_machine) => NuxPlayerKind::StateMachine,
+            Playback::LinearAnimation(_animation) => NuxPlayerKind::LinearAnimation,
         };
         // These are deliberately retained by the player for future playback
         // operations and occurrence-lineage validation.
@@ -3504,7 +3500,7 @@ unsafe fn read_player_step(step: *const NuxPlayerStep) -> Result<NuxPlayerStep, 
 fn validate_player_inputs(
     machine: &StateMachineInstance,
     inputs: &[NuxPlayerInputChange],
-) -> Result<Vec<PlannedPlayerInput>, (NuxStatus, &'static str)> {
+) -> Result<Vec<Input>, (NuxStatus, &'static str)> {
     let mut planned = Vec::with_capacity(inputs.len());
     let mut total_name_bytes = 0usize;
     for input in inputs {
@@ -3559,12 +3555,12 @@ fn validate_player_inputs(
             return Err((status, "player input name or type does not match"));
         };
         let mutation = match input.kind {
-            kind if kind == NuxPlayerInputKind::Bool as u32 => PlannedPlayerInput::Bool {
+            kind if kind == NuxPlayerInputKind::Bool as u32 => Input::Bool {
                 index,
                 value: input.bool_value != 0,
             },
             kind if kind == NuxPlayerInputKind::Number as u32 && input.number_value.is_finite() => {
-                PlannedPlayerInput::Number {
+                Input::Number {
                     index,
                     value: input.number_value,
                 }
@@ -3575,9 +3571,7 @@ fn validate_player_inputs(
                     "player number input must be finite",
                 ));
             }
-            kind if kind == NuxPlayerInputKind::Trigger as u32 => {
-                PlannedPlayerInput::Trigger { index }
-            }
+            kind if kind == NuxPlayerInputKind::Trigger as u32 => Input::Trigger { index },
             _ => {
                 return Err((
                     NuxStatus::InvalidArgument,
@@ -3592,14 +3586,14 @@ fn validate_player_inputs(
 
 fn validate_focus_inputs(
     inputs: &[NuxPlayerFocusInput],
-) -> Result<Vec<PreparedFocusInput>, (NuxStatus, &'static str)> {
+) -> Result<Vec<FocusInput>, (NuxStatus, &'static str)> {
     let mut prepared = Vec::with_capacity(inputs.len());
     let mut text_bytes = 0usize;
     for input in inputs {
         let value = match input.kind {
-            NUX_PLAYER_FOCUS_KIND_NEXT => PreparedFocusInput::Next,
-            NUX_PLAYER_FOCUS_KIND_PREVIOUS => PreparedFocusInput::Previous,
-            NUX_PLAYER_FOCUS_KIND_CLEAR => PreparedFocusInput::Clear,
+            NUX_PLAYER_FOCUS_KIND_NEXT => FocusInput::Next,
+            NUX_PLAYER_FOCUS_KIND_PREVIOUS => FocusInput::Previous,
+            NUX_PLAYER_FOCUS_KIND_CLEAR => FocusInput::Clear,
             NUX_PLAYER_FOCUS_KIND_KEY => {
                 if input.key_code > u32::from(u16::MAX)
                     || input.modifiers & !15 != 0
@@ -3608,7 +3602,7 @@ fn validate_focus_inputs(
                 {
                     return Err((NuxStatus::InvalidArgument, "invalid focus key input"));
                 }
-                PreparedFocusInput::Key {
+                FocusInput::Key {
                     key: Key::from_raw(input.key_code),
                     modifiers: KeyModifiers::from_raw(input.modifiers),
                     pressed: input.pressed != 0,
@@ -3629,15 +3623,13 @@ fn validate_focus_inputs(
                         NuxStatus::LimitExceeded,
                         "focus text exceeds the step byte bound",
                     ))?;
-                PreparedFocusInput::Text(with_utf8_view(input.text, str::to_owned).map_err(
-                    |status| {
-                        let message = match status {
-                            NuxStatus::NullArgument => "focus text pointer is null",
-                            _ => "focus text must be valid UTF-8",
-                        };
-                        (status, message)
-                    },
-                )?)
+                FocusInput::Text(with_utf8_view(input.text, str::to_owned).map_err(|status| {
+                    let message = match status {
+                        NuxStatus::NullArgument => "focus text pointer is null",
+                        _ => "focus text must be valid UTF-8",
+                    };
+                    (status, message)
+                })?)
             }
             _ => return Err((NuxStatus::InvalidArgument, "unknown focus input kind")),
         };
@@ -3648,7 +3640,7 @@ fn validate_focus_inputs(
 
 fn validate_player_pointers(
     pointers: &[NuxPlayerPointerEvent],
-) -> Result<Vec<PreparedPlayerPointer>, (NuxStatus, &'static str)> {
+) -> Result<Vec<Pointer>, (NuxStatus, &'static str)> {
     let mut prepared = Vec::with_capacity(pointers.len());
     for pointer in pointers {
         if !pointer.x.is_finite() || !pointer.y.is_finite() {
@@ -3664,10 +3656,10 @@ fn validate_player_pointers(
             ));
         }
         let kind = match pointer.kind {
-            kind if kind == NuxPlayerPointerKind::Down as u32 => PreparedPointerKind::Down,
-            kind if kind == NuxPlayerPointerKind::Move as u32 => PreparedPointerKind::Move,
-            kind if kind == NuxPlayerPointerKind::Up as u32 => PreparedPointerKind::Up,
-            kind if kind == NuxPlayerPointerKind::Exit as u32 => PreparedPointerKind::Exit,
+            kind if kind == NuxPlayerPointerKind::Down as u32 => PointerKind::Down,
+            kind if kind == NuxPlayerPointerKind::Move as u32 => PointerKind::Move,
+            kind if kind == NuxPlayerPointerKind::Up as u32 => PointerKind::Up,
+            kind if kind == NuxPlayerPointerKind::Exit as u32 => PointerKind::Exit,
             _ => {
                 return Err((
                     NuxStatus::InvalidArgument,
@@ -3675,7 +3667,7 @@ fn validate_player_pointers(
                 ));
             }
         };
-        prepared.push(PreparedPlayerPointer {
+        prepared.push(Pointer {
             kind,
             x: pointer.x,
             y: pointer.y,
@@ -4026,13 +4018,13 @@ fn player_operation_body(
     };
 
     let planned_inputs = match &*player_instance {
-        PlayerInstance::StateMachine(machine) => match validate_player_inputs(machine, inputs) {
+        Playback::StateMachine(machine) => match validate_player_inputs(machine, inputs) {
             Ok(planned) => planned,
             Err((status, message)) => {
                 return publish_player_step_failure(out_result, status, message);
             }
         },
-        PlayerInstance::LinearAnimation(_) | PlayerInstance::StaticArtboard
+        Playback::LinearAnimation(_) | Playback::StaticArtboard
             if !inputs.is_empty() || !focus_inputs.is_empty() =>
         {
             return publish_player_step_failure(
@@ -4041,9 +4033,9 @@ fn player_operation_body(
                 "named and focus inputs require a state-machine player",
             );
         }
-        PlayerInstance::LinearAnimation(_) | PlayerInstance::StaticArtboard => Vec::new(),
+        Playback::LinearAnimation(_) | Playback::StaticArtboard => Vec::new(),
     };
-    let prepared = PreparedPlayerOperation {
+    let prepared = Step {
         inputs: planned_inputs,
         pointers: prepared_pointers,
         focus_inputs: prepared_focus_inputs,
@@ -4511,7 +4503,7 @@ pub unsafe extern "C" fn nux_player_focus_state(
         let Ok(instance) = player.instance.try_borrow() else {
             return NuxStatus::ReentrantCall;
         };
-        let PlayerInstance::StateMachine(machine) = &*instance else {
+        let Playback::StateMachine(machine) = &*instance else {
             return NuxStatus::NotFound;
         };
         let state = machine.focus_state();

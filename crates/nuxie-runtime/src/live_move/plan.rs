@@ -709,8 +709,38 @@ fn flight_timeline(
         )),
     })
 }
+/// Adds a unit's two elements to the step's `used` owners: an element the
+/// step names twice is refused.
+fn claim_owners(used: &mut HashSet<CoreHandle>, from: &CoreHandle, to: &CoreHandle) -> Result<()> {
+    ensure!(
+        used.insert(from.clone()) && used.insert(to.clone()),
+        "overlapping flight owners"
+    );
+    Ok(())
+}
+/// A step's flight records, by the artboards that hold them, are on one
+/// Screen.
+fn records_on_one_screen(boards: &HashSet<CoreHandle>) -> Result<()> {
+    ensure!(
+        boards.len() <= 1,
+        "a step's flight records need to be on one Screen"
+    );
+    Ok(())
+}
+/// A matched element inside another of the same step does not fly on its
+/// own.
+fn no_flight_inside_another(used: &HashSet<CoreHandle>) -> Result<()> {
+    for a in used {
+        ensure!(
+            !used.iter().any(|b| super::in_place::is_inside(a, b)),
+            "a flight inside another flight"
+        );
+    }
+    Ok(())
+}
 /// Every refusal [`take_off`] reads from the rows' own content, read before
-/// anything is flushed or marked, through take-off's own reads: each unit's
+/// anything is flushed or marked, through take-off's own reads and rules,
+/// so no rule here has a second copy: each unit's
 /// elements on their rows, an element named twice or inside another, an
 /// element that does not fly in place, each flight record in `records` and
 /// its controls (`FlightFrame::check_controls`), records on two artboards,
@@ -729,16 +759,13 @@ fn check_rows(
 ) -> Result<()> {
     use super::When;
     use super::follow::FlightFrame;
-    use super::in_place::{Flying, InPlaceFlight, end, is_inside};
+    use super::in_place::{Flying, InPlaceFlight, end};
     let mut used = HashSet::new();
     let mut boards = HashSet::new();
     for unit in &step.units {
         let from = unit_element(outgoing, unit.outgoing_unit_key)?;
         let to = unit_element(arriving, unit.incoming_unit_key)?;
-        ensure!(
-            used.insert(from.clone()) && used.insert(to.clone()),
-            "overlapping flight owners"
-        );
+        claim_owners(&mut used, &from, &to)?;
         let (from_box, to_box) = (Flying::of(&from)?, Flying::of(&to)?);
         end(&from_box)?;
         end(&to_box)?;
@@ -770,16 +797,8 @@ fn check_rows(
     {
         super::follow::draw_pose(board)?;
     }
-    ensure!(
-        boards.len() <= 1,
-        "a step's flight records need to be on one Screen"
-    );
-    for a in &used {
-        ensure!(
-            !used.iter().any(|b| is_inside(a, b)),
-            "a flight inside another flight"
-        );
-    }
+    records_on_one_screen(&boards)?;
+    no_flight_inside_another(&used)?;
     flight_timeline(step, boards.iter().next())?;
     Ok(())
 }
@@ -799,7 +818,7 @@ fn take_off(
     Vec<super::in_place::InPlaceFlight>,
     Vec<super::in_place::InPlacePair>,
 )> {
-    use super::in_place::{Carried, InPlaceFlight, InPlacePair, is_inside};
+    use super::in_place::{Carried, InPlaceFlight, InPlacePair};
     let element = unit_element;
     let record = |key: u32| flight_record(records, key);
     let mut flights = Vec::new();
@@ -809,10 +828,7 @@ fn take_off(
     for unit in &step.units {
         let from = element(outgoing, unit.outgoing_unit_key)?;
         let to = element(arriving, unit.incoming_unit_key)?;
-        ensure!(
-            used.insert(from.clone()) && used.insert(to.clone()),
-            "overlapping flight owners"
-        );
+        claim_owners(&mut used, &from, &to)?;
         // A unit that transfers flies one copy, the arriving one, which
         // the carry fills with the leaving one's instance. It never
         // zooms.
@@ -855,18 +871,8 @@ fn take_off(
             )?);
         }
     }
-    ensure!(
-        boards.len() <= 1,
-        "a step's flight records need to be on one Screen"
-    );
-    // A matched element inside another of the same step does not fly
-    // on its own.
-    for a in &used {
-        ensure!(
-            !used.iter().any(|b| is_inside(a, b)),
-            "a flight inside another flight"
-        );
-    }
+    records_on_one_screen(&boards)?;
+    no_flight_inside_another(&used)?;
     for flight in flights.iter().filter(|flight| !flight.zoomed) {
         flight.project(&flight.size_frame(None)?, None)?;
     }

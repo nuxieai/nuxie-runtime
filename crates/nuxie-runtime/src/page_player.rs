@@ -2,6 +2,7 @@
 mod driver;
 mod renew;
 mod reset;
+pub use crate::FieldText;
 pub use driver::*;
 
 use crate::source::input::focusable::{Key, KeyModifiers};
@@ -1418,6 +1419,9 @@ pub struct OwnedPlayerEvent {
     /// Local id of the object whose listener reported the event, in the
     /// artboard `context`'s path leads to (the root when it has no path).
     pub listener_target_local_id: Option<usize>,
+    /// The text in the field the reporting listener is on, as it stood when
+    /// the event was reported.
+    pub field_text: Option<FieldText>,
 }
 
 type BudgetFailure = (ErrorKind, &'static str);
@@ -1643,15 +1647,20 @@ pub fn own_reported_events(
         let text = |value: Option<&str>| value.map_or(0, str::len);
         budget.admit_event(
             event.context(),
-            [text(event.name()), text(event.url()), text(event.target())]
-                .into_iter()
-                .chain(event.properties().iter().flat_map(|property| {
-                    let value = match &property.value {
-                        RuntimeEventPropertyValue::String(value) => value.len(),
-                        _ => 0,
-                    };
-                    [text(property.name.as_deref()), value]
-                })),
+            [
+                text(event.name()),
+                text(event.url()),
+                text(event.target()),
+                text(event.field_text().map(FieldText::as_str)),
+            ]
+            .into_iter()
+            .chain(event.properties().iter().flat_map(|property| {
+                let value = match &property.value {
+                    RuntimeEventPropertyValue::String(value) => value.len(),
+                    _ => 0,
+                };
+                [text(property.name.as_deref()), value]
+            })),
         )?;
         let context = event.context().cloned();
         let name = optional_owned_bytes(event.name());
@@ -1696,6 +1705,7 @@ pub fn own_reported_events(
             seconds_delay: seconds_since_event(event.seconds_delay()),
             properties,
             listener_target_local_id: event.listener_target_local_id(),
+            field_text: event.field_text().cloned(),
         });
     }
     Ok(events)

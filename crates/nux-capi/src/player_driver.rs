@@ -10,7 +10,7 @@ use std::ffi::c_void;
 use std::thread;
 
 use nuxie::page_player::{
-    DriverFault, DriverRound, HostDriver, MAX_DRIVER_ROUNDS, OwnedPlayerEvent,
+    DriverFault, DriverRound, FieldText, HostDriver, MAX_DRIVER_ROUNDS, OwnedPlayerEvent,
     RuntimeGeometryHitPathSegment, RuntimeListRowKey, SceneObject, SceneWriteError, SceneWriter,
 };
 
@@ -128,7 +128,17 @@ pub struct NuxPlayerDriverReport {
     /// `list_items`.
     pub row_keys: *const NuxSceneRowKey,
     pub row_key_count: usize,
+    /// Whether the reporting listener is on a text field. A report whose
+    /// `struct_size` ends before `has_field_text` carries no field text.
+    pub has_field_text: bool,
+    /// The text in the field the reporting listener is on, as it stood when
+    /// the event was reported. Valid only during the `drive` call.
+    pub field_text: NuxStringView,
 }
+
+/// The size of a `NuxPlayerDriverReport` that carries field text.
+pub const NUX_PLAYER_DRIVER_REPORT_FIELD_TEXT_SIZE: usize =
+    std::mem::offset_of!(NuxPlayerDriverReport, field_text) + std::mem::size_of::<NuxStringView>();
 
 /// One round of a step. `reports` holds `report_count` reports,
 /// `report_stride` bytes apart: in round 0 the step's own reports and any the
@@ -289,6 +299,8 @@ fn report_views(events: &[OwnedPlayerEvent]) -> ReportViews {
                 property_stride: std::mem::size_of::<NuxPlayerEventPropertyView>(),
                 row_keys: rows.as_ptr(),
                 row_key_count: rows.len(),
+                has_field_text: event.field_text.is_some(),
+                field_text: optional_byte_view(event.field_text.as_ref().map(FieldText::as_bytes)),
             },
         )
         .collect();
@@ -816,11 +828,13 @@ mod tests {
             }],
             view_model_instance_id: None,
             listener_target_local_id: Some(9),
+            field_text: Some(FieldText::new("ada".to_owned())),
         };
         let unheard = OwnedPlayerEvent {
             context: None,
             listener_target_local_id: None,
             properties: Vec::new(),
+            field_text: None,
             ..event.clone()
         };
         let events = [event, unheard];
@@ -858,6 +872,13 @@ mod tests {
         let property = unsafe { &*heard.properties };
         assert_eq!(property.number_value, 2.5);
 
+        assert!(heard.struct_size as usize >= NUX_PLAYER_DRIVER_REPORT_FIELD_TEXT_SIZE);
+        assert!(heard.has_field_text);
+        let text = unsafe {
+            std::slice::from_raw_parts(heard.field_text.data.cast::<u8>(), heard.field_text.len)
+        };
+        assert_eq!(text, b"ada");
+
         assert!(!unheard.has_listener_target);
         assert_eq!(
             (
@@ -866,6 +887,25 @@ mod tests {
                 unheard.property_count
             ),
             (0, 0, 0)
+        );
+        assert!(!unheard.has_field_text);
+        assert_eq!(unheard.field_text.len, 0);
+    }
+
+    /// The field text is appended after every earlier field, so a host built
+    /// before it reads what it did, and a report's `struct_size` covers it.
+    #[test]
+    fn a_report_appends_its_field_text_after_the_row_keys() {
+        use std::mem::{offset_of, size_of};
+        let rows_end = offset_of!(NuxPlayerDriverReport, row_key_count) + size_of::<usize>();
+        assert!(offset_of!(NuxPlayerDriverReport, has_field_text) >= rows_end);
+        assert!(
+            offset_of!(NuxPlayerDriverReport, field_text)
+                > offset_of!(NuxPlayerDriverReport, has_field_text)
+        );
+        assert_eq!(
+            NUX_PLAYER_DRIVER_REPORT_FIELD_TEXT_SIZE,
+            size_of::<NuxPlayerDriverReport>()
         );
     }
 

@@ -741,67 +741,113 @@ fn focused_typing_page(
     (played, reports)
 }
 
+/// Each report's event name and field text.
+fn heard(events: &[OwnedPlayerEvent]) -> Vec<(String, Option<String>)> {
+    names(events)
+        .into_iter()
+        .zip(events)
+        .map(|(name, event)| {
+            let text = event
+                .field_text
+                .as_ref()
+                .map(|text| text.as_str().to_owned());
+            (name, text)
+        })
+        .collect()
+}
+
+/// Reports of these names, each carrying its field text, or none.
+fn said(reports: &[(&str, Option<&str>)]) -> Vec<(String, Option<String>)> {
+    reports
+        .iter()
+        .map(|(name, text)| ((*name).to_owned(), text.map(str::to_owned)))
+        .collect()
+}
+
 /// A text listener on a field runs its actions, as upstream's runs them: the
-/// field inserts the text once, first, and then the listener reports. A
-/// delete is a key, so it reaches the keyboard listeners; a caret move and
-/// select all report nothing; Enter reports once per press, not while held.
-/// Two edits in one step report twice.
+/// field inserts the text once, first, and then the listener reports, its
+/// report carrying the field's text as it stood then. A delete is a key, so
+/// it reaches the keyboard listeners; a caret move and select all report
+/// nothing; Enter reports once per press, not while held. Two edits in one
+/// step report twice, each with its own text, in order. A listener that is
+/// not on a field reports no field text.
 #[test]
-fn a_text_listener_on_a_field_reports_each_edit() {
+fn a_text_listener_on_a_field_reports_each_edit_with_its_text() {
     use crate::source::input::focusable::Key;
     let system = if cfg!(target_os = "windows") { 2 } else { 8 };
     let (mut played, reports) = focused_typing_page(vec!["change"]);
     let take = |played: &mut Played, inputs: Vec<FocusInput>| {
         played.focus_step(inputs);
         let taken = std::mem::take(&mut *reports.borrow_mut());
-        (names(&taken), field_text(played))
+        (heard(&taken), field_text(played))
     };
-    let change = || vec!["change".to_owned()];
-    let nothing = Vec::<String>::new;
+    let change = |text| said(&[("change", Some(text))]);
 
     assert_eq!(
         take(&mut played, vec![typed("ada")]),
-        (change(), "ada".to_owned())
+        (change("ada"), "ada".to_owned())
     );
     assert_eq!(
         take(&mut played, vec![pressed(Key::BACKSPACE, 0, false)]),
-        (change(), "ad".to_owned())
+        (change("ad"), "ad".to_owned())
     );
     assert_eq!(
         take(&mut played, vec![pressed(Key::LEFT, 0, false)]),
-        (nothing(), "ad".to_owned()),
+        (said(&[]), "ad".to_owned()),
         "a caret move"
     );
     assert_eq!(
         take(&mut played, vec![pressed(Key::DELETE, 0, false)]),
-        (change(), "a".to_owned())
+        (change("a"), "a".to_owned())
     );
     assert_eq!(
         take(&mut played, vec![pressed(Key::A, system, false)]),
-        (nothing(), "a".to_owned()),
+        (said(&[]), "a".to_owned()),
         "select all"
     );
     assert_eq!(
         take(&mut played, vec![typed("bea")]),
-        (change(), "bea".to_owned())
+        (change("bea"), "bea".to_owned())
     );
     assert_eq!(
         take(&mut played, vec![pressed(Key::ENTER, 0, false)]),
-        (vec!["submit".to_owned()], "bea".to_owned())
+        (said(&[("submit", Some("bea"))]), "bea".to_owned())
     );
     assert_eq!(
         take(&mut played, vec![pressed(Key::ENTER, 0, true)]),
-        (nothing(), "bea".to_owned()),
+        (said(&[]), "bea".to_owned()),
         "a held Enter"
     );
     assert_eq!(
         take(&mut played, vec![typed("x"), typed("y")]),
         (
-            vec!["change".to_owned(), "change".to_owned()],
+            said(&[("change", Some("beax")), ("change", Some("beaxy"))]),
             "beaxy".to_owned()
         ),
         "two edits in one step"
     );
+
+    played.tap(50.0, 60.0);
+    assert_eq!(heard(&reports.borrow()), said(&[("tap", None)]));
+}
+
+/// A report's debug output, at every layer a host might print, names its
+/// field text's length and never the text: a field can hold a password.
+#[test]
+fn a_reports_debug_output_hides_its_field_text() {
+    let (mut played, reports) = focused_typing_page(vec!["change"]);
+    played.focus_step(vec![typed("hunter2")]);
+    let reports = reports.borrow();
+    let [report] = reports.as_slice() else {
+        panic!("one report: {:?}", names(&reports));
+    };
+    assert_eq!(
+        report.field_text.as_ref().map(|text| text.as_str()),
+        Some("hunter2")
+    );
+    let debug = format!("{report:?}");
+    assert!(!debug.contains("hunter2"), "{debug}");
+    assert!(debug.contains("<redacted, 7 bytes>"), "{debug}");
 }
 
 /// Two text listeners on one field both run, and the field inserts the text
@@ -810,7 +856,10 @@ fn a_text_listener_on_a_field_reports_each_edit() {
 fn two_text_listeners_on_a_field_both_run_and_the_text_goes_in_once() {
     let (mut played, reports) = focused_typing_page(vec!["change", "typed"]);
     played.focus_step(vec![typed("a")]);
-    assert_eq!(names(&reports.borrow()), ["change", "typed"]);
+    assert_eq!(
+        heard(&reports.borrow()),
+        said(&[("change", Some("a")), ("typed", Some("a"))])
+    );
     assert_eq!(field_text(&played), "a");
 }
 

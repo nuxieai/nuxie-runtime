@@ -469,3 +469,159 @@ fn focus_state_and_result_accessors_validate_caller_arguments() {
         NuxStatus::NullArgument
     );
 }
+
+/// What a driver was handed: each report's name and its field text.
+type Heard = Vec<(String, Option<String>)>;
+
+unsafe extern "C" fn hear_field_text(
+    context: *mut std::ffi::c_void,
+    round: *const NuxPlayerDriverRound,
+    _writer: *mut NuxSceneWriter,
+) -> NuxStatus {
+    let heard = unsafe { &mut *context.cast::<Heard>() };
+    let round = unsafe { &*round };
+    for index in 0..round.report_count {
+        let report = unsafe {
+            &*round
+                .reports
+                .cast::<u8>()
+                .add(index * round.report_stride)
+                .cast::<NuxPlayerDriverReport>()
+        };
+        assert!(report.struct_size as usize >= NUX_PLAYER_DRIVER_REPORT_FIELD_TEXT_SIZE);
+        heard.push((
+            string(report.name),
+            report.has_field_text.then(|| string(report.field_text)),
+        ));
+    }
+    NuxStatus::Ok
+}
+
+/// The field's text, read through the field string copy of a fresh
+/// presented capture.
+fn copied_field_text(scene: &Harness, result: &ResultView) -> String {
+    unsafe {
+        let mut info = NuxPlayerSchedulingInfo {
+            struct_size: std::mem::size_of::<NuxPlayerSchedulingInfo>() as u32,
+            ..Default::default()
+        };
+        assert_eq!(
+            nux_player_step_result_scheduling(result.0, &mut info),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_player_acknowledge_presented(scene.player, info.render_revision),
+            NuxStatus::Ok
+        );
+        let mut snapshot = ptr::null_mut();
+        assert_eq!(
+            nux_player_semantic_snapshot(scene.player, &mut snapshot),
+            NuxStatus::Ok
+        );
+        let mut snapshot_info = NuxSemanticSnapshotInfo {
+            struct_size: std::mem::size_of::<NuxSemanticSnapshotInfo>() as u32,
+            ..Default::default()
+        };
+        assert_eq!(
+            nux_semantic_snapshot_info(snapshot, &mut snapshot_info),
+            NuxStatus::Ok
+        );
+        let field = (0..snapshot_info.node_count)
+            .map(|index| {
+                let mut node = NuxSemanticNodeView {
+                    struct_size: std::mem::size_of::<NuxSemanticNodeView>() as u32,
+                    ..Default::default()
+                };
+                assert_eq!(
+                    nux_semantic_snapshot_node(snapshot, index, &mut node),
+                    NuxStatus::Ok
+                );
+                node
+            })
+            .find(|node| node.role == NUX_SEMANTIC_ROLE_TEXT_FIELD)
+            .expect("the text field");
+        let mut length = 0;
+        assert_eq!(
+            nux_player_field_string_copy(
+                scene.player,
+                snapshot,
+                field.id,
+                view("Field"),
+                ptr::null_mut(),
+                0,
+                &mut length
+            ),
+            NuxStatus::Ok
+        );
+        let mut text = vec![0u8; length];
+        assert_eq!(
+            nux_player_field_string_copy(
+                scene.player,
+                snapshot,
+                field.id,
+                view("Field"),
+                text.as_mut_ptr(),
+                text.len(),
+                &mut length
+            ),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+        String::from_utf8(text).unwrap()
+    }
+}
+
+/// A driver report from a listener on a field carries the field's text as it
+/// stood when the event was reported: the text the field string copy reads
+/// after the step, and for two edits in one step, each edit's own text.
+#[test]
+fn a_driver_report_carries_its_fields_text() {
+    let scene = Harness::new(
+        &fixture::text_field_listeners(include_bytes!("../../../fixtures/fonts/roboto-input.ttf")),
+        None,
+        false,
+    );
+    let heard = Box::into_raw(Box::new(Heard::new()));
+    unsafe {
+        assert_eq!(nux_player_enable_semantics(scene.player), NuxStatus::Ok);
+        assert_eq!(
+            nux_player_driver_set(
+                scene.player,
+                &NuxPlayerDriver {
+                    struct_size: std::mem::size_of::<NuxPlayerDriver>() as u32,
+                    context: heard.cast(),
+                    drive: Some(hear_field_text),
+                    release: None,
+                },
+            ),
+            NuxStatus::Ok
+        );
+    }
+    let take = || std::mem::take(unsafe { &mut *heard });
+    let text = |value: &str| NuxPlayerFocusInput {
+        kind: NUX_PLAYER_FOCUS_KIND_TEXT,
+        text: view(value),
+        ..NuxPlayerFocusInput::default()
+    };
+    let change = |value: &str| ("change".to_owned(), Some(value.to_owned()));
+    scene.step(&[]);
+    assert_eq!(scene.step(&[focus(NUX_PLAYER_FOCUS_KIND_NEXT)]).focus(0), 1);
+    take();
+
+    let result = scene.step(&[text("ada")]);
+    assert_eq!(take(), [change("ada")]);
+    assert_eq!(copied_field_text(&scene, &result), "ada");
+
+    let result = scene.step(&[text("x"), text("y")]);
+    assert_eq!(take(), [change("adax"), change("adaxy")]);
+    assert_eq!(copied_field_text(&scene, &result), "adaxy");
+
+    let result = scene.step(&[key(259, 0, 1, 0)]);
+    assert_eq!(take(), [change("adax")]);
+    assert_eq!(copied_field_text(&scene, &result), "adax");
+
+    unsafe {
+        assert_eq!(nux_player_driver_clear(scene.player), NuxStatus::Ok);
+        drop(Box::from_raw(heard));
+    }
+}

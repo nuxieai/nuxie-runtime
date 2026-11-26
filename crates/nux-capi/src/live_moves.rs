@@ -7,6 +7,19 @@ pub(super) enum Request {
     End(NuxStringView, *const NuxStringView),
     Row(NuxStringView, u32, u8),
     KeyedRow(NuxStringView, NuxByteView, u8),
+    BeginRow(NuxByteView),
+    EndRow(NuxByteView),
+}
+/// Copy a key's bytes: NULL is allowed only with length 0.
+fn key_bytes(key: NuxByteView) -> Result<Vec<u8>, NuxStatus> {
+    if key.data.is_null() && key.len != 0 {
+        return Err(NuxStatus::NullArgument);
+    }
+    Ok(if key.len == 0 {
+        Vec::new()
+    } else {
+        unsafe { std::slice::from_raw_parts(key.data, key.len) }.to_vec()
+    })
 }
 use nuxie::page_player::Operation;
 impl Request {
@@ -47,16 +60,11 @@ impl Request {
                 if collapsed > 1 {
                     return Err(NuxStatus::InvalidArgument);
                 }
-                if key.data.is_null() && key.len != 0 {
-                    return Err(NuxStatus::NullArgument);
-                }
-                let key = if key.len == 0 {
-                    Vec::new()
-                } else {
-                    unsafe { std::slice::from_raw_parts(key.data, key.len) }.to_vec()
-                };
+                let key = key_bytes(key)?;
                 Operation::KeyedRow(with_utf8_view(list, str::to_owned)?, key, collapsed != 0)
             }
+            Self::BeginRow(key) => Operation::BeginRow(key_bytes(key)?),
+            Self::EndRow(key) => Operation::EndRow(key_bytes(key)?),
         })
     }
 }
@@ -112,4 +120,29 @@ pub unsafe extern "C" fn nux_player_set_keyed_row_collapsed(
     collapsed: u8,
 ) -> NuxStatus {
     player_live_move_body(player, Request::KeyedRow(list_name, key, collapsed))
+}
+/// Begin a nameless step on a driver page (a keyed list marked
+/// `isPageRows`) whose arriving end is the row of the page's list mounted by
+/// `incoming_key`, as nux_player_step_begin with a NULL step_name does for a
+/// Screen. The key's bytes are compared only for equality. The step holds
+/// that row: removing its key cancels the step, and a key removed and
+/// mounted again is a new row. INVALID_ARGUMENT for a page that is not a
+/// driver page, a key not mounted, a sleeping row, or a step already
+/// running; NULL_ARGUMENT for a NULL key with a length.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step_begin_row(
+    player: *mut NuxPlayer,
+    incoming_key: NuxByteView,
+) -> NuxStatus {
+    player_live_move_body(player, Request::BeginRow(incoming_key))
+}
+/// End the step nux_player_step_begin_row began. `incoming_key` must name
+/// the row it holds; INVALID_ARGUMENT otherwise, or when no row step is
+/// running.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step_end_row(
+    player: *mut NuxPlayer,
+    incoming_key: NuxByteView,
+) -> NuxStatus {
+    player_live_move_body(player, Request::EndRow(incoming_key))
 }

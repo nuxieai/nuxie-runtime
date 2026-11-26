@@ -79,7 +79,9 @@ nux_player_set_keyed_row_collapsed
 nux_player_set_row_collapsed
 nux_player_step
 nux_player_step_begin
+nux_player_step_begin_row
 nux_player_step_end
+nux_player_step_end_row
 nux_player_step_result_diagnostic
 nux_player_step_result_event
 nux_player_step_result_event_property
@@ -122,6 +124,8 @@ nux_scene_writer_reset
 nux_scene_writer_set_bool
 nux_scene_writer_set_color
 nux_scene_writer_set_number
+nux_scene_writer_set_row_input_bool
+nux_scene_writer_set_row_input_number
 nux_scene_writer_set_text
 nux_scene_writer_set_unsigned
 nux_semantic_snapshot_free

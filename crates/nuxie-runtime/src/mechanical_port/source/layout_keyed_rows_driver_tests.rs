@@ -1392,3 +1392,6 @@ fn a_keyed_row_artboard_outside_a_list_is_refused_at_import() {
 
 #[path = "layout_keyed_page_rows_tests.rs"]
 mod page_rows_tests;
+
+#[path = "layout_keyed_page_phases_tests.rs"]
+mod page_phases_tests;

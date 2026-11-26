@@ -4005,25 +4005,42 @@ impl RuntimeStateMachineInstanceHandle {
     }
 
     pub fn set_number(&self, name: &str, value: f32) {
-        let notification = self.with_instance_mut(|instance| {
-            instance
-                .get_number_mut(name)
-                .and_then(|input| input.set_value_capture_notification(value))
-        });
-        if let Some(notification) = notification {
-            notification.notify();
-        }
+        self.set_number_named(name, value);
     }
 
     pub fn set_bool(&self, name: &str, value: bool) {
+        self.set_bool_named(name, value);
+    }
+
+    /// Set the number input named `name`, as `SMINumber::value` does: a new
+    /// value marks the machine as needing an advance and wakes a quiet list
+    /// row it plays. Whether the value changed; None when the machine has no
+    /// number input of that name.
+    pub fn set_number_named(&self, name: &str, value: f32) -> Option<bool> {
         let notification = self.with_instance_mut(|instance| {
             instance
-                .get_bool_mut(name)
-                .and_then(|input| input.set_value_capture_notification(value))
-        });
+                .get_number_mut(name)
+                .map(|input| input.set_value_capture_notification(value))
+        })?;
+        let changed = notification.is_some();
         if let Some(notification) = notification {
             notification.notify();
         }
+        Some(changed)
+    }
+
+    /// As [`Self::set_number_named`], for the bool input named `name`.
+    pub fn set_bool_named(&self, name: &str, value: bool) -> Option<bool> {
+        let notification = self.with_instance_mut(|instance| {
+            instance
+                .get_bool_mut(name)
+                .map(|input| input.set_value_capture_notification(value))
+        })?;
+        let changed = notification.is_some();
+        if let Some(notification) = notification {
+            notification.notify();
+        }
+        Some(changed)
     }
 
     pub(crate) fn borrow_instance_mut(&self) -> std::cell::RefMut<'_, StateMachineInstance> {

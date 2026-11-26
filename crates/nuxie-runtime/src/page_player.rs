@@ -151,6 +151,11 @@ pub enum Operation {
     Row(String, i32, bool),
     /// Sleep or wake a row of a driver page's keyed list by its key.
     KeyedRow(String, Vec<u8>, bool),
+    /// Begin a nameless step on a driver page, arriving at the row of its
+    /// list mounted by this key.
+    BeginRow(Vec<u8>),
+    /// End the step `BeginRow` began, naming the same row.
+    EndRow(Vec<u8>),
 }
 impl Operation {
     fn apply(self, root: &RuntimeArtboardInstanceHandle) -> Result<(), ErrorKind> {
@@ -158,6 +163,8 @@ impl Operation {
         let result = match self {
             Self::Begin(incoming, name) => moves.step_begin(root, &incoming, name.as_deref()),
             Self::End(incoming, name) => moves.step_end(root, &incoming, name.as_deref()),
+            Self::BeginRow(key) => moves.step_begin_row(root, &key),
+            Self::EndRow(key) => moves.step_end_row(root, &key),
             Self::Row(name, index, collapsed) => {
                 moves
                     .prepare(root)
@@ -686,6 +693,18 @@ impl PagePlayer {
                         // A driver cut off at the bound changed the scene too.
                         if drive.changed {
                             runtime_settled = false;
+                            // A row step whose arriving row a round removed
+                            // cancels before the frame is drawn, as one whose
+                            // Screen left does before the advance.
+                            if let Err(error) = crate::live_move::LiveMoves::default()
+                                .prepare(&artboard.native_handle())
+                            {
+                                boundary.poisoned.set(true);
+                                return failure(
+                                    ErrorKind::RuntimeError,
+                                    format!("live move update failed: {error:#}"),
+                                );
+                            }
                             if let Playback::StateMachine(machine) = playback {
                                 let projected = project_state_changes(machine).and_then(|states| {
                                     budget.admit_states(states.len()).map(|()| states)
@@ -1296,6 +1315,48 @@ impl PagePlayer {
             &mut Playback::StaticArtboard,
             Step::default(),
             Some(Operation::End(incoming.into(), name.map(str::to_owned))),
+            subscriptions,
+            effects,
+        )
+        .map(|_| ())
+    }
+    /// Begin a nameless step on a driver page (`isPageRows`) whose arriving
+    /// end is the row of the page's list mounted by `incoming_key`, as a
+    /// nameless `step_begin` does for a Screen. The row must be mounted and
+    /// awake, and no step may be running. The step holds that row: removing
+    /// its key cancels the step, and a key removed and mounted again is a
+    /// new row. Refused on a page that is not a driver page.
+    pub fn step_begin_row(
+        &self,
+        artboard: &mut ArtboardInstance,
+        incoming_key: &[u8],
+        subscriptions: &[RuntimeOwnedViewModelHandle],
+        effects: Option<&dyn Effects>,
+    ) -> Result<(), Error> {
+        self.run(
+            artboard,
+            &mut Playback::StaticArtboard,
+            Step::default(),
+            Some(Operation::BeginRow(incoming_key.to_vec())),
+            subscriptions,
+            effects,
+        )
+        .map(|_| ())
+    }
+    /// End the step `step_begin_row` began: `incoming_key` must name the row
+    /// it holds.
+    pub fn step_end_row(
+        &self,
+        artboard: &mut ArtboardInstance,
+        incoming_key: &[u8],
+        subscriptions: &[RuntimeOwnedViewModelHandle],
+        effects: Option<&dyn Effects>,
+    ) -> Result<(), Error> {
+        self.run(
+            artboard,
+            &mut Playback::StaticArtboard,
+            Step::default(),
+            Some(Operation::EndRow(incoming_key.to_vec())),
             subscriptions,
             effects,
         )

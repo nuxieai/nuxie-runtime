@@ -35,6 +35,15 @@ struct Screen {
     elements: Vec<(u32, CoreHandle)>,
     records: Vec<(u32, CoreHandle)>,
 }
+/// The arriving end of a step: a Screen of a `screens` page by its
+/// artboard's name, or a row of a driver page by its list item. The item is
+/// resolved from the row's key at begin, so a key removed and mounted again
+/// names a new row.
+#[derive(Clone, PartialEq)]
+enum Incoming {
+    Screen(String),
+    Row(CoreHandle),
+}
 /// File plans are scoped to mounted row identities. Between steps every
 /// placement holds its own Screen's instance, so nothing is kept about where
 /// one went.
@@ -44,7 +53,7 @@ pub(crate) struct Plan {
     revision: Option<u64>,
     steps: Vec<Step>,
     rows: HashMap<String, Screen>,
-    active: Option<(String, Option<String>)>,
+    active: Option<(Incoming, Option<String>)>,
     pub index: crate::hosted_scene::HostedIndex,
     /// The active step's flying copies (live_move/in_place.rs), and its
     /// zoomed pairs of them.
@@ -80,6 +89,21 @@ impl Plan {
         }
         if driver_page {
             self.rows.clear();
+            // A row step cancels when its arriving row leaves the page's
+            // list. A driver page flies nothing, so the cancel only ends it.
+            let row_left = match &self.active {
+                Some((Incoming::Row(item), _)) => page.as_ref().is_none_or(|page| {
+                    page.list
+                        .with_downcast::<ArtboardComponentList, _>(|list| {
+                            list.key_of_row(item).is_none()
+                        })
+                        .unwrap_or(true)
+                }),
+                _ => false,
+            };
+            if row_left {
+                self.settle(&HashSet::new())?;
+            }
             self.index.active(root);
             self.revision = Some(crate::hosted_scene::membership_revision(
                 &root.core_handle(),
@@ -96,7 +120,10 @@ impl Plan {
         let incoming_left = self
             .active
             .as_ref()
-            .is_some_and(|(incoming, _)| !self.rows.contains_key(incoming));
+            .is_some_and(|(incoming, _)| match incoming {
+                Incoming::Screen(name) => !self.rows.contains_key(name),
+                Incoming::Row(_) => true,
+            });
         // A step cancels when its incoming row, or a Screen, a copy or a
         // record it flies, is gone. Every plan entry prepares first, so the
         // cancel settles before the next frame is laid out or drawn.
@@ -188,9 +215,51 @@ impl Plan {
             crate::hosted_scene::is_active_artboard(&incoming_row.board),
             "incoming Screen is collapsed"
         );
-        self.active = Some((incoming.to_owned(), None));
+        self.active = Some((Incoming::Screen(incoming.to_owned()), None));
         self.after_advance(root)?;
         Ok(())
+    }
+    /// Begins a nameless step on a driver page whose arriving end is the
+    /// row of `list`, the page's list, mounted by `key`: it must be mounted
+    /// and awake. The step holds the row's list item.
+    pub fn step_begin_row(
+        &mut self,
+        root: &RuntimeArtboardInstanceHandle,
+        list: &CoreHandle,
+        key: &[u8],
+    ) -> Result<()> {
+        ensure!(self.active.is_none(), "step already active");
+        self.prepare(root)?;
+        let (item, _) = arriving_row(list, key)?;
+        self.active = Some((Incoming::Row(item), None));
+        self.after_advance(root)?;
+        Ok(())
+    }
+    /// Whether `key` names the row the running row step holds.
+    fn holds_row(&self, list: &CoreHandle, key: &[u8]) -> Result<()> {
+        let item = list
+            .with_downcast::<ArtboardComponentList, _>(|list| list.keyed_row_item(key))
+            .flatten();
+        ensure!(
+            matches!(
+                (&self.active, &item),
+                (Some((Incoming::Row(active), None)), Some(item)) if active == item
+            ),
+            "step_end mismatch"
+        );
+        Ok(())
+    }
+    /// Lands the nameless step [`Self::step_begin_row`] began: `key` must
+    /// still name the row it holds.
+    pub fn step_end_row(
+        &mut self,
+        root: &RuntimeArtboardInstanceHandle,
+        list: &CoreHandle,
+        key: &[u8],
+    ) -> Result<()> {
+        self.prepare(root)?;
+        self.holds_row(list, key)?;
+        self.land(root)
     }
     pub fn step_end(
         &mut self,
@@ -200,9 +269,9 @@ impl Plan {
     ) -> Result<()> {
         self.prepare(root)?;
         ensure!(
-            self.active
-                .as_ref()
-                .is_some_and(|(s, n)| s == incoming && n.as_deref() == name),
+            self.active.as_ref().is_some_and(
+                |(s, n)| *s == Incoming::Screen(incoming.to_owned()) && n.as_deref() == name
+            ),
             "step_end mismatch"
         );
         self.land(root)
@@ -434,7 +503,7 @@ impl Plan {
         }
         self.lifted = flights;
         self.pairs = pairs;
-        self.active = Some((incoming.to_owned(), Some(name.to_owned())));
+        self.active = Some((Incoming::Screen(incoming.to_owned()), Some(name.to_owned())));
         self.after_advance(root)?;
         Ok(())
     }
@@ -777,11 +846,35 @@ fn settle_slot(slot: &CoreHandle) -> Result<()> {
     Ok(())
 }
 
-/// A step on a driver page is refused, before anything runs: its rows are
-/// named by key, not by Screen, and its steps come later (UNIV-7101).
+/// A step named by Screen on a driver page is refused, before anything
+/// runs: its rows are named by key (`step_begin_row`), and named steps
+/// between rows come later (UNIV-7101).
 fn refuse_driver_page(scene: &crate::hosted_scene::SceneState) -> Result<()> {
-    ensure!(!scene.page.keyed, "a driver page has no steps");
+    ensure!(!scene.page.keyed, "a driver page names its rows by key");
     Ok(())
+}
+/// The list item and the artboard of the row of `list` mounted by `key`,
+/// which a row step may arrive at: mounted and awake.
+fn arriving_row(list: &CoreHandle, key: &[u8]) -> Result<(CoreHandle, CoreHandle)> {
+    let (item, board) = list
+        .with_downcast::<ArtboardComponentList, _>(|list| list.keyed_row(key))
+        .flatten()
+        .ok_or_else(|| anyhow::anyhow!("incoming row not found"))?;
+    let board = board.core_handle();
+    ensure!(
+        crate::hosted_scene::is_active_artboard(&board),
+        "incoming row is collapsed"
+    );
+    Ok((item, board))
+}
+/// A row step needs a driver page: its rows are named by key.
+fn driver_page(
+    root: &RuntimeArtboardInstanceHandle,
+) -> Result<std::rc::Rc<crate::hosted_scene::SceneState>> {
+    let scene = crate::hosted_scene::root_scene(root)
+        .ok_or_else(|| anyhow::anyhow!("root is not a live-move page"))?;
+    ensure!(scene.page.keyed, "a row step needs a driver page");
+    Ok(scene)
 }
 
 /// Stateless scene dispatcher. All plans, flights and caches belong to the
@@ -844,6 +937,45 @@ impl LiveMoves {
         refuse_driver_page(&scene)?;
         self.flush_membership(root)?;
         scene.plan.borrow_mut().step_end(root, incoming, name)
+    }
+    /// Begins a nameless step on a driver page whose arriving end is the
+    /// row of the page's list mounted by `incoming_key`, as a nameless
+    /// `step_begin` does for a Screen: membership flushes, the row runs its
+    /// own update pass, and the row must be mounted and awake.
+    pub fn step_begin_row(
+        &mut self,
+        root: &RuntimeArtboardInstanceHandle,
+        incoming_key: &[u8],
+    ) -> Result<()> {
+        // Every refusal comes before the flush, so it leaves the occurrence
+        // usable: a driver's row operations commit once per round, so the
+        // flush mounts and removes no row.
+        let scene = driver_page(root)?;
+        let list = scene.page.list.clone();
+        ensure!(!scene.plan.borrow().step_running(), "step already active");
+        let (_, board) = arriving_row(&list, incoming_key)?;
+        self.flush_membership(root)?;
+        Artboard::update_pass_handle(&board, false);
+        scene
+            .plan
+            .borrow_mut()
+            .step_begin_row(root, &list, incoming_key)
+    }
+    /// Lands the row step `step_begin_row` began; `incoming_key` must name
+    /// the same row.
+    pub fn step_end_row(
+        &mut self,
+        root: &RuntimeArtboardInstanceHandle,
+        incoming_key: &[u8],
+    ) -> Result<()> {
+        let scene = driver_page(root)?;
+        let list = scene.page.list.clone();
+        scene.plan.borrow().holds_row(&list, incoming_key)?;
+        self.flush_membership(root)?;
+        scene
+            .plan
+            .borrow_mut()
+            .step_end_row(root, &list, incoming_key)
     }
     pub fn after_advance(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<bool> {
         let Some(scene) = crate::hosted_scene::root_scene(root) else {

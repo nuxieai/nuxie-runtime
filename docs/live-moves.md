@@ -24,7 +24,7 @@ The shared Rust page-player follow-up, record-free page opt-in, driver pages (a 
 | `live_move/collapse.rs` | Non-virtual row sleep through upstream component collapse, destination reconciliation, and wake, of a row of the page's list named by its index or, on a driver page, by its key. Item identity carries sleep across list reorders. |
 | `crates/nuxie-runtime/src/hosted_scene.rs` | The occurrence-owned hosted-instance index and its shared active-row projection, and the page's list (`PageList`: its `screens` list, or a driver page's keyed list marked `isPageRows`), chosen once at opt-in. Membership stamps are scoped to the root instance. |
 | `live_move/frame.rs`, `host_viewmodel/transactions.rs` | Active VM graph projection and a lazy rollback checkpoint for live-move frames. |
-| `crates/nux-capi/src/live_moves.rs`, `lib.rs::player_operation_body` | Decode the four live-move C calls (begin, end, row sleep by index and by key) and run them inside the same guarded mutation boundary as player steps. The generated header and portable v4 exports include them. |
+| `crates/nux-capi/src/live_moves.rs`, `lib.rs::player_operation_body` | Decode the six live-move C calls (begin and end by Screen name, begin and end by a driver page's row key, row sleep by index and by key) and run them inside the same guarded mutation boundary as player steps. The generated header and portable v4 exports include them. |
 | `crates/nux-capi/src/video.rs`, `player_view_models.rs` | Indexed video enumeration, constant-time occurrence lookup, and indexed bound-owner capture. |
 | `crates/nuxie-runtime/src/host_state_machine/nested_events.rs` | Event drains use the active row projection. This was the remaining step cost. |
 | `live_move_fixture.rs`, `live_move/device_fixture.rs` | Literal RIV builders, compiled only with `test-support`. Both crate test suites use them. |
@@ -343,6 +343,10 @@ The three lifecycle values add three VM-graph visits to the earlier fixture. One
 Flight has the same counts, plus two layout/update entries for its one row and moving unit. Screen A has the inline comparison content. Screen B does not. A flight in B therefore has one video and one semantic field, against two of each on A. The moving unit still appears once.
 
 These are host timings. They do not establish the device 1 ms bar.
+
+## Phases on a driver page
+
+On a driver page ([page-player.md](page-player.md), Driver pages) rows are named by key, not by Screen. The phase reaches a row as inputs of the row's own machine, which the driver writes in its round (`SceneWriter::set_row_input_number` and `set_row_input_bool`); the round's settle lets the machine take the transition the inputs open in that step. A completion the row's machine fires, by a listener or a timeline's `KeyFrameCallback`, is reported with the list's path and the row's key, to the step result in Rust and to the driver in Rust and C. The nameless step by row (`step_begin_row`, `step_end_row`) runs as the nameless step above: it marks the step running and flies nothing, and it holds its arriving row's list item, so the row leaving the list, or its key mounted again as a new row, cancels it. Named steps and flights between rows come later (UNIV-7101).
 
 ## Device fixtures and device qualification
 

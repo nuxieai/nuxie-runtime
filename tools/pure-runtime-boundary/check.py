@@ -273,6 +273,82 @@ PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS = {
     },
 }
 PORTABLE_ABI_FACADE_FILE_MODULE_SYMBOLS = {
+    # The shared executor drives the runtime's command queue and server with
+    # a persistent factory.
+    "crates/nux-capi/src/executor.rs": {
+        "command_queue": {"CommandQueue"},
+        "command_server": {"CommandServer"},
+        "render_api": {"PersistentFactory"},
+    },
+    # The C player is the page player: its inputs, step, playback, events
+    # and errors, and the step timer its tests read.
+    "crates/nux-capi/src/lib.rs": {
+        "hosted_scene": {"StepTimer"},
+        "page_player": {
+            "Effects",
+            "ErrorKind",
+            "FocusInput",
+            "Input",
+            "OwnedPlayerEvent",
+            "OwnedPlayerEventProperty",
+            "OwnedPlayerEventPropertyValue",
+            "PagePlayer",
+            "Playback",
+            "Pointer",
+            "PointerKind",
+            "Step",
+            "StepEventBudget",
+            "is_poisoned",
+            "own_reported_events",
+        },
+    },
+    # A live move call is a page player operation.
+    "crates/nux-capi/src/live_moves.rs": {
+        "page_player": {"Operation"},
+    },
+    # Live move tests: the page's screens, flights and steps, the hosted
+    # scene's counters, and a page player stepped directly.
+    "crates/nux-capi/src/live_move_tests.rs": {
+        "hosted_scene": {"bookkeeping_counts", "enabled", "membership_revision"},
+        "live_move": {"LiveMoves", "carry", "records", "screens"},
+        "page_player": {"Effects", "PagePlayer", "Step", "seconds_since_event"},
+    },
+    # A host's player driver: the page player's driver round, its writer and
+    # the objects and rows it names.
+    "crates/nux-capi/src/player_driver.rs": {
+        "page_player": {
+            "DriverFault",
+            "DriverRound",
+            "HostDriver",
+            "MAX_DRIVER_ROUNDS",
+            "OwnedPlayerEvent",
+            "OwnedPlayerEventProperty",
+            "OwnedPlayerEventPropertyValue",
+            "RuntimeGeometryHitPathSegment",
+            "RuntimeListRowKey",
+            "SceneObject",
+            "SceneWriteError",
+            "SceneWriter",
+        },
+    },
+    # View model capture walks the hosted scene's index and counts the walk.
+    "crates/nux-capi/src/player_view_models.rs": {
+        "hosted_scene": {"HostedIndex", "Walk", "record_walk"},
+    },
+    # The image size callback reports the render API's size state.
+    "crates/nux-capi/src/render_callbacks.rs": {
+        "render_api": {"RenderImageSizeState"},
+    },
+    # Video enumeration walks the hosted scene's index, counts the walk and
+    # reads a live move's membership.
+    "crates/nux-capi/src/video.rs": {
+        "hosted_scene": {"HostedIndex", "Walk", "enabled", "membership_revision", "record_walk"},
+        "live_move": {"LiveMoves"},
+    },
+    # The collapsed-row device probe measures the hosted scene's walks.
+    "crates/nux-capi/tests/live_moves_collapsed_device_probe.rs": {
+        "hosted_scene": {"WalkCounts", "measure_walks", "measured_step_phases"},
+    },
     "crates/nux-capi/src/renderer_layout.rs": {
         "render_api": {"Aabb", "Fit", "Vec2D", "compute_alignment"},
     },
@@ -331,6 +407,26 @@ PORTABLE_ABI_FACADE_FILE_MODULE_SYMBOLS = {
     },
 }
 PORTABLE_ABI_FACADE_FILE_SYMBOLS = {
+    # A checked-value write from a form script names its own Screen's view
+    # model as the checked root.
+    "crates/nux-capi/src/value_rule_script.rs": {
+        "RuntimeCheckedValueRoot",
+        "script_checked_value_root",
+    },
+    "crates/nux-capi/src/form_script_tests.rs": {
+        "RuntimeCheckedValueRoot",
+        "ScriptViewModel",
+        "runtime_checked_value_root",
+    },
+    # Live move tests: a moved instance's artboard and a fresh view model.
+    "crates/nux-capi/src/live_move_tests.rs": {
+        "RuntimeArtboardInstanceHandle",
+        "ViewModelInstanceRuntime",
+    },
+    # Player driver tests: a row's artboard.
+    "crates/nux-capi/src/player_driver.rs": {
+        "RuntimeArtboardInstanceHandle",
+    },
     "crates/nux-capi/src/asset_hooks.rs": {
         "RenderCanvas",
         "RenderCanvasError",
@@ -346,9 +442,54 @@ PORTABLE_ABI_FACADE_PRODUCT_METHOD = re.compile(
     r"FlowSession[A-Za-z0-9_]*|"
     r"Scene(?:Tx)?[A-Za-z0-9_]*|ProjectData[A-Za-z0-9_]*)\b"
 )
+# The page player's writer, which a registered player driver uses to change
+# the mounted page's objects and rows. These are runtime mechanics, not the
+# old product scene lifecycle; every other `Scene...` name stays refused.
+PAGE_PLAYER_WRITER_NAMES = {"SceneObject", "SceneWriteError", "SceneWriter"}
+PORTABLE_ABI_FACADE_FILE_SCENE_NAMES = {
+    "crates/nux-capi/src/lib.rs": {"SceneWriter"},
+    "crates/nux-capi/src/player_driver.rs": PAGE_PLAYER_WRITER_NAMES,
+}
 # Exact baseline paths used by the semantic/text and video C adapters. These
 # are not permission to import the runtime or video module wholesale.
 PORTABLE_ABI_FACADE_FILE_PATHS = {
+    # The shared executor's retained factory.
+    "crates/nux-capi/src/executor.rs": {
+        "runtime::factory::RuntimeFactoryHandle",
+    },
+    # Live move tests: a host font, focus and semantic state, text input,
+    # layout, node positions and registry reads of moved objects.
+    "crates/nux-capi/src/live_move_tests.rs": {
+        "runtime::assets::font_asset::FontAsset",
+        "runtime::core::CoreArena",
+        "runtime::focus_data::FocusData",
+        "runtime::generated::core_registry::CoreRegistry",
+        "runtime::generated::world_transform_component_base::WorldTransformComponentBase",
+        "runtime::layout_component::LayoutComponent",
+        "runtime::node::Node",
+        "runtime::semantic::semantic_data::SemanticData",
+        "runtime::semantic::semantic_node::SemanticNode",
+        "runtime::semantic::semantic_node::SemanticNodeRef",
+        "runtime::text::font_hb::HbFont",
+        "runtime::text::text_input::TextInput",
+        "runtime::viewmodel::viewmodel_instance::ViewModelInstance",
+    },
+    # Player driver tests: a row's list, layout and nested artboard host,
+    # read through the registry.
+    "crates/nux-capi/src/player_driver.rs": {
+        "runtime::artboard_component_list::ArtboardComponentList",
+        "runtime::generated::core_registry::CoreRegistry",
+        "runtime::layout_component::LayoutComponent",
+        "runtime::nested_artboard_layout::NestedArtboardLayout",
+    },
+    # A reopened decoder's playback settings and actions, driven through the
+    # C API as the iOS host does.
+    "crates/nux-capi/tests/video_reclaim_position.rs": {
+        "video::playback::DecoderAction",
+        "video::playback::Playback",
+        "video::playback::PlaybackSettings",
+        "video::playback::SuspensionReason",
+    },
     "crates/nux-capi/src/data_binding.rs": {
         "runtime::core::CoreHandle", "runtime::text::text_value_run::TextValueRun",
     },
@@ -562,6 +703,8 @@ APPLE_PLATFORM_EXTENSION_VOCABULARY_FILES = {
     "crates/nux-capi/src/lib.rs",
     "crates/nux-capi/tests/apple_metal.rs",
     "crates/nux-capi/tests/support/apple_metal_authored_gpu_canvas.rs",
+    # Its apple-metal module drives the C API as the iOS video host does.
+    "crates/nux-capi/tests/video_reclaim_position.rs",
 }
 APPLE_PLATFORM_EXTENSION_VOCABULARY = re.compile(
     r"(?i:(?:[A-Za-z0-9_-]*apple[A-Za-z0-9_-]*)|CAMetal(?:Layer|Drawable)?)"
@@ -1803,6 +1946,8 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
             )
     for match in PORTABLE_ABI_FACADE_PRODUCT_METHOD.finditer(source):
         if match.group(0) in ANDROID_PRODUCT_IMPORT_ALLOWED_SYMBOLS.get(relative, set()):
+            continue
+        if match.group(0) in PORTABLE_ABI_FACADE_FILE_SCENE_NAMES.get(relative, set()):
             continue
         if (
             match.group(0) in PORTABLE_ABI_FACADE_TEST_ONLY_FILE_ASSOCIATED_ITEMS

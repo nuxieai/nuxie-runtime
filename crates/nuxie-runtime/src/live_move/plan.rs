@@ -328,12 +328,19 @@ impl Plan {
                 "a row of the step is asleep"
             );
         }
-        Ok(Between {
+        let between = Between {
             step,
             outgoing: (outgoing_item, row_screen(&outgoing)),
             incoming: (incoming_item, row_screen(&incoming)),
             incoming_upper: incoming_place > outgoing_place,
-        })
+        };
+        check_rows(
+            &between.step,
+            &between.outgoing.1,
+            &between.incoming.1,
+            &[between.upper()],
+        )?;
+        Ok(between)
     }
     /// Begins the step `name` on a driver page between the row of `list`,
     /// the page's list, mounted by `outgoing_key` and the one mounted by
@@ -665,6 +672,91 @@ impl Plan {
         self.projection.is_some()
     }
 }
+/// The element a step unit's `key` names on `row`.
+fn unit_element(row: &Screen, key: u32) -> Result<CoreHandle> {
+    row.elements
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map(|(_, element)| element.clone())
+        .ok_or_else(|| anyhow::anyhow!("no element with flight key {key}"))
+}
+/// The flight record `key` names, looked for in `records` in order, and the
+/// artboard that holds it.
+fn flight_record(records: &[&Screen], key: u32) -> Result<(CoreHandle, CoreHandle)> {
+    records
+        .iter()
+        .flat_map(|row| row.records.iter().map(move |record| (*row, record)))
+        .find(|(_, (k, _))| *k == key)
+        .map(|(row, (_, record))| (row.board.clone(), record.clone()))
+        .ok_or_else(|| anyhow::anyhow!("unknown flight record {key} on step Screens"))
+}
+/// The step's flight timeline, its `flightAnimationId` among the animations
+/// of `board`, the artboard that holds its flight records, if it names one.
+fn flight_timeline(
+    step: &Step,
+    board: Option<&CoreHandle>,
+) -> Result<Option<(CoreHandle, CoreHandle)>> {
+    Ok(match (step.flight_animation, board) {
+        (u32::MAX, _) | (_, None) => None,
+        (index, Some(board)) => Some((
+            board.clone(),
+            board
+                .with_downcast::<Artboard, _>(|b| b.animation_handle_at(index as usize))
+                .flatten()
+                .ok_or_else(|| {
+                    anyhow::anyhow!("flightAnimationId names no animation on its Screen")
+                })?,
+        )),
+    })
+}
+/// Every refusal [`take_off`] reads from the rows' own content, read before
+/// anything is flushed or marked: each unit's elements on their rows, an
+/// element named twice or inside another, an element that does not fly in
+/// place, each flight record in `records`, records on two artboards, and a
+/// flight timeline that names no animation. What depends on layout (a held
+/// element's parent, a resting size) is read at take-off, after the flush.
+/// A step between rows checks these first, so the flush never runs for a
+/// step its rows' content refuses.
+fn check_rows(
+    step: &Step,
+    outgoing: &Screen,
+    arriving: &Screen,
+    records: &[&Screen],
+) -> Result<()> {
+    use super::in_place::{Flying, is_inside};
+    let mut used = HashSet::new();
+    let mut boards = HashSet::new();
+    for unit in &step.units {
+        let from = unit_element(outgoing, unit.outgoing_unit_key)?;
+        let to = unit_element(arriving, unit.incoming_unit_key)?;
+        ensure!(
+            used.insert(from.clone()) && used.insert(to.clone()),
+            "overlapping flight owners"
+        );
+        Flying::of(&from)?;
+        Flying::of(&to)?;
+        let keys: &[u32] = if unit.transfers() {
+            &[unit.incoming_flight_key]
+        } else {
+            &[unit.outgoing_flight_key, unit.incoming_flight_key]
+        };
+        for key in keys {
+            boards.insert(flight_record(records, *key)?.0);
+        }
+    }
+    ensure!(
+        boards.len() <= 1,
+        "a step's flight records need to be on one Screen"
+    );
+    for a in &used {
+        ensure!(
+            !used.iter().any(|b| is_inside(a, b)),
+            "a flight inside another flight"
+        );
+    }
+    flight_timeline(step, boards.iter().next())?;
+    Ok(())
+}
 /// Takes off a named step's flights: every check before any mark, then
 /// each copy's marks and the flight timeline's first frame on the flight
 /// records. A refusal marks nothing. `records` are the Screens the step's
@@ -682,21 +774,8 @@ fn take_off(
     Vec<super::in_place::InPlacePair>,
 )> {
     use super::in_place::{Carried, InPlaceFlight, InPlacePair, is_inside};
-    let element = |row: &Screen, key: u32| {
-        row.elements
-            .iter()
-            .find(|(k, _)| *k == key)
-            .map(|(_, element)| element.clone())
-            .ok_or_else(|| anyhow::anyhow!("no element with flight key {key}"))
-    };
-    let record = |key: u32| {
-        records
-            .iter()
-            .flat_map(|row| row.records.iter().map(move |record| (*row, record)))
-            .find(|(_, (k, _))| *k == key)
-            .map(|(row, (_, record))| (row.board.clone(), record.clone()))
-            .ok_or_else(|| anyhow::anyhow!("unknown flight record {key} on step Screens"))
-    };
+    let element = unit_element;
+    let record = |key: u32| flight_record(records, key);
     let mut flights = Vec::new();
     let mut zoomed = Vec::new();
     let mut used = HashSet::new();
@@ -772,18 +851,7 @@ fn take_off(
         .into_iter()
         .map(|(rule, at)| InPlacePair::take_off(rule, [&flights[at], &flights[at + 1]], center))
         .collect::<Result<Vec<_>>>()?;
-    let timeline = match (step.flight_animation, boards.iter().next()) {
-        (u32::MAX, _) | (_, None) => None,
-        (index, Some(board)) => Some((
-            board.clone(),
-            board
-                .with_downcast::<Artboard, _>(|b| b.animation_handle_at(index as usize))
-                .flatten()
-                .ok_or_else(|| {
-                    anyhow::anyhow!("flightAnimationId names no animation on its Screen")
-                })?,
-        )),
-    };
+    let timeline = flight_timeline(step, boards.iter().next())?;
     // Every check has passed. Each transferring unit's instance moves into
     // the arriving placement, which discards that placement's own
     // never-shown instance and gives it the arriving Screen's props, and its
@@ -1202,8 +1270,10 @@ impl LiveMoves {
         incoming_key: &[u8],
         name: &str,
     ) -> Result<()> {
-        // Every refusal of the rows and the step comes before the flush, as
-        // a row step's does, so it leaves the occurrence usable.
+        // Every refusal of the rows, the step and the rows' content
+        // (`check_rows`) comes before the flush, as a row step's does, so it
+        // leaves the occurrence usable. Only what reads layout is refused
+        // after it, at take-off.
         let scene = driver_page(root)?;
         let list = scene.page.list.clone();
         let arriving = {

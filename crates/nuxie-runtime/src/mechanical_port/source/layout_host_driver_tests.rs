@@ -902,6 +902,146 @@ fn a_driver_writing_a_fields_text_fires_no_listener() {
     );
 }
 
+/// A focused field whose driver, in each round, rewrites the field's text
+/// with `rewrite` and writes it back through `set_text` when it differs, as
+/// a host echoing an action's result does.
+fn rewritten_field(rewrite: fn(&str) -> String) -> Played {
+    use crate::source::generated::text::text_input_base::TextInputBase;
+    let (played, _) = focused_typing_page(vec!["change"]);
+    let handle = played.f.object("Field");
+    let field = SceneObject::root(played.local_id(&handle));
+    played.drive(move |_, scene| {
+        let text =
+            CoreRegistry::get_string_handle(&handle, i32::from(TextInputBase::TEXT_PROPERTY_KEY))
+                .expect("the field's text");
+        let next = rewrite(&text);
+        if next != text {
+            assert_eq!(
+                scene.set_text(&field, TextInputBase::TEXT_PROPERTY_KEY, &next),
+                Ok(true)
+            );
+        }
+    });
+    played
+}
+
+/// One frame of focus inputs, then the field's text.
+fn typed_in(played: &mut Played, inputs: Vec<FocusInput>) -> String {
+    played.focus_step(inputs);
+    field_text(played)
+}
+
+/// A driver that lowercases typed text keeps the caret at the end, so the
+/// next letter follows the first.
+#[test]
+fn a_field_write_keeps_the_caret_after_a_lowercased_letter() {
+    let mut played = rewritten_field(str::to_lowercase);
+    assert_eq!(typed_in(&mut played, vec![typed("A")]), "a");
+    assert_eq!(typed_in(&mut played, vec![typed("b")]), "ab");
+}
+
+/// A formatter that inserts a dash before the caret leaves the caret after
+/// the last digit, counted from the end.
+#[test]
+fn a_field_write_keeps_the_caret_after_an_inserted_dash() {
+    let mut played = rewritten_field(|text| {
+        let digits: String = text.chars().filter(char::is_ascii_digit).collect();
+        if digits.len() > 3 {
+            format!("{}-{}", &digits[..3], &digits[3..])
+        } else {
+            digits
+        }
+    });
+    for (digit, shown) in [("1", "1"), ("2", "12"), ("3", "123"), ("4", "123-4")] {
+        assert_eq!(typed_in(&mut played, vec![typed(digit)]), shown);
+    }
+    assert_eq!(typed_in(&mut played, vec![typed("5")]), "123-45");
+}
+
+/// A trim that leaves the text shorter than the caret's index keeps the
+/// caret's distance from the end, and a caret further from the end than the
+/// new text is long goes to its start.
+#[test]
+fn a_field_write_keeps_the_caret_through_a_trim() {
+    use crate::source::input::focusable::Key;
+    let trim = |text: &str| text.trim().to_owned();
+    let mut played = rewritten_field(trim);
+    assert_eq!(typed_in(&mut played, vec![typed("ab ")]), "ab");
+    assert_eq!(typed_in(&mut played, vec![typed("c")]), "abc");
+
+    let mut played = rewritten_field(trim);
+    let left = || pressed(Key::LEFT, 0, false);
+    // "a " with the caret at its start, two from the end, trims to "a".
+    assert_eq!(
+        typed_in(&mut played, vec![typed("a "), left(), left()]),
+        "a"
+    );
+    assert_eq!(typed_in(&mut played, vec![typed("b")]), "ba");
+
+    let mut played = rewritten_field(trim);
+    // "  " with the caret between the spaces trims to nothing.
+    assert_eq!(typed_in(&mut played, vec![typed("  "), left()]), "");
+    assert_eq!(typed_in(&mut played, vec![typed("b")]), "b");
+}
+
+/// A caret in the middle of the text stays the same distance from the end.
+#[test]
+fn a_field_write_keeps_a_caret_in_the_middle() {
+    use crate::source::input::focusable::Key;
+    let mut played = rewritten_field(str::to_lowercase);
+    assert_eq!(typed_in(&mut played, vec![typed("ab")]), "ab");
+    assert_eq!(
+        typed_in(&mut played, vec![pressed(Key::LEFT, 0, false), typed("X")]),
+        "axb"
+    );
+    assert_eq!(typed_in(&mut played, vec![typed("y")]), "axyb");
+}
+
+/// A selection collapses to its caret, the end that moved: typing then
+/// inserts there and replaces nothing.
+#[test]
+fn a_field_write_collapses_a_selection_to_its_caret() {
+    use crate::source::generated::text::text_input_base::TextInputBase;
+    use crate::source::input::focusable::Key;
+    let (mut played, _) = focused_typing_page(vec!["change"]);
+    let field = SceneObject::root(played.local_id(&played.f.object("Field")));
+    let pending: Rc<RefCell<Option<&'static str>>> = Rc::new(RefCell::new(None));
+    let write = pending.clone();
+    played.drive(move |_, scene| {
+        if let Some(text) = write.borrow_mut().take() {
+            assert_eq!(
+                scene.set_text(&field, TextInputBase::TEXT_PROPERTY_KEY, text),
+                Ok(true)
+            );
+        }
+    });
+    assert_eq!(typed_in(&mut played, vec![typed("abcd")]), "abcd");
+    let shift_left = || pressed(Key::LEFT, 1, false);
+    assert_eq!(
+        typed_in(&mut played, vec![shift_left(), shift_left()]),
+        "abcd"
+    );
+    *pending.borrow_mut() = Some("ABCD");
+    played.step(FRAME, vec![]);
+    assert_eq!(field_text(&played), "ABCD");
+    assert_eq!(typed_in(&mut played, vec![typed("x")]), "ABxCD");
+}
+
+/// A write through the text property's own setter, the path a bind, a key
+/// and the file's own text take, still puts the caret at the start.
+#[test]
+fn a_property_setter_write_puts_the_caret_at_the_start() {
+    use crate::source::generated::text::text_input_base::TextInputBase;
+    let (mut played, _) = focused_typing_page(vec!["change"]);
+    assert_eq!(typed_in(&mut played, vec![typed("ab")]), "ab");
+    assert!(CoreRegistry::set_string_handle(
+        &played.f.object("Field"),
+        i32::from(TextInputBase::TEXT_PROPERTY_KEY),
+        "AB".into()
+    ));
+    assert_eq!(typed_in(&mut played, vec![typed("x")]), "xAB");
+}
+
 /// What one step's result may hold in owned bytes (`page_player`'s bound).
 const STEP_RESULT_BYTES: usize = 8 * 1024 * 1024;
 

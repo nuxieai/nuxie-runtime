@@ -628,3 +628,91 @@ fn a_driver_report_carries_its_fields_text() {
         drop(Box::from_raw(heard));
     }
 }
+
+/// Writes each report's field text back lowercased through
+/// `nux_scene_writer_set_text`, to the field (object 1) on the player's own
+/// artboard.
+unsafe extern "C" fn lowercase_field_text(
+    _context: *mut std::ffi::c_void,
+    round: *const NuxPlayerDriverRound,
+    writer: *mut NuxSceneWriter,
+) -> NuxStatus {
+    let round = unsafe { &*round };
+    for index in 0..round.report_count {
+        let report = unsafe {
+            &*round
+                .reports
+                .cast::<u8>()
+                .add(index * round.report_stride)
+                .cast::<NuxPlayerDriverReport>()
+        };
+        if !report.has_field_text {
+            continue;
+        }
+        let text = string(report.field_text);
+        let lower = text.to_lowercase();
+        if lower == text {
+            continue;
+        }
+        let field = NuxSceneObject {
+            struct_size: NUX_SCENE_OBJECT_MIN_SIZE as u32,
+            local_id: 1,
+            path: ptr::null(),
+            path_len: 0,
+            row_keys: ptr::null(),
+            row_key_count: 0,
+        };
+        let status = unsafe {
+            nux_scene_writer_set_text(writer, &field, 817, view(&lower), ptr::null_mut())
+        };
+        if status != NuxStatus::Ok {
+            return status;
+        }
+    }
+    NuxStatus::Ok
+}
+
+/// A driver writing a field's text back keeps its caret the same number of
+/// characters from the end, so a letter typed after the write follows it.
+#[test]
+fn a_driver_writing_a_fields_text_keeps_its_caret() {
+    let scene = Harness::new(
+        &fixture::text_field_listeners(
+            include_bytes!("../../../fixtures/fonts/roboto-input.ttf"),
+            1,
+        ),
+        None,
+        false,
+    );
+    unsafe {
+        assert_eq!(nux_player_enable_semantics(scene.player), NuxStatus::Ok);
+        assert_eq!(
+            nux_player_driver_set(
+                scene.player,
+                &NuxPlayerDriver {
+                    struct_size: std::mem::size_of::<NuxPlayerDriver>() as u32,
+                    context: ptr::null_mut(),
+                    drive: Some(lowercase_field_text),
+                    release: None,
+                },
+            ),
+            NuxStatus::Ok
+        );
+    }
+    let text = |value: &str| NuxPlayerFocusInput {
+        kind: NUX_PLAYER_FOCUS_KIND_TEXT,
+        text: view(value),
+        ..NuxPlayerFocusInput::default()
+    };
+    scene.step(&[]);
+    assert_eq!(scene.step(&[focus(NUX_PLAYER_FOCUS_KIND_NEXT)]).focus(0), 1);
+
+    let result = scene.step(&[text("A")]);
+    assert_eq!(copied_field_text(&scene, &result), "a");
+    let result = scene.step(&[text("b")]);
+    assert_eq!(copied_field_text(&scene, &result), "ab");
+
+    unsafe {
+        assert_eq!(nux_player_driver_clear(scene.player), NuxStatus::Ok);
+    }
+}

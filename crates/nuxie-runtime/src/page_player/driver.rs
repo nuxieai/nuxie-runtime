@@ -25,7 +25,8 @@ use crate::mechanical_port::source::{
         core_double_type::CoreDoubleType, core_string_type::CoreStringType,
         core_uint_type::CoreUintType,
     },
-    generated::core_registry::CoreRegistry,
+    generated::{core_registry::CoreRegistry, text::text_input_base::TextInputBase},
+    text::text_input::TextInput,
 };
 use crate::{ArtboardInstance, CoreHandle, RuntimeNestedArtboardOccurrence, StateMachineInstance};
 
@@ -328,6 +329,10 @@ impl<'a> SceneWriter<'a> {
 
     /// Set a text property, such as a text run's text. Whether its value
     /// changed.
+    ///
+    /// Writing a text field's text keeps its caret the same number of
+    /// characters from the end; a selection collapses to its caret. A bind
+    /// or the file's own text still puts the caret at the start.
     pub fn set_text(
         &mut self,
         object: &SceneObject,
@@ -335,13 +340,20 @@ impl<'a> SceneWriter<'a> {
         value: &str,
     ) -> Result<bool, SceneWriteError> {
         let handle = self.property(object, key, CoreStringType::ID)?;
+        let caret = (key == TextInputBase::TEXT_PROPERTY_KEY)
+            .then(|| handle.with_downcast::<TextInput, _>(TextInput::caret_from_end))
+            .flatten();
         let key = i32::from(key);
-        self.written(
+        let changed = self.written(
             &handle,
             value.to_owned(),
             |h| CoreRegistry::get_string_handle(h, key),
             |h, v| CoreRegistry::set_string_handle(h, key, v),
-        )
+        )?;
+        if let Some(caret) = caret.filter(|_| changed) {
+            handle.with_downcast_mut::<TextInput, _>(|input| input.restore_caret_from_end(caret));
+        }
+        Ok(changed)
     }
 
     /// Reset what the engine holds under `object`, the object included.

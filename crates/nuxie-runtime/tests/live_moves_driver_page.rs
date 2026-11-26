@@ -804,6 +804,27 @@ fn a_step_with_a_nan_control_refused_with_layout_pending_leaves_the_page_usable(
     assert!(!s.poisoned());
 }
 
+/// A driver page with no step running does not walk its rows when its
+/// membership changes: sleeping a row and waking it reads no row, as
+/// nothing can cancel. With a step running, the same sleep of a third row
+/// walks them, to find whether an end left, and the step runs on.
+#[test]
+fn a_driver_page_with_no_step_running_walks_no_rows_on_a_sleep() {
+    let mut s = DriverScene::new(DriverPage::TwoVersions, &[("a", A), ("b", B), ("c", A)]);
+    let walks = |s: &mut DriverScene, collapsed: bool| {
+        hosted_scene::measure_walks(true);
+        s.sleep("c", collapsed);
+        hosted_scene::measure_walks(false).page_rows
+    };
+    assert_eq!(walks(&mut s, true), 0, "a sleep with no step running");
+    assert_eq!(walks(&mut s, false), 0, "a wake with no step running");
+
+    s.begin("a", "b", "t1").expect("the step begins");
+    assert!(walks(&mut s, true) > 0, "a sleep with a step running");
+    assert_eq!(s.lifted().len(), 2, "the step runs on");
+    s.end("a", "b", "t1").expect("the step lands");
+}
+
 /// Proof 6. A component artboard of a driver page is checked as a Screen
 /// at import: a duplicate flight key refuses the file, and so does an
 /// invalid unit. A driver page with steps and no step running frames as a

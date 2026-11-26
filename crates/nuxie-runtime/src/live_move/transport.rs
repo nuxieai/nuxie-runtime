@@ -1043,7 +1043,7 @@ fn containing_list(slot: &CoreHandle) -> Option<CoreHandle> {
     let host = board
         .with_downcast::<Artboard, _>(Artboard::host)
         .flatten()?;
-    crate::hosted_scene::is_screen_list(&host).then_some(host)
+    crate::hosted_scene::is_page_list(&host).then_some(host)
 }
 fn register_loan(slot: &CoreHandle, occupied: bool) {
     let Some(scene) = crate::hosted_scene::scene_for(slot) else {

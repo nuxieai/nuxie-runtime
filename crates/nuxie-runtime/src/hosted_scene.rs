@@ -8,11 +8,22 @@ use std::{
     cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
 };
-// Only a root runtime occurrence in a file with published records owns this.
+/// The list whose rows are a page's rows: the rows the page sleeps, wakes
+/// and measures. Decided once, when the root opts in.
+#[derive(Clone)]
+pub(crate) struct PageList {
+    pub(crate) list: CoreHandle,
+    /// A keyed list marked `isPageRows`, whose rows a host driver mounts by
+    /// key: a driver page. Otherwise the root's `screens` list, whose rows
+    /// come from its bound list.
+    pub(crate) keyed: bool,
+}
+// Only a page root's runtime occurrence owns this.
 // Descendants resolve the owner through their existing host ancestry. There is
 // no global route, revision or retained-handle store to sweep later.
 pub(crate) struct SceneState {
     root: CoreHandle,
+    pub(crate) page: PageList,
     // Classification belongs to this Page occurrence, not shared definitions.
     screen_names: HashSet<String>,
     revision: Cell<u64>,
@@ -78,12 +89,18 @@ impl SceneState {
         drop(released);
         self.reconciled_revision.set(Some(revision));
     }
-    pub(crate) fn new(root: CoreHandle) -> std::rc::Rc<Self> {
-        let screen_names = root
-            .with_downcast::<Artboard, _>(|b| {
+    pub(crate) fn new(root: CoreHandle, page: PageList) -> std::rc::Rc<Self> {
+        // A driver page's LiveStep records are ignored: its rows are no
+        // Screens a step names.
+        let steps = if page.keyed {
+            Vec::new()
+        } else {
+            root.with_downcast::<Artboard, _>(|b| {
                 b.find_all_handles::<crate::live_move::records::LiveStep>()
             })
             .unwrap_or_default()
+        };
+        let screen_names = steps
             .iter()
             .filter_map(|step| {
                 step.with_downcast::<crate::live_move::records::LiveStep, _>(|s| {
@@ -94,6 +111,7 @@ impl SceneState {
             .collect();
         let state = std::rc::Rc::new(Self {
             root,
+            page,
             screen_names,
             revision: Cell::new(0),
             reconciled_revision: Cell::new(None),
@@ -157,14 +175,14 @@ pub(crate) fn scene_for_operation(owner: &CoreHandle) -> Option<std::rc::Rc<Scen
         }
     }
 }
-pub(crate) fn is_screen_list(list: &CoreHandle) -> bool {
-    let Some(scene) = scene_for(list) else {
-        return false;
-    };
-    list.with_downcast::<ArtboardComponentList, _>(|l| {
-        l.name() == "screens" && l.artboard_handle().is_some_and(|b| scene.is_root(&b))
-    })
-    .unwrap_or(false)
+/// Whether `list` is its page's list: the root's `screens` list, or on a
+/// driver page the keyed list marked `isPageRows`.
+pub(crate) fn is_page_list(list: &CoreHandle) -> bool {
+    scene_for(list).is_some_and(|scene| scene.page.list == *list)
+}
+/// The page list of a page root: None for a root that is not a page.
+pub(crate) fn page_list(root: &RuntimeArtboardInstanceHandle) -> Option<PageList> {
+    root_scene(root).map(|scene| scene.page.clone())
 }
 pub(crate) fn is_screen(board: &CoreHandle) -> bool {
     let Some(scene) = scene_for(board) else {
@@ -258,7 +276,7 @@ fn in_screen_row(host: &CoreHandle) -> bool {
         return false;
     };
     is_screen(&board)
-        && is_screen_list(&list)
+        && is_page_list(&list)
         && list
             .with_downcast::<ArtboardComponentList, _>(|list| {
                 (0..list.artboard_count()).any(|i| {
@@ -283,14 +301,11 @@ pub fn membership_revision(root: &CoreHandle) -> u64 {
 /// rows: an insertion, removal or move written to the page model's list since
 /// the list last took it. It compares the bound list's items with the list's
 /// own, element by element, as the list does before it rebuilds its rows.
-/// Pages without a live-move scene answer false without walking anything.
+/// Pages without a live-move scene answer false without walking anything,
+/// and so does a driver page, whose rows no bind changes.
 pub fn membership_pending(root: &RuntimeArtboardInstanceHandle) -> bool {
     use crate::source::viewmodel::viewmodel_instance_list::ViewModelInstanceList;
-    if root_scene(root).is_none() {
-        return false;
-    }
-    let Some(list) = root.with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-    else {
+    let Some(PageList { list, keyed: false }) = page_list(root) else {
         return false;
     };
     let Some(binds) = list
@@ -573,18 +588,35 @@ pub(crate) fn root_scene(root: &RuntimeArtboardInstanceHandle) -> Option<std::rc
     // hooks only read the decision; explicit entry points initialize it here.
     // A Screen used by paint or an ordinary nested host gets no scene state.
     let records = source.1.as_ref().is_some_and(definition_has_records);
-    // Only a root with a screens list opts in: a $nuxie.page by shape, or a
+    // A root with a screens list opts in: a $nuxie.page by shape, or a
     // root whose file declares live-move steps. Misplaced steps elsewhere
-    // stay ignored.
-    let declared = root.with_artboard(|b| {
-        b.find_handle::<ArtboardComponentList>("screens").is_some()
-            && (b.name() == "$nuxie.page"
-                || (records
-                    && !b
-                        .find_all_handles::<crate::live_move::records::LiveStep>()
-                        .is_empty()))
+    // stay ignored. Otherwise a root whose own artboard holds a keyed list
+    // marked isPageRows opts in as a driver page, with no name and no
+    // records; the first such list in file order is the page's.
+    let screens = root.with_artboard(|b| {
+        b.find_handle::<ArtboardComponentList>("screens")
+            .filter(|_| {
+                b.name() == "$nuxie.page"
+                    || (records
+                        && !b
+                            .find_all_handles::<crate::live_move::records::LiveStep>()
+                            .is_empty())
+            })
     });
-    let scene = declared.then(|| SceneState::new(root.core_handle()));
+    let page = match screens {
+        Some(list) => Some(PageList { list, keyed: false }),
+        None => root
+            .with_artboard(|b| b.find_all_handles::<ArtboardComponentList>())
+            .into_iter()
+            .find(|list| {
+                list.with_downcast::<ArtboardComponentList, _>(
+                    ArtboardComponentList::is_page_row_list,
+                )
+                .unwrap_or(false)
+            })
+            .map(|list| PageList { list, keyed: true }),
+    };
+    let scene = page.map(|page| SceneState::new(root.core_handle(), page));
     root.with_artboard_mut(|b| b.live_move_scene = Some(scene.clone()));
     scene
 }

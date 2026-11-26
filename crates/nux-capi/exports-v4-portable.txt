@@ -75,6 +75,7 @@ nux_player_scroll_region_by
 nux_player_semantic_node_for_text_run
 nux_player_semantic_snapshot
 nux_player_set_global_view_model
+nux_player_set_keyed_row_collapsed
 nux_player_set_row_collapsed
 nux_player_step
 nux_player_step_begin

@@ -1389,3 +1389,6 @@ fn a_keyed_row_artboard_outside_a_list_is_refused_at_import() {
     );
     assert_eq!(keys(&misplaced), ["y"]);
 }
+
+#[path = "layout_keyed_page_rows_tests.rs"]
+mod page_rows_tests;

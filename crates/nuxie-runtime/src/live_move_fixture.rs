@@ -431,6 +431,10 @@ struct Options {
     /// when `go` fires; the Unit model and machine likewise. See
     /// `row_trigger_fixture`.
     row_trigger: bool,
+    /// The page also carries `isPageRows`: on its `screens` list, and on a
+    /// keyed list "rows" of its own (rows of Screen A, none mounted) after
+    /// its other objects. See `page_rows_screens_fixture`.
+    page_rows: bool,
 }
 /// `fixture(2)` whose Unit model's default instance has `count` 9, while
 /// each slot's own authored instance keeps `count` 0.
@@ -2268,6 +2272,20 @@ pub fn record_free_page_fixture() -> Vec<u8> {
         },
     )
 }
+/// A Rive-made `screens` page of two Screens, with `isPageRows` on its
+/// `screens` list and on a keyed list "rows" of its own when `flagged`:
+/// `record_free_page_fixture` when `record_free`, otherwise `fixture(2)`.
+pub fn page_rows_screens_fixture(record_free: bool, flagged: bool) -> Vec<u8> {
+    build(
+        2,
+        Options {
+            ordinary: record_free,
+            page_shape: record_free,
+            page_rows: flagged,
+            ..Options::default()
+        },
+    )
+}
 pub fn ordinary_fixture(rows: usize) -> Vec<u8> {
     build(
         rows,
@@ -2671,11 +2689,11 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             ],
         );
     }
-    obj(
-        &mut b,
-        "ArtboardComponentList",
-        &[("name", S("screens")), ("parentId", U(1))],
-    ); // 2
+    let mut screens = vec![("name", S("screens")), ("parentId", U(1))];
+    if options.page_rows {
+        screens.push(("isPageRows", B(true)));
+    }
+    obj(&mut b, "ArtboardComponentList", &screens); // 2
     bind(&mut b, 800, &[rows as u8 + 1, 0]);
     if rows > 1 && !options.ordinary {
         let mut step = vec![
@@ -2872,6 +2890,18 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 ("distance", F(0.15)),
                 ("distanceEnd", F(0.85)),
                 ("orient", B(true)),
+            ],
+        );
+    }
+    if options.page_rows {
+        obj(
+            &mut b,
+            "ArtboardComponentList",
+            &[
+                ("name", S("rows")),
+                ("parentId", U(1)),
+                ("rowArtboardId", U(1)),
+                ("isPageRows", B(true)),
             ],
         );
     }

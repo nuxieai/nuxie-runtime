@@ -1718,6 +1718,199 @@ mod tests {
         }
     }
 
+    /// A player of the file `bytes`' first artboard: the file, the instance
+    /// and the player.
+    fn open_player(
+        bytes: &[u8],
+    ) -> (
+        *mut crate::NuxFile,
+        *mut crate::NuxArtboardInstance,
+        *mut NuxPlayer,
+    ) {
+        let mut file = std::ptr::null_mut();
+        let mut instance = std::ptr::null_mut();
+        let mut player = std::ptr::null_mut();
+        unsafe {
+            let caps = crate::NuxVideoPlaybackCapabilities {
+                playback_available: 1,
+                ..Default::default()
+            };
+            let mut result = std::ptr::null_mut();
+            let status = crate::nux_file_import_with_video_capabilities(
+                bytes.as_ptr(),
+                bytes.len(),
+                &crate::NuxRenderCallbacks::default(),
+                &caps,
+                &mut file,
+                &mut result,
+            );
+            let message = if result.is_null() {
+                String::new()
+            } else {
+                String::from_utf8_lossy(&(*result).message).into_owned()
+            };
+            crate::nux_capi_result_free(result);
+            assert_eq!(status, NuxStatus::Ok, "{message}");
+            assert_eq!(
+                crate::nux_artboard_instance_new(file, 0, &mut instance),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                crate::nux_player_new_default(instance, &mut player),
+                NuxStatus::Ok
+            );
+        }
+        (file, instance, player)
+    }
+
+    fn string(value: &str) -> NuxStringView {
+        NuxStringView {
+            data: value.as_ptr().cast(),
+            len: value.len(),
+        }
+    }
+
+    /// Through the C edge, on a driver page (`isPageRows`): a row the driver
+    /// mounted sleeps and wakes by its key, the index call names the same
+    /// row, and the content height reads the top row awake. A key not
+    /// mounted, a name that is no list, a collapsed value past 1 and a NULL
+    /// key with a length are refused, as is the key call on a `screens` page,
+    /// whose list is not keyed.
+    #[test]
+    fn keyed_row_sleep_through_the_c_edge() {
+        use nuxie::runtime::artboard_component_list::ArtboardComponentList;
+        use nuxie_runtime::keyed_rows_fixture::{BANNER_HEIGHT, Cards, keyed_plans_fixture, page};
+        let bytes = keyed_plans_fixture(Cards::PageRows);
+        let (file, instance, player) = open_player(&bytes);
+        let mut rows = Rows {
+            next: Some(mount_declared),
+            ..Rows::default()
+        };
+        let driver = NuxPlayerDriver {
+            struct_size: sized::<NuxPlayerDriver>(),
+            context: (&raw mut rows).cast(),
+            drive: Some(drive_rows),
+            release: None,
+        };
+        unsafe {
+            assert_eq!(nux_player_driver_set(player, &driver), NuxStatus::Ok);
+            for _ in 0..60 {
+                step(player, &[]);
+            }
+            assert_eq!(nux_player_driver_clear(player), NuxStatus::Ok);
+        }
+        let list = unsafe { &*player }
+            .artboard
+            .instance
+            .borrow()
+            .native_handle()
+            .with_artboard(|board| board.objects()[page::CARDS].clone())
+            .expect("the list");
+        // A sleeping row is laid out without a node of its own.
+        let asleep = |key: &[u8]| {
+            list.with_downcast::<ArtboardComponentList, _>(|list| {
+                let index = list
+                    .row_keys()
+                    .iter()
+                    .position(|row| *row == key)
+                    .expect("a mounted row");
+                list.layout_node(index as i32).is_none()
+            })
+            .expect("the list")
+        };
+        let height = || {
+            let mut height = 0.0;
+            let status = unsafe { crate::nux_player_content_height(player, &mut height) };
+            (status, height)
+        };
+        let sleep = |key: &[u8], collapsed: u8| unsafe {
+            crate::nux_player_set_keyed_row_collapsed(
+                player,
+                string("Cards"),
+                self::key(key),
+                collapsed,
+            )
+        };
+        // The rows are card, banner, plain (a card): plain is on top.
+        let (status, card_height) = height();
+        assert_eq!(status, NuxStatus::Ok);
+        assert!(card_height > BANNER_HEIGHT, "{card_height}");
+        unsafe {
+            assert_eq!(sleep(b"plain", 1), NuxStatus::Ok);
+            step(player, &[]);
+        }
+        assert!(asleep(b"plain"));
+        let (status, banner) = height();
+        assert_eq!(status, NuxStatus::Ok);
+        assert!((banner - BANNER_HEIGHT).abs() < 0.05, "{banner}");
+        unsafe {
+            assert_eq!(
+                crate::nux_player_set_row_collapsed(player, string("Cards"), 2, 0),
+                NuxStatus::Ok
+            );
+            step(player, &[]);
+        }
+        assert!(!asleep(b"plain"));
+        assert_eq!(height(), (NuxStatus::Ok, card_height));
+        unsafe {
+            assert_eq!(
+                crate::nux_player_set_row_collapsed(player, string("Cards"), 1, 1),
+                NuxStatus::Ok
+            );
+        }
+        assert!(asleep(b"banner"));
+        unsafe {
+            assert_eq!(sleep(b"banner", 0), NuxStatus::Ok);
+        }
+        assert!(!asleep(b"banner"));
+
+        unsafe {
+            assert_eq!(sleep(b"gone", 1), NuxStatus::InvalidArgument);
+            assert_eq!(sleep(b"card", 2), NuxStatus::InvalidArgument);
+            assert_eq!(
+                crate::nux_player_set_keyed_row_collapsed(
+                    player,
+                    string("Heading"),
+                    key(b"card"),
+                    1
+                ),
+                NuxStatus::InvalidArgument
+            );
+            assert_eq!(
+                crate::nux_player_set_keyed_row_collapsed(
+                    player,
+                    string("Cards"),
+                    NuxByteView {
+                        data: std::ptr::null(),
+                        len: 3,
+                    },
+                    1
+                ),
+                NuxStatus::NullArgument
+            );
+        }
+        assert!(!asleep(b"card"));
+        unsafe {
+            step(player, &[]);
+            assert_eq!(crate::nux_player_free(player), NuxStatus::Ok);
+            assert_eq!(crate::nux_artboard_instance_free(instance), NuxStatus::Ok);
+            assert_eq!(crate::nux_file_free(file), NuxStatus::Ok);
+        }
+
+        let bytes = nuxie_runtime::live_move_fixture::record_free_page_fixture();
+        let (file, instance, player) = open_player(&bytes);
+        unsafe {
+            step(player, &[]);
+            assert_eq!(
+                crate::nux_player_set_keyed_row_collapsed(player, string("screens"), key(b"A"), 1),
+                NuxStatus::InvalidArgument
+            );
+            assert_eq!(crate::nux_player_free(player), NuxStatus::Ok);
+            assert_eq!(crate::nux_artboard_instance_free(instance), NuxStatus::Ok);
+            assert_eq!(crate::nux_file_free(file), NuxStatus::Ok);
+        }
+    }
+
     /// What the replacing driver does in its next round 0, and what it was
     /// told.
     #[derive(Default)]

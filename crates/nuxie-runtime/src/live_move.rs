@@ -12,10 +12,10 @@ pub mod records;
 mod transport;
 mod values;
 mod wide;
-pub use collapse::set_row_collapsed;
 pub(crate) use collapse::{
     apply_row_collapse, effectively_hidden, reconcile_row_hosts, reconcile_slot_collapse,
 };
+pub use collapse::{set_keyed_row_collapsed, set_row_collapsed};
 pub use drawn::When;
 pub use follow::SizeMode;
 pub use plan::{LiveMoves, screens, zoom::Ends};

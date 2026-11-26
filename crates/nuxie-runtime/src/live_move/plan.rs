@@ -61,19 +61,33 @@ impl Plan {
         if self.root.as_ref() == Some(&root.core_handle()) && self.revision == Some(revision) {
             return Ok(());
         }
+        let page = crate::hosted_scene::page_list(root);
+        // A driver page reads no steps and no Screens: its LiveStep records
+        // are ignored, and its rows may repeat an artboard, which `screens`
+        // refuses.
+        let driver_page = page.as_ref().is_some_and(|page| page.keyed);
         if self.root.as_ref() != Some(&root.core_handle()) {
             ensure!(
                 self.active.is_none(),
                 "cannot change scene occurrence during a step"
             );
-            self.steps = read_steps(root)?;
+            self.steps = if driver_page {
+                Vec::new()
+            } else {
+                read_steps(root)?
+            };
             self.root = Some(root.core_handle());
         }
+        if driver_page {
+            self.rows.clear();
+            self.index.active(root);
+            self.revision = Some(crate::hosted_scene::membership_revision(
+                &root.core_handle(),
+            ));
+            return Ok(());
+        }
         // Ordinary upstream files never acquire a page-host requirement.
-        let has_screens = root
-            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-            .is_some();
-        if !has_screens {
+        if page.is_none() {
             ensure!(self.steps.is_empty(), "live steps require a screens list");
             self.revision = Some(revision);
             return Ok(());
@@ -763,6 +777,13 @@ fn settle_slot(slot: &CoreHandle) -> Result<()> {
     Ok(())
 }
 
+/// A step on a driver page is refused, before anything runs: its rows are
+/// named by key, not by Screen, and its steps come later (UNIV-7101).
+fn refuse_driver_page(scene: &crate::hosted_scene::SceneState) -> Result<()> {
+    ensure!(!scene.page.keyed, "a driver page has no steps");
+    Ok(())
+}
+
 /// Stateless scene dispatcher. All plans, flights and caches belong to the
 /// native root occurrence, shared across Rust adapters and C API players.
 #[derive(Default)]
@@ -794,6 +815,7 @@ impl LiveMoves {
     ) -> Result<()> {
         let scene = crate::hosted_scene::root_scene(root)
             .ok_or_else(|| anyhow::anyhow!("root is not a live-move page"))?;
+        refuse_driver_page(&scene)?;
         self.flush_membership(root)?;
         // The root's pass can leave a binding that changes the arriving
         // Screen's own layout unsettled, so that Screen runs its own update
@@ -819,6 +841,7 @@ impl LiveMoves {
     ) -> Result<()> {
         let scene = crate::hosted_scene::root_scene(root)
             .ok_or_else(|| anyhow::anyhow!("root is not a live-move page"))?;
+        refuse_driver_page(&scene)?;
         self.flush_membership(root)?;
         scene.plan.borrow_mut().step_end(root, incoming, name)
     }

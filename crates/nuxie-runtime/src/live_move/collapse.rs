@@ -91,12 +91,41 @@ impl ArtboardComponentList {
         state.active = active;
     }
 }
+/// Put row `index` of a page's list to sleep, or wake it: the root's
+/// `screens` list, or a driver page's keyed list.
 pub fn set_row_collapsed(list: &CoreHandle, index: i32, collapsed: bool) -> Result<()> {
+    set_collapsed(list, collapsed, |_| Some(index))
+}
+
+/// Put the row mounted by `key` on a driver page's keyed list to sleep, or
+/// wake it. A list that is not keyed, and a key not mounted, are refused
+/// before anything runs: a driver's row operations commit once per round, so
+/// the flush cannot mount one. The key's place is read after the flush, so
+/// it names the row the list lays out now.
+pub fn set_keyed_row_collapsed(list: &CoreHandle, key: &[u8], collapsed: bool) -> Result<()> {
+    let mounted = list
+        .with_downcast::<ArtboardComponentList, _>(|l| {
+            ensure!(l.is_keyed(), "row sleep by key requires a keyed list");
+            ensure!(l.keyed_row_index(key).is_some(), "row not found");
+            Ok(())
+        })
+        .ok_or_else(|| anyhow::anyhow!("expected a list"))?;
+    mounted?;
+    set_collapsed(list, collapsed, |l| l.keyed_row_index(key))
+}
+
+/// The shared body: `find_row` finds the row's index in the flushed list,
+/// None for a row the call does not name.
+fn set_collapsed(
+    list: &CoreHandle,
+    collapsed: bool,
+    find_row: impl FnOnce(&ArtboardComponentList) -> Option<i32>,
+) -> Result<()> {
     let scene = crate::hosted_scene::scene_for_operation(list)
-        .ok_or_else(|| anyhow::anyhow!("file has no live-move records"))?;
+        .ok_or_else(|| anyhow::anyhow!("root is not a page"))?;
     ensure!(
-        crate::hosted_scene::is_screen_list(list),
-        "row sleep requires Page.screens"
+        crate::hosted_scene::is_page_list(list),
+        "row sleep requires the page's list"
     );
     // Apply list insertions, removals and moves before interpreting the row
     // index. This flush runs inside the caller's transaction, without playback.
@@ -108,12 +137,13 @@ pub fn set_row_collapsed(list: &CoreHandle, index: i32, collapsed: bool) -> Resu
         Some(root) => super::LiveMoves::default().flush_membership(&root)?,
         None => scene.prepare()?,
     }
-    let (row, parent, changed) = list
+    let (index, row, parent, changed) = list
         .with_downcast_mut::<ArtboardComponentList, _>(|l| -> Result<_> {
             ensure!(
                 !l.virtualization_enabled(),
                 "cannot collapse a virtualised row"
             );
+            let index = find_row(l).ok_or_else(|| anyhow::anyhow!("row not found"))?;
             let item = l
                 .list_item(index)
                 .ok_or_else(|| anyhow::anyhow!("row not found"))?;
@@ -142,6 +172,7 @@ pub fn set_row_collapsed(list: &CoreHandle, index: i32, collapsed: bool) -> Resu
                 l.mark_host_transform_dirty();
             }
             Ok((
+                index,
                 l.artboard_instance(index),
                 l.layout_parent_handle(),
                 changed,

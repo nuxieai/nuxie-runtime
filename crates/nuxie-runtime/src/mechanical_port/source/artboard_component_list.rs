@@ -204,6 +204,9 @@ pub struct ArtboardComponentList {
     /// the artboard a keyed list's rows are made from. `u32::MAX` when the
     /// record does not set it, and then the list is not keyed.
     row_artboard_id: u32,
+    /// Nuxie `isPageRows` (60026): whether a keyed list's rows are its
+    /// page's rows. It counts only on a keyed list.
+    is_page_rows: bool,
     /// Nuxie `KeyedRowArtboard` children (60003): the further artboards a
     /// keyed list's rows may be made from, by their index in the file's
     /// artboards. With `row_artboard_id` they are the list's declared set.
@@ -289,6 +292,7 @@ impl Default for ArtboardComponentList {
             provider_state: LayoutNodeProviderState::default(),
             constrainable_list_state: ConstrainableListState::default(),
             row_artboard_id: u32::MAX,
+            is_page_rows: false,
             declared_row_artboards: Vec::new(),
             keyed_rows: Vec::new(),
             keyed_row_keys: CoreHandleMap::default(),
@@ -2604,6 +2608,7 @@ impl ArtboardComponentList {
         let mut cloned = self.base.clone_into(&mut ArtboardComponentList::default());
         cloned.set_file(self.file());
         cloned.set_row_artboard_id(self.row_artboard_id());
+        cloned.set_is_page_rows(self.is_page_rows());
         cloned
             .declared_row_artboards
             .clone_from(&self.declared_row_artboards);
@@ -3868,6 +3873,24 @@ impl ArtboardComponentList {
         self.row_artboard_id != u32::MAX
     }
 
+    pub const IS_PAGE_ROWS_PROPERTY_KEY: u16 = 60026;
+
+    /// The list's `isPageRows`, as its record sets it.
+    pub fn is_page_rows(&self) -> bool {
+        self.is_page_rows
+    }
+
+    pub fn set_is_page_rows(&mut self, value: bool) {
+        self.is_page_rows = value;
+    }
+
+    /// Whether the list's rows are a page's rows: a keyed list whose record
+    /// sets `isPageRows`. The flag on a list that is not keyed counts for
+    /// nothing.
+    pub fn is_page_row_list(&self) -> bool {
+        self.is_keyed() && self.is_page_rows
+    }
+
     /// Add `artboard` to the artboards the list declares for keyed rows, as
     /// a `KeyedRowArtboard` child does.
     pub(crate) fn declare_row_artboard(&mut self, artboard: u32) {
@@ -3909,6 +3932,15 @@ impl ArtboardComponentList {
                     .is_some_and(|row| **row == *key)
             })
             .cloned()
+    }
+
+    /// The place among the list's laid out rows of the keyed row mounted by
+    /// `key`, as a row index names it. None for a key not mounted, or
+    /// mounted this round and not yet taken into the list's order.
+    pub(crate) fn keyed_row_index(&self, key: &[u8]) -> Option<i32> {
+        let item = self.keyed_row_item(key)?;
+        let index = self.list_items.iter().position(|row| *row == item)?;
+        i32::try_from(index).ok()
     }
 
     /// The list item and the artboard of the keyed row mounted by `key`.

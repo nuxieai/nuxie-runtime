@@ -3153,6 +3153,20 @@ NuxStatus nux_player_set_global_view_model(struct NuxPlayer *player,
                                            const struct NuxViewModelInstance *instance);
 
 /**
+ * Collapse or wake the row mounted by `key` on a named keyed list that is
+ * the page's rows (`isPageRows`), as nux_player_set_row_collapsed does for
+ * a row by its index. collapsed is 0 or 1. The key's bytes are compared
+ * only for equality. Retains the row's playback, state and place. An
+ * unknown list, a list that is not keyed or not the page's, a key not
+ * mounted and a collapsed value past 1 return INVALID_ARGUMENT; a NULL key
+ * with a length returns NULL_ARGUMENT.
+ */
+NuxStatus nux_player_set_keyed_row_collapsed(struct NuxPlayer *player,
+                                             struct NuxStringView list_name,
+                                             struct NuxByteView key,
+                                             uint8_t collapsed);
+
+/**
  * Collapse or wake one mounted row of a named non-virtual list. collapsed is
  * 0 or 1. Retains playback, view models, video and native field identities.
  * Unknown lists, rows and virtualised lists return INVALID_ARGUMENT.

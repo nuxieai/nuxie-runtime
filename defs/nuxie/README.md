@@ -8,7 +8,7 @@ Type keys and property keys are independent namespaces. Allocate both from
 60000–65535. The generator rejects upstream definitions that claim this band
 (including alternate keys), other than properties a Nuxie `augments` file adds
 to them (StateTransition.isHold, 60023; ArtboardComponentList.rowArtboardId,
-60024); it also rejects owned keys outside the
+60024, and isPageRows, 60026); it also rejects owned keys outside the
 band, and duplicate definitions and keys.
 Upstream has not reserved this band; a future overlap blocks adoption until
 resolved explicitly.
@@ -18,7 +18,7 @@ resolved explicitly.
 - TextStyleDecoration: type 60002; property 60022.
 - KeyedRowArtboard: type 60003; property 60025.
 - StateTransition (upstream type 65, augmented by `state_transition_hold.json`): property 60023.
-- ArtboardComponentList (upstream type 559, augmented by `artboard_component_list_rows.json`): property 60024.
+- ArtboardComponentList (upstream type 559, augmented by `artboard_component_list_rows.json`): properties 60024 and 60026.
 - LayoutCssStyle: type 61000; properties 61000–61082, 61099–61100 and 61106–61108.
 - BoxBorder: type 61001; properties 61083 and 61103.
 - BoxGradient: type 61002; properties 61084–61095.
@@ -86,6 +86,17 @@ and moves them by key (docs/page-player.md, Host driver). An id that names
 no artboard leaves the list keyed and empty: every mount is refused. It is a
 uint, unset at -1 (the largest uint), not an upstream `Id`. Readers without it
 skip it and see an empty list.
+
+ArtboardComponentList's `isPageRows` (60026), from the same file, marks a
+keyed list's rows as a page's rows. An unhosted root whose own artboard holds
+a keyed list with the flag is a page (docs/page-player.md, Driver pages): a
+host can put the list's rows to sleep and wake them by key, and the page's
+content height is read from its top row. It counts only on a keyed list; on
+a list that is not keyed it is ignored. A root that is already a page through
+its `screens` list keeps that and ignores the flag, and with two flagged
+lists the first in file order is the page's. Like `isHold`, it is a bool on
+the wire, and writers list it in the property ToC as a uint so readers
+without it skip it and see an ordinary keyed list.
 
 KeyedRowArtboard (60003), from `keyed_row_artboard.json`, is a child of a
 keyed list and declares one more artboard its rows may be made from: its

@@ -58,9 +58,9 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // Upstream 515eb61d adds LayoutComponentStyle.aspectRatioAxisValue (546),
     // stored but not read by CSS-mode layout.
     // StateTransition's isHold (60023) and ArtboardComponentList's
-    // rowArtboardId (60024) are Nuxie augmentations, and KeyedRowArtboard
-    // adds its artboardId (60025).
-    assert_eq!(runtime_property_count, 836);
+    // rowArtboardId (60024) and isPageRows (60026) are Nuxie augmentations,
+    // and KeyedRowArtboard adds its artboardId (60025).
+    assert_eq!(runtime_property_count, 837);
 
     let animatable_property_count = DEFINITIONS
         .iter()
@@ -103,9 +103,9 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // StateTransition's isHold (60023) and ArtboardComponentList's
     // rowArtboardId (60024), Nuxie augmentations, are described, and so are LiveStep's flightAnimationId (62030) and LiveStepUnit's
     // transfers (62029), LiveFlight's key and sizeMode (62031, 62032), and
-    // upstream 515eb61d's aspectRatioAxisValue (546), and KeyedRowArtboard's
-    // artboardId (60025).
-    assert_eq!(described_property_count, 592);
+    // upstream 515eb61d's aspectRatioAxisValue (546), KeyedRowArtboard's
+    // artboardId (60025) and ArtboardComponentList's isPageRows (60026).
+    assert_eq!(described_property_count, 593);
 }
 
 #[test]

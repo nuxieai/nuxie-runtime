@@ -122,7 +122,8 @@ fn is_upstream_definition(definition: &nuxie_schema::Definition) -> bool {
 
 /// Whether upstream's generated C++ has `property`: every property of an
 /// upstream definition but the fork-band ones a Nuxie `augments` file adds
-/// (StateTransition.isHold, ArtboardComponentList.rowArtboardId), which
+/// (StateTransition.isHold, ArtboardComponentList.rowArtboardId and
+/// isPageRows), which
 /// `nuxie_augmentations_stay_out_of_the_cpp_registry` pins and checks.
 fn is_upstream_property(definition: &nuxie_schema::Definition, property: &Property) -> bool {
     is_upstream_definition(definition) && property.key.int < 60000
@@ -319,6 +320,7 @@ fn nuxie_augmentations_stay_out_of_the_cpp_registry() {
         [
             ("StateTransition", "isHold", 60023),
             ("ArtboardComponentList", "rowArtboardId", 60024),
+            ("ArtboardComponentList", "isPageRows", 60026),
         ]
     );
 

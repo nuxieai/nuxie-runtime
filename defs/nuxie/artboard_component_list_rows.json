@@ -6,6 +6,12 @@
       "initialValue": "-1",
       "key": { "int": 60024 },
       "description": "Nuxie keyed rows. The artboard a host's rows are made from, as an index into the file's artboards (as ArtboardListMapRule.artboardId names one). A list with this set takes its rows from a host driver, which mounts, removes and moves each row by its key; an id that names no artboard leaves the list empty. Readers without the key skip it and see an empty list."
+    },
+    "isPageRows": {
+      "type": "bool",
+      "key": { "int": 60026 },
+      "initialValue": "false",
+      "description": "Nuxie page rows. On a keyed list (one that sets rowArtboardId) of an unhosted root artboard: the list's rows are the page's rows, which a host can put to sleep and wake by key, and the page's content height is read from its top row. Ignored on a list that is not keyed, and on a root whose screens list already makes it a page; with two flagged lists the first in file order is the page's. Readers without the key skip it and see an ordinary keyed list."
     }
   }
 }

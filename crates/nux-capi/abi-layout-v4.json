@@ -620,7 +620,7 @@
     },
     {
       "name": "NuxPlayerDriverReport",
-      "size": 168,
+      "size": 192,
       "alignment": 8,
       "fields": [
         {
@@ -702,6 +702,14 @@
         {
           "name": "row_key_count",
           "offset": 160
+        },
+        {
+          "name": "has_field_text",
+          "offset": 168
+        },
+        {
+          "name": "field_text",
+          "offset": 176
         }
       ]
     },

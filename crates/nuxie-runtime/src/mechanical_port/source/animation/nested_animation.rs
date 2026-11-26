@@ -119,6 +119,7 @@ impl NestedEventNotifier {
                 host_sequence: 0,
                 host_view_model_instance_id: None,
                 listener_target: None,
+                field_text: None,
             })
             .collect();
         let nested_artboard = self.nested_artboard.clone();

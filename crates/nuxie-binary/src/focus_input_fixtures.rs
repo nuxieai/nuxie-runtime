@@ -154,3 +154,73 @@ pub fn key_moves_focus() -> Vec<u8> {
     });
     bytes
 }
+
+/// A single line text field (object 1, named "Field", empty) set in `font`,
+/// that can take focus and is a semantic text field. A text listener on it
+/// fires `change` (object 5), as does a keyboard listener on Backspace,
+/// pressed or held with no modifiers.
+pub fn text_field_listeners(font: &[u8]) -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 0, 9658, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "FontAsset", |bytes| {
+        push_uint(bytes, "FontAsset", "assetId", 0);
+    });
+    push_object(&mut bytes, "FileAssetContents", |bytes| {
+        push_var_uint(bytes, u64::from(property_key("FileAssetContents", "bytes")));
+        push_var_uint(bytes, font.len() as u64);
+        bytes.extend_from_slice(font);
+    });
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 200.0);
+        push_f32(bytes, "Artboard", "height", 100.0);
+    });
+    push_object(&mut bytes, "TextInput", |bytes| {
+        push_uint(bytes, "Component", "parentId", 0);
+        push_string(bytes, "Component", "name", "Field");
+        push_string(bytes, "TextInput", "text", "");
+        // A bool is one byte, as a var uint below 128 is.
+        push_uint(bytes, "TextInput", "multiline", 0);
+    });
+    push_object(&mut bytes, "TextStylePaint", |bytes| {
+        push_uint(bytes, "Component", "parentId", 1);
+        push_uint(bytes, "TextStyle", "fontAssetId", 0);
+        push_f32(bytes, "TextStyle", "fontSize", 16.0);
+    });
+    push_object(&mut bytes, "FocusData", |bytes| {
+        push_uint(bytes, "Component", "parentId", 1);
+        push_uint(bytes, "FocusData", "focusFlags", 7);
+    });
+    push_object(&mut bytes, "SemanticData", |bytes| {
+        push_uint(bytes, "Component", "parentId", 1);
+        push_uint(bytes, "SemanticData", "role", 6);
+    });
+    push_object(&mut bytes, "Event", |bytes| {
+        push_uint(bytes, "Component", "parentId", 0);
+        push_string(bytes, "Component", "name", "change");
+    });
+    push_object(&mut bytes, "StateMachine", |_| {});
+    push_object(&mut bytes, "StateMachineListenerSingle", |bytes| {
+        push_uint(bytes, "StateMachineListener", "targetId", 1);
+        push_uint(bytes, "StateMachineListenerSingle", "listenerTypeValue", 8);
+    });
+    push_object(&mut bytes, "ListenerFireEvent", |bytes| {
+        push_uint(bytes, "ListenerFireEvent", "eventId", 5);
+    });
+    push_object(&mut bytes, "StateMachineListenerSingle", |bytes| {
+        push_uint(bytes, "StateMachineListener", "targetId", 1);
+        push_uint(bytes, "StateMachineListenerSingle", "listenerTypeValue", 15);
+    });
+    push_object(&mut bytes, "ListenerInputTypeKeyboard", |_| {});
+    push_object(&mut bytes, "KeyboardInput", |bytes| {
+        // Backspace, as `Key::BACKSPACE` numbers it.
+        push_uint(bytes, "KeyboardInput", "keyType", 259);
+        push_uint(bytes, "KeyboardInput", "keyPhase", 3);
+    });
+    push_object(&mut bytes, "ListenerFireEvent", |bytes| {
+        push_uint(bytes, "ListenerFireEvent", "eventId", 5);
+    });
+    bytes
+}

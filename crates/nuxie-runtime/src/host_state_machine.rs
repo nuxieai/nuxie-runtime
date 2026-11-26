@@ -29,7 +29,8 @@ use crate::{RuntimeGeometryHitOccurrence, RuntimeGeometryHitPathSegment, Runtime
 use std::cell::RefCell;
 
 pub use crate::mechanical_port::source::{
-    animation::state_machine_instance::FocusState, hit_result::HitResult as RuntimeHitResult,
+    animation::state_machine_instance::{FieldText, FocusState},
+    hit_result::HitResult as RuntimeHitResult,
 };
 
 impl RuntimeHitResult {
@@ -243,6 +244,7 @@ pub struct StateMachineReportedEvent {
     string_properties: Vec<StateMachineEventStringProperty>,
     context: Option<StateMachineEventContext>,
     listener_target_local_id: Option<usize>,
+    field_text: Option<FieldText>,
     host_sequence: u64,
 }
 
@@ -299,6 +301,7 @@ impl StateMachineReportedEvent {
             string_properties,
             context,
             listener_target_local_id,
+            field_text: report.field_text,
             host_sequence: report.host_sequence,
         })
     }
@@ -343,6 +346,13 @@ impl StateMachineReportedEvent {
     /// path). `None` when no listener reported the event.
     pub fn listener_target_local_id(&self) -> Option<usize> {
         self.listener_target_local_id
+    }
+
+    /// The text in the field the reporting listener is on, as it stood when
+    /// the event was reported. `None` when the listener is not on a text
+    /// field, or no listener reported the event.
+    pub fn field_text(&self) -> Option<&FieldText> {
+        self.field_text.as_ref()
     }
 }
 

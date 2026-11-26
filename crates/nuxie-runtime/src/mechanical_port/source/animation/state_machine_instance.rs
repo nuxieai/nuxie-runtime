@@ -195,6 +195,36 @@ pub struct EventReport {
     /// event, in the machine's artboard. `None` for events reported by a
     /// state, a transition or a keyframe.
     pub listener_target: Option<u32>,
+    /// The text in the field the reporting listener is on, as it stood when
+    /// the event was reported. `None` when the listener's target is not a
+    /// text field, or no listener reported the event.
+    pub field_text: Option<FieldText>,
+}
+
+/// A text field's text, as a report carries it. It can hold a password, so
+/// its `Debug` names only its length: no log, debug print or snapshot that
+/// formats a report writes the text.
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct FieldText(String);
+
+impl FieldText {
+    pub fn new(text: String) -> Self {
+        Self(text)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
+impl std::fmt::Debug for FieldText {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "FieldText(<redacted, {} bytes>)", self.0.len())
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -7124,8 +7154,21 @@ impl StateMachineInstance {
                 .as_ref()
                 .map(crate::host_viewmodel::view_model_identity),
             listener_target: self.performing_listener_target,
+            field_text: self.performing_listener_field_text(),
         };
         self.ensure_reporting().reported_events.push(report);
+    }
+
+    /// The text of the field the performing listener is on, read now, so a
+    /// report carries the text as it stands when the event is reported.
+    fn performing_listener_field_text(&self) -> Option<FieldText> {
+        self.resolve_artboard_object(self.performing_listener_target?)?
+            .with(|target| {
+                target
+                    .as_text_input()
+                    .map(|field| FieldText::new(field.base.text().to_owned()))
+            })
+            .flatten()
     }
 
     pub fn reported_event_count(&self) -> usize {

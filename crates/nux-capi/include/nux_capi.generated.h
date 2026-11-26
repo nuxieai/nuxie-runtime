@@ -1273,6 +1273,16 @@ typedef struct NuxPlayerDriverReport {
    */
   const struct NuxSceneRowKey *row_keys;
   size_t row_key_count;
+  /**
+   * Whether the reporting listener is on a text field. A report whose
+   * `struct_size` ends before `has_field_text` carries no field text.
+   */
+  bool has_field_text;
+  /**
+   * The text in the field the reporting listener is on, as it stood when
+   * the event was reported. Valid only during the `drive` call.
+   */
+  struct NuxStringView field_text;
 } NuxPlayerDriverReport;
 
 /**

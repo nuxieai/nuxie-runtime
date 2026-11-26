@@ -3812,6 +3812,13 @@ fn player_step_owned_result_bytes(
         checked_owned_bytes(&mut total, event.name.as_deref().map_or(0, <[u8]>::len))?;
         checked_owned_bytes(&mut total, event.url.as_deref().map_or(0, <[u8]>::len))?;
         checked_owned_bytes(&mut total, event.target.as_deref().map_or(0, <[u8]>::len))?;
+        checked_owned_bytes(
+            &mut total,
+            event
+                .field_text
+                .as_ref()
+                .map_or(0, |text| text.as_bytes().len()),
+        )?;
         checked_owned_items::<OwnedPlayerEventProperty>(&mut total, event.properties.len())?;
         for property in &event.properties {
             checked_owned_bytes(&mut total, property.name.as_deref().map_or(0, <[u8]>::len))?;

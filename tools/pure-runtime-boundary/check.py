@@ -780,11 +780,14 @@ ALLOWED_DYNAMIC_DATA_INCLUDES = {
     ),
     # The native Metal backend's shader compile plan and background compiler
     # read the same generated shader sources and exports as the mechanical
-    # Metal port, by exact generated file name under OUT_DIR.
+    # Metal port, by exact generated file name under OUT_DIR. The draw
+    # shader's namespace inventory test reads the generated combinations
+    # its metallib is compiled from.
     **{
         path: GENERATED_SHADER_SOURCE_INCLUDE
         for path in (
             "crates/nuxie-renderer/src/native_metal/background_shader_compiler.rs",
+            "crates/nuxie-renderer/src/native_metal/draw_shader.rs",
             "crates/nuxie-renderer/src/native_metal/shader_compile_plan.rs",
         )
     },

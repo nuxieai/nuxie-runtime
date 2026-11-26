@@ -9339,6 +9339,15 @@ impl CoreRegistry {
         value: u32,
         completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
     ) {
+        // Nuxie SpringInterpolator.kind.
+        if crate::spring_interpolator::SpringInterpolator::set_uint_property(
+            object.as_registry_any_mut(),
+            property_key,
+            value,
+            completion,
+        ) {
+            return;
+        }
         if crate::css_text::is_property(property_key)
             && let Some(record) = object
                 .as_registry_any_mut()
@@ -9900,6 +9909,15 @@ impl CoreRegistry {
         value: f32,
         completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
     ) {
+        // Nuxie SpringInterpolator.strength.
+        if crate::spring_interpolator::SpringInterpolator::set_double_property(
+            object.as_registry_any_mut(),
+            property_key,
+            value,
+            completion,
+        ) {
+            return;
+        }
         // Nuxie LiveFlight keyable flight controls.
         if crate::live_move::records::field_id(property_key) == Some(2) {
             crate::live_move::records::set_double(
@@ -10077,6 +10095,18 @@ impl CoreRegistry {
         object.get_uint(field)
     }
     pub fn get_uint<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> u32 {
+        // Nuxie SpringInterpolator.kind.
+        if crate::spring_interpolator::SpringInterpolator::field_id(property_key)
+            == Some(
+                crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::ID,
+            )
+        {
+            return crate::spring_interpolator::SpringInterpolator::property(
+                object.as_registry_any(),
+                property_key,
+            )
+            .map_or(0, |kind| kind as u32);
+        }
         if crate::css_text::is_property(property_key)
             && let Some(record) = object
                 .as_registry_any_mut()
@@ -10542,6 +10572,16 @@ impl CoreRegistry {
         object.get_bool(field)
     }
     pub fn get_double<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> f32 {
+        // Nuxie SpringInterpolator.strength.
+        if crate::spring_interpolator::SpringInterpolator::field_id(property_key)
+            == Some(crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::ID)
+        {
+            return crate::spring_interpolator::SpringInterpolator::property(
+                object.as_registry_any(),
+                property_key,
+            )
+            .unwrap_or(0.0);
+        }
         // Nuxie LiveFlight keyable flight controls.
         if crate::live_move::records::field_id(property_key) == Some(2) {
             return crate::live_move::records::get_double(object.as_registry_any(), property_key);
@@ -10922,6 +10962,11 @@ impl CoreRegistry {
         // Nuxie TextStyleDecoration.line is a uint.
         if property_key == i32::from(crate::text_decoration::LINE_PROPERTY_KEY) {
             return 0;
+        }
+        // Nuxie SpringInterpolator.kind is a uint and its strength a double.
+        if let Some(field) = crate::spring_interpolator::SpringInterpolator::field_id(property_key)
+        {
+            return field;
         }
         // Nuxie ArtboardComponentList.rowArtboardId is a uint.
         if property_key
@@ -12293,6 +12338,12 @@ impl CoreRegistry {
             return object
                 .as_registry_any()
                 .is::<crate::css_text::TextStyleCssText>();
+        }
+        // Nuxie SpringInterpolator.kind and strength.
+        if crate::spring_interpolator::SpringInterpolator::field_id(property_key as i32).is_some() {
+            return object
+                .as_registry_any()
+                .is::<crate::spring_interpolator::SpringInterpolator>();
         }
         // Nuxie TextStyleDecoration.line, so keyed and host writes reach it.
         if property_key == u32::from(crate::text_decoration::LINE_PROPERTY_KEY) {

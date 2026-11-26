@@ -1,0 +1,27 @@
+{
+  "name": "SpringInterpolator",
+  "key": {
+    "int": 60004,
+    "string": "springinterpolator"
+  },
+  "exportsWithContext": true,
+  "extends": "animation/keyframe_interpolator.json",
+  "properties": {
+    "kind": {
+      "type": "uint",
+      "key": {
+        "int": 60027
+      },
+      "initialValue": "0",
+      "description": "Nuxie spring easings. 0 spring: a critically damped step on smoothstepped time, k = 8p + 3.5, u = t²(3 − 2t), (1 − e^(−ku)(1 + ku)) / (1 − e^(−k)(1 + k)). 1 bouncy: an underdamped step, ω = 8p + 10, ζ = clamp(0.55 − 0.35p, 0.05, 0.9), ω_d = ω√(1 − ζ²), osc(t) = 1 − e^(−ζωt)(cos ω_d t + ζ/√(1 − ζ²) · sin ω_d t), divided by osc(1). Both end exactly on the next key's value. Any other kind eases linearly. Readers without the type skip the record, and the key plays linearly."
+    },
+    "strength": {
+      "type": "double",
+      "key": {
+        "int": 60028
+      },
+      "initialValue": "0.6",
+      "description": "The strength p, clamped to 0 to 1; not a number reads as 0.6."
+    }
+  }
+}

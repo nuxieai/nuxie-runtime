@@ -62,6 +62,7 @@ pub mod keyed_row_artboard;
 pub mod page_player;
 #[doc(hidden)]
 pub mod script_borrow_check;
+pub mod spring_interpolator;
 pub mod text_decoration;
 pub mod utils;
 pub mod video;
@@ -76,6 +77,7 @@ pub(crate) fn make_core(type_key: i32) -> Option<Box<dyn source::core::CoreObjec
         61005 => Some(Box::new(css_text::TextStyleCssText::default())),
         60002 => Some(Box::new(text_decoration::TextStyleDecoration::default())),
         60003 => Some(Box::new(keyed_row_artboard::KeyedRowArtboard::default())),
+        60004 => Some(Box::new(spring_interpolator::SpringInterpolator::default())),
         62001 => Some(Box::new(live_move::records::LiveStep::default())),
         62002 => Some(Box::new(live_move::records::LiveStepUnit::default())),
         62003 => Some(Box::new(live_move::records::LiveFlight::default())),

@@ -1541,7 +1541,7 @@ mod tests {
     /// Mount rows from each artboard the list declares, and from ones it
     /// does not.
     unsafe fn mount_declared(rows: &mut Rows, writer: *mut NuxSceneWriter) {
-        use nuxie::keyed_rows_fixture::{BANNER_ARTBOARD, CARD_ARTBOARD, MISSING_ARTBOARD};
+        use nuxie_runtime::keyed_rows_fixture::{BANNER_ARTBOARD, CARD_ARTBOARD, MISSING_ARTBOARD};
         let (_, _, list) = cards_list();
         unsafe {
             answer_rows(rows, "mount from the card", |changed| {
@@ -1580,10 +1580,10 @@ mod tests {
     /// still makes a card.
     #[test]
     fn mount_row_from_through_the_c_edge() {
-        use nuxie::keyed_rows_fixture::{
+        use nuxie::runtime::artboard_component_list::ArtboardComponentList;
+        use nuxie_runtime::keyed_rows_fixture::{
             BANNER_ARTBOARD, CARD_ARTBOARD, Cards, keyed_plans_fixture, page,
         };
-        use nuxie::runtime::artboard_component_list::ArtboardComponentList;
         let bytes = keyed_plans_fixture(Cards::WithBanner);
         let mut file = std::ptr::null_mut();
         let mut instance = std::ptr::null_mut();

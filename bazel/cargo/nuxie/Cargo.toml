@@ -44,6 +44,7 @@ path = "lib.rs"
 "luaur-compiler" = { "version" = "=0.1.8", "path" = "../luaur-compiler", "default-features" = false, "features" = ["__bazel_dependency_default"] }
 "ed25519-dalek" = { "version" = "2", "default-features" = false, "features" = ["std"] }
 "nuxie" = { "path" = "../nuxie", "default-features" = false, "features" = ["scripting", "test-support"] }
+"nuxie-runtime" = { "path" = "../nuxie-runtime", "default-features" = false, "features" = ["test-support"] }
 "nuxie-binary" = { "path" = "../nuxie-binary", "features" = ["test-support"] }
 "nuxie-render-stream" = { "path" = "../nuxie-render-stream" }
 "nuxie-schema" = { "path" = "../nuxie-schema" }

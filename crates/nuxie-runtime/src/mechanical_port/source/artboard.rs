@@ -527,6 +527,9 @@ pub struct Artboard {
     // Replaced, never edited, as initialization adds components; advance
     // iterates one snapshot.
     advancing_components: Rc<[AdvancingComponentHandle]>,
+    // Nuxie: the frames this artboard has advanced (`NEW_FRAME`), so a
+    // semantic record's bounds retry can last one frame (UNIV-7008).
+    frames_advanced: Cell<u64>,
     instance_value_binds_source: Option<CoreHandle>,
     instance_value_binds_pending: bool,
     pub(crate) data_bind_container: DataBindContainer,
@@ -635,6 +638,7 @@ impl Default for Artboard {
             scripted_objects: LazyVector::default(),
             scripted_interpolators: RefCell::new(HashMap::new()),
             advancing_components: Rc::new([]),
+            frames_advanced: Cell::new(0),
             instance_value_binds_source: None,
             instance_value_binds_pending: false,
             data_bind_container: DataBindContainer::default(),
@@ -897,6 +901,11 @@ impl Artboard {
         artboard.factory = Some(factory);
         artboard.base.base.set_clip(true);
         artboard
+    }
+
+    /// The frames this artboard has advanced (`NEW_FRAME`).
+    pub(crate) fn frames_advanced(&self) -> u64 {
+        self.frames_advanced.get()
     }
 
     pub fn frame_id() -> u64 {
@@ -1372,6 +1381,8 @@ impl Artboard {
             joysticks_apply_before_update: _,
             scripted_objects: _,
             advancing_components: _,
+            // A count that only goes up; a reset keeps it.
+            frames_advanced: _,
             first_drawable: _,
             draw_links: _,
             is_instance: _,
@@ -4508,7 +4519,14 @@ impl Artboard {
         // The advancing component array is fixed once the artboard
         // initializes, so one snapshot serves the whole pass.
         let advancing = root
-            .with_downcast::<Artboard, _>(|artboard| Rc::clone(&artboard.advancing_components))
+            .with_downcast::<Artboard, _>(|artboard| {
+                if flags.contains(AdvanceFlags::NEW_FRAME) {
+                    artboard
+                        .frames_advanced
+                        .set(artboard.frames_advanced.get() + 1);
+                }
+                Rc::clone(&artboard.advancing_components)
+            })
             .expect("live Artboard advance");
         let mut did_update = false;
         for component in advancing.iter() {

@@ -709,18 +709,18 @@ fn flight_timeline(
         )),
     })
 }
-/// Every refusal [`take_off`] reads from the rows' own content, read before
-/// anything is flushed or marked, through take-off's own reads: each unit's
-/// elements on their rows, an element named twice or inside another, an
-/// element that does not fly in place, each flight record in `records` and
-/// its controls (`FlightFrame::check_controls`), records on two artboards,
-/// each end's parent and place (`in_place::end`), a zoomed pair's boxes, the
-/// rows' and the upper row's poses, and a flight timeline that names no
-/// animation. What depends on a laid-out size or a bound value (a held
-/// element's solved size, a nonzero box in Scale mode, a finite blended size
-/// or opacity) is read at take-off, after the flush. A step between rows
-/// checks these first, so the flush never runs for a step its rows' content
-/// refuses.
+/// Take-off's reads of the rows' own content, run before `LiveMoves`
+/// flushes a driver page, through the functions take-off itself calls, so
+/// no rule here is a second copy of one there: each unit's elements on their
+/// rows (`unit_element`), each element's kind (`Flying::of`), each end's
+/// parent and place (`in_place::end`), each flight record on the upper row
+/// (`flight_record`) and its controls (`FlightFrame::check_controls`), a
+/// zoomed pair's boxes, the rows' and the record holder's poses
+/// (`draw_pose`), and the flight timeline (`flight_timeline`). Take-off's own
+/// `ensure!` rules (overlapping owners, records on two artboards, a flight
+/// inside another) and what reads layout are left to take-off. The page
+/// player flushes before every live operation (UNIV-7136), so these refuse
+/// no step take-off would not; they only refuse it before the flush.
 fn check_rows(
     step: &Step,
     outgoing: &Screen,
@@ -729,16 +729,11 @@ fn check_rows(
 ) -> Result<()> {
     use super::When;
     use super::follow::FlightFrame;
-    use super::in_place::{Flying, InPlaceFlight, end, is_inside};
-    let mut used = HashSet::new();
+    use super::in_place::{Flying, InPlaceFlight, end};
     let mut boards = HashSet::new();
     for unit in &step.units {
         let from = unit_element(outgoing, unit.outgoing_unit_key)?;
         let to = unit_element(arriving, unit.incoming_unit_key)?;
-        ensure!(
-            used.insert(from.clone()) && used.insert(to.clone()),
-            "overlapping flight owners"
-        );
         let (from_box, to_box) = (Flying::of(&from)?, Flying::of(&to)?);
         end(&from_box)?;
         end(&to_box)?;
@@ -769,16 +764,6 @@ fn check_rows(
         .chain(&boards)
     {
         super::follow::draw_pose(board)?;
-    }
-    ensure!(
-        boards.len() <= 1,
-        "a step's flight records need to be on one Screen"
-    );
-    for a in &used {
-        ensure!(
-            !used.iter().any(|b| is_inside(a, b)),
-            "a flight inside another flight"
-        );
     }
     flight_timeline(step, boards.iter().next())?;
     Ok(())
@@ -1296,10 +1281,10 @@ impl LiveMoves {
         incoming_key: &[u8],
         name: &str,
     ) -> Result<()> {
-        // Every refusal of the rows, the step and the rows' content
-        // (`check_rows`) comes before the flush, as a row step's does, so it
-        // leaves the occurrence usable. Only what reads layout is refused
-        // after it, at take-off.
+        // The rows, the step and the rows' content (`check_rows`) are
+        // checked before the flush, as a row step's are. The page player
+        // has flushed already (UNIV-7136), so a refusal after it, at
+        // take-off, leaves the occurrence usable too.
         let scene = driver_page(root)?;
         let list = scene.page.list.clone();
         let arriving = {

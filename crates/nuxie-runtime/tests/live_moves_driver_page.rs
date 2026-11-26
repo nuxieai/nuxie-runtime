@@ -28,7 +28,7 @@ use nuxie_runtime::source::{
 };
 use nuxie_runtime::{
     ArtboardInstance, CoreHandle, File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle,
-    RuntimeFileHandle, RuntimeOwnedViewModelHandle, hosted_scene, source,
+    RuntimeFileHandle, RuntimeOwnedViewModelHandle, css_layout, hosted_scene, source,
 };
 
 /// The fills of the units: A's version, and B's.
@@ -734,22 +734,16 @@ fn refusals_mark_nothing() {
 }
 
 /// Proof 5, with a layout change pending. With "b" first, "a" is the upper
-/// row and holds none of t1's records. The root is resized, so a flush
-/// would lay the page out again: the step is refused before it, the page
-/// is not laid out by the refusal and stays usable. Moved below "a", "b"
+/// row and holds none of t1's records. The root is resized, so the flush
+/// the player runs first lays the page out again: the step is refused and
+/// the page stays usable. Moved below "a", "b"
 /// is the upper row, and the same step begins and lands.
 #[test]
 fn a_step_refused_with_layout_pending_leaves_the_page_usable() {
     let mut s = DriverScene::new(DriverPage::TwoVersions, &[("b", B), ("a", A)]);
     let root = s.root();
     root.set_size(321.0, 654.0);
-    let serial = root.with_artboard(|b| b.change_serial());
     assert_eq!(refused(s.begin("a", "b", "t1")), ErrorKind::InvalidArgument);
-    assert_eq!(
-        root.with_artboard(|b| b.change_serial()),
-        serial,
-        "the refusal flushes nothing"
-    );
     assert!(s.lifted().is_empty());
     assert!(!s.poisoned());
 
@@ -770,9 +764,9 @@ fn a_step_refused_with_layout_pending_leaves_the_page_usable() {
 }
 
 /// Proof 5, with a layout change pending and a control that is not finite:
-/// record 11, on "b", the upper row, fades by NaN. The root is resized, so a
-/// flush would lay the page out again: the step is refused before it, the
-/// page is not laid out by the refusal and stays usable. With the fade
+/// record 11, on "b", the upper row, fades by NaN. The root is resized, so
+/// the flush the player runs first lays the page out again: the step is
+/// refused and the page stays usable. With the fade
 /// restored the same step begins and lands.
 #[test]
 fn a_step_with_a_nan_control_refused_with_layout_pending_leaves_the_page_usable() {
@@ -785,13 +779,7 @@ fn a_step_with_a_nan_control_refused_with_layout_pending_leaves_the_page_usable(
     set(&record, FADE, f32::NAN);
     let root = s.root();
     root.set_size(321.0, 654.0);
-    let serial = root.with_artboard(|b| b.change_serial());
     assert_eq!(refused(s.begin("a", "b", "t1")), ErrorKind::InvalidArgument);
-    assert_eq!(
-        root.with_artboard(|b| b.change_serial()),
-        serial,
-        "the refusal flushes nothing"
-    );
     assert!(s.lifted().is_empty());
     assert!(!s.poisoned());
 
@@ -802,6 +790,71 @@ fn a_step_with_a_nan_control_refused_with_layout_pending_leaves_the_page_usable(
     s.end("a", "b", "t1").expect("the step lands");
     assert!(s.lifted().is_empty());
     assert!(!s.poisoned());
+}
+
+/// The leaving copy's CSS record, as `box_of(slot)` holds it.
+fn css_of(element: &CoreHandle) -> CoreHandle {
+    element
+        .with(|o| css_layout::record::find_in(o.as_container_component().unwrap().children()))
+        .flatten()
+        .expect("a CSS record")
+}
+
+/// UNIV-7136, proof 1. A refusal only layout can find, with a resize
+/// pending: the leaving box is set to a width of 0 and the root resized.
+/// Nothing in the rows' content refuses the step, so it reaches take-off,
+/// where the laid-out box is 0 wide and a Scale mode flight refuses it
+/// ("scale mode needs a nonzero box"). The player flushed the layout before
+/// the operation, so the refusal leaves the page usable. With the width put
+/// back the step begins and lands.
+#[test]
+fn a_layout_refusal_with_a_resize_pending_leaves_the_page_usable() {
+    use css_layout::keys::WIDTH_KIND;
+    let mut s = DriverScene::new(DriverPage::TwoVersions, &[("a", A), ("b", B)]);
+    let css = css_of(&box_of(&s.slot("a")));
+    let width = i32::from(WIDTH_KIND) + 1;
+    let rest = val(&css, width);
+    set(&css, width, 0.0);
+    s.root().set_size(321.0, 654.0);
+    let error = s.begin("a", "b", "t1").expect_err("refused");
+    assert_eq!(error.kind, ErrorKind::InvalidArgument);
+    assert!(s.lifted().is_empty());
+    assert!(!s.poisoned());
+
+    set(&css, width, rest);
+    s.step(0.0);
+    s.begin("a", "b", "t1").expect("the step begins");
+    assert_eq!(s.lifted().len(), 2);
+    s.step(0.0);
+    s.end("a", "b", "t1").expect("the step lands");
+    assert!(!s.poisoned());
+}
+
+/// UNIV-7136, proof 2, on a driver page. With a resize and a box's width
+/// pending, the first flush lays the page out; a second, with nothing
+/// pending, moves neither the change serial nor the membership revision.
+#[test]
+fn a_second_flush_with_nothing_pending_changes_nothing_on_a_driver_page() {
+    use css_layout::keys::WIDTH_KIND;
+    let s = DriverScene::new(DriverPage::TwoVersions, &[("a", A), ("b", B)]);
+    let root = s.root();
+    set(
+        &css_of(&box_of(&s.slot("a"))),
+        i32::from(WIDTH_KIND) + 1,
+        60.0,
+    );
+    root.set_size(321.0, 654.0);
+    let before = root.with_artboard(|b| b.change_serial());
+    LiveMoves::default().flush_membership(&root).unwrap();
+    let serial = root.with_artboard(|b| b.change_serial());
+    let membership = hosted_scene::membership_revision(&root.core_handle());
+    assert_ne!(serial, before, "the first flush lays the page out");
+    LiveMoves::default().flush_membership(&root).unwrap();
+    assert_eq!(root.with_artboard(|b| b.change_serial()), serial);
+    assert_eq!(
+        hosted_scene::membership_revision(&root.core_handle()),
+        membership
+    );
 }
 
 /// Proof 6. A component artboard of a driver page is checked as a Screen

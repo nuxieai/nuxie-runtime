@@ -504,3 +504,63 @@ fn a_frame_that_flushes_a_list_change_reports_it_changed() {
     assert!(!screens(&root).unwrap().contains_key("A"));
     settle(&mut step, "after the removal");
 }
+
+/// UNIV-7136, proofs 1 and 3. With Screen B inserted and not yet set up, a
+/// step the page does not publish is refused. The player flushes the list
+/// before the operation, with the page model subscribed so its change
+/// capture is running; the flush writes no model value the capture counts,
+/// so the refusal leaves the page usable. B is set up by that flush, and
+/// the step to it begins and lands.
+#[test]
+fn an_unknown_step_with_a_screen_pending_leaves_the_page_usable() {
+    let mut page = Page::resting_on_a_named(&fixture::two_version_fixture(), "Page");
+    page.insert_b();
+    let error = page
+        .player
+        .step_begin(
+            &mut page.board,
+            "B",
+            Some("nope"),
+            std::slice::from_ref(&page.vm),
+            None,
+        )
+        .expect_err("an unknown step is refused");
+    assert_eq!(error.kind, page_player::ErrorKind::InvalidArgument);
+    assert!(!page_player::is_poisoned(&page.root()));
+    assert!(
+        screens(&page.root()).unwrap().contains_key("B"),
+        "the flush set B up"
+    );
+    page.wake(1);
+    ok(page.step(0.0), "B's first frame");
+    page.begin("B", "t1");
+    ok(page.step(1.0 / 60.0), "a flight frame");
+    page.end("B", "t1");
+    ok(page.step(1.0 / 60.0), "the frame after landing");
+    assert!(!page_player::is_poisoned(&page.root()));
+}
+
+/// UNIV-7136, proofs 2 and 3, on a `screens` page. The flush that sets up an
+/// inserted Screen writes no model value a change capture counts. A second
+/// flush, with nothing pending, writes none either, and moves neither the
+/// change serial nor the membership revision.
+#[test]
+fn a_flush_writes_no_counted_model_value_and_a_second_changes_nothing() {
+    use nuxie_runtime::live_move::LiveMoves;
+    let page = Page::resting_on_a_named(&fixture::two_version_fixture(), "Page");
+    page.insert_b();
+    let root = page.root();
+    let capture = RuntimeViewModelChangeCapture::begin().expect("no capture is running");
+    LiveMoves::default().flush_membership(&root).unwrap();
+    assert_eq!(capture.write_count().ok(), Some(0));
+    assert!(screens(&root).unwrap().contains_key("B"), "B is set up");
+    let serial = root.with_artboard(|b| b.change_serial());
+    let membership = hosted_scene::membership_revision(&root.core_handle());
+    LiveMoves::default().flush_membership(&root).unwrap();
+    assert_eq!(capture.write_count().ok(), Some(0));
+    assert_eq!(root.with_artboard(|b| b.change_serial()), serial);
+    assert_eq!(
+        hosted_scene::membership_revision(&root.core_handle()),
+        membership
+    );
+}

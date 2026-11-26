@@ -498,13 +498,27 @@ impl PagePlayer {
         let (mut keep_going, mut runtime_dirty, mut runtime_settled) =
             if let Some(operation) = live_operation {
                 let root = artboard.native_handle();
+                // Every live operation flushes pending list changes and layout
+                // before it reads the page (begin and end of each kind, and row
+                // sleep). That flush is the frame's own work, so it runs here,
+                // before the snapshot below: the operation's own flush then
+                // finds nothing pending, and a refusal leaves the occurrence
+                // usable. A failed flush poisons, as a frame's does.
+                if let Err(error) = crate::live_move::LiveMoves::default().flush_membership(&root) {
+                    boundary.poisoned.set(true);
+                    return failure(
+                        ErrorKind::RuntimeError,
+                        format!("live membership flush failed: {error:#}"),
+                    );
+                }
                 let membership = crate::hosted_scene::membership_revision(&root.core_handle());
                 let serial = root.with_artboard(|b| b.change_serial());
                 let applied = operation.apply(&root);
                 if let Err(status) = applied {
-                    // Caller preflight refusals leave the occurrence usable. A failure
-                    // after ownership, component or VM mutation uses the step's poison
-                    // policy; dropping the checkpoint alone cannot undo those effects.
+                    // A refusal leaves the occurrence usable. A failure after the
+                    // operation's own ownership, component or VM mutation uses the
+                    // step's poison policy; dropping the checkpoint alone cannot
+                    // undo those effects.
                     if membership != crate::hosted_scene::membership_revision(&root.core_handle())
                         || serial != root.with_artboard(|b| b.change_serial())
                         || change_capture

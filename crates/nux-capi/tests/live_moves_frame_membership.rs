@@ -6,7 +6,7 @@
 //! A fade home draws its part once on every presented frame, through the C
 //! API in the SDKs' order (UNIV-5899).
 use nux_capi::*;
-use nuxie::live_move_fixture as fixture;
+use nuxie_runtime::live_move_fixture as fixture;
 use std::cell::RefCell;
 use std::ptr;
 

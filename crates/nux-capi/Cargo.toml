@@ -10,8 +10,10 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 
 [features]
 default = []
-# Counters and literal fixtures are absent from shipping builds.
-test-support = ["nuxie/test-support"]
+# Counters and literal fixtures are absent from shipping builds. Only this
+# crate's own test graph turns it on: the counters it guards live behind
+# nuxie-runtime's test-support, which only the dev-dependency below enables.
+test-support = []
 scripting = ["nuxie/scripting"]
 apple-metal = ["nuxie/renderer-metal", "dep:dispatch2", "dep:nuxie-image-codec", "dep:nuxie-renderer", "nuxie-renderer/renderer-metal", "dep:objc2", "dep:objc2-metal", "dep:objc2-quartz-core"]
 android-vulkan = ["nuxie/renderer-vulkan", "dep:nuxie-image-codec", "dep:nuxie-renderer", "nuxie-renderer/renderer-vulkan"]
@@ -34,7 +36,7 @@ luaur-common = "=0.1.8"
 luaur-compiler = "=0.1.8"
 nuxie = { path = "../nuxie", default-features = false, features = ["test-support"] }
 nuxie-render-api = { path = "../nuxie-render-api" }
-nuxie-runtime = { path = "../nuxie-runtime", default-features = false, features = ["policy-pass-counter"] }
+nuxie-runtime = { path = "../nuxie-runtime", default-features = false, features = ["policy-pass-counter", "test-support"] }
 nuxie-project-data = { path = "../nuxie-project-data" }
 nuxie-schema = { path = "../nuxie-schema" }
 serde_json = "1"

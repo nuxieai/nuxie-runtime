@@ -880,7 +880,7 @@ mod tests {
         round: *const NuxPlayerDriverRound,
         writer: *mut NuxSceneWriter,
     ) -> NuxStatus {
-        use nuxie::occurrence_fixture::{card, page};
+        use nuxie_runtime::occurrence_fixture::{card, page};
         let answers = unsafe { &mut *context.cast::<Answers>() };
         let round = unsafe { &*round };
         let reports = unsafe { std::slice::from_raw_parts(round.reports, round.report_count) };
@@ -978,7 +978,7 @@ mod tests {
     /// leads nowhere are refused and change nothing.
     #[test]
     fn a_scene_object_path_writes_one_use_and_an_old_size_writes_the_page() {
-        use nuxie::occurrence_fixture::{PageMachine, RUN_TEXT, card, page, two_uses_fixture};
+        use nuxie_runtime::occurrence_fixture::{PageMachine, RUN_TEXT, card, page, two_uses_fixture};
         use nuxie::runtime::{
             generated::core_registry::CoreRegistry, layout_component::LayoutComponent,
             nested_artboard_layout::NestedArtboardLayout,
@@ -1135,7 +1135,7 @@ mod tests {
 
     /// The "Cards" list as each size of caller names it.
     fn cards_list() -> (OldSceneObject, PathSceneObject, NuxSceneObject) {
-        use nuxie::keyed_rows_fixture::page;
+        use nuxie_runtime::keyed_rows_fixture::page;
         (
             OldSceneObject {
                 struct_size: sized::<OldSceneObject>(),
@@ -1161,7 +1161,7 @@ mod tests {
     /// Mount three rows, one through each size of caller, and write the
     /// footer through an old-size object.
     unsafe fn mount_three(rows: &mut Rows, writer: *mut NuxSceneWriter) {
-        use nuxie::keyed_rows_fixture::page;
+        use nuxie_runtime::keyed_rows_fixture::page;
         let (old, path, new) = cards_list();
         unsafe {
             answer_rows(rows, "mount through a 16 byte object", |changed| {
@@ -1201,7 +1201,7 @@ mod tests {
 
     /// Move, remove, and every way a row call is refused.
     unsafe fn reorder(rows: &mut Rows, writer: *mut NuxSceneWriter) {
-        use nuxie::keyed_rows_fixture::page;
+        use nuxie_runtime::keyed_rows_fixture::page;
         let (_, _, list) = cards_list();
         let footer = NuxSceneObject {
             local_id: page::FOOTER,
@@ -1258,7 +1258,7 @@ mod tests {
         round: *const NuxPlayerDriverRound,
         writer: *mut NuxSceneWriter,
     ) -> NuxStatus {
-        use nuxie::keyed_rows_fixture::card;
+        use nuxie_runtime::keyed_rows_fixture::card;
         let rows = unsafe { &mut *context.cast::<Rows>() };
         let round = unsafe { &*round };
         if round.index == 0
@@ -1349,7 +1349,7 @@ mod tests {
     /// nothing.
     #[test]
     fn row_calls_and_row_keys_through_the_c_edge() {
-        use nuxie::keyed_rows_fixture::{Cards, RUN_TEXT, card, keyed_plans_fixture, page};
+        use nuxie_runtime::keyed_rows_fixture::{Cards, RUN_TEXT, card, keyed_plans_fixture, page};
         use nuxie::runtime::{
             artboard_component_list::ArtboardComponentList, generated::core_registry::CoreRegistry,
             layout_component::LayoutComponent,
@@ -1528,7 +1528,7 @@ mod tests {
         round: *const NuxPlayerDriverRound,
         writer: *mut NuxSceneWriter,
     ) -> NuxStatus {
-        use nuxie::occurrence_fixture::page;
+        use nuxie_runtime::occurrence_fixture::page;
         let replace = unsafe { &mut *context.cast::<Replace>() };
         if unsafe { (*round).index } != 0 || !std::mem::take(&mut replace.armed) {
             return NuxStatus::Ok;
@@ -1562,7 +1562,7 @@ mod tests {
     /// not there and a null host are refused.
     #[test]
     fn a_host_is_given_a_fresh_instance_through_the_c_edge() {
-        use nuxie::occurrence_fixture::{DOT_TRAVEL, PageMachine, card, page, two_uses_fixture};
+        use nuxie_runtime::occurrence_fixture::{DOT_TRAVEL, PageMachine, card, page, two_uses_fixture};
         use nuxie::runtime::generated::core_registry::CoreRegistry;
         const X: u16 = 13;
         let bytes = two_uses_fixture(PageMachine::OneLayer);

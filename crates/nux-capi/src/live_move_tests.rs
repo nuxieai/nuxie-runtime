@@ -1,5 +1,5 @@
 use super::*;
-use nuxie::live_move_fixture as fixture;
+use nuxie_runtime::live_move_fixture as fixture;
 
 #[test]
 fn page_player_published_emits_initial_presentation() {
@@ -913,7 +913,7 @@ fn live_moves_record_free_media_queries_keep_no_live_cache_round6() {
 #[test]
 fn live_moves_rebind_default_page_then_step_does_not_poison_round7() {
     unsafe {
-        let mut scene = LiveScene::from_bytes(&nuxie::live_move::device_fixture::device_fixture(2));
+        let mut scene = LiveScene::from_bytes(&nuxie_runtime::live_move::device_fixture::device_fixture(2));
         for _ in 0..2 {
             let mut replacement = ptr::null_mut();
             assert_eq!(
@@ -1192,7 +1192,7 @@ return function() return {value=0,last=0,atSource=false,update=update} end"#;
 unsafe fn detached_row_write_case(remove_before_write: bool, step_after_remove: bool) {
     use crate::data_binding::*;
     unsafe {
-        let scene = LiveScene::from_bytes(&nuxie::live_move::device_fixture::device_fixture(2));
+        let scene = LiveScene::from_bytes(&nuxie_runtime::live_move::device_fixture::device_fixture(2));
         let mut row = ptr::null_mut();
         let mut live = ptr::null_mut();
         assert_eq!(
@@ -1362,7 +1362,7 @@ fn live_moves_detached_row_late_write_after_previous_step() {
 fn live_moves_native_typing_requires_a_fresh_presented_snapshot() {
     use nuxie::runtime::{focus_data::FocusData, semantic::semantic_data::SemanticData};
     unsafe {
-        let scene = LiveScene::from_bytes(&nuxie::live_move::device_fixture::device_fixture(2));
+        let scene = LiveScene::from_bytes(&nuxie_runtime::live_move::device_fixture::device_fixture(2));
         assert_eq!(nux_player_enable_semantics(scene.player), NuxStatus::Ok);
         let root = (&(*scene.player).artboard)
             .instance
@@ -1747,7 +1747,7 @@ fn page_player_rust_and_c_have_identical_events_changes_and_commands() {
         assert!(changes > 0);
         assert_eq!(page_player_parity_step(&rust, &native, &c, 0.0), (0, 0, 0));
 
-        let bytes = nuxie::live_move::device_fixture::device_fixture(2);
+        let bytes = nuxie_runtime::live_move::device_fixture::device_fixture(2);
         let rust = LiveScene::from_bytes(&bytes);
         let c = LiveScene::from_bytes(&bytes);
         let native = nuxie::page_player::PagePlayer::default();
@@ -3201,7 +3201,7 @@ fn in_place_live_moves_blended_midpoint_step_publishes_to_the_shared_owner_obser
 #[test]
 fn second_screen_change_reports_a_reversed_entrance_events_and_keeps_playing() {
     use crate::data_binding::*;
-    use nuxie::live_move::device_fixture::reversed_entrance_fixture;
+    use nuxie_runtime::live_move::device_fixture::reversed_entrance_fixture;
     unsafe {
         let scene = LiveScene::from_bytes(&reversed_entrance_fixture());
         let mut rows = [ptr::null_mut(); 3];

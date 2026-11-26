@@ -21,6 +21,18 @@
 //!
 //! [`Cards::PageRows`] marks that list as the page's rows (`isPageRows`), so
 //! the record-free "Plans" root is a driver page.
+//!
+//! [`Cards::PagePhases`] is that driver page with a card machine a host
+//! writes phases into: number inputs "phase" and "step" and a bool input
+//! "reduceMotion", in that order, and no "intro". Its "enter" layer plays
+//! "enter" (moving the dot right) while "phase" is [`PHASE_ENTERING`] and
+//! "step" is [`STEP`], unless "reduceMotion" is set, and goes back to idle
+//! when either changes (idle is the layer's entry, which plays nothing); its
+//! "exit" layer does the same with "exit" (moving
+//! the dot down) for [`PHASE_EXITING`]. Each animation fires its event,
+//! "entered" or "exited", by a `KeyFrameCallback` on its last frame. The
+//! banner there has no machine. [`Cards::Phases`] is the same card in a keyed
+//! list that is not the page's rows.
 #![allow(dead_code)]
 use crate::live_move_fixture::{V, obj};
 use crate::source::drawable_flag::DrawableFlag;
@@ -54,7 +66,23 @@ pub mod card {
     pub const SCRIPT: usize = 28;
     /// In [`Cards::DescribedLine`] only: the scrolled line's semantic data.
     pub const LINE_SEMANTICS: usize = 28;
+    /// In [`Cards::PagePhases`] only: the event "enter" fires at its end.
+    pub const ENTERED: usize = 28;
+    /// In [`Cards::PagePhases`] only: the event "exit" fires at its end.
+    pub const EXITED: usize = 29;
 }
+
+/// The card machine's "phase" value that plays "enter", in
+/// [`Cards::PagePhases`].
+pub const PHASE_ENTERING: f32 = 1.0;
+/// The card machine's "phase" value that plays "exit", in
+/// [`Cards::PagePhases`].
+pub const PHASE_EXITING: f32 = 2.0;
+/// The card machine's "step" value its layers play for, in
+/// [`Cards::PagePhases`].
+pub const STEP: f32 = 7.0;
+/// How long "enter" and "exit" play, in seconds: 30 frames at 60 a second.
+pub const PHASE_SECONDS: f32 = 0.5;
 
 /// The banner's local ids, in [`Cards::WithBanner`] and
 /// [`Cards::MisplacedBanner`].
@@ -135,6 +163,12 @@ pub enum Cards {
     /// A list with no `rowArtboardId` that sets `isPageRows`, which counts
     /// for nothing on a list that is not keyed.
     PageRowsUnkeyed,
+    /// [`Cards::PageRows`] whose card machine plays phases a host writes
+    /// into its inputs, and whose banner has no machine.
+    PagePhases,
+    /// A keyed list of cards, not the page's rows, whose card machine is
+    /// [`Cards::PagePhases`]'s.
+    Phases,
 }
 
 fn var(b: &mut Vec<u8>, mut n: u64) {
@@ -159,6 +193,90 @@ fn layer(b: &mut Vec<u8>, plays: bool) {
     if plays {
         obj(b, "AnimationState", &[("animationId", U(0))]);
     }
+}
+
+/// A transition from the state before it to state `to`, under the
+/// conditions on the card machine's inputs: "phase" (0) and "step" (1) by
+/// `(input, op, value)`, op 0 equal and 1 not equal, and, with
+/// `still`, "reduceMotion" (2) unset.
+fn transition(b: &mut Vec<u8>, to: u64, numbers: &[(u64, u64, f32)], still: bool) {
+    use V::*;
+    obj(b, "StateTransition", &[("stateToId", U(to))]);
+    for &(input, op, value) in numbers {
+        obj(
+            b,
+            "TransitionNumberCondition",
+            &[
+                ("inputId", U(input)),
+                ("opValue", U(op)),
+                ("value", F(value)),
+            ],
+        );
+    }
+    if still {
+        // Not equal: the input is false.
+        obj(
+            b,
+            "TransitionBoolCondition",
+            &[("inputId", U(2)), ("opValue", U(1))],
+        );
+    }
+}
+
+/// A phase layer: 0 entry, which is idle, and 1 playing animation
+/// `animation`, which entry leads to while "phase" is `phase` and "step" is
+/// [`STEP`] and "reduceMotion" is unset, and which leads back to entry when
+/// either changes. Idle plays nothing, so a row that holds it goes quiet.
+fn phase_layer(b: &mut Vec<u8>, name: &str, animation: u64, phase: f32) {
+    use V::*;
+    obj(b, "StateMachineLayer", &[("name", S(name))]);
+    obj(b, "EntryState", &[]); // 0
+    transition(b, 1, &[(0, 0, phase), (1, 0, STEP)], true);
+    obj(b, "AnimationState", &[("animationId", U(animation))]); // 1
+    transition(b, 0, &[(0, 1, phase)], false);
+    transition(b, 0, &[(1, 1, STEP)], false);
+}
+
+/// A one-shot phase animation: 30 frames at 60 a second keying the dot's
+/// `property` from 0 to [`DOT_TRAVEL`], and firing the event at `event` on
+/// its last frame.
+fn phase_animation(b: &mut Vec<u8>, name: &str, property: u16, event: usize) {
+    use crate::source::generated::event_base::EventBase;
+    use V::*;
+    obj(
+        b,
+        "LinearAnimation",
+        &[
+            ("name", S(name)),
+            ("fps", U(60)),
+            ("duration", U(30)),
+            ("loopValue", U(0)),
+        ],
+    );
+    obj(b, "KeyedObject", &[("objectId", U(card::DOT as u64))]);
+    obj(
+        b,
+        "KeyedProperty",
+        &[("propertyKey", U(u64::from(property)))],
+    );
+    for (frame, value) in [(0, 0.0), (30, DOT_TRAVEL)] {
+        obj(
+            b,
+            "KeyFrameDouble",
+            &[
+                ("frame", U(frame)),
+                ("value", F(value)),
+                ("interpolationType", U(1)),
+            ],
+        );
+    }
+    obj(b, "KeyedObject", &[("objectId", U(event as u64))]);
+    obj(
+        b,
+        "KeyedProperty",
+        &[("propertyKey", U(u64::from(EventBase::TRIGGER_PROPERTY_KEY)))],
+    );
+    obj(b, "KeyFrameCallback", &[("frame", U(30))]);
 }
 
 /// A click listener on `target` that fires the event at `event`.
@@ -299,8 +417,9 @@ fn build(cards: Cards, script: Option<&[u8]>) -> Vec<u8> {
     let badges = cards == Cards::Badged;
     let banners = matches!(
         cards,
-        Cards::WithBanner | Cards::MisplacedBanner | Cards::PageRows
+        Cards::WithBanner | Cards::MisplacedBanner | Cards::PageRows | Cards::PagePhases
     );
+    let phases = matches!(cards, Cards::PagePhases | Cards::Phases);
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
         var(&mut b, n);
@@ -353,9 +472,10 @@ fn build(cards: Cards, script: Option<&[u8]>) -> Vec<u8> {
         | Cards::DescribedLine
         | Cards::WithBanner
         | Cards::DeclaresMissing
-        | Cards::MisplacedBanner => list.push(("rowArtboardId", U(u64::from(CARD_ARTBOARD)))),
+        | Cards::MisplacedBanner
+        | Cards::Phases => list.push(("rowArtboardId", U(u64::from(CARD_ARTBOARD)))),
         Cards::MissingArtboard => list.push(("rowArtboardId", U(9))),
-        Cards::PageRows => list.extend([
+        Cards::PageRows | Cards::PagePhases => list.extend([
             ("rowArtboardId", U(u64::from(CARD_ARTBOARD))),
             ("isPageRows", B(true)),
         ]),
@@ -382,7 +502,9 @@ fn build(cards: Cards, script: Option<&[u8]>) -> Vec<u8> {
         ); // 12 to 14
     }
     let declared = match cards {
-        Cards::WithBanner | Cards::PageRows => Some((page::CARDS, BANNER_ARTBOARD)),
+        Cards::WithBanner | Cards::PageRows | Cards::PagePhases => {
+            Some((page::CARDS, BANNER_ARTBOARD))
+        }
         Cards::DeclaresMissing => Some((page::CARDS, MISSING_ARTBOARD)),
         Cards::MisplacedBanner => Some((page::HEADING, BANNER_ARTBOARD)),
         _ => None,
@@ -548,6 +670,11 @@ fn build(cards: Cards, script: Option<&[u8]>) -> Vec<u8> {
             ],
         ); // 28
     }
+    if phases {
+        for name in ["entered", "exited"] {
+            obj(&mut b, "Event", &[("name", S(name)), ("parentId", U(0))]);
+        } // 28, 29
+    }
     // "intro": half a second at 60 frames a second, once, moving the dot.
     obj(
         &mut b,
@@ -572,9 +699,29 @@ fn build(cards: Cards, script: Option<&[u8]>) -> Vec<u8> {
             ],
         );
     }
+    if phases {
+        use crate::source::generated::node_base::NodeBase;
+        phase_animation(&mut b, "enter", NodeBase::X_PROPERTY_KEY, card::ENTERED); // 1
+        phase_animation(&mut b, "exit", NodeBase::Y_PROPERTY_KEY, card::EXITED); // 2
+    }
     obj(&mut b, "StateMachine", &[("name", S("card"))]);
+    if phases {
+        for name in ["phase", "step"] {
+            obj(
+                &mut b,
+                "StateMachineNumber",
+                &[("name", S(name)), ("value", F(0.0))],
+            );
+        }
+        obj(&mut b, "StateMachineBool", &[("name", S("reduceMotion"))]);
+    }
     click(&mut b, card::BUTTON, card::CHOSEN);
-    layer(&mut b, true);
+    if phases {
+        phase_layer(&mut b, "enter", 1, PHASE_ENTERING);
+        phase_layer(&mut b, "exit", 2, PHASE_EXITING);
+    } else {
+        layer(&mut b, true);
+    }
 
     if badges {
         // Badge.
@@ -654,8 +801,10 @@ fn build(cards: Cards, script: Option<&[u8]>) -> Vec<u8> {
                 &[("parentId", U(parent as u64))],
             ); // 6, 7
         }
-        obj(&mut b, "StateMachine", &[("name", S("banner"))]);
-        layer(&mut b, false);
+        if !phases {
+            obj(&mut b, "StateMachine", &[("name", S("banner"))]);
+            layer(&mut b, false);
+        }
     }
     b
 }

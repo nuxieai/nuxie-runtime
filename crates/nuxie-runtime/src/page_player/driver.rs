@@ -125,6 +125,9 @@ pub enum SceneWriteError {
     /// or a live move, a bound artboard property or a view model owns what
     /// it holds.
     NotReplaceable,
+    /// A row input write named an input the row's machine does not have, by
+    /// that name and of that kind, or a row whose artboard has no machine.
+    UnknownInput,
 }
 
 impl From<KeyedRowRefusal> for SceneWriteError {
@@ -542,6 +545,63 @@ impl<'a> SceneWriter<'a> {
             self.row_changed(handle);
         }
         Ok(moved)
+    }
+
+    /// The machine the keyed list `list` plays on the row mounted by `key`.
+    fn row_machine(
+        &self,
+        list: &SceneObject,
+        key: &[u8],
+    ) -> Result<RuntimeStateMachineInstanceHandle, SceneWriteError> {
+        let handle = self.keyed_list(list)?;
+        handle
+            .with_downcast::<ArtboardComponentList, _>(|list| list.keyed_row_machine(key))
+            .ok_or(SceneWriteError::NotKeyedList)??
+            .ok_or(SceneWriteError::UnknownInput)
+    }
+
+    fn input_written(&mut self, changed: Option<bool>) -> Result<bool, SceneWriteError> {
+        let changed = changed.ok_or(SceneWriteError::UnknownInput)?;
+        if changed {
+            self.changes += 1;
+        }
+        Ok(changed)
+    }
+
+    /// Set the number input named `input` of the machine the keyed list
+    /// `list` plays on the row mounted by `key`: the row artboard's default
+    /// machine, or its first. A row mounted in the same round has its
+    /// machine already. A new value wakes a quiet row, and the round's
+    /// settle lets the machine take a transition it opens within the step;
+    /// a sleeping row keeps the value until it wakes. Whether the value
+    /// changed: writing the value the input holds is not a change. A list
+    /// reset rebuilds its rows' machines with the file's input values.
+    pub fn set_row_input_number(
+        &mut self,
+        list: &SceneObject,
+        key: &[u8],
+        input: &str,
+        value: f32,
+    ) -> Result<bool, SceneWriteError> {
+        if !value.is_finite() {
+            return Err(SceneWriteError::InvalidValue);
+        }
+        let machine = self.row_machine(list, key)?;
+        self.input_written(machine.set_number_named(input, value))
+    }
+
+    /// Set the bool input named `input` of the machine the keyed list `list`
+    /// plays on the row mounted by `key`, as [`Self::set_row_input_number`]
+    /// does. Whether the value changed.
+    pub fn set_row_input_bool(
+        &mut self,
+        list: &SceneObject,
+        key: &[u8],
+        input: &str,
+        value: bool,
+    ) -> Result<bool, SceneWriteError> {
+        let machine = self.row_machine(list, key)?;
+        self.input_written(machine.set_bool_named(input, value))
     }
 }
 

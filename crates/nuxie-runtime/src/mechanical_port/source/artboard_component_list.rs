@@ -3922,8 +3922,9 @@ impl ArtboardComponentList {
             .collect()
     }
 
-    /// The list item of the keyed row mounted by `key`.
-    fn keyed_row_item(&self, key: &[u8]) -> Option<CoreHandle> {
+    /// The list item of the keyed row mounted by `key`, a row mounted this
+    /// round included. A key removed and mounted again names a new item.
+    pub(crate) fn keyed_row_item(&self, key: &[u8]) -> Option<CoreHandle> {
         self.keyed_rows
             .iter()
             .find(|item| {
@@ -3951,6 +3952,23 @@ impl ArtboardComponentList {
         let item = self.keyed_row_item(key)?;
         let artboard = self.artboard_instances_map.get(&item).cloned()?;
         Some((item, artboard))
+    }
+
+    /// The machine the list plays on the keyed row mounted by `key`, a row
+    /// mounted this round included: the row artboard's default machine, or
+    /// its first. None for a row whose artboard has no machine. A list that
+    /// is not keyed and a key not mounted are refused.
+    pub(crate) fn keyed_row_machine(
+        &self,
+        key: &[u8],
+    ) -> Result<Option<RuntimeStateMachineInstanceHandle>, KeyedRowRefusal> {
+        if !self.is_keyed() {
+            return Err(KeyedRowRefusal::NotKeyed);
+        }
+        let item = self
+            .keyed_row_item(key)
+            .ok_or(KeyedRowRefusal::KeyNotFound)?;
+        Ok(self.row_state_machine(&item))
     }
 
     /// The machine the list plays on the row of `item`.

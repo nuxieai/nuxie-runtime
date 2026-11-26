@@ -432,7 +432,8 @@ fn write_status(error: SceneWriteError) -> NuxStatus {
         | SceneWriteError::NotRowArtboard
         | SceneWriteError::KeyExists
         | SceneWriteError::PlaceOutOfRange
-        | SceneWriteError::NotReplaceable => NuxStatus::InvalidArgument,
+        | SceneWriteError::NotReplaceable
+        | SceneWriteError::UnknownInput => NuxStatus::InvalidArgument,
     }
 }
 
@@ -786,6 +787,60 @@ pub unsafe extern "C" fn nux_scene_writer_move_row(
     ffi_guard(NuxStatus::RuntimeError, || {
         with_row(writer, list, key, out_changed, |scene, list, key| {
             scene.move_row(list, key, place)
+        })
+    })
+}
+
+/// Set the number input named `input` of the machine the keyed list `list`
+/// plays on the row mounted by `key`: the row artboard's default machine, or
+/// its first. A row mounted in the same round has its machine already. A new
+/// value wakes a quiet row, and the round's settle lets the machine take a
+/// transition it opens within the step; a sleeping row keeps the value until
+/// it wakes. `out_changed`, when not NULL, receives whether the value
+/// changed. NOT_FOUND for a list that is not found or a key not mounted
+/// there; INVALID_ARGUMENT for an object that is not a keyed list, a value
+/// that is not finite, a row with no machine, or an input the machine does
+/// not have by that name as a number.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_scene_writer_set_row_input_number(
+    writer: *mut NuxSceneWriter,
+    list: *const NuxSceneObject,
+    key: NuxByteView,
+    input: NuxStringView,
+    value: f32,
+    out_changed: *mut bool,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let input = match with_utf8_view(input, str::to_owned) {
+            Ok(input) => input,
+            Err(status) => return status,
+        };
+        with_row(writer, list, key, out_changed, |scene, list, key| {
+            scene.set_row_input_number(list, key, &input, value)
+        })
+    })
+}
+
+/// Set the bool input named `input` of the machine the keyed list `list`
+/// plays on the row mounted by `key`, as
+/// `nux_scene_writer_set_row_input_number` does. INVALID_ARGUMENT for an
+/// input the machine does not have by that name as a bool.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_scene_writer_set_row_input_bool(
+    writer: *mut NuxSceneWriter,
+    list: *const NuxSceneObject,
+    key: NuxByteView,
+    input: NuxStringView,
+    value: bool,
+    out_changed: *mut bool,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let input = match with_utf8_view(input, str::to_owned) {
+            Ok(input) => input,
+            Err(status) => return status,
+        };
+        with_row(writer, list, key, out_changed, |scene, list, key| {
+            scene.set_row_input_bool(list, key, &input, value)
         })
     })
 }
@@ -1905,6 +1960,317 @@ mod tests {
                 crate::nux_player_set_keyed_row_collapsed(player, string("screens"), key(b"A"), 1),
                 NuxStatus::InvalidArgument
             );
+            assert_eq!(crate::nux_player_free(player), NuxStatus::Ok);
+            assert_eq!(crate::nux_artboard_instance_free(instance), NuxStatus::Ok);
+            assert_eq!(crate::nux_file_free(file), NuxStatus::Ok);
+        }
+    }
+
+    /// What the phases driver does in its next round 0, what it was
+    /// answered, and the name and row keys of every report it heard.
+    #[derive(Default)]
+    struct Phases {
+        next: Option<unsafe fn(&mut Phases, *mut NuxSceneWriter)>,
+        answers: Vec<(&'static str, NuxStatus, bool)>,
+        heard: Vec<(Vec<u8>, Vec<Vec<u8>>)>,
+    }
+
+    unsafe fn answer_phases(
+        phases: &mut Phases,
+        what: &'static str,
+        call: impl FnOnce(*mut bool) -> NuxStatus,
+    ) {
+        let mut changed = false;
+        let status = call(&mut changed);
+        phases.answers.push((what, status, changed));
+    }
+
+    unsafe extern "C" fn drive_phases(
+        context: *mut c_void,
+        round: *const NuxPlayerDriverRound,
+        writer: *mut NuxSceneWriter,
+    ) -> NuxStatus {
+        let phases = unsafe { &mut *context.cast::<Phases>() };
+        let round = unsafe { &*round };
+        if round.index == 0
+            && let Some(next) = phases.next.take()
+        {
+            unsafe { next(phases, writer) };
+        }
+        let reports = unsafe { std::slice::from_raw_parts(round.reports, round.report_count) };
+        for report in reports {
+            let name = unsafe {
+                std::slice::from_raw_parts(report.name.data.cast::<u8>(), report.name.len)
+            };
+            let keys = unsafe { std::slice::from_raw_parts(report.row_keys, report.row_key_count) };
+            phases.heard.push((
+                name.to_vec(),
+                keys.iter()
+                    .map(|row| {
+                        unsafe { std::slice::from_raw_parts(row.key.data, row.key.len) }.to_vec()
+                    })
+                    .collect(),
+            ));
+        }
+        NuxStatus::Ok
+    }
+
+    /// Mount two cards and a banner.
+    unsafe fn mount_phase_rows(phases: &mut Phases, writer: *mut NuxSceneWriter) {
+        use nuxie_runtime::keyed_rows_fixture::{BANNER_ARTBOARD, CARD_ARTBOARD};
+        let (_, _, list) = cards_list();
+        for (row, artboard) in [
+            (b"a".as_slice(), CARD_ARTBOARD),
+            (b"b".as_slice(), CARD_ARTBOARD),
+            (b"banner".as_slice(), BANNER_ARTBOARD),
+        ] {
+            unsafe {
+                answer_phases(phases, "mount", |changed| {
+                    nux_scene_writer_mount_row_from(writer, &list, key(row), artboard, changed)
+                });
+            }
+        }
+    }
+
+    /// Write the entering phase and step 7 into row "b", and try each
+    /// refusal.
+    unsafe fn write_phases(phases: &mut Phases, writer: *mut NuxSceneWriter) {
+        use nuxie_runtime::keyed_rows_fixture::{PHASE_ENTERING, STEP, page};
+        let (_, _, list) = cards_list();
+        let heading = NuxSceneObject {
+            local_id: page::HEADING,
+            ..list
+        };
+        unsafe {
+            answer_phases(phases, "phase", |changed| {
+                nux_scene_writer_set_row_input_number(
+                    writer,
+                    &list,
+                    key(b"b"),
+                    string("phase"),
+                    PHASE_ENTERING,
+                    changed,
+                )
+            });
+            answer_phases(phases, "step", |changed| {
+                nux_scene_writer_set_row_input_number(
+                    writer,
+                    &list,
+                    key(b"b"),
+                    string("step"),
+                    STEP,
+                    changed,
+                )
+            });
+            answer_phases(phases, "reduced motion as the file has it", |changed| {
+                nux_scene_writer_set_row_input_bool(
+                    writer,
+                    &list,
+                    key(b"b"),
+                    string("reduceMotion"),
+                    false,
+                    changed,
+                )
+            });
+            answer_phases(phases, "a key not mounted", |changed| {
+                nux_scene_writer_set_row_input_number(
+                    writer,
+                    &list,
+                    key(b"gone"),
+                    string("phase"),
+                    1.0,
+                    changed,
+                )
+            });
+            answer_phases(phases, "not a keyed list", |changed| {
+                nux_scene_writer_set_row_input_number(
+                    writer,
+                    &heading,
+                    key(b"b"),
+                    string("phase"),
+                    1.0,
+                    changed,
+                )
+            });
+            answer_phases(phases, "an unknown input", |changed| {
+                nux_scene_writer_set_row_input_bool(
+                    writer,
+                    &list,
+                    key(b"b"),
+                    string("phase"),
+                    true,
+                    changed,
+                )
+            });
+            answer_phases(phases, "a row with no machine", |changed| {
+                nux_scene_writer_set_row_input_number(
+                    writer,
+                    &list,
+                    key(b"banner"),
+                    string("phase"),
+                    1.0,
+                    changed,
+                )
+            });
+            answer_phases(phases, "not finite", |changed| {
+                nux_scene_writer_set_row_input_number(
+                    writer,
+                    &list,
+                    key(b"b"),
+                    string("phase"),
+                    f32::NAN,
+                    changed,
+                )
+            });
+            answer_phases(phases, "a NULL key with a length", |changed| {
+                nux_scene_writer_set_row_input_number(
+                    writer,
+                    &list,
+                    NuxByteView {
+                        data: std::ptr::null(),
+                        len: 1,
+                    },
+                    string("phase"),
+                    1.0,
+                    changed,
+                )
+            });
+        }
+    }
+
+    /// Through the C edge, on a driver page: the driver writes the entering
+    /// phase into row "b" and hears the "entered" report with "b"'s key, and
+    /// the refused writes return their statuses. A row step begins and ends
+    /// by key, and its refusals return INVALID_ARGUMENT or NULL_ARGUMENT, as
+    /// the row call does on a `screens` page.
+    #[test]
+    fn row_phases_and_row_steps_through_the_c_edge() {
+        use nuxie_runtime::keyed_rows_fixture::{Cards, keyed_plans_fixture};
+        let bytes = keyed_plans_fixture(Cards::PagePhases);
+        let (file, instance, player) = open_player(&bytes);
+        let mut phases = Phases {
+            next: Some(mount_phase_rows),
+            ..Phases::default()
+        };
+        let driver = NuxPlayerDriver {
+            struct_size: sized::<NuxPlayerDriver>(),
+            context: (&raw mut phases).cast(),
+            drive: Some(drive_phases),
+            release: None,
+        };
+        unsafe {
+            assert_eq!(nux_player_driver_set(player, &driver), NuxStatus::Ok);
+            for _ in 0..60 {
+                step(player, &[]);
+            }
+        }
+        assert!(
+            phases
+                .answers
+                .iter()
+                .all(|(_, status, changed)| *status == NuxStatus::Ok && *changed)
+        );
+        phases.answers.clear();
+        phases.next = Some(write_phases);
+        unsafe {
+            for _ in 0..40 {
+                step(player, &[]);
+            }
+        }
+        let answers = phases
+            .answers
+            .iter()
+            .map(|(what, status, changed)| (*what, *status, *changed))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            answers,
+            [
+                ("phase", NuxStatus::Ok, true),
+                ("step", NuxStatus::Ok, true),
+                ("reduced motion as the file has it", NuxStatus::Ok, false),
+                ("a key not mounted", NuxStatus::NotFound, false),
+                ("not a keyed list", NuxStatus::InvalidArgument, false),
+                ("an unknown input", NuxStatus::InvalidArgument, false),
+                ("a row with no machine", NuxStatus::InvalidArgument, false),
+                ("not finite", NuxStatus::InvalidArgument, false),
+                ("a NULL key with a length", NuxStatus::NullArgument, false),
+            ]
+        );
+        assert_eq!(
+            phases.heard,
+            [(b"entered".to_vec(), vec![b"b".to_vec()])],
+            "the completion report carries the row's key"
+        );
+
+        unsafe {
+            assert_eq!(nux_player_driver_clear(player), NuxStatus::Ok);
+            assert_eq!(
+                crate::nux_player_step_begin_row(player, key(b"b")),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                crate::nux_player_step_begin_row(player, key(b"a")),
+                NuxStatus::InvalidArgument,
+                "a step is running"
+            );
+            assert_eq!(
+                crate::nux_player_step_end_row(player, key(b"a")),
+                NuxStatus::InvalidArgument,
+                "another row"
+            );
+            step(player, &[]);
+            assert_eq!(
+                crate::nux_player_step_end_row(player, key(b"b")),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                crate::nux_player_step_end_row(player, key(b"b")),
+                NuxStatus::InvalidArgument,
+                "no step is running"
+            );
+            assert_eq!(
+                crate::nux_player_step_begin_row(player, key(b"gone")),
+                NuxStatus::InvalidArgument
+            );
+            assert_eq!(
+                crate::nux_player_step_begin_row(
+                    player,
+                    NuxByteView {
+                        data: std::ptr::null(),
+                        len: 1,
+                    }
+                ),
+                NuxStatus::NullArgument
+            );
+            assert_eq!(
+                crate::nux_player_set_keyed_row_collapsed(player, string("Cards"), key(b"a"), 1),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                crate::nux_player_step_begin_row(player, key(b"a")),
+                NuxStatus::InvalidArgument,
+                "a sleeping row"
+            );
+            step(player, &[]);
+            assert_eq!(crate::nux_player_free(player), NuxStatus::Ok);
+            assert_eq!(crate::nux_artboard_instance_free(instance), NuxStatus::Ok);
+            assert_eq!(crate::nux_file_free(file), NuxStatus::Ok);
+        }
+
+        let bytes = nuxie_runtime::live_move_fixture::record_free_page_fixture();
+        let (file, instance, player) = open_player(&bytes);
+        unsafe {
+            step(player, &[]);
+            assert_eq!(
+                crate::nux_player_step_begin_row(player, key(b"A")),
+                NuxStatus::InvalidArgument,
+                "a screens page names its Screens by name"
+            );
+            assert_eq!(
+                crate::nux_player_step_end_row(player, key(b"A")),
+                NuxStatus::InvalidArgument
+            );
+            step(player, &[]);
             assert_eq!(crate::nux_player_free(player), NuxStatus::Ok);
             assert_eq!(crate::nux_artboard_instance_free(instance), NuxStatus::Ok);
             assert_eq!(crate::nux_file_free(file), NuxStatus::Ok);

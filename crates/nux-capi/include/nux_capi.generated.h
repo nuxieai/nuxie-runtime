@@ -3201,6 +3201,18 @@ NuxStatus nux_player_step_begin(struct NuxPlayer *player,
                                 const struct NuxStringView *step_name);
 
 /**
+ * Begin a nameless step on a driver page (a keyed list marked
+ * `isPageRows`) whose arriving end is the row of the page's list mounted by
+ * `incoming_key`, as nux_player_step_begin with a NULL step_name does for a
+ * Screen. The key's bytes are compared only for equality. The step holds
+ * that row: removing its key cancels the step, and a key removed and
+ * mounted again is a new row. INVALID_ARGUMENT for a page that is not a
+ * driver page, a key not mounted, a sleeping row, or a step already
+ * running; NULL_ARGUMENT for a NULL key with a length.
+ */
+NuxStatus nux_player_step_begin_row(struct NuxPlayer *player, struct NuxByteView incoming_key);
+
+/**
  * Land a published step. Both arguments must match step_begin, including a
  * NULL step_name. Land every flight: each copy on its own Screen, and
  * a transferred unit in the arriving placement, whose departure placement gets
@@ -3209,6 +3221,13 @@ NuxStatus nux_player_step_begin(struct NuxPlayer *player,
 NuxStatus nux_player_step_end(struct NuxPlayer *player,
                               struct NuxStringView incoming_screen,
                               const struct NuxStringView *step_name);
+
+/**
+ * End the step nux_player_step_begin_row began. `incoming_key` must name
+ * the row it holds; INVALID_ARGUMENT otherwise, or when no row step is
+ * running.
+ */
+NuxStatus nux_player_step_end_row(struct NuxPlayer *player, struct NuxByteView incoming_key);
 
 NuxStatus nux_player_step_result_diagnostic(const struct NuxPlayerStepResult *result,
                                             struct NuxCapiDiagnosticView *out_diagnostic);
@@ -3827,6 +3846,38 @@ NuxStatus nux_scene_writer_set_number(struct NuxSceneWriter *writer,
                                       uint16_t property_key,
                                       float value,
                                       bool *out_changed);
+
+/**
+ * Set the bool input named `input` of the machine the keyed list `list`
+ * plays on the row mounted by `key`, as
+ * `nux_scene_writer_set_row_input_number` does. INVALID_ARGUMENT for an
+ * input the machine does not have by that name as a bool.
+ */
+NuxStatus nux_scene_writer_set_row_input_bool(struct NuxSceneWriter *writer,
+                                              const struct NuxSceneObject *list,
+                                              struct NuxByteView key,
+                                              struct NuxStringView input,
+                                              bool value,
+                                              bool *out_changed);
+
+/**
+ * Set the number input named `input` of the machine the keyed list `list`
+ * plays on the row mounted by `key`: the row artboard's default machine, or
+ * its first. A row mounted in the same round has its machine already. A new
+ * value wakes a quiet row, and the round's settle lets the machine take a
+ * transition it opens within the step; a sleeping row keeps the value until
+ * it wakes. `out_changed`, when not NULL, receives whether the value
+ * changed. NOT_FOUND for a list that is not found or a key not mounted
+ * there; INVALID_ARGUMENT for an object that is not a keyed list, a value
+ * that is not finite, a row with no machine, or an input the machine does
+ * not have by that name as a number.
+ */
+NuxStatus nux_scene_writer_set_row_input_number(struct NuxSceneWriter *writer,
+                                                const struct NuxSceneObject *list,
+                                                struct NuxByteView key,
+                                                struct NuxStringView input,
+                                                float value,
+                                                bool *out_changed);
 
 /**
  * Set a text property of `object` by property key, such as a text run's

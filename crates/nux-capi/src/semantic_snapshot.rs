@@ -2347,3 +2347,7 @@ mod scroll_region_tests;
 #[cfg(test)]
 #[path = "semantic_reveal_tests.rs"]
 mod semantic_reveal_tests;
+
+#[cfg(test)]
+#[path = "semantic_bounds_capture_tests.rs"]
+mod semantic_bounds_capture_tests;

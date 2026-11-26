@@ -1,14 +1,15 @@
 //! A semantic record whose bounds are empty when it is first placed retries
-//! them once (UNIV-7008), as upstream's comment on the retry says
-//! (`src/semantic/semantic_data.cpp`, "re-dirts once if the initial bounds
-//! are degenerate"). Each page is played by a state-machine page player with
-//! the semantic tree built, as the SDKs play it, and read through the
-//! player's `settled`.
+//! them through the next frame its artboard advances (UNIV-7008), and holds
+//! the empty bounds it read while it retries (UNIV-7138). Each page is played
+//! by a state-machine page player with the semantic tree built, as the SDKs
+//! play it, and read through the player's `settled` and the semantic
+//! manager's capture (its tree version and each node's box).
 //!
 //! Oracle: a page with nothing moving reports itself settled within a few
-//! frames, as the same page does without the tree; the text's bounds follow
-//! from its font size and line height (20 and 24 points) and from where it
-//! is placed (the artboard's top left); a shape's bounds are its rectangle.
+//! frames, as the same page does without the tree, and its tree version
+//! holds once captured; the text's bounds follow from its font size and line
+//! height (20 and 24 points) and from where it is placed (the artboard's top
+//! left); a shape's bounds are its rectangle.
 use super::*;
 use crate::mechanical_port::source::{
     generated::{core_registry::CoreRegistry, text::text_value_run_base::TextValueRunBase},
@@ -26,6 +27,9 @@ use nuxie_render_api::{PersistentFactory, RecordingFactory};
 /// the tree settles on its second; a page that settles at all does so
 /// within a handful.
 const SETTLE_FRAMES: usize = 10;
+
+/// The still frames over which a captured tree version must hold.
+const STILL_FRAMES: usize = 120;
 
 /// The promise for a still page: it settles within this many frames.
 const SETTLED_WITHIN: usize = 5;
@@ -288,6 +292,26 @@ struct Page {
     board: ArtboardInstance,
     playback: Playback,
     player: PagePlayer,
+    manager: Option<RuntimeSemanticManagerHandle>,
+}
+
+/// One capture of the semantic tree: its version and each node's box.
+#[derive(Debug, PartialEq)]
+struct Capture {
+    version: u64,
+    boxes: Vec<Bounds>,
+}
+
+/// A node's frame as a host reads it, its origin and size, is finite and not
+/// negative; the unmeasured placeholder (`f32::MAX` minimums, `-f32::MAX`
+/// maximums) gives an infinite negative size.
+fn frame_is_finite(bounds: &Bounds) -> bool {
+    let (width, height) = (bounds.max_x - bounds.min_x, bounds.max_y - bounds.min_y);
+    [bounds.min_x, bounds.min_y, width, height]
+        .iter()
+        .all(|value| value.is_finite())
+        && width >= 0.0
+        && height >= 0.0
 }
 
 impl Page {
@@ -308,11 +332,11 @@ impl Page {
         let machine = board
             .state_machine_instance(0)
             .expect("the page's state machine");
-        if semantics {
-            board.native_handle().build_semantic_tree(
-                Some(RuntimeSemanticManagerHandle::new(SemanticManager::new())),
-                None,
-            );
+        let manager = semantics.then(|| RuntimeSemanticManagerHandle::new(SemanticManager::new()));
+        if let Some(manager) = &manager {
+            board
+                .native_handle()
+                .build_semantic_tree(Some(manager.clone()), None);
         }
         Self {
             _file: file,
@@ -320,22 +344,46 @@ impl Page {
             board,
             playback: Playback::StateMachine(Box::new(machine)),
             player: PagePlayer::default(),
+            manager,
         }
     }
 
     fn step(&mut self) -> Output {
+        self.step_by(1.0 / 60.0)
+    }
+
+    fn step_by(&mut self, elapsed_seconds: f32) -> Output {
         self.player
             .step(
                 &mut self.board,
                 &mut self.playback,
                 Step {
-                    elapsed_seconds: 1.0 / 60.0,
+                    elapsed_seconds,
                     ..Default::default()
                 },
                 &[],
                 None,
             )
             .unwrap_or_else(|error| panic!("a step: {:?}: {}", error.kind, error.message))
+    }
+
+    /// The semantic manager's capture, as `nux_player_semantic_snapshot`
+    /// takes it.
+    fn capture(&self) -> Capture {
+        self.manager
+            .as_ref()
+            .expect("the tree is built")
+            .with_semantic_manager_mut(|manager| {
+                let boxes = manager
+                    .snapshot()
+                    .iter()
+                    .map(|node| node.bounds())
+                    .collect();
+                Capture {
+                    version: manager.version(),
+                    boxes,
+                }
+            })
     }
 
     /// The frame, counted from 1, on which the page first reports itself
@@ -545,5 +593,89 @@ fn a_still_page_of_shapes_settles_with_and_without_the_tree() {
                 max_y: 260.0,
             },
         ]
+    );
+}
+
+/// The SDK's case (UNIV-7138): over an empty text, the tree version taken at
+/// the first capture holds across 120 still frames, played by zero-second
+/// steps and by timed ones, and every capture holds the text's empty box.
+#[test]
+fn an_empty_texts_tree_version_holds_over_still_frames() {
+    for (label, seconds) in [("zero-second steps", 0.0), ("timed steps", 1.0 / 60.0)] {
+        let mut page = Page::open(&text_page(""), true);
+        page.step_by(seconds);
+        let first = page.capture();
+        assert_eq!(first.boxes.len(), 1, "{label}: one node");
+        for frame in 1..=STILL_FRAMES {
+            page.step_by(seconds);
+            assert_eq!(
+                page.capture(),
+                first,
+                "{label}: the capture after {frame} more still frames"
+            );
+        }
+    }
+}
+
+/// No capture taken once the tree is built carries the unmeasured
+/// placeholder box: from the capture right after the build through the
+/// still frames, every node's frame is finite, on the empty text's page and
+/// on the nested shape's.
+#[test]
+fn no_capture_after_the_build_carries_the_placeholder_box() {
+    for (label, bytes) in [
+        ("empty text", text_page("")),
+        ("nested shape", nested_page()),
+    ] {
+        let mut page = Page::open(&bytes, true);
+        for frame in 0..=STILL_FRAMES {
+            if frame > 0 {
+                page.step();
+            }
+            let capture = page.capture();
+            assert!(
+                capture.boxes.iter().all(frame_is_finite),
+                "{label}: the capture after {frame} frames: {:?}",
+                capture.boxes
+            );
+        }
+    }
+}
+
+/// A node whose real bounds arrive while it retries (the nested shape's
+/// path is built after the record is placed) moves the tree version exactly
+/// once from the first capture, taken right after the build, and ends with
+/// the shape's rectangle.
+#[test]
+fn bounds_that_arrive_during_the_retry_move_the_version_once() {
+    let mut page = Page::open(&nested_page(), true);
+    let first = page.capture();
+    assert!(
+        first.boxes.iter().all(is_empty),
+        "the rectangle arrives after the first capture: {:?}",
+        first.boxes
+    );
+    let mut versions = vec![first.version];
+    for _ in 0..STILL_FRAMES {
+        page.step();
+        let version = page.capture().version;
+        if versions.last() != Some(&version) {
+            versions.push(version);
+        }
+    }
+    assert_eq!(
+        versions,
+        [first.version, first.version + 1],
+        "the versions seen, from the first capture ({:?})",
+        first.boxes
+    );
+    assert_eq!(
+        page.capture().boxes,
+        [Bounds {
+            min_x: 40.0,
+            min_y: 70.0,
+            max_x: 140.0,
+            max_y: 110.0,
+        }]
     );
 }

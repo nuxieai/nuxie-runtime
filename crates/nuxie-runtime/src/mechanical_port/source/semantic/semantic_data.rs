@@ -12,6 +12,7 @@ use crate::mechanical_port::source::{
         semantic_manager::RuntimeSemanticManagerHandle,
         semantic_node::{SemanticNode, SemanticNodeRef},
         semantic_provider::semantic_bounds,
+        semantic_snapshot::Bounds,
         semantic_state::SemanticState,
         semantic_trait::SemanticTrait,
     },
@@ -497,11 +498,33 @@ impl SemanticData {
             // the artboard advances, whose update passes (at most the
             // settle loop's) have built the paths; a later update keeps the
             // bounds, empty or not.
+            //
+            // The empty bounds read here are written while the retry runs,
+            // so the node's box is the one the retry will keep, not the
+            // unmeasured placeholder, and a page whose box stays empty keeps
+            // its tree version when the retry ends (UNIV-7138). A box with a
+            // NaN side is written as the empty box at the origin, so it
+            // reads as unchanged on the next update.
+            let bounds = if [bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y]
+                .iter()
+                .any(|value| value.is_nan())
+            {
+                Bounds::default()
+            } else {
+                bounds
+            };
+            self.write_bounds(bounds);
             self.component_mut()
                 .add_dirt(ComponentDirt::WORLD_TRANSFORM, false);
             return;
         }
         self.bounds_retry_until = None;
+        self.write_bounds(bounds);
+    }
+
+    /// The node's box becomes `bounds`, its manager told only when they
+    /// differ from what it holds.
+    fn write_bounds(&mut self, bounds: Bounds) {
         let Some(node) = &self.semantic_node else {
             return;
         };

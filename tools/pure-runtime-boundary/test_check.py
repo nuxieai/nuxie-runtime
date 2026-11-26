@@ -2816,6 +2816,45 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("portable ABI facade product method", result.stderr)
 
+    def test_allows_page_player_writer_names_only_in_the_player_driver(
+        self,
+    ) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/player_driver.rs").write_text(
+            "use nuxie::page_player::{SceneObject, SceneWriteError, SceneWriter};\n"
+            "fn write(_: &mut SceneWriter<'_>, _: &SceneObject) -> Result<(), SceneWriteError> { Ok(()) }\n"
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_other_scene_names_in_the_player_driver(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/player_driver.rs").write_text("fn leak(_: SceneTx) {}\n")
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "portable ABI facade product method/type 'SceneTx' is not approved",
+            result.stderr,
+        )
+
+    def test_rejects_page_player_writer_names_outside_their_files(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/new_writer.rs").write_text(
+            "fn leak(_: &mut SceneWriter<'_>) {}\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "portable ABI facade product method/type 'SceneWriter' is not approved",
+            result.stderr,
+        )
+
     def test_rejects_unsigned_script_import_outside_cfg_test(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         (package / "src/new_trust.rs").write_text(

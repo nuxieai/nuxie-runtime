@@ -118,7 +118,10 @@ mechanics for an exact-artifact caller. They do not select product commands or
 authorize product policy: approved dependency shapes, facade symbols,
 constructors, nested imports, and owning files are each enumerated, while
 aliases, globs, unknown features and symbols, and product lifecycle vocabulary
-remain rejected.
+remain rejected. The page player's writer (`SceneWriter`, `SceneObject`,
+`SceneWriteError`) is runtime mechanics for a registered player driver, so its
+names are allowed in the player driver and the C player that hands it out;
+every other `Scene` name stays refused as product scene-lifecycle vocabulary.
 
 Semantic snapshots, editable-text geometry, ViewModel observer tests, and video
 playback C adapters use exact baseline paths scoped to their owning source

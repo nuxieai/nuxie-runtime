@@ -35,14 +35,39 @@ struct Screen {
     elements: Vec<(u32, CoreHandle)>,
     records: Vec<(u32, CoreHandle)>,
 }
-/// The arriving end of a step: a Screen of a `screens` page by its
-/// artboard's name, or a row of a driver page by its list item. The item is
-/// resolved from the row's key at begin, so a key removed and mounted again
-/// names a new row.
+/// The ends a running step holds. On a `screens` page, its arriving Screen
+/// by its artboard's name. On a driver page, a nameless step's arriving row,
+/// or a named step's two rows, each by its list item. An item is resolved
+/// from the row's key at begin, so a key removed and mounted again names a
+/// new row.
 #[derive(Clone, PartialEq)]
-enum Incoming {
+enum Ends {
     Screen(String),
     Row(CoreHandle),
+    Rows {
+        outgoing: CoreHandle,
+        incoming: CoreHandle,
+    },
+}
+/// The two rows a named step between rows of a driver page names, checked
+/// (`Plan::between`): each row's list item and its Screen, read from its
+/// own instance, and which of them is upper, the one later in the list's
+/// order.
+struct Between {
+    step: Step,
+    outgoing: (CoreHandle, Screen),
+    incoming: (CoreHandle, Screen),
+    incoming_upper: bool,
+}
+impl Between {
+    /// The upper row, the only one whose flight records the step reads.
+    fn upper(&self) -> &Screen {
+        if self.incoming_upper {
+            &self.incoming.1
+        } else {
+            &self.outgoing.1
+        }
+    }
 }
 /// File plans are scoped to mounted row identities. Between steps every
 /// placement holds its own Screen's instance, so nothing is kept about where
@@ -53,7 +78,7 @@ pub(crate) struct Plan {
     revision: Option<u64>,
     steps: Vec<Step>,
     rows: HashMap<String, Screen>,
-    active: Option<(Incoming, Option<String>)>,
+    active: Option<(Ends, Option<String>)>,
     pub index: crate::hosted_scene::HostedIndex,
     /// The active step's flying copies (live_move/in_place.rs), and its
     /// zoomed pairs of them.
@@ -71,38 +96,42 @@ impl Plan {
             return Ok(());
         }
         let page = crate::hosted_scene::page_list(root);
-        // A driver page reads no steps and no Screens: its LiveStep records
-        // are ignored, and its rows may repeat an artboard, which `screens`
-        // refuses.
-        let driver_page = page.as_ref().is_some_and(|page| page.keyed);
+        // A driver page reads its steps but no Screens by name: its rows may
+        // repeat an artboard, which `screens` refuses, so a step names its
+        // two rows by key (`step_begin_between`).
+        let driver_list = page
+            .as_ref()
+            .filter(|page| page.keyed)
+            .map(|page| page.list.clone());
         if self.root.as_ref() != Some(&root.core_handle()) {
             ensure!(
                 self.active.is_none(),
                 "cannot change scene occurrence during a step"
             );
-            self.steps = if driver_page {
-                Vec::new()
-            } else {
-                read_steps(root)?
-            };
+            self.steps = read_steps(root)?;
             self.root = Some(root.core_handle());
         }
-        if driver_page {
+        if let Some(list) = driver_list {
             self.rows.clear();
-            // A row step cancels when its arriving row leaves the page's
-            // list. A driver page flies nothing, so the cancel only ends it.
-            let row_left = match &self.active {
-                Some((Incoming::Row(item), _)) => page.as_ref().is_none_or(|page| {
-                    page.list
-                        .with_downcast::<ArtboardComponentList, _>(|list| {
-                            list.key_of_row(item).is_none()
-                        })
-                        .unwrap_or(true)
-                }),
+            let mounted = page_rows(&list);
+            let has = |item: &CoreHandle| mounted.iter().any(|(row, _)| row == item);
+            // A row step cancels when a row it names leaves the page's list,
+            // compared by list item, so a key removed and mounted again in
+            // one round cancels it too. A step between rows also cancels
+            // when a copy or a record it flies is gone, as on a `screens`
+            // page. A row asleep stays mounted.
+            let end_left = match &self.active {
+                Some((Ends::Row(item), _)) => !has(item),
+                Some((Ends::Rows { outgoing, incoming }, _)) => !has(outgoing) || !has(incoming),
                 _ => false,
             };
-            if row_left {
-                self.settle(&HashSet::new())?;
+            let rows = mounted
+                .into_iter()
+                .map(|(_, board)| board)
+                .collect::<HashSet<_>>();
+            let lost_copy = self.lifted.iter().any(|flight| !flight.is_whole(&rows));
+            if end_left || lost_copy {
+                self.settle(&rows)?;
             }
             self.index.active(root);
             self.revision = Some(crate::hosted_scene::membership_revision(
@@ -117,13 +146,10 @@ impl Plan {
             return Ok(());
         }
         self.rows = screen_rows(root)?;
-        let incoming_left = self
-            .active
-            .as_ref()
-            .is_some_and(|(incoming, _)| match incoming {
-                Incoming::Screen(name) => !self.rows.contains_key(name),
-                Incoming::Row(_) => true,
-            });
+        let incoming_left = self.active.as_ref().is_some_and(|(ends, _)| match ends {
+            Ends::Screen(name) => !self.rows.contains_key(name),
+            Ends::Row(_) | Ends::Rows { .. } => true,
+        });
         // A step cancels when its incoming row, or a Screen, a copy or a
         // record it flies, is gone. Every plan entry prepares first, so the
         // cancel settles before the next frame is laid out or drawn.
@@ -215,7 +241,7 @@ impl Plan {
             crate::hosted_scene::is_active_artboard(&incoming_row.board),
             "incoming Screen is collapsed"
         );
-        self.active = Some((Incoming::Screen(incoming.to_owned()), None));
+        self.active = Some((Ends::Screen(incoming.to_owned()), None));
         self.after_advance(root)?;
         Ok(())
     }
@@ -231,7 +257,7 @@ impl Plan {
         ensure!(self.active.is_none(), "step already active");
         self.prepare(root)?;
         let (item, _) = arriving_row(list, key)?;
-        self.active = Some((Incoming::Row(item), None));
+        self.active = Some((Ends::Row(item), None));
         self.after_advance(root)?;
         Ok(())
     }
@@ -243,7 +269,7 @@ impl Plan {
         ensure!(
             matches!(
                 (&self.active, &item),
-                (Some((Incoming::Row(active), None)), Some(item)) if active == item
+                (Some((Ends::Row(active), None)), Some(item)) if active == item
             ),
             "step_end mismatch"
         );
@@ -261,6 +287,131 @@ impl Plan {
         self.holds_row(list, key)?;
         self.land(root)
     }
+    /// The rows of `list`, the page's list, that the step `name` would
+    /// begin between, checked as `step_begin_between` checks them, before
+    /// anything is marked: each key mounted, two different rows, the step
+    /// published and carrying no instance, the step's from and to artboards
+    /// the rows' own, and both rows awake.
+    fn between(
+        &self,
+        list: &CoreHandle,
+        outgoing_key: &[u8],
+        incoming_key: &[u8],
+        name: &str,
+    ) -> Result<Between> {
+        let (outgoing_place, outgoing_item, outgoing) = step_row(list, outgoing_key, "outgoing")?;
+        let (incoming_place, incoming_item, incoming) = step_row(list, incoming_key, "incoming")?;
+        ensure!(
+            outgoing_item != incoming_item,
+            "a step's two ends name one row"
+        );
+        let step = self.step_named(name)?;
+        // Carrying one instance between rows comes with 4.5.
+        ensure!(
+            !step.units.iter().any(Values::transfers),
+            "step {name} carries an instance, which a step between rows does not do yet"
+        );
+        // The step's artboards name its kind: which component each row is.
+        // A step from an artboard to itself is two rows of one component.
+        let artboard = |board: &CoreHandle| {
+            board
+                .with_downcast::<Artboard, _>(|b| b.name().to_owned())
+                .unwrap_or_default()
+        };
+        ensure!(
+            artboard(&outgoing) == step.from && artboard(&incoming) == step.to,
+            "step ends mismatch"
+        );
+        for board in [&outgoing, &incoming] {
+            ensure!(
+                crate::hosted_scene::is_active_artboard(board),
+                "a row of the step is asleep"
+            );
+        }
+        Ok(Between {
+            step,
+            outgoing: (outgoing_item, row_screen(&outgoing)),
+            incoming: (incoming_item, row_screen(&incoming)),
+            incoming_upper: incoming_place > outgoing_place,
+        })
+    }
+    /// Begins the step `name` on a driver page between the row of `list`,
+    /// the page's list, mounted by `outgoing_key` and the one mounted by
+    /// `incoming_key`. The rows are checked (`between`), and the step's
+    /// flight records are read from the upper row alone, the one later in
+    /// the list's order; each copy is read from its own row. Then it takes
+    /// off as a named step on a `screens` page does. The step holds both
+    /// rows' list items.
+    pub fn step_begin_between(
+        &mut self,
+        root: &RuntimeArtboardInstanceHandle,
+        list: &CoreHandle,
+        outgoing_key: &[u8],
+        incoming_key: &[u8],
+        name: &str,
+    ) -> Result<()> {
+        ensure!(self.active.is_none(), "step already active");
+        self.prepare(root)?;
+        let between = self.between(list, outgoing_key, incoming_key, name)?;
+        let (flights, pairs) = take_off(
+            root,
+            &between.step,
+            &between.outgoing.1,
+            &between.incoming.1,
+            &[between.upper()],
+        )?;
+        self.lifted = flights;
+        self.pairs = pairs;
+        self.active = Some((
+            Ends::Rows {
+                outgoing: between.outgoing.0,
+                incoming: between.incoming.0,
+            },
+            Some(name.to_owned()),
+        ));
+        self.after_advance(root)?;
+        Ok(())
+    }
+    /// Whether the running step is the step `name` between the rows `list`
+    /// mounts by `outgoing_key` and `incoming_key`, by list item.
+    fn holds_rows(
+        &self,
+        list: &CoreHandle,
+        outgoing_key: &[u8],
+        incoming_key: &[u8],
+        name: &str,
+    ) -> Result<()> {
+        let item = |key: &[u8]| {
+            list.with_downcast::<ArtboardComponentList, _>(|list| list.keyed_row_item(key))
+                .flatten()
+        };
+        ensure!(
+            matches!(
+                (&self.active, item(outgoing_key), item(incoming_key)),
+                (
+                    Some((Ends::Rows { outgoing, incoming }, Some(active))),
+                    Some(leaving),
+                    Some(arriving),
+                ) if *outgoing == leaving && *incoming == arriving && active == name
+            ),
+            "step_end mismatch"
+        );
+        Ok(())
+    }
+    /// Lands the step [`Self::step_begin_between`] began: both keys must
+    /// still name the rows it holds, and `name` the step.
+    pub fn step_end_between(
+        &mut self,
+        root: &RuntimeArtboardInstanceHandle,
+        list: &CoreHandle,
+        outgoing_key: &[u8],
+        incoming_key: &[u8],
+        name: &str,
+    ) -> Result<()> {
+        self.prepare(root)?;
+        self.holds_rows(list, outgoing_key, incoming_key, name)?;
+        self.land(root)
+    }
     pub fn step_end(
         &mut self,
         root: &RuntimeArtboardInstanceHandle,
@@ -270,7 +421,7 @@ impl Plan {
         self.prepare(root)?;
         ensure!(
             self.active.as_ref().is_some_and(
-                |(s, n)| *s == Incoming::Screen(incoming.to_owned()) && n.as_deref() == name
+                |(s, n)| *s == Ends::Screen(incoming.to_owned()) && n.as_deref() == name
             ),
             "step_end mismatch"
         );
@@ -323,23 +474,16 @@ impl Plan {
         }
         self.follow_in_place(root)
     }
-    /// Begins a named step (live_move/in_place.rs): every check before any
-    /// mark, then each copy's marks, the flight timeline's first frame on
-    /// the flight records, and one follow. A refusal marks nothing.
+    /// Begins a named step (live_move/in_place.rs) on a `screens` page,
+    /// whose flight records may be on either of its Screens: the leaving
+    /// one is read first.
     fn step_begin_in_place(
         &mut self,
         root: &RuntimeArtboardInstanceHandle,
         incoming: &str,
         name: &str,
     ) -> Result<()> {
-        use super::in_place::{Carried, InPlaceFlight, InPlacePair, is_inside};
-        let step = self
-            .steps
-            .iter()
-            .find(|s| s.name == name)
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("published step not found"))?;
-        validate_step_units(&step.units)?;
+        let step = self.step_named(name)?;
         ensure!(step.to == incoming, "step destination mismatch");
         let outgoing = self
             .rows
@@ -355,157 +499,23 @@ impl Plan {
                 "a Screen of the step is collapsed"
             );
         }
-        let element = |row: &Screen, key: u32| {
-            row.elements
-                .iter()
-                .find(|(k, _)| *k == key)
-                .map(|(_, element)| element.clone())
-                .ok_or_else(|| anyhow::anyhow!("no element with flight key {key}"))
-        };
-        let record = |key: u32| {
-            outgoing
-                .records
-                .iter()
-                .map(|record| (outgoing, record))
-                .chain(arriving.records.iter().map(|record| (arriving, record)))
-                .find(|(_, (k, _))| *k == key)
-                .map(|(row, (_, record))| (row.board.clone(), record.clone()))
-                .ok_or_else(|| anyhow::anyhow!("unknown flight record {key} on step Screens"))
-        };
-        let mut flights = Vec::new();
-        let mut zoomed = Vec::new();
-        let mut used = HashSet::new();
-        let mut boards = HashSet::new();
-        for unit in &step.units {
-            let from = element(outgoing, unit.outgoing_unit_key)?;
-            let to = element(arriving, unit.incoming_unit_key)?;
-            ensure!(
-                used.insert(from.clone()) && used.insert(to.clone()),
-                "overlapping flight owners"
-            );
-            // A unit that transfers flies one copy, the arriving one, which
-            // the carry fills with the leaving one's instance. It never
-            // zooms.
-            if unit.transfers() {
-                let carried = Carried::read((&from, &outgoing.board), &to)?;
-                let (board, record) = record(unit.incoming_flight_key)?;
-                boards.insert(board.clone());
-                flights.push(
-                    InPlaceFlight::new(
-                        record,
-                        to.clone(),
-                        arriving.board.clone(),
-                        (from.clone(), outgoing.board.clone()),
-                        (to.clone(), arriving.board.clone()),
-                        board,
-                        false,
-                    )?
-                    .carrying(carried),
-                );
-                continue;
-            }
-            let rule = zoom::Rule::of(unit.read_zoom());
-            if let Some(rule) = rule {
-                zoomed.push((rule, flights.len()));
-            }
-            for (key, copy, row) in [
-                (unit.outgoing_flight_key, &from, &outgoing.board),
-                (unit.incoming_flight_key, &to, &arriving.board),
-            ] {
-                let (board, record) = record(key)?;
-                boards.insert(board.clone());
-                flights.push(InPlaceFlight::new(
-                    record,
-                    copy.clone(),
-                    row.clone(),
-                    (from.clone(), outgoing.board.clone()),
-                    (to.clone(), arriving.board.clone()),
-                    board,
-                    rule.is_some(),
-                )?);
-            }
-        }
-        ensure!(
-            boards.len() <= 1,
-            "a step's flight records need to be on one Screen"
-        );
-        // A matched element inside another of the same step does not fly
-        // on its own.
-        for a in &used {
-            ensure!(
-                !used.iter().any(|b| is_inside(a, b)),
-                "a flight inside another flight"
-            );
-        }
-        for flight in flights.iter().filter(|flight| !flight.zoomed) {
-            flight.project(&flight.size_frame(None)?, None)?;
-        }
-        // The point a zoom's tracker follows on Back: the center of the
-        // page's drawing space.
-        let center = root.with_artboard(|b| b.bounds().center());
-        let pairs = zoomed
-            .into_iter()
-            .map(|(rule, at)| InPlacePair::take_off(rule, [&flights[at], &flights[at + 1]], center))
-            .collect::<Result<Vec<_>>>()?;
-        let timeline = match (step.flight_animation, boards.iter().next()) {
-            (u32::MAX, _) | (_, None) => None,
-            (index, Some(board)) => Some((
-                board.clone(),
-                board
-                    .with_downcast::<Artboard, _>(|b| b.animation_handle_at(index as usize))
-                    .flatten()
-                    .ok_or_else(|| {
-                        anyhow::anyhow!("flightAnimationId names no animation on its Screen")
-                    })?,
-            )),
-        };
-        // Every check has passed. Each transferring unit's instance moves
-        // into the arriving placement, which discards that placement's own
-        // never-shown instance and gives it the arriving Screen's props, and
-        // its Screen settles once, as after any carry. Then mark. Lifts that
-        // share an anchor draw by
-        // their records' order, a later record on top, so a later record is
-        // placed first.
-        let order = |flight: &InPlaceFlight| {
-            flight
-                .board
-                .with_downcast::<Artboard, _>(|board| {
-                    board
-                        .objects()
-                        .iter()
-                        .position(|o| o.as_ref() == Some(&flight.record))
-                })
-                .flatten()
-                .unwrap_or(0)
-        };
-        flights.sort_by_key(|flight| std::cmp::Reverse(order(flight)));
-        for flight in &mut flights {
-            if let Some(carried) = &mut flight.carried {
-                super::transport::move_to_flight(&carried.from, &carried.to, &mut carried.values)?;
-                carried.written.take_off();
-                // The placement it left keeps the instance's frame at rest
-                // for the step: its Screen sorts it, and the lift's cover
-                // reads it, as it rested.
-                carried.link();
-                settle_row(&flight.row);
-            }
-        }
-        for flight in &flights {
-            flight.mark(if flight.zoomed {
-                crate::css_layout::lift::OpacityRoot::Nothing
-            } else {
-                crate::css_layout::lift::OpacityRoot::Own
-            });
-        }
-        if let Some((board, animation)) = timeline {
-            let controls = flights.iter().map(|f| f.record.clone()).collect();
-            apply_first_frame(&board, &animation, &controls);
-        }
+        let (flights, pairs) = take_off(root, &step, outgoing, arriving, &[outgoing, arriving])?;
         self.lifted = flights;
         self.pairs = pairs;
-        self.active = Some((Incoming::Screen(incoming.to_owned()), Some(name.to_owned())));
+        self.active = Some((Ends::Screen(incoming.to_owned()), Some(name.to_owned())));
         self.after_advance(root)?;
         Ok(())
+    }
+    /// The published step named `name`, its units valid.
+    fn step_named(&self, name: &str) -> Result<Step> {
+        let step = self
+            .steps
+            .iter()
+            .find(|s| s.name == name)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("published step not found"))?;
+        validate_step_units(&step.units)?;
+        Ok(step)
     }
 
     /// One frame of a step, in four barriers. Size: every copy's controls and
@@ -654,6 +664,168 @@ impl Plan {
     pub(crate) fn has_projection(&self) -> bool {
         self.projection.is_some()
     }
+}
+/// Takes off a named step's flights: every check before any mark, then
+/// each copy's marks and the flight timeline's first frame on the flight
+/// records. A refusal marks nothing. `records` are the Screens the step's
+/// flight records are read from, in the order they are looked in: on a
+/// `screens` page both of its Screens, the leaving one first, and on a
+/// driver page the upper row alone.
+fn take_off(
+    root: &RuntimeArtboardInstanceHandle,
+    step: &Step,
+    outgoing: &Screen,
+    arriving: &Screen,
+    records: &[&Screen],
+) -> Result<(
+    Vec<super::in_place::InPlaceFlight>,
+    Vec<super::in_place::InPlacePair>,
+)> {
+    use super::in_place::{Carried, InPlaceFlight, InPlacePair, is_inside};
+    let element = |row: &Screen, key: u32| {
+        row.elements
+            .iter()
+            .find(|(k, _)| *k == key)
+            .map(|(_, element)| element.clone())
+            .ok_or_else(|| anyhow::anyhow!("no element with flight key {key}"))
+    };
+    let record = |key: u32| {
+        records
+            .iter()
+            .flat_map(|row| row.records.iter().map(move |record| (*row, record)))
+            .find(|(_, (k, _))| *k == key)
+            .map(|(row, (_, record))| (row.board.clone(), record.clone()))
+            .ok_or_else(|| anyhow::anyhow!("unknown flight record {key} on step Screens"))
+    };
+    let mut flights = Vec::new();
+    let mut zoomed = Vec::new();
+    let mut used = HashSet::new();
+    let mut boards = HashSet::new();
+    for unit in &step.units {
+        let from = element(outgoing, unit.outgoing_unit_key)?;
+        let to = element(arriving, unit.incoming_unit_key)?;
+        ensure!(
+            used.insert(from.clone()) && used.insert(to.clone()),
+            "overlapping flight owners"
+        );
+        // A unit that transfers flies one copy, the arriving one, which
+        // the carry fills with the leaving one's instance. It never
+        // zooms.
+        if unit.transfers() {
+            let carried = Carried::read((&from, &outgoing.board), &to)?;
+            let (board, record) = record(unit.incoming_flight_key)?;
+            boards.insert(board.clone());
+            flights.push(
+                InPlaceFlight::new(
+                    record,
+                    to.clone(),
+                    arriving.board.clone(),
+                    (from.clone(), outgoing.board.clone()),
+                    (to.clone(), arriving.board.clone()),
+                    board,
+                    false,
+                )?
+                .carrying(carried),
+            );
+            continue;
+        }
+        let rule = zoom::Rule::of(unit.read_zoom());
+        if let Some(rule) = rule {
+            zoomed.push((rule, flights.len()));
+        }
+        for (key, copy, row) in [
+            (unit.outgoing_flight_key, &from, &outgoing.board),
+            (unit.incoming_flight_key, &to, &arriving.board),
+        ] {
+            let (board, record) = record(key)?;
+            boards.insert(board.clone());
+            flights.push(InPlaceFlight::new(
+                record,
+                copy.clone(),
+                row.clone(),
+                (from.clone(), outgoing.board.clone()),
+                (to.clone(), arriving.board.clone()),
+                board,
+                rule.is_some(),
+            )?);
+        }
+    }
+    ensure!(
+        boards.len() <= 1,
+        "a step's flight records need to be on one Screen"
+    );
+    // A matched element inside another of the same step does not fly
+    // on its own.
+    for a in &used {
+        ensure!(
+            !used.iter().any(|b| is_inside(a, b)),
+            "a flight inside another flight"
+        );
+    }
+    for flight in flights.iter().filter(|flight| !flight.zoomed) {
+        flight.project(&flight.size_frame(None)?, None)?;
+    }
+    // The point a zoom's tracker follows on Back: the center of the
+    // page's drawing space.
+    let center = root.with_artboard(|b| b.bounds().center());
+    let pairs = zoomed
+        .into_iter()
+        .map(|(rule, at)| InPlacePair::take_off(rule, [&flights[at], &flights[at + 1]], center))
+        .collect::<Result<Vec<_>>>()?;
+    let timeline = match (step.flight_animation, boards.iter().next()) {
+        (u32::MAX, _) | (_, None) => None,
+        (index, Some(board)) => Some((
+            board.clone(),
+            board
+                .with_downcast::<Artboard, _>(|b| b.animation_handle_at(index as usize))
+                .flatten()
+                .ok_or_else(|| {
+                    anyhow::anyhow!("flightAnimationId names no animation on its Screen")
+                })?,
+        )),
+    };
+    // Every check has passed. Each transferring unit's instance moves into
+    // the arriving placement, which discards that placement's own
+    // never-shown instance and gives it the arriving Screen's props, and its
+    // Screen settles once, as after any carry. Then mark. Lifts that share
+    // an anchor draw by their records' order, a later record on top, so a
+    // later record is placed first.
+    let order = |flight: &InPlaceFlight| {
+        flight
+            .board
+            .with_downcast::<Artboard, _>(|board| {
+                board
+                    .objects()
+                    .iter()
+                    .position(|o| o.as_ref() == Some(&flight.record))
+            })
+            .flatten()
+            .unwrap_or(0)
+    };
+    flights.sort_by_key(|flight| std::cmp::Reverse(order(flight)));
+    for flight in &mut flights {
+        if let Some(carried) = &mut flight.carried {
+            super::transport::move_to_flight(&carried.from, &carried.to, &mut carried.values)?;
+            carried.written.take_off();
+            // The placement it left keeps the instance's frame at rest
+            // for the step: its Screen sorts it, and the lift's cover
+            // reads it, as it rested.
+            carried.link();
+            settle_row(&flight.row);
+        }
+    }
+    for flight in &flights {
+        flight.mark(if flight.zoomed {
+            crate::css_layout::lift::OpacityRoot::Nothing
+        } else {
+            crate::css_layout::lift::OpacityRoot::Own
+        });
+    }
+    if let Some((board, animation)) = timeline {
+        let controls = flights.iter().map(|f| f.record.clone()).collect();
+        apply_first_frame(&board, &animation, &controls);
+    }
+    Ok((flights, pairs))
 }
 // Layout ownership is independent of where a flight's pose is authored.
 fn layout_root(mut board: CoreHandle) -> CoreHandle {
@@ -847,8 +1019,8 @@ fn settle_slot(slot: &CoreHandle) -> Result<()> {
 }
 
 /// A step named by Screen on a driver page is refused, before anything
-/// runs: its rows are named by key (`step_begin_row`), and named steps
-/// between rows come later (UNIV-7101).
+/// runs: its rows are named by key, a nameless step's arriving row
+/// (`step_begin_row`) or a named step's two rows (`step_begin_between`).
 fn refuse_driver_page(scene: &crate::hosted_scene::SceneState) -> Result<()> {
     ensure!(!scene.page.keyed, "a driver page names its rows by key");
     Ok(())
@@ -866,6 +1038,47 @@ fn arriving_row(list: &CoreHandle, key: &[u8]) -> Result<(CoreHandle, CoreHandle
         "incoming row is collapsed"
     );
     Ok((item, board))
+}
+/// The row of `list` mounted by `key` that a step between rows names: its
+/// place in the list's order, its list item and its artboard.
+fn step_row(list: &CoreHandle, key: &[u8], end: &str) -> Result<(usize, CoreHandle, CoreHandle)> {
+    let (place, item, board) = list
+        .with_downcast::<ArtboardComponentList, _>(|list| {
+            let place = list.row_keys().iter().position(|row| *row == key)?;
+            let (item, board) = list.keyed_row(key)?;
+            Some((place, item, board))
+        })
+        .flatten()
+        .ok_or_else(|| anyhow::anyhow!("{end} row not found"))?;
+    Ok((place, item, board.core_handle()))
+}
+/// The rows of a driver page's list, asleep ones included, in the list's
+/// order: each row's list item and its artboard.
+fn page_rows(list: &CoreHandle) -> Vec<(CoreHandle, CoreHandle)> {
+    let rows = list
+        .with_downcast::<ArtboardComponentList, _>(|list| {
+            list.row_keys()
+                .into_iter()
+                .filter_map(|key| list.keyed_row(key))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    rows.into_iter()
+        .map(|(item, board)| (item, board.core_handle()))
+        .collect()
+}
+/// A row of a driver page as a step reads it: its elements by flight key
+/// and its flight records, from its own instance. Two rows of one artboard
+/// have the same keys, each on its own objects.
+fn row_screen(board: &CoreHandle) -> Screen {
+    let objects = board
+        .with_downcast::<Artboard, _>(|b| b.objects().iter().flatten().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    Screen {
+        board: board.clone(),
+        elements: super::in_place::keyed_elements(&objects),
+        records: super::in_place::flight_records(&objects),
+    }
 }
 /// A row step needs a driver page: its rows are named by key.
 fn driver_page(
@@ -976,6 +1189,57 @@ impl LiveMoves {
             .plan
             .borrow_mut()
             .step_end_row(root, &list, incoming_key)
+    }
+    /// Begins the step `name` between two rows of a driver page, the row of
+    /// the page's list mounted by `outgoing_key` and the one mounted by
+    /// `incoming_key`, as `step_begin` does between two Screens:
+    /// membership flushes, the arriving row runs its own update pass, and
+    /// the step takes off with its flight records read from the upper row.
+    pub fn step_begin_between(
+        &mut self,
+        root: &RuntimeArtboardInstanceHandle,
+        outgoing_key: &[u8],
+        incoming_key: &[u8],
+        name: &str,
+    ) -> Result<()> {
+        // Every refusal of the rows and the step comes before the flush, as
+        // a row step's does, so it leaves the occurrence usable.
+        let scene = driver_page(root)?;
+        let list = scene.page.list.clone();
+        let arriving = {
+            let mut plan = scene.plan.borrow_mut();
+            ensure!(!plan.step_running(), "step already active");
+            plan.prepare(root)?;
+            let between = plan.between(&list, outgoing_key, incoming_key, name)?;
+            between.incoming.1.board
+        };
+        self.flush_membership(root)?;
+        Artboard::update_pass_handle(&arriving, false);
+        scene
+            .plan
+            .borrow_mut()
+            .step_begin_between(root, &list, outgoing_key, incoming_key, name)
+    }
+    /// Lands the step `step_begin_between` began; both keys and the name
+    /// must name it.
+    pub fn step_end_between(
+        &mut self,
+        root: &RuntimeArtboardInstanceHandle,
+        outgoing_key: &[u8],
+        incoming_key: &[u8],
+        name: &str,
+    ) -> Result<()> {
+        let scene = driver_page(root)?;
+        let list = scene.page.list.clone();
+        scene
+            .plan
+            .borrow()
+            .holds_rows(&list, outgoing_key, incoming_key, name)?;
+        self.flush_membership(root)?;
+        scene
+            .plan
+            .borrow_mut()
+            .step_end_between(root, &list, outgoing_key, incoming_key, name)
     }
     pub fn after_advance(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<bool> {
         let Some(scene) = crate::hosted_scene::root_scene(root) else {

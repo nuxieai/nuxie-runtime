@@ -1,6 +1,6 @@
 //! Device-shaped media identity regression.
 use nux_capi::*;
-use nuxie::live_move::device_fixture as fixture;
+use nuxie_runtime::live_move::device_fixture as fixture;
 use std::{ffi::c_void, mem::size_of, ptr};
 fn sv(s: &str) -> NuxStringView {
     NuxStringView {

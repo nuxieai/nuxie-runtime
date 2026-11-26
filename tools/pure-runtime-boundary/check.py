@@ -318,20 +318,6 @@ PORTABLE_ABI_FACADE_FILE_MODULE_SYMBOLS = {
             "StrokeParams",
         },
     },
-    # Scroll region tests mount the keyed rows test fixture through the C
-    # driver.
-    "crates/nux-capi/src/scroll_region_tests.rs": {
-        "keyed_rows_fixture": {
-            "BUTTON_LABEL",
-            "Cards",
-            "LINE_LABEL",
-            "RUN_TEXT",
-            "STILL",
-            "card",
-            "keyed_plans_fixture",
-            "page",
-        },
-    },
     "crates/nux-capi/src/asset_hooks.rs": {
         # The deferred host's image-mesh factory hook returns this handle.
         "render_api": {

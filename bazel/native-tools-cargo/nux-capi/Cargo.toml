@@ -14,7 +14,7 @@ path = "lib.rs"
 
 [features]
 "default" = ["android-authored-wgsl", "android-vulkan", "apple-authored-msl", "apple-metal", "scripting", "test-support"]
-"test-support" = ["nuxie/test-support"]
+"test-support" = []
 "scripting" = ["nuxie/scripting"]
 "apple-metal" = ["nuxie/renderer-metal", "dep:dispatch2", "dep:nuxie-image-codec", "dep:nuxie-renderer", "nuxie-renderer/renderer-metal", "dep:objc2", "dep:objc2-metal", "dep:objc2-quartz-core"]
 "android-vulkan" = ["nuxie/renderer-vulkan", "dep:nuxie-image-codec", "dep:nuxie-renderer", "nuxie-renderer/renderer-vulkan"]
@@ -37,7 +37,7 @@ path = "lib.rs"
 "luaur-compiler" = { "version" = "=0.1.8", "path" = "../luaur-compiler", "default-features" = false, "features" = ["__bazel_dependency_default"] }
 "nuxie" = { "path" = "../nuxie", "default-features" = false, "features" = ["test-support"] }
 "nuxie-render-api" = { "path" = "../nuxie-render-api" }
-"nuxie-runtime" = { "path" = "../nuxie-runtime", "default-features" = false, "features" = ["policy-pass-counter"] }
+"nuxie-runtime" = { "path" = "../nuxie-runtime", "default-features" = false, "features" = ["policy-pass-counter", "test-support"] }
 "nuxie-project-data" = { "path" = "../nuxie-project-data" }
 "nuxie-schema" = { "path" = "../nuxie-schema" }
 "serde_json" = { "version" = "1" }

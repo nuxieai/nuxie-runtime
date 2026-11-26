@@ -1,7 +1,7 @@
 //! Device-shaped collapsed-row regression and host timing probe for UNIV-5289.
 use nux_capi::*;
 use nuxie::hosted_scene::{WalkCounts, measure_walks};
-use nuxie::live_move::device_fixture as fixture;
+use nuxie_runtime::live_move::device_fixture as fixture;
 use std::{ffi::c_void, mem::size_of, ptr, time::Instant};
 fn sv(s: &str) -> NuxStringView {
     NuxStringView {

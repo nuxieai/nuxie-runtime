@@ -6,7 +6,7 @@
 //! through the player: a region can move a way exactly when its content is
 //! not at that end of its range.
 use super::*;
-use nuxie::keyed_rows_fixture::{
+use nuxie_runtime::keyed_rows_fixture::{
     BUTTON_LABEL, Cards, LINE_LABEL, RUN_TEXT, STILL, card, keyed_plans_fixture, page,
 };
 use std::ffi::c_void;

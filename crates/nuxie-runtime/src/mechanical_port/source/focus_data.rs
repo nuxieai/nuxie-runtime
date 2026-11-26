@@ -876,11 +876,13 @@ impl FocusData {
     /// Scroll every scroller above `layout_component`'s nearest layout box,
     /// across the artboards hosting it, by the smallest move that shows the
     /// box. Nuxie: also starts a reveal from a semantic node
-    /// (`semantic_reveal`), and answers whether any scroller's effective
-    /// offset (its target while it settles) changed.
+    /// (`semantic_reveal`), moving each scroller with `move_to` (a focus
+    /// keeps upstream's `scroll_to_position`), and answers whether any
+    /// scroller's effective offset (its target while it settles) changed.
     pub(crate) fn scroll_into_view(
         mut layout_component: Option<CoreHandle>,
         mut traversal: ParentTraversal,
+        move_to: fn(&mut ScrollConstraint, Vec2D),
     ) -> bool {
         while let Some(component) = layout_component.clone() {
             if component
@@ -942,7 +944,11 @@ impl FocusData {
             for constraint in constraints {
                 moved |= constraint
                     .with_downcast_mut::<ScrollConstraint, _>(|scroll_constraint| {
-                        Self::scroll_constraint_to_show_bounds(scroll_constraint, element_bounds)
+                        Self::scroll_constraint_to_show_bounds(
+                            scroll_constraint,
+                            element_bounds,
+                            move_to,
+                        )
                     })
                     .unwrap_or(false);
             }
@@ -954,6 +960,7 @@ impl FocusData {
     fn scroll_constraint_to_show_bounds(
         constraint: &mut ScrollConstraint,
         element_bounds: Aabb,
+        move_to: fn(&mut ScrollConstraint, Vec2D),
     ) -> bool {
         let Some(_content) = constraint.content_handle() else {
             return false;
@@ -1009,7 +1016,7 @@ impl FocusData {
             let delta = constraint.logical_scroll_delta(Vec2D::new(delta_x, delta_y));
             let target = current + delta;
             let snapped = constraint.nearest_snap_offset_in_direction(current, target);
-            constraint.scroll_to_position(snapped.x, snapped.y);
+            move_to(constraint, snapped);
             return Vec2D::new(
                 constraint.effective_scroll_offset_x(),
                 constraint.effective_scroll_offset_y(),
@@ -1029,7 +1036,9 @@ impl FocusData {
         };
         // Scroll dirt can return through descendants to this FocusData.
         // Release its arena borrow before moving the content.
-        let _ = Self::scroll_into_view(parent, traversal);
+        let _ = Self::scroll_into_view(parent, traversal, |constraint, target| {
+            constraint.scroll_to_position(target.x, target.y)
+        });
         owner.with_downcast_mut::<Self, _>(Self::focused_after_scroll);
     }
 

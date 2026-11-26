@@ -9,7 +9,7 @@ use super::*;
 #[path = "scroll_reveal_fixture.rs"]
 mod fixture;
 use fixture::{
-    BOTTOM, DEEP, FAR, MIDDLE, Page, ROW_BUTTON, ROWS, START, TOP, USED_BUTTON,
+    BOTTOM, DEEP, FAR, MIDDLE, Page, Physics, ROW_BUTTON, ROWS, START, TOP, USED_BUTTON,
     scroll_reveal_fixture,
 };
 use std::ffi::c_void;
@@ -77,11 +77,11 @@ struct Host {
 const MAX_SETTLE_STEPS: usize = 600;
 
 impl Host {
-    fn new(page: Page, physics: bool) -> Self {
+    fn new(page: Page, physics: Physics) -> Self {
         Self::played(page, physics, Plays::Machine)
     }
 
-    fn played(page: Page, physics: bool, plays: Plays) -> Self {
+    fn played(page: Page, physics: Physics, plays: Plays) -> Self {
         let bytes = scroll_reveal_fixture(page, physics);
         let mut file = ptr::null_mut();
         let mut instance = ptr::null_mut();
@@ -332,7 +332,7 @@ const CAN_BOTTOM: u32 = 1 << 1;
 /// 200 (300 of content in 100), along its one axis.
 #[test]
 fn a_button_below_the_fold_is_listed_in_its_region() {
-    let scene = Host::new(Page::Buttons, true);
+    let scene = Host::new(Page::Buttons, Physics::Elastic);
     let capture = scene.capture().expect("a capture");
     let regions = capture.regions();
     assert_eq!(regions.len(), 1);
@@ -354,7 +354,7 @@ fn a_button_below_the_fold_is_listed_in_its_region() {
 /// demand keeps getting frames.
 #[test]
 fn a_reveal_animates_the_box_until_the_button_shows() {
-    let scene = Host::new(Page::Buttons, true);
+    let scene = Host::new(Page::Buttons, Physics::Elastic);
     let capture = scene.capture().expect("a capture");
     let bottom = capture.node(BOTTOM).id;
     let (status, moved) = scene.reveal(&capture, bottom);
@@ -393,11 +393,54 @@ fn a_reveal_animates_the_box_until_the_button_shows() {
     assert_eq!(capture.regions()[0].can_scroll, CAN_TOP | CAN_BOTTOM);
 }
 
+/// Under clamped physics, whose `scrollToPosition` is upstream's empty
+/// default, a reveal still moves: the offset is set at once, the call
+/// answers that it moved, the first presented step draws the button where
+/// it rests, and the step after it is settled. A second reveal moves
+/// nothing and says so.
+#[test]
+fn a_reveal_under_clamped_physics_moves_at_once() {
+    let scene = Host::new(Page::Buttons, Physics::Clamped);
+    let capture = scene.capture().expect("a capture");
+    let bottom = capture.node(BOTTOM).id;
+    assert_eq!(scene.reveal(&capture, bottom), (NuxStatus::Ok, true));
+    drop(capture);
+    scene.present();
+    let capture = scene.capture().expect("a capture");
+    assert_eq!(node_box(&capture.node(BOTTOM)), [0.0, 60.0, 100.0, 100.0]);
+    assert_eq!(position(&capture.regions()[0]), [0.0, 160.0, 0.0, 200.0]);
+    let bottom = capture.node(BOTTOM).id;
+    assert_eq!(scene.reveal(&capture, bottom), (NuxStatus::Ok, false));
+    assert!(scene.present().settled, "no animation to wait for");
+}
+
+/// A static player passes no time on its steps, so an animated reveal
+/// would never arrive: there a reveal moves even an elastic scroller at
+/// once, the first presented step draws the button where it rests and
+/// reports itself settled, and a second reveal moves nothing. Its capture
+/// lists no regions (only a state-machine player's does), so nothing
+/// there can be moved by region.
+#[test]
+fn a_static_player_reveals_at_once() {
+    let still = Host::played(Page::Buttons, Physics::Elastic, Plays::Nothing);
+    let capture = still.capture().expect("a capture");
+    assert_eq!(capture.info().scroll_region_count, 0);
+    assert_eq!(node_box(&capture.node(BOTTOM)), [0.0, 220.0, 100.0, 260.0]);
+    let bottom = capture.node(BOTTOM).id;
+    assert_eq!(still.reveal(&capture, bottom), (NuxStatus::Ok, true));
+    drop(capture);
+    assert!(still.present().settled, "nothing left to animate");
+    let capture = still.capture().expect("a capture");
+    assert_eq!(node_box(&capture.node(BOTTOM)), [0.0, 60.0, 100.0, 100.0]);
+    let bottom = capture.node(BOTTOM).id;
+    assert_eq!(still.reveal(&capture, bottom), (NuxStatus::Ok, false));
+}
+
 /// A button already in view moves nothing: the call answers false and the
 /// capture stays valid.
 #[test]
 fn revealing_a_button_in_view_moves_nothing() {
-    let scene = Host::new(Page::Buttons, true);
+    let scene = Host::new(Page::Buttons, Physics::Elastic);
     let capture = scene.capture().expect("a capture");
     let (status, moved) = scene.reveal(&capture, capture.node(TOP).id);
     assert_eq!((status, moved), (NuxStatus::Ok, false));
@@ -412,16 +455,18 @@ fn revealing_a_button_in_view_moves_nothing() {
 /// A move by a negative `dy` shows content below, by exactly that much,
 /// and a positive one content above; a move past the end stops at it and
 /// a move further answers false, with the bottom bit cleared. A sideways
-/// move of a vertical region is ignored. Without physics the first
-/// presented step draws the content where it rests.
+/// move of a vertical region is ignored. Without physics, and with
+/// clamped physics, which cannot animate to a target, the first presented
+/// step draws the content where it rests, and the step after it (a changed
+/// step asks for one more, as any changed advance does) is settled.
 #[test]
 fn scroll_by_moves_by_the_amount_and_stops_at_the_end() {
-    for physics in [true, false] {
+    for physics in [Physics::Elastic, Physics::None, Physics::Clamped] {
         let scene = Host::new(Page::Buttons, physics);
         let mut expected = 0.0;
         for (dy, rests_at) in [(-80.0, 80.0), (-80.0, 160.0), (-80.0, 200.0), (50.0, 150.0)] {
-            assert!(scene.scroll_label(0, 0.0, dy), "{dy} moves");
-            if physics {
+            assert!(scene.scroll_label(0, 0.0, dy), "{physics:?}: {dy} moves");
+            if physics == Physics::Elastic {
                 scene.settle();
             } else {
                 scene.present();
@@ -435,6 +480,8 @@ fn scroll_by_moves_by_the_amount_and_stops_at_the_end() {
                 drop(capture);
                 assert!(!scene.scroll_label(0, 0.0, -1.0), "past the end");
                 assert!(scene.present().settled);
+            } else if physics != Physics::Elastic {
+                assert!(scene.present().settled, "{physics:?}: nothing animates");
             }
         }
         assert_eq!(expected, 150.0);
@@ -450,7 +497,7 @@ fn scroll_by_moves_by_the_amount_and_stops_at_the_end() {
 /// from the first's target, not from where the content is drawn.
 #[test]
 fn a_move_while_one_settles_starts_from_its_target() {
-    let scene = Host::new(Page::Buttons, true);
+    let scene = Host::new(Page::Buttons, Physics::Elastic);
     assert!(scene.scroll_label(0, 0.0, -80.0));
     assert!(!scene.present().settled);
     assert!(scene.scroll_label(0, 0.0, -80.0));
@@ -470,7 +517,7 @@ fn a_move_while_one_settles_starts_from_its_target() {
 /// viewport's top, partly shown, and a second reveal brings it whole.
 #[test]
 fn one_reveal_moves_nested_scrollers() {
-    let scene = Host::new(Page::Nested, true);
+    let scene = Host::new(Page::Nested, Physics::Elastic);
     let capture = scene.capture().expect("a capture");
     let regions = capture.regions();
     assert_eq!(regions.len(), 1, "the inner viewport is clipped away");
@@ -507,7 +554,7 @@ fn one_reveal_moves_nested_scrollers() {
 /// scroll box: a reveal crosses the host to the scroller above it.
 #[test]
 fn a_reveal_crosses_a_used_component_and_a_list_row() {
-    let scene = Host::new(Page::Hosted, true);
+    let scene = Host::new(Page::Hosted, Physics::Elastic);
     let capture = scene.capture().expect("a capture");
     let used = capture.node(USED_BUTTON);
     assert_eq!(node_box(&used), [0.0, 150.0, 200.0, 190.0]);
@@ -545,7 +592,7 @@ fn a_reveal_crosses_a_used_component_and_a_list_row() {
 /// back toward the start; at the start a move that way answers false.
 #[test]
 fn right_to_left_reveal_and_scroll_count_from_the_start() {
-    let scene = Host::new(Page::Sideways, true);
+    let scene = Host::new(Page::Sideways, Physics::Elastic);
     let capture = scene.capture().expect("a capture");
     assert_eq!(region_box(&capture.regions()[0]), [0.0, 0.0, 100.0, 40.0]);
     assert_eq!(position(&capture.regions()[0]), [0.0, 0.0, 200.0, 0.0]);
@@ -573,7 +620,7 @@ fn right_to_left_reveal_and_scroll_count_from_the_start() {
 #[test]
 fn a_disabled_button_is_revealed() {
     use nuxie::runtime::semantic::semantic_data::SemanticData;
-    let scene = Host::new(Page::Buttons, true);
+    let scene = Host::new(Page::Buttons, Physics::Elastic);
     let capture = scene.capture().expect("a capture");
     let data = scene
         .live_node(capture.node(BOTTOM).id)
@@ -601,7 +648,7 @@ fn a_disabled_button_is_revealed() {
 /// What each call refuses, and that a refusal moves nothing.
 #[test]
 fn refusals() {
-    let scene = Host::new(Page::Hosted, true);
+    let scene = Host::new(Page::Hosted, Physics::Elastic);
     let capture = scene.capture().expect("a capture");
     let count = capture.info().scroll_region_count as u32;
     assert_eq!(count, 1);
@@ -667,7 +714,7 @@ fn refusals() {
     drop(capture);
 
     // A static player's capture has no regions to move.
-    let still = Host::played(Page::Buttons, true, Plays::Nothing);
+    let still = Host::played(Page::Buttons, Physics::Elastic, Plays::Nothing);
     let capture = still.capture().expect("a capture");
     assert_eq!(capture.info().scroll_region_count, 0);
     assert_eq!(
@@ -694,7 +741,7 @@ fn region_view_layout_and_older_callers() {
     );
     assert_eq!(NUX_SCROLL_REGION_VIEW_MIN_SIZE, 32);
 
-    let scene = Host::new(Page::Buttons, true);
+    let scene = Host::new(Page::Buttons, Physics::Elastic);
     let capture = scene.capture().expect("a capture");
     let mut old = NuxScrollRegionView {
         struct_size: NUX_SCROLL_REGION_VIEW_MIN_SIZE as u32,
@@ -722,7 +769,7 @@ fn region_view_layout_and_older_callers() {
 /// A host reveals again only once the player reports itself settled.
 #[test]
 fn a_second_reveal_while_one_settles_overshoots() {
-    let scene = Host::new(Page::Buttons, true);
+    let scene = Host::new(Page::Buttons, Physics::Elastic);
     assert!(scene.reveal_label(BOTTOM));
     scene.present();
     let capture = scene.capture().expect("a capture");

@@ -11,9 +11,12 @@
 //! here starts the same walk from the node's `SemanticData` instead, as
 //! `FocusData::focused_occurrence` starts it from a focus. Nothing is
 //! focused and no listener hears it; the geometry, the snapping and the
-//! animated move are upstream's.
+//! animated move are upstream's. One difference: upstream's focus reveal
+//! moves nothing under clamped physics, whose `scrollToPosition` is the
+//! empty default; a host reveal sets that scroller's offset at once.
 use crate::mechanical_port::source::{
-    focus_data::FocusData, parent_traversal::ParentTraversal,
+    constraints::scrolling::scroll_constraint::ScrollConstraint, focus_data::FocusData,
+    math::vec2d::Vec2D, parent_traversal::ParentTraversal,
     semantic::semantic_node::SemanticNodeRef,
 };
 
@@ -23,8 +26,9 @@ use crate::mechanical_port::source::{
 /// while it settles) changed; false for a node already in view, one with
 /// no scroller above it, and a boundary node, which has no `SemanticData`.
 /// The caller checks the node may be revealed
-/// (`SemanticNode::is_reveal_eligible`).
-pub fn semantic_reveal(node: &SemanticNodeRef) -> bool {
+/// (`SemanticNode::is_reveal_eligible`). With `animate` unset, for a player
+/// whose time does not pass, every scroller moves at once, physics or not.
+pub fn semantic_reveal(node: &SemanticNodeRef, animate: bool) -> bool {
     let Some(data) = node.borrow().semantic_data.clone() else {
         return false;
     };
@@ -42,5 +46,16 @@ pub fn semantic_reveal(node: &SemanticNodeRef) -> bool {
     };
     // The data's arena borrow is released before any content moves, as
     // `focused_occurrence` releases its focus's.
-    FocusData::scroll_into_view(parent, traversal)
+    // A host move, so a scroller whose physics cannot animate to a target
+    // (clamped) still moves, at once (`host_scroll_to_position`).
+    let move_to: fn(&mut ScrollConstraint, Vec2D) = if animate {
+        |constraint, target| {
+            let _ = constraint.host_scroll_to_position(target, true);
+        }
+    } else {
+        |constraint, target| {
+            let _ = constraint.host_scroll_to_position(target, false);
+        }
+    };
+    FocusData::scroll_into_view(parent, traversal, move_to)
 }

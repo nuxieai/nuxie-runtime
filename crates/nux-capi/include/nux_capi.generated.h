@@ -3201,6 +3201,27 @@ NuxStatus nux_player_step_begin(struct NuxPlayer *player,
                                 const struct NuxStringView *step_name);
 
 /**
+ * Take off the units of the published LiveStep `step_name` on a driver
+ * page (a keyed list marked `isPageRows`), between the row of the page's
+ * list mounted by `outgoing_key` and the one mounted by `incoming_key`.
+ * The keys' bytes are compared only for equality. The step's from and to
+ * artboards must be the rows' own; a step from an artboard to itself runs
+ * between two rows of one component. The step reads its flight records
+ * from the upper row alone, the one later in the list's order. It holds
+ * both rows: removing either key cancels it, and a key removed and mounted
+ * again is a new row. INVALID_ARGUMENT for a page that is not a driver
+ * page, a key not mounted, one key for both ends, an unknown step, a step
+ * whose artboards are not the rows', a sleeping row, a unit that carries
+ * an instance, a flight record missing from the upper row, or a step
+ * already running; NULL_ARGUMENT for a NULL key or step name with a
+ * length.
+ */
+NuxStatus nux_player_step_begin_between(struct NuxPlayer *player,
+                                        struct NuxByteView outgoing_key,
+                                        struct NuxByteView incoming_key,
+                                        struct NuxStringView step_name);
+
+/**
  * Begin a nameless step on a driver page (a keyed list marked
  * `isPageRows`) whose arriving end is the row of the page's list mounted by
  * `incoming_key`, as nux_player_step_begin with a NULL step_name does for a
@@ -3221,6 +3242,16 @@ NuxStatus nux_player_step_begin_row(struct NuxPlayer *player, struct NuxByteView
 NuxStatus nux_player_step_end(struct NuxPlayer *player,
                               struct NuxStringView incoming_screen,
                               const struct NuxStringView *step_name);
+
+/**
+ * Land the step nux_player_step_begin_between began. Both keys and
+ * `step_name` must name it; INVALID_ARGUMENT otherwise, or when no such
+ * step is running.
+ */
+NuxStatus nux_player_step_end_between(struct NuxPlayer *player,
+                                      struct NuxByteView outgoing_key,
+                                      struct NuxByteView incoming_key,
+                                      struct NuxStringView step_name);
 
 /**
  * End the step nux_player_step_begin_row began. `incoming_key` must name

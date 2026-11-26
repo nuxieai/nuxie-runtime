@@ -494,12 +494,26 @@ pub(crate) fn validate_import_shape(file: &crate::File, replacement: Option<&Cor
     let mut pages = HashSet::new();
     let mut screen_names = HashSet::new();
     for board in &boards {
-        if !board
+        // A page holds a `screens` list, or is a driver page: a keyed list
+        // of its own is marked `isPageRows`. Its steps name its Screens, a
+        // driver page's by the artboards its rows are made from.
+        let (screens, lists) = board
             .with_downcast::<Artboard, _>(|b| {
-                b.find_handle::<ArtboardComponentList>("screens").is_some()
+                (
+                    b.find_handle::<ArtboardComponentList>("screens").is_some(),
+                    b.find_all_handles::<ArtboardComponentList>(),
+                )
             })
-            .unwrap_or(false)
-        {
+            .unwrap_or_default();
+        let driver = || {
+            lists.iter().any(|list| {
+                list.with_downcast::<ArtboardComponentList, _>(
+                    ArtboardComponentList::is_page_row_list,
+                )
+                .unwrap_or(false)
+            })
+        };
+        if !screens && !driver() {
             continue;
         }
         pages.insert(board.clone());

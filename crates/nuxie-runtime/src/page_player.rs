@@ -156,6 +156,19 @@ pub enum Operation {
     BeginRow(Vec<u8>),
     /// End the step `BeginRow` began, naming the same row.
     EndRow(Vec<u8>),
+    /// Begin the named step between two rows of a driver page's list,
+    /// each named by the key it was mounted by.
+    BeginBetween {
+        outgoing: Vec<u8>,
+        incoming: Vec<u8>,
+        name: String,
+    },
+    /// End the step `BeginBetween` began, naming the same rows and step.
+    EndBetween {
+        outgoing: Vec<u8>,
+        incoming: Vec<u8>,
+        name: String,
+    },
 }
 impl Operation {
     fn apply(self, root: &RuntimeArtboardInstanceHandle) -> Result<(), ErrorKind> {
@@ -165,6 +178,16 @@ impl Operation {
             Self::End(incoming, name) => moves.step_end(root, &incoming, name.as_deref()),
             Self::BeginRow(key) => moves.step_begin_row(root, &key),
             Self::EndRow(key) => moves.step_end_row(root, &key),
+            Self::BeginBetween {
+                outgoing,
+                incoming,
+                name,
+            } => moves.step_begin_between(root, &outgoing, &incoming, &name),
+            Self::EndBetween {
+                outgoing,
+                incoming,
+                name,
+            } => moves.step_end_between(root, &outgoing, &incoming, &name),
             Self::Row(name, index, collapsed) => {
                 moves
                     .prepare(root)
@@ -1357,6 +1380,63 @@ impl PagePlayer {
             &mut Playback::StaticArtboard,
             Step::default(),
             Some(Operation::EndRow(incoming_key.to_vec())),
+            subscriptions,
+            effects,
+        )
+        .map(|_| ())
+    }
+    /// Begin the step `name` on a driver page (`isPageRows`) between the
+    /// row of the page's list mounted by `outgoing_key` and the one mounted
+    /// by `incoming_key`. The step's from and to artboards must be the
+    /// rows' own; a step from an artboard to itself runs between two rows of
+    /// one component. Both rows must be awake and no step may be running.
+    /// The step reads its flight records from the upper row alone, the one
+    /// later in the list's order, and holds both rows: removing either key
+    /// cancels it. A unit that carries an instance is refused for now.
+    /// Refused on a page that is not a driver page.
+    pub fn step_begin_between(
+        &self,
+        artboard: &mut ArtboardInstance,
+        outgoing_key: &[u8],
+        incoming_key: &[u8],
+        name: &str,
+        subscriptions: &[RuntimeOwnedViewModelHandle],
+        effects: Option<&dyn Effects>,
+    ) -> Result<(), Error> {
+        self.run(
+            artboard,
+            &mut Playback::StaticArtboard,
+            Step::default(),
+            Some(Operation::BeginBetween {
+                outgoing: outgoing_key.to_vec(),
+                incoming: incoming_key.to_vec(),
+                name: name.to_owned(),
+            }),
+            subscriptions,
+            effects,
+        )
+        .map(|_| ())
+    }
+    /// End the step `step_begin_between` began: both keys must name the
+    /// rows it holds, and `name` the step.
+    pub fn step_end_between(
+        &self,
+        artboard: &mut ArtboardInstance,
+        outgoing_key: &[u8],
+        incoming_key: &[u8],
+        name: &str,
+        subscriptions: &[RuntimeOwnedViewModelHandle],
+        effects: Option<&dyn Effects>,
+    ) -> Result<(), Error> {
+        self.run(
+            artboard,
+            &mut Playback::StaticArtboard,
+            Step::default(),
+            Some(Operation::EndBetween {
+                outgoing: outgoing_key.to_vec(),
+                incoming: incoming_key.to_vec(),
+                name: name.to_owned(),
+            }),
             subscriptions,
             effects,
         )

@@ -79,8 +79,10 @@ nux_player_set_keyed_row_collapsed
 nux_player_set_row_collapsed
 nux_player_step
 nux_player_step_begin
+nux_player_step_begin_between
 nux_player_step_begin_row
 nux_player_step_end
+nux_player_step_end_between
 nux_player_step_end_row
 nux_player_step_result_diagnostic
 nux_player_step_result_event

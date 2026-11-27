@@ -332,6 +332,11 @@ PORTABLE_ABI_FACADE_FILE_MODULE_SYMBOLS = {
             "SceneWriter",
         },
     },
+    # Where a host places a platform view over a box: the page player's
+    # island read, its clip and its refusal.
+    "crates/nux-capi/src/island_frames.rs": {
+        "page_player": {"IslandClip", "IslandReadError", "island_frame"},
+    },
     # View model capture walks the hosted scene's index and counts the walk.
     "crates/nux-capi/src/player_view_models.rs": {
         "hosted_scene": {"HostedIndex", "Walk", "record_walk"},
@@ -570,6 +575,11 @@ PORTABLE_ABI_FACADE_FILE_PATHS = {
         "runtime::constraints::scrolling::scroll_constraint::ScrollConstraint",
         "runtime::layout_component::LayoutComponent",
         "runtime::math::path_types::PathDirection",
+    },
+    # The island read fails as a semantic capture does on a clip past the
+    # geometry budget or with a bad path.
+    "crates/nux-capi/src/island_frames.rs": {
+        "runtime::semantic::semantic_provider::SemanticGeometryError",
     },
     # Semantic reveal tests: a live node, to find a boundary node and to
     # disable a button through its semantic data.

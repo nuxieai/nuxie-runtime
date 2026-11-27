@@ -1,4 +1,5 @@
 use crate::mechanical_port::source::{
+    component_dirt::ComponentDirt,
     core::CoreHandle,
     core_context::CoreContext,
     generated::text::text_input_drawable_base::TextInputDrawableBase,
@@ -25,7 +26,11 @@ impl TextInputDrawable {
             .parent_handle()
             .expect("TextInputDrawable TextInput parent")
     }
-    pub fn on_added_clean(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
+    /// Links the parent's transform and opacity first, as TextInput does, so
+    /// the field's text, caret and selection fade with its ancestors.
+    /// Upstream's skips this link.
+    pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
+        self.base.on_added_clean(context);
         if self.base.parent_handle().is_some_and(|parent| {
             parent
                 .is_type_of(crate::mechanical_port::source::generated::text::text_input_base::TextInputBase::TYPE_KEY)
@@ -33,6 +38,14 @@ impl TextInputDrawable {
             StatusCode::Ok
         } else {
             StatusCode::InvalidObject
+        }
+    }
+    /// Hands its render opacity to its paints, as a Shape does, so a fade
+    /// between 0 and 1 reaches the field's fills and strokes. Our addition:
+    /// upstream's TextInputDrawable has no update of its own.
+    pub(crate) fn update_after_transform_super(&mut self, value: ComponentDirt) {
+        if value.contains(ComponentDirt::RENDER_OPACITY) {
+            self.paints.propagate_opacity(self.base.render_opacity());
         }
     }
     pub fn shape_world_transform(&self) -> Mat2D {
@@ -245,5 +258,247 @@ mod tests {
         };
         assert_eq!(color(3), 0xff33_6699);
         assert_eq!(color(8), 0xff00_0000);
+    }
+
+    /// An ancestor of the field, outermost first.
+    enum Ancestor {
+        /// A Node at this opacity.
+        Node(f32),
+        /// A LayoutComponent, with its style, at this opacity.
+        Layout(f32),
+        /// A Node at opacity 1, scaled by this much along x.
+        ScaledX(f32),
+    }
+
+    /// A field that reads "Hi", under `ancestors`, with all four text input
+    /// drawables, each holding a Fill of 0xFF336699. With `feather_x`, the
+    /// text's Fill has an inner Feather of strength 0, offset by that much
+    /// along x in world space.
+    struct Field {
+        _factory: PersistentFactory<RecordingFactory>,
+        _file: crate::RuntimeFileHandle,
+        artboard: crate::RuntimeArtboardInstanceHandle,
+        /// TextInputText, TextInputCursor, TextInputSelection and
+        /// TextInputSelectedText, with each one's Fill.
+        drawables: Vec<(u32, u32)>,
+        feather: Option<u32>,
+    }
+
+    fn field(ancestors: &[Ancestor], feather_x: Option<f32>) -> Field {
+        use FixtureValue::{Bool, Bytes, Color, Double, String, Uint};
+        let mut records = vec![
+            record("Backboard", vec![]),
+            record("FontAsset", vec![("assetId", Uint(0))]),
+            record(
+                "FileAssetContents",
+                vec![(
+                    "bytes",
+                    Bytes(
+                        include_bytes!("../../../../../../fixtures/fonts/roboto-input.ttf")
+                            .to_vec(),
+                    ),
+                )],
+            ),
+            record(
+                "Artboard",
+                vec![("width", Double(200.0)), ("height", Double(100.0))],
+            ),
+        ];
+        // Artboard objects count from the Artboard, at 0.
+        let next = |records: &Vec<FixtureRecord>| (records.len() - 3) as u64;
+        let mut parent = 0;
+        for ancestor in ancestors {
+            let id = next(&records);
+            match *ancestor {
+                Ancestor::Node(opacity) => records.push(record(
+                    "Node",
+                    vec![("parentId", Uint(parent)), ("opacity", Double(opacity))],
+                )),
+                Ancestor::Layout(opacity) => {
+                    records.push(record(
+                        "LayoutComponent",
+                        vec![
+                            ("parentId", Uint(parent)),
+                            ("opacity", Double(opacity)),
+                            ("styleId", Uint(id + 1)),
+                        ],
+                    ));
+                    records.push(record("LayoutComponentStyle", vec![("parentId", Uint(id))]));
+                }
+                Ancestor::ScaledX(scale) => records.push(record(
+                    "Node",
+                    vec![("parentId", Uint(parent)), ("scaleX", Double(scale))],
+                )),
+            }
+            parent = id;
+        }
+        let input = next(&records);
+        records.push(record(
+            "TextInput",
+            vec![("parentId", Uint(parent)), ("text", String("Hi".into()))],
+        ));
+        records.push(record(
+            "TextStylePaint",
+            vec![
+                ("parentId", Uint(input)),
+                ("fontAssetId", Uint(0)),
+                ("fontSize", Double(16.0)),
+            ],
+        ));
+        let mut drawables = vec![];
+        let mut feather = None;
+        for owner in [
+            "TextInputText",
+            "TextInputCursor",
+            "TextInputSelection",
+            "TextInputSelectedText",
+        ] {
+            let drawable = next(&records);
+            records.push(record(owner, vec![("parentId", Uint(input))]));
+            let fill = next(&records);
+            records.push(record("Fill", vec![("parentId", Uint(drawable))]));
+            records.push(record(
+                "SolidColor",
+                vec![("parentId", Uint(fill)), ("colorValue", Color(0xff33_6699))],
+            ));
+            if let (Some(offset), "TextInputText") = (feather_x, owner) {
+                feather = Some(next(&records) as u32);
+                records.push(record(
+                    "Feather",
+                    vec![
+                        ("parentId", Uint(fill)),
+                        ("inner", Bool(true)),
+                        ("strength", Double(0.0)),
+                        ("offsetX", Double(offset)),
+                    ],
+                ));
+            }
+            drawables.push((drawable as u32, fill as u32));
+        }
+        let bytes =
+            encode_runtime_file(&RuntimeFile::from_fixture_records(records).unwrap()).unwrap();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let file = File::import(
+            &bytes,
+            RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
+            None,
+            None,
+            None,
+        )
+        .expect("the file imports");
+        let artboard = file
+            .with_file(File::artboard_default)
+            .expect("default artboard");
+        artboard.advance_default(0.0);
+        Field {
+            _factory: factory,
+            _file: file,
+            artboard,
+            drawables,
+            feather,
+        }
+    }
+
+    impl Field {
+        fn object(&self, id: u32) -> crate::mechanical_port::source::core::CoreHandle {
+            self.artboard
+                .with_artboard(|artboard| artboard.base.resolve_handle(id))
+                .expect("a field object")
+        }
+        /// Each drawable's render opacity and whether it will draw.
+        fn drawn(&self) -> Vec<(f32, bool)> {
+            use crate::mechanical_port::source::generated::core_registry::CoreCapabilities;
+            self.drawables
+                .iter()
+                .map(|&(drawable, _)| {
+                    self.object(drawable)
+                        .with(|object| {
+                            (
+                                object.as_transform_component().unwrap().render_opacity(),
+                                object.drawable_will_draw(),
+                            )
+                        })
+                        .unwrap()
+                })
+                .collect()
+        }
+        /// Each drawable's Fill's render opacity.
+        fn fill_opacities(&self) -> Vec<f32> {
+            self.drawables
+                .iter()
+                .map(|&(_, fill)| {
+                    self.object(fill)
+                        .with_downcast::<super::super::super::shapes::paint::fill::Fill, _>(
+                            |fill| fill.base.render_opacity(),
+                        )
+                        .unwrap()
+                })
+                .collect()
+        }
+    }
+
+    #[test]
+    fn text_input_drawables_under_an_ancestor_at_opacity_0_do_not_draw() {
+        let field = field(&[Ancestor::Node(0.0)], None);
+        assert_eq!(field.drawn(), vec![(0.0, false); 4]);
+    }
+
+    #[test]
+    fn text_input_drawables_under_an_ancestor_at_opacity_1_draw() {
+        let field = field(&[Ancestor::Node(1.0)], None);
+        assert_eq!(field.drawn(), vec![(1.0, true); 4]);
+        assert_eq!(field.fill_opacities(), vec![1.0; 4]);
+    }
+
+    #[test]
+    fn a_field_under_two_ancestors_fades_with_the_outer_one() {
+        let field = field(&[Ancestor::Node(0.0), Ancestor::Node(1.0)], None);
+        assert_eq!(field.drawn(), vec![(0.0, false); 4]);
+    }
+
+    #[test]
+    fn a_field_under_a_layout_box_at_opacity_0_does_not_draw() {
+        let field = field(&[Ancestor::Layout(0.0)], None);
+        assert_eq!(field.drawn(), vec![(0.0, false); 4]);
+    }
+
+    #[test]
+    fn a_half_faded_ancestor_reaches_the_field_paints() {
+        let field = field(&[Ancestor::Node(0.5)], None);
+        assert_eq!(field.drawn(), vec![(0.5, true); 4]);
+        assert_eq!(field.fill_opacities(), vec![0.5; 4]);
+    }
+
+    /// Under an ancestor scaled 2 along x, a world offset of 10 is 5 in the
+    /// space the text is drawn in, so the inner path's reversed copy of the
+    /// text ends 5 past the text.
+    #[test]
+    fn an_inner_feather_on_a_field_rebuilds_in_the_drawn_space() {
+        use crate::mechanical_port::source::shapes::paint::{
+            feather::Feather, shape_paint::ShapePaintPathKind,
+        };
+        let field = field(&[Ancestor::ScaledX(2.0)], Some(10.0));
+        let mut text = None;
+        field
+            .object(field.drawables[0].0)
+            .with_downcast::<TextInputText, _>(|drawable| {
+                drawable.with_path_mut(ShapePaintPathKind::Local, &mut |path| {
+                    text = Some(path.raw_path().bounds());
+                })
+            })
+            .unwrap();
+        let text = text.expect("the text's path");
+        assert!(text.width() > 0.0, "the field shaped its text");
+        let inner = field
+            .object(field.feather.unwrap())
+            .with_downcast::<Feather, _>(|feather| {
+                feather.inner_path().borrow().raw_path().bounds()
+            })
+            .unwrap();
+        assert_eq!(inner.min_x, text.min_x);
+        assert!(
+            (inner.max_x - (text.max_x + 5.0)).abs() < 1e-4,
+            "{inner:?} {text:?}"
+        );
     }
 }

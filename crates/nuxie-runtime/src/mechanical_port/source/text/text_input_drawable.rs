@@ -6,8 +6,8 @@ use crate::mechanical_port::source::{
     renderer::Renderer,
     shapes::{
         paint::{
-            fill::Fill, shape_paint::ShapePaintPathKind, shape_paint_path::ShapePaintPath,
-            solid_color::SolidColor,
+            color::ColorInt, fill::Fill, shape_paint::ShapePaintPathKind,
+            shape_paint_path::ShapePaintPath, solid_color::SolidColor,
         },
         shape_paint_container::ShapePaintContainer,
     },
@@ -100,8 +100,18 @@ impl TextInputDrawable {
         if !input.has_color_glyphs(Some(selected)) {
             return;
         }
-        let foreground = self
-            .paints
+        let foreground = self.fill_color();
+        let factory = self
+            .base
+            .with_artboard(|artboard| artboard.factory())
+            .flatten()
+            .expect("TextInputDrawable requires its imported renderer factory");
+        input.draw_color_glyphs(&factory, renderer, world, Some(selected), foreground, 1.0);
+    }
+
+    /// The color its first solid fill paints, as ARGB; black when it has none.
+    pub(crate) fn fill_color(&self) -> ColorInt {
+        self.paints
             .shape_paints()
             .iter()
             .find_map(|paint| {
@@ -115,13 +125,7 @@ impl TextInputDrawable {
                     })
                     .flatten()
             })
-            .unwrap_or(0xff000000);
-        let factory = self
-            .base
-            .with_artboard(|artboard| artboard.factory())
-            .flatten()
-            .expect("TextInputDrawable requires its imported renderer factory");
-        input.draw_color_glyphs(&factory, renderer, world, Some(selected), foreground, 1.0);
+            .unwrap_or(0xff000000)
     }
 
     pub fn will_draw(&self) -> bool {
@@ -137,5 +141,109 @@ impl std::ops::Deref for TextInputDrawable {
 impl std::ops::DerefMut for TextInputDrawable {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.base
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::text_input_text::TextInputText;
+    use crate::{File, RuntimeFactoryHandle};
+    use nuxie_binary::{
+        FixtureProperty, FixtureRecord, FixtureValue, RuntimeFile, encode_runtime_file,
+    };
+    use nuxie_render_api::{PersistentFactory, RecordingFactory};
+
+    fn record(owner: &str, values: Vec<(&str, FixtureValue)>) -> FixtureRecord {
+        let def = nuxie_schema::definition_by_name(owner).unwrap();
+        FixtureRecord {
+            type_key: def.type_key.int,
+            properties: values
+                .into_iter()
+                .map(|(name, value)| {
+                    let key = std::iter::once(def.name)
+                        .chain(def.ancestors.iter().copied())
+                        .filter_map(nuxie_schema::definition_by_name)
+                        .flat_map(|d| d.properties)
+                        .find(|p| p.name == name)
+                        .unwrap_or_else(|| panic!("{owner}.{name}"))
+                        .key
+                        .int;
+                    FixtureProperty { key, value }
+                })
+                .collect(),
+        }
+    }
+
+    /// The text of a field whose text drawable has a solid fill of
+    /// 0xFF336699 paints that color; the text of a field whose drawable
+    /// has no fill paints black, as `draw_text` draws its color glyphs.
+    #[test]
+    fn fill_color_is_the_first_solid_fill_or_black() {
+        use FixtureValue::{Bytes, Color, Double, Uint};
+        let records = vec![
+            record("Backboard", vec![]),
+            record("FontAsset", vec![("assetId", Uint(0))]),
+            record(
+                "FileAssetContents",
+                vec![(
+                    "bytes",
+                    Bytes(
+                        include_bytes!("../../../../../../fixtures/fonts/roboto-input.ttf")
+                            .to_vec(),
+                    ),
+                )],
+            ),
+            record(
+                "Artboard",
+                vec![("width", Double(200.0)), ("height", Double(100.0))],
+            ), // 0
+            record("TextInput", vec![("parentId", Uint(0))]), // 1
+            record(
+                "TextStylePaint",
+                vec![
+                    ("parentId", Uint(1)),
+                    ("fontAssetId", Uint(0)),
+                    ("fontSize", Double(16.0)),
+                ],
+            ), // 2
+            record("TextInputText", vec![("parentId", Uint(1))]), // 3
+            record("Fill", vec![("parentId", Uint(3))]),      // 4
+            record(
+                "SolidColor",
+                vec![("parentId", Uint(4)), ("colorValue", Color(0xff33_6699))],
+            ), // 5
+            record("TextInput", vec![("parentId", Uint(0))]), // 6
+            record(
+                "TextStylePaint",
+                vec![
+                    ("parentId", Uint(6)),
+                    ("fontAssetId", Uint(0)),
+                    ("fontSize", Double(16.0)),
+                ],
+            ), // 7
+            record("TextInputText", vec![("parentId", Uint(6))]), // 8
+        ];
+        let bytes =
+            encode_runtime_file(&RuntimeFile::from_fixture_records(records).unwrap()).unwrap();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let file = File::import(
+            &bytes,
+            RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
+            None,
+            None,
+            None,
+        )
+        .expect("the file imports");
+        let page = file
+            .with_file(File::artboard_default)
+            .expect("default artboard");
+        let color = |id| {
+            page.with_artboard(|artboard| artboard.base.resolve_handle(id))
+                .expect("the text drawable")
+                .with_downcast::<TextInputText, _>(|text| text.base.base.fill_color())
+                .expect("a TextInputText")
+        };
+        assert_eq!(color(3), 0xff33_6699);
+        assert_eq!(color(8), 0xff00_0000);
     }
 }

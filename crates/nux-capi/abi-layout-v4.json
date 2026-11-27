@@ -1836,6 +1836,100 @@
       ]
     },
     {
+      "name": "NuxTextFieldLook",
+      "size": 80,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "render_revision",
+          "offset": 8
+        },
+        {
+          "name": "font_asset",
+          "offset": 16
+        },
+        {
+          "name": "font_size",
+          "offset": 20
+        },
+        {
+          "name": "has_weight",
+          "offset": 24
+        },
+        {
+          "name": "weight",
+          "offset": 28
+        },
+        {
+          "name": "letter_spacing",
+          "offset": 32
+        },
+        {
+          "name": "color",
+          "offset": 36
+        },
+        {
+          "name": "has_placeholder",
+          "offset": 40
+        },
+        {
+          "name": "placeholder_color",
+          "offset": 44
+        },
+        {
+          "name": "align",
+          "offset": 48
+        },
+        {
+          "name": "obscured",
+          "offset": 52
+        },
+        {
+          "name": "max_characters",
+          "offset": 56
+        },
+        {
+          "name": "disabled",
+          "offset": 60
+        },
+        {
+          "name": "value_length",
+          "offset": 64
+        },
+        {
+          "name": "placeholder_length",
+          "offset": 72
+        }
+      ]
+    },
+    {
+      "name": "NuxTextFieldObjects",
+      "size": 112,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "field",
+          "offset": 8
+        },
+        {
+          "name": "has_placeholder",
+          "offset": 56
+        },
+        {
+          "name": "placeholder",
+          "offset": 64
+        }
+      ]
+    },
+    {
       "name": "NuxTextInputGeometry",
       "size": 120,
       "alignment": 8,

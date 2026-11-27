@@ -337,6 +337,11 @@ PORTABLE_ABI_FACADE_FILE_MODULE_SYMBOLS = {
     "crates/nux-capi/src/island_frames.rs": {
         "page_player": {"IslandClip", "IslandReadError", "island_frame"},
     },
+    # What a host needs to draw an engine text field as the platform's own:
+    # the page player's text field read, its text copy and their refusal.
+    "crates/nux-capi/src/text_fields.rs": {
+        "page_player": {"TextFieldReadError", "scene_text", "text_field_look"},
+    },
     # View model capture walks the hosted scene's index and counts the walk.
     "crates/nux-capi/src/player_view_models.rs": {
         "hosted_scene": {"HostedIndex", "Walk", "record_walk"},

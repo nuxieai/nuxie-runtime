@@ -99,6 +99,18 @@ impl TextStyle {
     pub fn add_feature(&mut self, feature: CoreHandle) {
         self.style_features.push(feature);
     }
+    /// The value of the variation axis tagged `tag` (big-endian, as `wght`)
+    /// this style sets, or None when it sets none.
+    pub(crate) fn axis_value(&self, tag: u32) -> Option<f32> {
+        // The last one with the tag wins, as the font takes them in order
+        // (`update_variable_font`).
+        self.variations.iter().rev().find_map(|axis| {
+            axis.with_downcast::<TextStyleAxis, _>(|axis| {
+                (axis.base.tag() == tag).then(|| axis.base.axis_value())
+            })
+            .flatten()
+        })
+    }
     pub fn on_dirty(&mut self, dirt: ComponentDirt) {
         if let Some(text) = self.text.as_ref() {
             if dirt.contains(ComponentDirt::TEXT_SHAPE) {
@@ -465,5 +477,33 @@ impl TextStyle {
         parent.as_ref().is_some_and(|parent| {
             parent.is_type_of(crate::source::generated::artboard_base::ArtboardBase::TYPE_KEY)
         }) || <dyn TextInterface>::from_core(parent).is_some()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mechanical_port::source::core::CoreArena;
+
+    /// A style that sets `wght` to 600 and `opsz` to 12 reads each by its
+    /// tag, and None for `wdth`, which it does not set; a style with no
+    /// axes reads None.
+    #[test]
+    fn axis_value_reads_the_axis_with_the_tag() {
+        let tag = |name: &[u8; 4]| u32::from_be_bytes(*name);
+        let arena = CoreArena::default();
+        let axis = |name: &[u8; 4], value: f32| {
+            let mut axis = TextStyleAxis::default();
+            axis.base.set_tag_value(tag(name));
+            axis.base.set_axis_value_value(value);
+            arena.insert(axis)
+        };
+        let mut style = TextStyle::default();
+        assert_eq!(style.axis_value(tag(b"wght")), None);
+        style.add_variation(axis(b"wght", 600.0));
+        style.add_variation(axis(b"opsz", 12.0));
+        assert_eq!(style.axis_value(tag(b"wght")), Some(600.0));
+        assert_eq!(style.axis_value(tag(b"opsz")), Some(12.0));
+        assert_eq!(style.axis_value(tag(b"wdth")), None);
     }
 }

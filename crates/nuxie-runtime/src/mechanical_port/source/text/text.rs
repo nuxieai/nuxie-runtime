@@ -1215,14 +1215,44 @@ impl Text {
         }
     }
     pub(crate) fn mark_shape_dirty_occurrence(owner: &CoreHandle, send_to_layout: bool) {
+        Self::mark_shape_dirty_with(owner, send_to_layout, None);
+    }
+    /// [`Self::mark_shape_dirty_occurrence`] inside a dirt cascade that a
+    /// Layout owner started. That owner is already borrowed, so dirt and the
+    /// layout walk that reach it go through `active`.
+    pub(crate) fn mark_shape_dirty_from_layout(
+        owner: &CoreHandle,
+        send_to_layout: bool,
+        active: &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+        active_handle: &CoreHandle,
+    ) {
+        Self::mark_shape_dirty_with(owner, send_to_layout, Some((active, active_handle)));
+    }
+    fn mark_shape_dirty_with(
+        owner: &CoreHandle,
+        send_to_layout: bool,
+        mut active: Option<(
+            &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+            &CoreHandle,
+        )>,
+    ) {
+        use crate::mechanical_port::source::component::ComponentOccurrenceHandle;
         owner.with_downcast_mut::<Self, _>(|text| {
             text.listened_runs_dirty = true;
             text.list_items_dirty = true;
         });
-        crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
-            owner.clone(),
-        )
-        .add_dirt(ComponentDirt::PATH, false);
+        let mut add_dirt = |value: ComponentDirt, recurse: bool| {
+            let occurrence = ComponentOccurrenceHandle::Authored(owner.clone());
+            match active.as_mut() {
+                Some((active, handle)) => {
+                    occurrence.add_dirt_from_layout(active, handle, value, recurse);
+                }
+                None => {
+                    occurrence.add_dirt(value, recurse);
+                }
+            }
+        };
+        add_dirt(ComponentDirt::PATH, false);
         let groups = owner
             .with_downcast::<Text, _>(|text| text.modifier_groups.clone())
             .unwrap_or_default();
@@ -1234,12 +1264,14 @@ impl Text {
                     .clear_range_maps();
             });
         }
-        crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
-            owner.clone(),
-        )
-        .add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
+        add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
         if send_to_layout {
-            owner.with_downcast_mut::<Text, _>(|text| text.base.mark_layout_node_dirty());
+            owner.with_downcast_mut::<Text, _>(|text| match active.as_mut() {
+                Some((active, handle)) => {
+                    text.base.mark_layout_node_dirty_from_layout(active, handle);
+                }
+                None => text.base.mark_layout_node_dirty(),
+            });
         }
     }
     pub fn mark_paint_dirty(&mut self) {

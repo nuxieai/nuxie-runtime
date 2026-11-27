@@ -17,6 +17,7 @@ use nuxie_runtime::source::{
             text_base::TextBase, text_modifier_group_base::TextModifierGroupBase,
             text_variation_modifier_base::TextVariationModifierBase,
         },
+        world_transform_component_base::WorldTransformComponentBase,
     },
     layout::layout_component_style::LayoutComponentStyle,
     layout_component::LayoutComponent,
@@ -26,7 +27,8 @@ use nuxie_runtime::source::{
     status_code::StatusCode,
     text::{
         text::Text, text_follow_path_modifier::TextFollowPathModifier,
-        text_modifier_group::TextModifierGroup, text_variation_modifier::TextVariationModifier,
+        text_modifier_group::TextModifierGroup, text_style_paint::TextStylePaint,
+        text_variation_modifier::TextVariationModifier,
     },
 };
 
@@ -477,4 +479,57 @@ fn direct_artboard_uncollapse_resolves_scripted_transition_selection() {
     assert_eq!(dirt(&root), ComponentDirt::COMPONENTS);
     assert_eq!(dirt(&transition), ComponentDirt::NONE);
     assert_eq!(dirt(&child), ComponentDirt::NONE);
+}
+
+#[test]
+fn layout_opacity_reaches_its_text_through_a_style_with_shaping_pending() {
+    let mut context = Context::new();
+    let layout = context.insert(LayoutComponent::default(), 0);
+    let style = context.insert(LayoutComponentStyle::default(), 0);
+    uint(&layout, LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 2);
+    context.added(&layout);
+    context.added(&style);
+    let text = context.insert(Text::default(), 1);
+    context.added(&text);
+    let text_style = context.insert(TextStylePaint::default(), 3);
+    context.added(&text_style);
+    assert_eq!(
+        text_style.with_mut(|object| object.on_added_clean(&mut context)),
+        Some(StatusCode::Ok)
+    );
+    // A text style depends on the layout drawing it, as a style bound to the
+    // layout's size does. Its shaping is still owed: fonts can arrive after
+    // the frame that marked it.
+    add_dependent(&layout, &text_style);
+    context.clear_dirt();
+    set_dirt(&text_style, ComponentDirt::TEXT_SHAPE);
+
+    // A keyed opacity on the layout publishes RenderOpacity to its
+    // dependents while CoreRegistry's setter holds this Layout. The style's
+    // onDirty sees TextShape pending and marks its Text's shape, whose
+    // markLayoutNodeDirty walks up to this same Layout: it must mark the
+    // active Layout, not borrow its arena slot again.
+    number(
+        &layout,
+        WorldTransformComponentBase::OPACITY_PROPERTY_KEY,
+        0.5,
+    );
+    assert_eq!(
+        CoreRegistry::get_double_handle(
+            &layout,
+            WorldTransformComponentBase::OPACITY_PROPERTY_KEY.into()
+        ),
+        Some(0.5)
+    );
+    assert_eq!(dirt(&layout), ComponentDirt::RENDER_OPACITY);
+    assert_eq!(
+        dirt(&text_style),
+        ComponentDirt::TEXT_SHAPE | ComponentDirt::RENDER_OPACITY
+    );
+    // Text::markShapeDirty: its path and world transform are owed again.
+    assert_eq!(
+        dirt(&text),
+        ComponentDirt::PATH | ComponentDirt::WORLD_TRANSFORM
+    );
+    assert_eq!(dirt(&context.objects[0]), ComponentDirt::COMPONENTS);
 }

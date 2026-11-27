@@ -146,9 +146,36 @@ impl Node {
     }
 
     pub fn mark_layout_node_dirty(&mut self) {
+        self.mark_layout_node_dirty_with(None);
+    }
+
+    /// [`Self::mark_layout_node_dirty`] inside a dirt cascade that a Layout
+    /// owner started: that owner is already borrowed, so the walk marks it
+    /// through `active` rather than borrowing its arena slot again.
+    pub(crate) fn mark_layout_node_dirty_from_layout(
+        &mut self,
+        active: &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+        active_handle: &CoreHandle,
+    ) {
+        self.mark_layout_node_dirty_with(Some((active, active_handle)));
+    }
+
+    fn mark_layout_node_dirty_with(
+        &mut self,
+        mut active: Option<(
+            &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+            &CoreHandle,
+        )>,
+    ) {
         LayoutParticipant::invalidate_host_measurements(self.base.children());
         let mut parent = self.base.parent_handle();
         while let Some(current) = parent {
+            if let Some((owner, handle)) = active.as_mut()
+                && current == **handle
+            {
+                parent = owner.mark_layout_node_dirty(*handle);
+                continue;
+            }
             let is_layout = current
                 .with(|current| current.as_layout_component().is_some())
                 .expect("a Node ancestor remains live");

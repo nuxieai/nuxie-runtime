@@ -145,6 +145,29 @@ impl TextStyle {
     }
 
     pub(crate) fn on_dirty_occurrence(owner: &CoreHandle, dirt: ComponentDirt) {
+        Self::on_dirty_with(owner, dirt, None);
+    }
+
+    /// [`Self::on_dirty_occurrence`] inside a dirt cascade that a Layout
+    /// owner started. Marking the Text's shape walks up to that owner, which
+    /// is already borrowed, so the walk and its dirt go through `active`.
+    pub(crate) fn on_dirty_from_layout(
+        owner: &CoreHandle,
+        dirt: ComponentDirt,
+        active: &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+        active_handle: &CoreHandle,
+    ) {
+        Self::on_dirty_with(owner, dirt, Some((active, active_handle)));
+    }
+
+    fn on_dirty_with(
+        owner: &CoreHandle,
+        dirt: ComponentDirt,
+        mut active: Option<(
+            &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+            &CoreHandle,
+        )>,
+    ) {
         let text = owner
             .with(|object| object.as_text_style().expect("TextStyle").text.clone())
             .flatten();
@@ -152,7 +175,12 @@ impl TextStyle {
             if text.is_type_of(
                 crate::mechanical_port::source::generated::text::text_base::TextBase::TYPE_KEY,
             ) {
-                super::text::Text::mark_shape_dirty_occurrence(&text, true);
+                match active.as_mut() {
+                    Some((active, handle)) => {
+                        super::text::Text::mark_shape_dirty_from_layout(&text, true, active, handle)
+                    }
+                    None => super::text::Text::mark_shape_dirty_occurrence(&text, true),
+                }
             } else {
                 text.with_mut(|object| object.text_interface_mark_shape_dirty());
             }
@@ -167,7 +195,19 @@ impl TextStyle {
                 })
                 .flatten();
             if let Some(helper) = helper {
-                helper.add_dirt(ComponentDirt::TEXT_SHAPE, false);
+                match active.as_mut() {
+                    Some((active, handle)) => {
+                        helper.add_dirt_from_layout(
+                            active,
+                            handle,
+                            ComponentDirt::TEXT_SHAPE,
+                            false,
+                        );
+                    }
+                    None => {
+                        helper.add_dirt(ComponentDirt::TEXT_SHAPE, false);
+                    }
+                }
             }
         } else if dirt.contains(ComponentDirt::TEXT_SHAPE) {
             let (callback, helper) = owner

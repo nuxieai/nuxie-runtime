@@ -2854,7 +2854,11 @@ impl Text {
             }
         }
     }
-    pub(crate) fn on_dirty_occurrence(owner: &CoreHandle, value: ComponentDirt) {
+    pub(crate) fn on_dirty_occurrence(
+        owner: &CoreHandle,
+        value: ComponentDirt,
+        _add_value: ComponentDirt,
+    ) {
         if value.intersects(ComponentDirt::WORLD_TRANSFORM) {
             let mut index = 0;
             while let Some(group) = owner

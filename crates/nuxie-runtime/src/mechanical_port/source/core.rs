@@ -1059,6 +1059,11 @@ impl CoreHandle {
         // borrow of the empty root route. Release an empty object guard before
         // root callbacks, which may resolve this same arena identity again.
         {
+            // Debug builds: name the setter that still holds this object.
+            #[cfg(debug_assertions)]
+            if slot.object.try_borrow().is_err() {
+                SetterInProgress::panic_if_held(self);
+            }
             let object = slot.object.borrow();
             if let Some(object) = object.as_deref() {
                 return Some(f(object));
@@ -1095,6 +1100,11 @@ impl CoreHandle {
         // available while an authored object is mutably borrowed. As above,
         // never carry the empty object guard into a runtime-root callback.
         {
+            // Debug builds: name the setter that still holds this object.
+            #[cfg(debug_assertions)]
+            if slot.object.try_borrow_mut().is_err() {
+                SetterInProgress::panic_if_held(self);
+            }
             let mut payload = slot.object.borrow_mut();
             if let Some(object) = payload.as_deref_mut() {
                 // Nuxie: shared frame projection and first-write checkpoint.
@@ -1309,6 +1319,66 @@ pub struct Core {
     handle: Option<CoreHandle>,
     type_metadata: Option<(CoreTypeKey, fn(CoreTypeKey) -> bool)>,
     observers: Option<Rc<PropertyObservers>>,
+}
+
+/// A registry setter's hold on its object. Debug builds record it, so a change
+/// callback that reaches the held object again panics naming the setter and
+/// the property it writes.
+#[must_use]
+pub(crate) struct SetterInProgress {
+    #[cfg(debug_assertions)]
+    _recorded: (),
+}
+
+#[cfg(debug_assertions)]
+thread_local! {
+    static SETTERS_IN_PROGRESS: RefCell<Vec<(CoreHandle, &'static str, i32)>> =
+        const { RefCell::new(Vec::new()) };
+}
+
+impl SetterInProgress {
+    #[inline]
+    pub(crate) fn new(handle: &CoreHandle, setter: &'static str, property_key: i32) -> Self {
+        #[cfg(debug_assertions)]
+        {
+            SETTERS_IN_PROGRESS.with(|held| {
+                held.borrow_mut()
+                    .push((handle.clone(), setter, property_key))
+            });
+            Self { _recorded: () }
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            let _ = (handle, setter, property_key);
+            Self {}
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    #[cold]
+    fn panic_if_held(handle: &CoreHandle) {
+        let held = SETTERS_IN_PROGRESS.with(|held| {
+            held.borrow()
+                .iter()
+                .rev()
+                .find(|(owner, _, _)| owner == handle)
+                .map(|(_, setter, property_key)| (*setter, *property_key))
+        });
+        if let Some((setter, property_key)) = held {
+            panic!(
+                "{setter} still holds this object while it writes property {property_key}, and a change callback reached the object again"
+            );
+        }
+    }
+}
+
+#[cfg(debug_assertions)]
+impl Drop for SetterInProgress {
+    fn drop(&mut self) {
+        SETTERS_IN_PROGRESS.with(|held| {
+            held.borrow_mut().pop();
+        });
+    }
 }
 
 /// A generated setter's final notification, completed by its caller after
@@ -2607,6 +2677,25 @@ mod tests {
                 "outer-return",
                 "final-drop"
             ]
+        );
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    fn a_callback_reaching_an_object_its_setter_still_holds_names_the_setter() {
+        let arena = CoreArena::default();
+        let handle = arena.insert(Node::default());
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _setter =
+                super::SetterInProgress::new(&handle, "CoreRegistry::set_double_handle", 18);
+            handle.with_mut(|_| handle.with(|_| ()));
+        }))
+        .expect_err("the second borrow panics");
+        assert_eq!(
+            panic.downcast_ref::<String>().map(String::as_str),
+            Some(
+                "CoreRegistry::set_double_handle still holds this object while it writes property 18, and a change callback reached the object again"
+            )
         );
     }
 }

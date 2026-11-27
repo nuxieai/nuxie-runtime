@@ -864,7 +864,11 @@ impl Path {
         }
     }
 
-    pub(crate) fn on_dirty_occurrence(owner: &CoreHandle, dirt: ComponentDirt) {
+    pub(crate) fn on_dirty_occurrence(
+        owner: &CoreHandle,
+        dirt: ComponentDirt,
+        _value: ComponentDirt,
+    ) {
         if let Some(cells) = Self::cells_of(owner) {
             cells.on_dirty(owner, dirt);
         }

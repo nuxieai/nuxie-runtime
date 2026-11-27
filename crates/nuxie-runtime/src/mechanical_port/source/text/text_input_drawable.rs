@@ -273,11 +273,17 @@ mod tests {
     /// A field that reads "Hi", under `ancestors`, with all four text input
     /// drawables, each holding a Fill of 0xFF336699. With `feather_x`, the
     /// text's Fill has an inner Feather of strength 0, offset by that much
-    /// along x in world space.
+    /// along x in world space. The file has a second font asset with the same
+    /// face, and, with ancestors, an animation "Fade" that keys the outermost
+    /// one's opacity to 0 at frame 0.
     struct Field {
         _factory: PersistentFactory<RecordingFactory>,
         _file: crate::RuntimeFileHandle,
         artboard: crate::RuntimeArtboardInstanceHandle,
+        /// Each ancestor, outermost first.
+        ancestors: Vec<u32>,
+        input: u32,
+        style: u32,
         /// TextInputText, TextInputCursor, TextInputSelection and
         /// TextInputSelectedText, with each one's Fill.
         drawables: Vec<(u32, u32)>,
@@ -285,10 +291,15 @@ mod tests {
     }
 
     fn field(ancestors: &[Ancestor], feather_x: Option<f32>) -> Field {
+        let field = unadvanced(ancestors, feather_x);
+        field.artboard.advance_default(0.0);
+        field
+    }
+
+    /// The field before its first advance.
+    fn unadvanced(ancestors: &[Ancestor], feather_x: Option<f32>) -> Field {
         use FixtureValue::{Bool, Bytes, Color, Double, String, Uint};
-        let mut records = vec![
-            record("Backboard", vec![]),
-            record("FontAsset", vec![("assetId", Uint(0))]),
+        let face = || {
             record(
                 "FileAssetContents",
                 vec![(
@@ -298,17 +309,26 @@ mod tests {
                             .to_vec(),
                     ),
                 )],
-            ),
+            )
+        };
+        let mut records = vec![
+            record("Backboard", vec![]),
+            record("FontAsset", vec![("assetId", Uint(0))]),
+            face(),
+            record("FontAsset", vec![("assetId", Uint(1))]),
+            face(),
             record(
                 "Artboard",
                 vec![("width", Double(200.0)), ("height", Double(100.0))],
             ),
         ];
         // Artboard objects count from the Artboard, at 0.
-        let next = |records: &Vec<FixtureRecord>| (records.len() - 3) as u64;
+        let next = |records: &Vec<FixtureRecord>| (records.len() - 5) as u64;
         let mut parent = 0;
+        let mut ancestor_ids = vec![];
         for ancestor in ancestors {
             let id = next(&records);
+            ancestor_ids.push(id as u32);
             match *ancestor {
                 Ancestor::Node(opacity) => records.push(record(
                     "Node",
@@ -337,6 +357,7 @@ mod tests {
             "TextInput",
             vec![("parentId", Uint(parent)), ("text", String("Hi".into()))],
         ));
+        let style = next(&records);
         records.push(record(
             "TextStylePaint",
             vec![
@@ -375,6 +396,30 @@ mod tests {
             }
             drawables.push((drawable as u32, fill as u32));
         }
+        if let Some(&outermost) = ancestor_ids.first() {
+            records.push(record(
+                "LinearAnimation",
+                vec![
+                    ("name", String("Fade".into())),
+                    ("fps", Uint(60)),
+                    ("duration", Uint(60)),
+                    ("loopValue", Uint(0)),
+                ],
+            ));
+            records.push(record(
+                "KeyedObject",
+                vec![("objectId", Uint(u64::from(outermost)))],
+            ));
+            records.push(record("KeyedProperty", vec![("propertyKey", Uint(18))]));
+            records.push(record(
+                "KeyFrameDouble",
+                vec![
+                    ("frame", Uint(0)),
+                    ("value", Double(0.0)),
+                    ("interpolationType", Uint(0)),
+                ],
+            ));
+        }
         let bytes =
             encode_runtime_file(&RuntimeFile::from_fixture_records(records).unwrap()).unwrap();
         let mut factory = PersistentFactory::new(RecordingFactory::new());
@@ -389,11 +434,13 @@ mod tests {
         let artboard = file
             .with_file(File::artboard_default)
             .expect("default artboard");
-        artboard.advance_default(0.0);
         Field {
             _factory: factory,
             _file: file,
             artboard,
+            ancestors: ancestor_ids,
+            input: input as u32,
+            style: style as u32,
             drawables,
             feather,
         }
@@ -404,6 +451,20 @@ mod tests {
             self.artboard
                 .with_artboard(|artboard| artboard.base.resolve_handle(id))
                 .expect("a field object")
+        }
+        fn write_double(&self, id: u32, key: u16, value: f32) -> bool {
+            crate::mechanical_port::source::generated::core_registry::CoreRegistry::set_double_handle(
+                &self.object(id),
+                i32::from(key),
+                value,
+            )
+        }
+        fn write_uint(&self, id: u32, key: u16, value: u32) -> bool {
+            crate::mechanical_port::source::generated::core_registry::CoreRegistry::set_uint_handle(
+                &self.object(id),
+                i32::from(key),
+                value,
+            )
         }
         /// Each drawable's render opacity and whether it will draw.
         fn drawn(&self) -> Vec<(f32, bool)> {
@@ -500,5 +561,62 @@ mod tests {
             (inner.max_x - (text.max_x + 5.0)).abs() < 1e-4,
             "{inner:?} {text:?}"
         );
+    }
+
+    use crate::mechanical_port::source::generated::{
+        text::text_style_base::TextStyleBase,
+        world_transform_component_base::WorldTransformComponentBase,
+    };
+    const OPACITY: u16 = WorldTransformComponentBase::OPACITY_PROPERTY_KEY;
+
+    #[test]
+    fn a_box_set_to_opacity_0_before_the_first_advance_does_not_panic_and_hides_the_field() {
+        let field = unadvanced(&[Ancestor::Layout(1.0)], None);
+        assert!(field.write_double(field.ancestors[0], OPACITY, 0.0));
+        field.artboard.advance_default(0.0);
+        assert_eq!(field.drawn(), vec![(0.0, false); 4]);
+    }
+
+    #[test]
+    fn a_box_set_to_opacity_0_after_a_font_change_and_before_the_update_hides_the_field() {
+        let field = field(&[Ancestor::Layout(1.0)], None);
+        assert!(field.write_uint(field.style, TextStyleBase::FONT_ASSET_ID_PROPERTY_KEY, 1));
+        assert!(field.write_double(field.ancestors[0], OPACITY, 0.0));
+        field.artboard.advance_default(0.0);
+        assert_eq!(field.drawn(), vec![(0.0, false); 4]);
+    }
+
+    #[test]
+    fn a_box_set_to_opacity_0_after_a_font_size_change_and_before_the_update_hides_the_field() {
+        let field = field(&[Ancestor::Layout(1.0)], None);
+        assert!(field.write_double(field.style, TextStyleBase::FONT_SIZE_PROPERTY_KEY, 24.0));
+        assert!(field.write_double(field.ancestors[0], OPACITY, 0.0));
+        field.artboard.advance_default(0.0);
+        assert_eq!(field.drawn(), vec![(0.0, false); 4]);
+    }
+
+    #[test]
+    fn a_keyframe_setting_a_box_to_opacity_0_before_the_first_advance_does_not_panic_and_hides_the_field()
+     {
+        let field = unadvanced(&[Ancestor::Layout(1.0)], None);
+        field.artboard.animation_at(0).expect("the fade").apply(1.0);
+        field.artboard.advance_default(0.0);
+        assert_eq!(field.drawn(), vec![(0.0, false); 4]);
+    }
+
+    #[test]
+    fn a_field_set_to_opacity_0_before_the_first_advance_does_not_draw() {
+        let field = unadvanced(&[], None);
+        assert!(field.write_double(field.input, OPACITY, 0.0));
+        field.artboard.advance_default(0.0);
+        assert_eq!(field.drawn(), vec![(0.0, false); 4]);
+    }
+
+    #[test]
+    fn a_box_set_to_opacity_0_after_the_first_advance_hides_the_field() {
+        let field = field(&[Ancestor::Layout(1.0)], None);
+        assert!(field.write_double(field.ancestors[0], OPACITY, 0.0));
+        field.artboard.advance_default(0.0);
+        assert_eq!(field.drawn(), vec![(0.0, false); 4]);
     }
 }

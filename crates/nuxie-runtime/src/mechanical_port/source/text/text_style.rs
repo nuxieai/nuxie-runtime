@@ -112,6 +112,8 @@ impl TextStyle {
         })
     }
     pub fn on_dirty(&mut self, dirt: ComponentDirt) {
+        // The borrowed form runs only for adds on this style itself, each of
+        // which carries the shape bit, so it keeps upstream's whole-dirt check.
         if let Some(text) = self.text.as_ref() {
             if dirt.contains(ComponentDirt::TEXT_SHAPE) {
                 text.with_mut(|text| text.text_interface_mark_shape_dirty());
@@ -144,8 +146,18 @@ impl TextStyle {
         .add_dirt(value, recurse)
     }
 
-    pub(crate) fn on_dirty_occurrence(owner: &CoreHandle, dirt: ComponentDirt) {
-        Self::on_dirty_with(owner, dirt, None);
+    /// TextStyle::onDirty. The text is marked only when this add carries the
+    /// shape bit. While the bit stays set from an earlier add, that add's mark
+    /// of the text and its layout still stands, and the text marks its layout
+    /// again itself if its new shape differs from what layout measured.
+    /// Upstream marks again on every add while the bit is set; here that
+    /// second mark would walk into an object a setter still holds.
+    pub(crate) fn on_dirty_occurrence(
+        owner: &CoreHandle,
+        _dirt: ComponentDirt,
+        value: ComponentDirt,
+    ) {
+        Self::on_dirty_with(owner, value, None);
     }
 
     /// [`Self::on_dirty_occurrence`] inside a dirt cascade that a Layout
@@ -153,16 +165,16 @@ impl TextStyle {
     /// is already borrowed, so the walk and its dirt go through `active`.
     pub(crate) fn on_dirty_from_layout(
         owner: &CoreHandle,
-        dirt: ComponentDirt,
+        value: ComponentDirt,
         active: &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
         active_handle: &CoreHandle,
     ) {
-        Self::on_dirty_with(owner, dirt, Some((active, active_handle)));
+        Self::on_dirty_with(owner, value, Some((active, active_handle)));
     }
 
     fn on_dirty_with(
         owner: &CoreHandle,
-        dirt: ComponentDirt,
+        value: ComponentDirt,
         mut active: Option<(
             &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
             &CoreHandle,
@@ -171,7 +183,7 @@ impl TextStyle {
         let text = owner
             .with(|object| object.as_text_style().expect("TextStyle").text.clone())
             .flatten();
-        if let Some(text) = text.filter(|_| dirt.contains(ComponentDirt::TEXT_SHAPE)) {
+        if let Some(text) = text.filter(|_| value.contains(ComponentDirt::TEXT_SHAPE)) {
             if text.is_type_of(
                 crate::mechanical_port::source::generated::text::text_base::TextBase::TYPE_KEY,
             ) {
@@ -209,7 +221,7 @@ impl TextStyle {
                     }
                 }
             }
-        } else if dirt.contains(ComponentDirt::TEXT_SHAPE) {
+        } else if value.contains(ComponentDirt::TEXT_SHAPE) {
             let (callback, helper) = owner
                 .with(|object| {
                     let style = object.as_text_style().expect("TextStyle");
@@ -545,5 +557,203 @@ mod tests {
         assert_eq!(style.axis_value(tag(b"wght")), Some(600.0));
         assert_eq!(style.axis_value(tag(b"opsz")), Some(12.0));
         assert_eq!(style.axis_value(tag(b"wdth")), None);
+    }
+
+    fn record(
+        owner: &str,
+        values: Vec<(&str, nuxie_binary::FixtureValue)>,
+    ) -> nuxie_binary::FixtureRecord {
+        let def = nuxie_schema::definition_by_name(owner).unwrap();
+        nuxie_binary::FixtureRecord {
+            type_key: def.type_key.int,
+            properties: values
+                .into_iter()
+                .map(|(name, value)| {
+                    let key = std::iter::once(def.name)
+                        .chain(def.ancestors.iter().copied())
+                        .filter_map(nuxie_schema::definition_by_name)
+                        .flat_map(|d| d.properties)
+                        .find(|p| p.name == name)
+                        .unwrap_or_else(|| panic!("{owner}.{name}"))
+                        .key
+                        .int;
+                    nuxie_binary::FixtureProperty { key, value }
+                })
+                .collect(),
+        }
+    }
+
+    /// A Text that reads "Hi" with a TextStylePaint holding a Fill of
+    /// 0xFF336699, on the Artboard or, with `in_box`, under a LayoutComponent.
+    /// The file has two font assets with the same face.
+    struct Words {
+        _factory: nuxie_render_api::PersistentFactory<nuxie_render_api::RecordingFactory>,
+        _file: crate::RuntimeFileHandle,
+        artboard: crate::RuntimeArtboardInstanceHandle,
+        container: Option<u32>,
+        text: u32,
+        style: u32,
+        fill: u32,
+    }
+
+    fn words(in_box: bool) -> Words {
+        use nuxie_binary::FixtureValue::{Bytes, Color, Double, String, Uint};
+        let face = || {
+            record(
+                "FileAssetContents",
+                vec![(
+                    "bytes",
+                    Bytes(
+                        include_bytes!("../../../../../../fixtures/fonts/roboto-input.ttf")
+                            .to_vec(),
+                    ),
+                )],
+            )
+        };
+        let mut records = vec![
+            record("Backboard", vec![]),
+            record("FontAsset", vec![("assetId", Uint(0))]),
+            face(),
+            record("FontAsset", vec![("assetId", Uint(1))]),
+            face(),
+            record(
+                "Artboard",
+                vec![("width", Double(200.0)), ("height", Double(100.0))],
+            ),
+        ];
+        // Artboard objects count from the Artboard, at 0.
+        let next = |records: &Vec<nuxie_binary::FixtureRecord>| (records.len() - 5) as u64;
+        let mut parent = 0;
+        let mut container = None;
+        if in_box {
+            let id = next(&records);
+            records.push(record(
+                "LayoutComponent",
+                vec![("parentId", Uint(0)), ("styleId", Uint(id + 1))],
+            ));
+            records.push(record("LayoutComponentStyle", vec![("parentId", Uint(id))]));
+            container = Some(id as u32);
+            parent = id;
+        }
+        let text = next(&records);
+        records.push(record("Text", vec![("parentId", Uint(parent))]));
+        let style = next(&records);
+        records.push(record(
+            "TextStylePaint",
+            vec![
+                ("parentId", Uint(text)),
+                ("fontAssetId", Uint(0)),
+                ("fontSize", Double(16.0)),
+            ],
+        ));
+        let fill = next(&records);
+        records.push(record("Fill", vec![("parentId", Uint(style))]));
+        records.push(record(
+            "SolidColor",
+            vec![("parentId", Uint(fill)), ("colorValue", Color(0xff33_6699))],
+        ));
+        records.push(record(
+            "TextValueRun",
+            vec![
+                ("parentId", Uint(text)),
+                ("styleId", Uint(style)),
+                ("text", String("Hi".into())),
+            ],
+        ));
+        let bytes = nuxie_binary::encode_runtime_file(
+            &nuxie_binary::RuntimeFile::from_fixture_records(records).unwrap(),
+        )
+        .unwrap();
+        let mut factory =
+            nuxie_render_api::PersistentFactory::new(nuxie_render_api::RecordingFactory::new());
+        let file = crate::File::import(
+            &bytes,
+            crate::RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
+            None,
+            None,
+            None,
+        )
+        .expect("the file imports");
+        let artboard = file
+            .with_file(crate::File::artboard_default)
+            .expect("default artboard");
+        Words {
+            _factory: factory,
+            _file: file,
+            artboard,
+            container,
+            text: text as u32,
+            style: style as u32,
+            fill: fill as u32,
+        }
+    }
+
+    impl Words {
+        fn object(&self, id: u32) -> CoreHandle {
+            self.artboard
+                .with_artboard(|artboard| artboard.base.resolve_handle(id))
+                .expect("a words object")
+        }
+        fn write_double(&self, id: u32, key: u16, value: f32) -> bool {
+            crate::mechanical_port::source::generated::core_registry::CoreRegistry::set_double_handle(
+                &self.object(id),
+                i32::from(key),
+                value,
+            )
+        }
+        fn write_uint(&self, id: u32, key: u16, value: u32) -> bool {
+            crate::mechanical_port::source::generated::core_registry::CoreRegistry::set_uint_handle(
+                &self.object(id),
+                i32::from(key),
+                value,
+            )
+        }
+        /// The Text's render opacity, whether it will draw, and its Fill's
+        /// render opacity.
+        fn drawn(&self) -> (f32, bool, f32) {
+            use crate::mechanical_port::source::generated::core_registry::CoreCapabilities;
+            let (opacity, will_draw) = self
+                .object(self.text)
+                .with(|object| {
+                    (
+                        object.as_transform_component().unwrap().render_opacity(),
+                        object.drawable_will_draw(),
+                    )
+                })
+                .unwrap();
+            let fill = self
+                .object(self.fill)
+                .with_downcast::<crate::mechanical_port::source::shapes::paint::fill::Fill, _>(
+                    |fill| fill.base.render_opacity(),
+                )
+                .unwrap();
+            (opacity, will_draw, fill)
+        }
+    }
+
+    const OPACITY: u16 = crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBase::OPACITY_PROPERTY_KEY;
+
+    /// A Text fades by handing its render opacity to its style's paints
+    /// (upstream src/text/text.cpp:2151-2157); it still reports that it will
+    /// draw, as upstream's Drawable::willDraw does (src/drawable.cpp:88).
+    #[test]
+    fn a_text_set_to_opacity_0_before_the_first_advance_fades_its_paints() {
+        let words = words(false);
+        assert!(words.write_double(words.text, OPACITY, 0.0));
+        words.artboard.advance_default(0.0);
+        assert_eq!(words.drawn(), (0.0, true, 0.0));
+    }
+
+    /// The Text takes the box's opacity into its style's paints (upstream
+    /// src/text/text.cpp:2151-2157) and still reports that it will draw
+    /// (src/drawable.cpp:88).
+    #[test]
+    fn a_text_under_a_box_with_its_shape_pending_takes_the_box_opacity() {
+        let words = words(true);
+        words.artboard.advance_default(0.0);
+        assert!(words.write_uint(words.style, TextStyleBase::FONT_ASSET_ID_PROPERTY_KEY, 1));
+        assert!(words.write_double(words.container.unwrap(), OPACITY, 0.0));
+        words.artboard.advance_default(0.0);
+        assert_eq!(words.drawn(), (0.0, true, 0.0));
     }
 }

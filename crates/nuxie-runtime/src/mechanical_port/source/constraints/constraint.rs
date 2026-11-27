@@ -165,7 +165,11 @@ impl Constraint {
         self.mark_constraint_dirty();
     }
 
-    pub(crate) fn on_dirty_occurrence(owner: &CoreHandle, dirt: ComponentDirt) {
+    pub(crate) fn on_dirty_occurrence(
+        owner: &CoreHandle,
+        dirt: ComponentDirt,
+        _value: ComponentDirt,
+    ) {
         if (dirt & !ComponentDirt::COLLAPSED) == ComponentDirt::RENDER_OPACITY {
             return;
         }

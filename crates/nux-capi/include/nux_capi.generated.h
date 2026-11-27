@@ -1343,6 +1343,65 @@ typedef struct NuxPlayerInfo {
 } NuxPlayerInfo;
 
 /**
+ * One object of the player's artboard, or of one nested artboard or keyed
+ * list row occurrence under it. Fields may be appended; initialize
+ * `struct_size` to `sizeof(NuxSceneObject)`.
+ *
+ * `path` leads from the player's artboard to the occurrence that holds the
+ * object: the host of each nested artboard or keyed list on the way, each by
+ * its local id in the artboard the path has reached, with that artboard's
+ * file-global id, as a report's `path` carries it. `row_keys` names the row
+ * of each keyed list step, in path order, as a report's `row_keys` carries
+ * them. NULL with `path_len` 0 names the player's own artboard; a caller
+ * whose `struct_size` ends before `path` names it too, and one whose
+ * `struct_size` ends before `row_keys` names no row. `local_id` is the
+ * object's local id in the artboard the path leads to.
+ */
+typedef struct NuxSceneObject {
+  uint32_t struct_size;
+  size_t local_id;
+  const struct NuxScenePathSegment *path;
+  size_t path_len;
+  const struct NuxSceneRowKey *row_keys;
+  size_t row_key_count;
+} NuxSceneObject;
+
+/**
+ * Where a host places a platform view over one box, copied out of a
+ * step. Matrices use [a, b, c, d, tx, ty]: x' = a*x + c*y + tx.
+ * `world_transform` maps the box's layout space into the root
+ * artboard's; `frame_*` and `content_*` are in the box's layout space.
+ * `clip` is 0 when nothing clips the box, 1 when `clip_*` is the
+ * rectangle that does, in root space, and 2 when a clip is not a
+ * rectangle. `placeable` is 0 when the transform rotates, skews or
+ * mirrors, `clip` is 2, or the box or anything above it flies in place.
+ * Canonical 0/1 flags.
+ */
+typedef struct NuxIslandFrame {
+  uint32_t struct_size;
+  uint64_t render_revision;
+  float world_transform[6];
+  float frame_min_x;
+  float frame_min_y;
+  float frame_max_x;
+  float frame_max_y;
+  float content_min_x;
+  float content_min_y;
+  float content_max_x;
+  float content_max_y;
+  uint32_t visible;
+  float opacity;
+  float scale_x;
+  float scale_y;
+  uint32_t clip;
+  float clip_min_x;
+  float clip_min_y;
+  float clip_max_x;
+  float clip_max_y;
+  uint32_t placeable;
+} NuxIslandFrame;
+
+/**
  * The player's laid-out size in points, read after stepping.
  */
 typedef struct NuxPlayerLayoutSize {
@@ -1967,30 +2026,6 @@ typedef struct NuxMetalRenderOperation {
   float layout_scale_factor;
 } NuxMetalRenderOperation;
 #endif
-
-/**
- * One object of the player's artboard, or of one nested artboard or keyed
- * list row occurrence under it. Fields may be appended; initialize
- * `struct_size` to `sizeof(NuxSceneObject)`.
- *
- * `path` leads from the player's artboard to the occurrence that holds the
- * object: the host of each nested artboard or keyed list on the way, each by
- * its local id in the artboard the path has reached, with that artboard's
- * file-global id, as a report's `path` carries it. `row_keys` names the row
- * of each keyed list step, in path order, as a report's `row_keys` carries
- * them. NULL with `path_len` 0 names the player's own artboard; a caller
- * whose `struct_size` ends before `path` names it too, and one whose
- * `struct_size` ends before `row_keys` names no row. `local_id` is the
- * object's local id in the artboard the path leads to.
- */
-typedef struct NuxSceneObject {
-  uint32_t struct_size;
-  size_t local_id;
-  const struct NuxScenePathSegment *path;
-  size_t path_len;
-  const struct NuxSceneRowKey *row_keys;
-  size_t row_key_count;
-} NuxSceneObject;
 
 typedef struct NuxSemanticSnapshotInfo {
   uint32_t struct_size;
@@ -2961,6 +2996,23 @@ NuxStatus nux_player_free(struct NuxPlayer *player);
  * Read selected-player metadata into a versioned caller-owned struct.
  */
 NuxStatus nux_player_info(const struct NuxPlayer *player, struct NuxPlayerInfo *out_info);
+
+/**
+ * Read `count` boxes' island frames from the state named by `step`, in
+ * order, into `out`, as `nux_player_text_run_geometry` reads a text
+ * run: the step must be this player's and name its current render
+ * revision, or HANDLE_MISMATCH. Each box is a scene object, as a driver
+ * writes one. Both arrays are fixed-stride: each `boxes[i].struct_size`
+ * and `out[i].struct_size` must equal the size of its struct, or
+ * INVALID_STRUCT_SIZE. NOT_FOUND when a box names nothing,
+ * INVALID_ARGUMENT when it names something that is not a box. `out` is
+ * written only when every box reads. Changes nothing in the scene.
+ */
+NuxStatus nux_player_island_frames(const struct NuxPlayer *player,
+                                   const struct NuxPlayerStepResult *step,
+                                   const struct NuxSceneObject *boxes,
+                                   size_t count,
+                                   struct NuxIslandFrame *out);
 
 /**
  * Read the laid-out root width and height in points into a caller-sized struct.

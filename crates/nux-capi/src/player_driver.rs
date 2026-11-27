@@ -448,7 +448,9 @@ unsafe fn byte_slice<'a>(data: *const u8, len: usize) -> Result<&'a [u8], NuxSta
     Ok(unsafe { std::slice::from_raw_parts(data, len) })
 }
 
-unsafe fn read_scene_object(object: *const NuxSceneObject) -> Result<SceneObject, NuxStatus> {
+pub(crate) unsafe fn read_scene_object(
+    object: *const NuxSceneObject,
+) -> Result<SceneObject, NuxStatus> {
     if object.is_null() {
         return Err(NuxStatus::NullArgument);
     }

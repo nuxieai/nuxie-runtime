@@ -383,6 +383,81 @@ pub(crate) fn held_above(component: &CoreHandle) -> f32 {
     fade
 }
 
+/// Every fade `component`'s render opacity leaves out of what it shows at,
+/// multiplied, read along the walk its draw takes. On each artboard: the
+/// held fade of the node the walk came from and of each box above it,
+/// except, where a Screen's draw lifts that node above every row, the boxes
+/// the `Above` pass leaves out, as the clip walk leaves out their clips
+/// (`lifted_on`, `marked_above`). Then what the artboard's draw applies
+/// itself (`draw_hosted`): a Screen's own fade, except to what draws
+/// outside its picture at its own strength (`ScreenLayer`), as the
+/// visibility walk reads it, and any other artboard's held part of its
+/// host's fade. Then on to its host. A platform view laid over the box
+/// takes its render opacity times this.
+pub(crate) fn held_out_of(component: &CoreHandle) -> f32 {
+    let mut fade = 1.0;
+    let mut from = component.clone();
+    let mut seen = std::collections::HashSet::new();
+    loop {
+        let Some(board) = from
+            .with(|object| object.component_artboard_handle())
+            .flatten()
+        else {
+            break;
+        };
+        if !seen.insert(board.clone()) {
+            break;
+        }
+        let lifted = lifted_on(&board, &from);
+        let mut node = Some(from.clone());
+        while let Some(current) = node {
+            let Some((held, next)) = current
+                .with(|object| {
+                    if object.as_artboard().is_some() {
+                        return None;
+                    }
+                    let held = object.as_layout_component().map_or(1.0, held_box_fade);
+                    Some((held, object.component_parent_handle()))
+                })
+                .flatten()
+            else {
+                break;
+            };
+            if !lifted || marked_above(&current) {
+                fade *= held;
+            }
+            node = next;
+        }
+        let Some((screen, held, host)) = board.with_downcast::<Artboard, _>(|artboard| {
+            (
+                held_screen_fade(artboard),
+                artboard.held_fade(),
+                artboard.host(),
+            )
+        }) else {
+            break;
+        };
+        fade *= match screen {
+            Some(screen)
+                if screen < 1.0
+                    && matches!(
+                        screen_layer_of(&board, &from),
+                        ScreenLayer::OwnStrength | ScreenLayer::Above
+                    ) =>
+            {
+                1.0
+            }
+            Some(screen) => screen,
+            None => held,
+        };
+        let Some(host) = host else {
+            break;
+        };
+        from = host;
+    }
+    fade
+}
+
 /// What a box's draw did with its run.
 pub(crate) enum BoxDrawn {
     /// No picture: the run draws entry by entry, from the box's own paint.
@@ -1930,6 +2005,81 @@ mod tests {
             next_canvas_size((2100, 100), (2048, 512), &mut smaller, 2660),
             (2660, 512)
         );
+    }
+
+    /// A Screen at 0.5 holds its fade out of its boxes' render opacity. A
+    /// box "A" in its picture shows at the Screen's 0.5; a box "B" marked
+    /// 2 draws outside the picture at its own strength, 1. A box "C" at 0.5
+    /// that clips both axes holds its own fade: "E" under it shows at
+    /// 0.5 * 0.5, and "D" under it, marked 3, draws in the `Above` pass,
+    /// which leaves C out, at 1. Nothing else on the page fades.
+    #[test]
+    fn a_screen_s_fade_is_held_out_of_all_but_what_draws_at_its_own_strength() {
+        use crate::group_opacity_fixture::{
+            Block, Item, MARKS, Overflow, Page, Unit, bind_page, box_record, screen_row,
+            set_row_opacity,
+        };
+        use crate::{File, RuntimeFactoryHandle};
+        use nuxie_render_api::{PersistentFactory, RecordingFactory};
+
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let block = |name, at, mark| Block {
+            name: Some(name),
+            at,
+            size: (60.0, 60.0),
+            color: Some(0xffc8_c8c8),
+            mark,
+            ..Block::default()
+        };
+        let clipping = Block {
+            size: (120.0, 60.0),
+            opacity: Some(0.5),
+            overflow: Overflow::Hidden,
+            items: vec![
+                Item::Block(block("D", (0.0, 0.0), Some(3.0))),
+                Item::Block(block("E", (60.0, 0.0), None)),
+            ],
+            ..block("C", (40.0, 200.0), None)
+        };
+        let file = File::import(
+            &Page::one(
+                (300.0, 300.0),
+                Unit {
+                    items: vec![
+                        Item::Block(block("A", (40.0, 40.0), None)),
+                        Item::Block(block("B", (40.0, 120.0), Some(2.0))),
+                        Item::Block(clipping),
+                    ],
+                    ..Unit::css(300.0, 300.0)
+                },
+            )
+            .bytes(),
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let page = file.with_file(File::artboard_default).unwrap();
+        bind_page(&file, &page);
+        let screen = screen_row(&page, "Screen");
+        set_row_opacity(&screen, 0.5);
+        screen
+            .animation_named(MARKS)
+            .expect("the Screen's marks")
+            .apply(1.0);
+        page.advance_default(1.0 / 60.0);
+        let held = |name| {
+            let element = box_record(&screen, name)
+                .with(|record| record.component_parent_handle())
+                .flatten()
+                .expect("the box");
+            held_out_of(&element)
+        };
+        assert_eq!(held("A"), 0.5, "in the Screen's picture");
+        assert_eq!(held("B"), 1.0, "outside it, at its own strength");
+        assert_eq!(held("E"), 0.25, "under C, in the Screen's picture");
+        assert_eq!(held("D"), 1.0, "lifted above every row, past C");
     }
 
     /// Ruling U13's check: in a test build, a Screen's draw fails when where

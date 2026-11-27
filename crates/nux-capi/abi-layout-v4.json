@@ -549,6 +549,97 @@
       ]
     },
     {
+      "name": "NuxIslandFrame",
+      "size": 112,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "render_revision",
+          "offset": 8
+        },
+        {
+          "name": "world_transform",
+          "offset": 16
+        },
+        {
+          "name": "frame_min_x",
+          "offset": 40
+        },
+        {
+          "name": "frame_min_y",
+          "offset": 44
+        },
+        {
+          "name": "frame_max_x",
+          "offset": 48
+        },
+        {
+          "name": "frame_max_y",
+          "offset": 52
+        },
+        {
+          "name": "content_min_x",
+          "offset": 56
+        },
+        {
+          "name": "content_min_y",
+          "offset": 60
+        },
+        {
+          "name": "content_max_x",
+          "offset": 64
+        },
+        {
+          "name": "content_max_y",
+          "offset": 68
+        },
+        {
+          "name": "visible",
+          "offset": 72
+        },
+        {
+          "name": "opacity",
+          "offset": 76
+        },
+        {
+          "name": "scale_x",
+          "offset": 80
+        },
+        {
+          "name": "scale_y",
+          "offset": 84
+        },
+        {
+          "name": "clip",
+          "offset": 88
+        },
+        {
+          "name": "clip_min_x",
+          "offset": 92
+        },
+        {
+          "name": "clip_min_y",
+          "offset": 96
+        },
+        {
+          "name": "clip_max_x",
+          "offset": 100
+        },
+        {
+          "name": "clip_max_y",
+          "offset": 104
+        },
+        {
+          "name": "placeable",
+          "offset": 108
+        }
+      ]
+    },
+    {
       "name": "NuxMetalRenderOperation",
       "size": 72,
       "alignment": 8,

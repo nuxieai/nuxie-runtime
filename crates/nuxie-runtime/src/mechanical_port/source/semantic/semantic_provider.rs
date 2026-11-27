@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
     artboard_component_list::ArtboardComponentList,
     core::CoreHandle,
     generated::{container_component_base::ContainerComponentBase, node_base::NodeBase},
-    math::{aabb::Aabb, mat2d::Mat2D, raw_path::RawPath, vec2d::Vec2D},
+    math::{aabb::Aabb, mat2d::Mat2D, path_types::PathVerb, raw_path::RawPath, vec2d::Vec2D},
     semantic::{
         semantic_clip::SemanticClipRegion,
         semantic_inference_registry::{resolve_inferred_semantics, supports_inferred_semantics},
@@ -12,6 +12,7 @@ use crate::mechanical_port::source::{
     },
     shapes::clipping_shape::ClippingShape,
 };
+use crate::page_player::IslandClip;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ResolvedSemanticData {
@@ -193,10 +194,21 @@ fn semantic_is_fully_clipped(component: &CoreHandle) -> bool {
 /// the geometry budget fails with its error, as `validate_semantic_geometry`
 /// fails a node's, rather than reading as cut away; every part is checked.
 pub(crate) fn semantic_clipped_away(component: &CoreHandle) -> Result<bool, SemanticGeometryError> {
+    clipped_away(component, true)
+}
+
+/// `semantic_clipped_away` without the box's own overflow clip, for a
+/// host laying a platform view over the box (page_player/island.rs): that
+/// clip cuts what is inside the box, not the box, as `island_clip` reads.
+pub(crate) fn island_clipped_away(component: &CoreHandle) -> Result<bool, SemanticGeometryError> {
+    clipped_away(component, false)
+}
+
+fn clipped_away(component: &CoreHandle, own_clip: bool) -> Result<bool, SemanticGeometryError> {
     let geometry = semantic_geometry(component);
     let mut clipped = !geometry.is_empty();
     for (owner, polygon) in geometry {
-        let region = clip_to_rendered_ancestors(&owner, polygon.to_vec());
+        let region = clip_region(&owner, polygon.to_vec(), own_clip);
         region.status()?;
         clipped &= region.is_empty();
     }
@@ -204,8 +216,12 @@ pub(crate) fn semantic_clipped_away(component: &CoreHandle) -> Result<bool, Sema
 }
 
 fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> SemanticClipRegion {
+    clip_region(component, polygon, true)
+}
+
+fn clip_region(component: &CoreHandle, polygon: Vec<Vec2D>, own_clip: bool) -> SemanticClipRegion {
     let mut region = SemanticClipRegion::from_polygon(&polygon);
-    let complete = walk_rendered_clips(component, true, |artboard, clip| {
+    let complete = walk_rendered_clips(component, own_clip, |artboard, clip| {
         let clip = if let Some(artboard) = artboard {
             let Some(clip) = artboard.with_downcast_mut::<Artboard, _>(|artboard| {
                 clip.mapped(|point| artboard.semantic_root_transform(point))
@@ -223,6 +239,84 @@ fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> Se
         return SemanticClipRegion::default();
     }
     region
+}
+
+/// What clips `component` in the root artboard's space, for a host that
+/// lays a platform view over it (page_player/island.rs). Its own overflow
+/// clip is left out: that clips what is inside the box, not the box.
+/// Rectangles meet in their intersection. A walk that cannot finish, such
+/// as a clip with no path, which draws nothing, clips the box away.
+pub(crate) fn island_clip(component: &CoreHandle) -> IslandClip {
+    let mut met = IslandClip::None;
+    let complete = walk_rendered_clips(component, false, |artboard, clip| {
+        let clip = if let Some(artboard) = artboard {
+            let Some(clip) = artboard.with_downcast_mut::<Artboard, _>(|artboard| {
+                clip.mapped(|point| artboard.semantic_root_transform(point))
+            }) else {
+                return false;
+            };
+            clip
+        } else {
+            clip
+        };
+        met = match (met, clip.axis_aligned_rect()) {
+            (IslandClip::NotRect, _) | (_, None) => IslandClip::NotRect,
+            (IslandClip::None, Some(rect)) => IslandClip::Rect(rect),
+            (IslandClip::Rect(seen), Some(rect)) => IslandClip::Rect(intersect_bounds(seen, rect)),
+        };
+        true
+    });
+    if complete {
+        met
+    } else {
+        IslandClip::Rect(Bounds::default())
+    }
+}
+
+/// Where two rectangles meet; an empty rectangle at the nearer corner when
+/// they do not.
+fn intersect_bounds(a: Bounds, b: Bounds) -> Bounds {
+    let min_x = a.min_x.max(b.min_x);
+    let min_y = a.min_y.max(b.min_y);
+    Bounds {
+        min_x,
+        min_y,
+        max_x: a.max_x.min(b.max_x).max(min_x),
+        max_y: a.max_y.min(b.max_y).max(min_y),
+    }
+}
+
+/// The rectangle `points` outline, when they are one closed axis-aligned
+/// rectangle: each point a corner of their bounds and each edge, the
+/// closing one too, level or upright. Repeated points count once.
+fn polygon_rect(points: &[Vec2D]) -> Option<Bounds> {
+    let mut corners: Vec<Vec2D> = Vec::with_capacity(points.len());
+    for &point in points {
+        if corners.last() != Some(&point) {
+            corners.push(point);
+        }
+    }
+    if corners.len() > 1 && corners.first() == corners.last() {
+        corners.pop();
+    }
+    let mut bounds = Bounds::for_expansion();
+    for point in &corners {
+        bounds.expand((point.x, point.y));
+    }
+    if corners.is_empty() || corners.len() > 4 {
+        return None;
+    }
+    let on_corner = |point: &Vec2D| {
+        (point.x == bounds.min_x || point.x == bounds.max_x)
+            && (point.y == bounds.min_y || point.y == bounds.max_y)
+    };
+    let level_or_upright = corners
+        .iter()
+        .zip(corners.iter().cycle().skip(1))
+        .all(|(a, b)| a.x == b.x || a.y == b.y);
+    let has_area = bounds.max_x > bounds.min_x && bounds.max_y > bounds.min_y;
+    (corners.iter().all(on_corner) && level_or_upright && (!has_area || corners.len() == 4))
+        .then_some(bounds)
 }
 
 /// A clip in its owning artboard's drawing space. Both host geometry
@@ -244,6 +338,24 @@ impl RenderedClip {
         match self {
             Self::Path(path, rule) => region.intersect_path(path, *rule),
             Self::Polygon(corners) => region.intersect_polygon(corners),
+        }
+    }
+
+    /// The rectangle this clip is, when it is one closed axis-aligned
+    /// rectangle: a polygon whose corners are, or a path of one contour of
+    /// straight lines that outlines one.
+    fn axis_aligned_rect(&self) -> Option<Bounds> {
+        match self {
+            Self::Polygon(corners) => polygon_rect(corners),
+            Self::Path(path, _) => {
+                let verbs = path.verbs();
+                let straight = verbs.first() == Some(&PathVerb::Move)
+                    && verbs.iter().enumerate().skip(1).all(|(index, verb)| {
+                        *verb == PathVerb::Line
+                            || (*verb == PathVerb::Close && index == verbs.len() - 1)
+                    });
+                straight.then(|| polygon_rect(path.points())).flatten()
+            }
         }
     }
 

@@ -144,6 +144,38 @@ impl From<KeyedRowRefusal> for SceneWriteError {
     }
 }
 
+/// The occurrence `object`'s path leads to, or None for an object of the
+/// player's own artboard.
+fn scene_occurrence(
+    artboard: &ArtboardInstance,
+    object: &SceneObject,
+) -> Result<Option<RuntimeNestedArtboardOccurrence>, SceneWriteError> {
+    if object.path.is_empty() {
+        return if object.rows.is_empty() {
+            Ok(None)
+        } else {
+            Err(SceneWriteError::PathNotFound)
+        };
+    }
+    artboard
+        .nested_artboard_occurrence_on_keyed_path(&object.path, &object.rows)
+        .map(Some)
+        .ok_or(SceneWriteError::PathNotFound)
+}
+
+/// The object `object` names: through the occurrence its path and rows
+/// lead to, or in the player's own artboard when the path is empty.
+pub(crate) fn scene_object_handle(
+    artboard: &ArtboardInstance,
+    object: &SceneObject,
+) -> Result<CoreHandle, SceneWriteError> {
+    match scene_occurrence(artboard, object)? {
+        None => artboard.object_handle(object.local_id),
+        Some(occurrence) => occurrence.object_handle(object.local_id),
+    }
+    .ok_or(SceneWriteError::NotFound)
+}
+
 /// Writes into the player's artboard and the nested artboard occurrences
 /// under it, valid for one driver round.
 ///
@@ -192,40 +224,13 @@ impl<'a> SceneWriter<'a> {
         self.changes
     }
 
-    /// The occurrence `object`'s path leads to, or None for an object of
-    /// the player's own artboard.
-    fn occurrence(
-        &self,
-        object: &SceneObject,
-    ) -> Result<Option<RuntimeNestedArtboardOccurrence>, SceneWriteError> {
-        if object.path.is_empty() {
-            return if object.rows.is_empty() {
-                Ok(None)
-            } else {
-                Err(SceneWriteError::PathNotFound)
-            };
-        }
-        self.artboard
-            .nested_artboard_occurrence_on_keyed_path(&object.path, &object.rows)
-            .map(Some)
-            .ok_or(SceneWriteError::PathNotFound)
-    }
-
-    fn object_handle(&self, object: &SceneObject) -> Result<CoreHandle, SceneWriteError> {
-        match self.occurrence(object)? {
-            None => self.artboard.object_handle(object.local_id),
-            Some(occurrence) => occurrence.object_handle(object.local_id),
-        }
-        .ok_or(SceneWriteError::NotFound)
-    }
-
     fn property(
         &self,
         object: &SceneObject,
         key: u16,
         field: i32,
     ) -> Result<CoreHandle, SceneWriteError> {
-        let handle = self.object_handle(object)?;
+        let handle = scene_object_handle(self.artboard, object)?;
         let supported = CoreRegistry::property_field_id(i32::from(key)) == field
             && handle
                 .with(|object| CoreRegistry::object_supports_property(object, u32::from(key)))
@@ -396,7 +401,7 @@ impl<'a> SceneWriter<'a> {
     /// reset that names the list rebuilds each row it lays out, under its key
     /// and in its place, and keeps none for reuse. Whether anything was reset.
     pub fn reset(&mut self, object: &SceneObject) -> Result<bool, SceneWriteError> {
-        let changed = match self.occurrence(object)? {
+        let changed = match scene_occurrence(self.artboard, object)? {
             None => {
                 let handle = self
                     .artboard
@@ -446,7 +451,7 @@ impl<'a> SceneWriter<'a> {
     /// chooses, or that carries a view model instance is refused
     /// ([`SceneWriteError::NotReplaceable`]). Always a change otherwise.
     pub fn replace_instance(&mut self, host: &SceneObject) -> Result<bool, SceneWriteError> {
-        let (artboard, machines, handle) = match self.occurrence(host)? {
+        let (artboard, machines, handle) = match scene_occurrence(self.artboard, host)? {
             None => (
                 self.artboard.native_handle(),
                 self.machine
@@ -477,7 +482,7 @@ impl<'a> SceneWriter<'a> {
 
     /// The keyed list `list` names.
     fn keyed_list(&self, list: &SceneObject) -> Result<CoreHandle, SceneWriteError> {
-        let handle = self.object_handle(list)?;
+        let handle = scene_object_handle(self.artboard, list)?;
         let keyed = handle
             .with_downcast::<ArtboardComponentList, _>(ArtboardComponentList::is_keyed)
             .unwrap_or(false);

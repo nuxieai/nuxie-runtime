@@ -25,9 +25,13 @@ const BLACK: u32 = 0xff00_0000;
 /// One text input's look.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TextFieldLook {
-    /// The index its style's font asset has in the file's assets, or
-    /// None when its style names none.
+    /// The index, in the file's assets, of the font it draws with: the
+    /// one a font binding chose, else the one its style names. None when
+    /// it draws with none, or with one the host gave.
     pub font_asset: Option<u32>,
+    /// Whether the font it draws with was given by the host and has no
+    /// index in the file's assets.
+    pub font_from_host: bool,
     pub font_size: f32,
     /// Its style's `wght` axis value, or None when it sets none.
     pub weight: Option<f32>,
@@ -93,13 +97,13 @@ pub fn text_field_look(
         return Err(TextFieldReadError::NotATextInput);
     };
     // A field with no style shapes nothing: no font, no size.
-    let (font_asset, font_size, letter_spacing, weight) = style
+    let (font, font_size, letter_spacing, weight) = style
         .and_then(|style| {
             style
                 .with(|object| {
                     object.as_text_style().map(|style| {
                         (
-                            style.base.font_asset_id(),
+                            style.asset(),
                             style.base.font_size(),
                             style.base.letter_spacing(),
                             style.axis_value(WEIGHT),
@@ -108,7 +112,15 @@ pub fn text_field_look(
                 })
                 .flatten()
         })
-        .unwrap_or((u32::MAX, 0.0, 0.0, None));
+        .unwrap_or((None, 0.0, 0.0, None));
+    // The font it draws with, as a font binding left it: one of the file's
+    // assets, or one the host gave, which has no index there.
+    let font_asset = font.as_ref().and_then(|font| {
+        artboard
+            .native_file()
+            .with_file(|file| file.assets().iter().position(|asset| asset == font))
+    });
+    let font_from_host = font.is_some() && font_asset.is_none();
     // A field with no text drawable draws no text; black, as one with no
     // fill paints.
     let color = drawn
@@ -144,7 +156,8 @@ pub fn text_field_look(
         }
     };
     Ok(TextFieldLook {
-        font_asset: (font_asset != u32::MAX).then_some(font_asset),
+        font_asset: font_asset.map(|index| index as u32),
+        font_from_host,
         font_size,
         weight,
         letter_spacing,

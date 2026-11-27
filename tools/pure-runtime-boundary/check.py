@@ -581,6 +581,14 @@ PORTABLE_ABI_FACADE_FILE_PATHS = {
         "runtime::layout_component::LayoutComponent",
         "runtime::math::path_types::PathDirection",
     },
+    # Text field tests: a font the host gives through a view model's font,
+    # as a host on the Rust API gives it; the C API sets no font in a view
+    # model.
+    "crates/nux-capi/src/text_fields_tests.rs": {
+        "runtime::text::font_hb::HbFont",
+        "runtime::viewmodel::viewmodel_instance::ViewModelInstance",
+        "runtime::viewmodel::viewmodel_instance_asset_font::ViewModelInstanceAssetFont",
+    },
     # The island read fails as a semantic capture does on a clip past the
     # geometry budget or with a bad path.
     "crates/nux-capi/src/island_frames.rs": {

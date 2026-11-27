@@ -1663,16 +1663,20 @@ typedef struct NuxTextFieldObjects {
 
 /**
  * A text field's look, copied out of a step. Colors are ARGB.
- * `font_asset` is the index of its font in the file's assets, or
- * UINT32_MAX when it names none. `has_weight` is 0 when its style sets
- * no `wght`. `align` is 0 left, 1 right, 2 center. `max_characters` is 0
- * for no limit. `value_length` and `placeholder_length` are UTF-8
- * bytes, for `nux_player_scene_text_copy`. Canonical 0/1 flags.
+ * `font_asset` is the index, in the file's assets, of the font it draws
+ * with, a font binding's choice included, or UINT32_MAX when it draws
+ * with none. `font_from_host` is 1 when the font that draws was given by
+ * the host and has no index in the file's assets; `font_asset` is then
+ * UINT32_MAX. `has_weight` is 0 when its style sets no `wght`. `align`
+ * is 0 left, 1 right, 2 center. `max_characters` is 0 for no limit.
+ * `value_length` and `placeholder_length` are UTF-8 bytes, for
+ * `nux_player_scene_text_copy`. Canonical 0/1 flags.
  */
 typedef struct NuxTextFieldLook {
   uint32_t struct_size;
   uint64_t render_revision;
   uint32_t font_asset;
+  uint32_t font_from_host;
   float font_size;
   uint32_t has_weight;
   float weight;

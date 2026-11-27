@@ -1837,7 +1837,7 @@
     },
     {
       "name": "NuxTextFieldLook",
-      "size": 80,
+      "size": 88,
       "alignment": 8,
       "fields": [
         {
@@ -1853,56 +1853,60 @@
           "offset": 16
         },
         {
-          "name": "font_size",
+          "name": "font_from_host",
           "offset": 20
         },
         {
-          "name": "has_weight",
+          "name": "font_size",
           "offset": 24
         },
         {
-          "name": "weight",
+          "name": "has_weight",
           "offset": 28
         },
         {
-          "name": "letter_spacing",
+          "name": "weight",
           "offset": 32
         },
         {
-          "name": "color",
+          "name": "letter_spacing",
           "offset": 36
         },
         {
-          "name": "has_placeholder",
+          "name": "color",
           "offset": 40
         },
         {
-          "name": "placeholder_color",
+          "name": "has_placeholder",
           "offset": 44
         },
         {
-          "name": "align",
+          "name": "placeholder_color",
           "offset": 48
         },
         {
-          "name": "obscured",
+          "name": "align",
           "offset": 52
         },
         {
-          "name": "max_characters",
+          "name": "obscured",
           "offset": 56
         },
         {
-          "name": "disabled",
+          "name": "max_characters",
           "offset": 60
         },
         {
-          "name": "value_length",
+          "name": "disabled",
           "offset": 64
         },
         {
-          "name": "placeholder_length",
+          "name": "value_length",
           "offset": 72
+        },
+        {
+          "name": "placeholder_length",
+          "offset": 80
         }
       ]
     },

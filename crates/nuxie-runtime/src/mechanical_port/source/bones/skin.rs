@@ -384,7 +384,11 @@ impl Skin {
         }
     }
 
-    pub(crate) fn on_dirty_occurrence(owner: &CoreHandle, dirt: ComponentDirt) {
+    pub(crate) fn on_dirty_occurrence(
+        owner: &CoreHandle,
+        dirt: ComponentDirt,
+        _value: ComponentDirt,
+    ) {
         Self::on_dirty_with_path(
             owner,
             dirt,

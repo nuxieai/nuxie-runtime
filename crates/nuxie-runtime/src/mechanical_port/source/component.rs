@@ -51,8 +51,13 @@ pub enum ComponentOccurrenceHandle {
 pub type DependencySnapshot =
     crate::mechanical_port::source::lazy_vector::LazyVectorSnapshot<ComponentOccurrenceHandle>;
 
+/// An onDirty that runs once its object's borrow is released, given the
+/// object, its dirt after the add, and the bits the add carried (addDirt's
+/// value).
+pub(crate) type DirtyHandler = fn(&CoreHandle, ComponentDirt, ComponentDirt);
+
 enum DirtyAction<T> {
-    Callback(fn(&CoreHandle, ComponentDirt), ComponentDirt),
+    Callback(DirtyHandler, ComponentDirt),
     Complete(T),
 }
 
@@ -243,7 +248,7 @@ impl ComponentOccurrenceHandle {
     pub(crate) fn on_dirty_helper(&self, dirt: ComponentDirt) {
         self.on_dirty(dirt);
     }
-    fn on_dirty_authored(handle: &CoreHandle, dirt: ComponentDirt) {
+    fn on_dirty_authored(handle: &CoreHandle, dirt: ComponentDirt, value: ComponentDirt) {
         let callback = handle
             .with_mut(|object| {
                 if let Some(callback) = object.component_on_dirty_handler() {
@@ -255,12 +260,13 @@ impl ComponentOccurrenceHandle {
             })
             .flatten();
         if let Some(callback) = callback {
-            callback(handle, dirt);
+            callback(handle, dirt, value);
         }
     }
     fn on_dirty_authored_from_layout(
         handle: &CoreHandle,
         dirt: ComponentDirt,
+        value: ComponentDirt,
         active: &mut ActiveLayoutOwner<'_>,
         active_handle: &CoreHandle,
     ) {
@@ -286,10 +292,10 @@ impl ComponentOccurrenceHandle {
             crate::mechanical_port::source::generated::text::text_style_base::TextStyleBase::TYPE_KEY,
         ) {
             crate::mechanical_port::source::text::text_style::TextStyle::on_dirty_from_layout(
-                handle, dirt, active, active_handle,
+                handle, value, active, active_handle,
             );
         } else {
-            Self::on_dirty_authored(handle, dirt);
+            Self::on_dirty_authored(handle, dirt, value);
         }
     }
     fn on_dirty_helper_from_layout(
@@ -349,7 +355,7 @@ impl ComponentOccurrenceHandle {
                 DirtyAction::Callback(callback, dirt) => {
                     // The arena borrow and temporary strong slot reference end
                     // before a callback can edit or retire this occurrence.
-                    callback(handle, dirt);
+                    callback(handle, dirt, value);
                     self.with_component(|component| {
                         component.notify_and_snapshot_dependents(recurse)
                     })
@@ -479,7 +485,7 @@ impl ComponentOccurrenceHandle {
                         handle, dirt, shape,
                     );
                 } else {
-                    Self::on_dirty_authored(handle, dirt);
+                    Self::on_dirty_authored(handle, dirt, value);
                 }
             }
             Self::PathComposer(handle) => {
@@ -540,7 +546,7 @@ impl ComponentOccurrenceHandle {
                     handle, dirt, text,
                 );
             }
-            Self::Authored(handle) => Self::on_dirty_authored(handle, dirt),
+            Self::Authored(handle) => Self::on_dirty_authored(handle, dirt, value),
             Self::PathComposer(_) | Self::TextVariationHelper(_) => self.on_dirty(dirt),
         }
         self.notify_artboard();
@@ -576,7 +582,7 @@ impl ComponentOccurrenceHandle {
         };
         match self {
             Self::Authored(handle) => {
-                Self::on_dirty_authored_from_layout(handle, dirt, active, active_handle);
+                Self::on_dirty_authored_from_layout(handle, dirt, value, active, active_handle);
             }
             Self::PathComposer(_) | Self::TextVariationHelper(_) => {
                 self.on_dirty_helper_from_layout(dirt, active, active_handle);
@@ -640,9 +646,15 @@ impl ComponentOccurrenceHandle {
             let (collapsed, collapsables) = match action {
                 DirtyAction::Callback(callback, dirt) => {
                     if let Some((active, active_handle)) = active_layout.as_mut() {
-                        Self::on_dirty_authored_from_layout(handle, dirt, active, active_handle);
+                        Self::on_dirty_authored_from_layout(
+                            handle,
+                            dirt,
+                            ComponentDirt::COLLAPSED,
+                            active,
+                            active_handle,
+                        );
                     } else {
-                        callback(handle, dirt);
+                        callback(handle, dirt, ComponentDirt::COLLAPSED);
                     }
                     let Some(post_dirty) = handle
                         .with(|object| {

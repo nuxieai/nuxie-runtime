@@ -5854,8 +5854,7 @@ pub trait CoreCapabilities: Any {
     /// an already-borrowed receiver retain component_on_dirty's direct lane.
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         None
     }
     fn component_hit_test_point(
@@ -10631,6 +10630,11 @@ impl CoreRegistry {
             );
         }
         let mut completion = crate::source::core::PropertySetterCompletion::default();
+        let setter = crate::source::core::SetterInProgress::new(
+            handle,
+            "CoreRegistry::set_id_handle",
+            property_key,
+        );
         let pending = handle.with_mut(|object| {
             Self::set_id_with_completion(object, property_key, value, &mut completion);
             // Capture deferred setter work while this receiver is already
@@ -10640,6 +10644,7 @@ impl CoreRegistry {
                 .downcast_ref::<crate::source::scripted::scripted_transition::ScriptedTransition>()
                 .is_some_and(|transition| transition.has_pending_property_changes())
         });
+        drop(setter);
         completion.finish();
         if pending == Some(true) {
             flush_scripted_transition_property_changes(handle);
@@ -10670,6 +10675,11 @@ impl CoreRegistry {
             return crate::source::viewmodel::viewmodel_instance_trigger::ViewModelInstanceTrigger::set_property_value_handle(handle, value);
         }
         let mut completion = crate::source::core::PropertySetterCompletion::default();
+        let setter = crate::source::core::SetterInProgress::new(
+            handle,
+            "CoreRegistry::set_uint_handle",
+            property_key,
+        );
         let pending = handle.with_mut(|object| {
             {
                 if !prepare_layout_participant_uint(
@@ -10687,6 +10697,7 @@ impl CoreRegistry {
                 .downcast_ref::<crate::source::scripted::scripted_transition::ScriptedTransition>()
                 .is_some_and(|transition| transition.has_pending_property_changes())
         });
+        drop(setter);
         completion.finish();
         if pending == Some(true) {
             flush_scripted_transition_property_changes(handle);
@@ -10696,22 +10707,34 @@ impl CoreRegistry {
 
     pub fn set_string_handle(handle: &CoreHandle, property_key: i32, value: String) -> bool {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
+        let setter = crate::source::core::SetterInProgress::new(
+            handle,
+            "CoreRegistry::set_string_handle",
+            property_key,
+        );
         let written = handle
             .with_mut(|object| {
                 Self::set_string_with_completion(object, property_key, value, &mut completion)
             })
             .is_some();
+        drop(setter);
         completion.finish();
         written
     }
 
     pub fn set_color_handle(handle: &CoreHandle, property_key: i32, value: i32) -> bool {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
+        let setter = crate::source::core::SetterInProgress::new(
+            handle,
+            "CoreRegistry::set_color_handle",
+            property_key,
+        );
         let written = handle
             .with_mut(|object| {
                 Self::set_color_with_completion(object, property_key, value, &mut completion)
             })
             .is_some();
+        drop(setter);
         completion.finish();
         written
     }
@@ -10736,6 +10759,11 @@ impl CoreRegistry {
             return true;
         }
         let mut completion = crate::source::core::PropertySetterCompletion::default();
+        let setter = crate::source::core::SetterInProgress::new(
+            handle,
+            "CoreRegistry::set_bool_handle",
+            property_key,
+        );
         let written = handle
             .with_mut(|object| {
                 if !prepare_layout_participant_bool(
@@ -10749,6 +10777,7 @@ impl CoreRegistry {
                 }
             })
             .is_some();
+        drop(setter);
         completion.finish();
         written
     }
@@ -10772,11 +10801,17 @@ impl CoreRegistry {
                 return written;
             }
             let mut completion = crate::source::core::PropertySetterCompletion::default();
+            let setter = crate::source::core::SetterInProgress::new(
+                handle,
+                "CoreRegistry::set_double_handle",
+                property_key,
+            );
             let written = handle
                 .with_mut(|object| {
                     Self::set_double_with_completion(object, property_key, value, &mut completion)
                 })
                 .is_some();
+            drop(setter);
             completion.finish_in_place();
             return written;
         }
@@ -10867,6 +10902,11 @@ impl CoreRegistry {
             return crate::mechanical_port::source::text::text_style::TextStyle::set_double_occurrence(handle, property_key as u16, value);
         }
         let mut completion = crate::source::core::PropertySetterCompletion::default();
+        let setter = crate::source::core::SetterInProgress::new(
+            handle,
+            "CoreRegistry::set_double_handle",
+            property_key,
+        );
         let written = handle
             .with_mut(|object| {
                 if !prepare_layout_participant_double(
@@ -10880,6 +10920,7 @@ impl CoreRegistry {
                 }
             })
             .is_some();
+        drop(setter);
         completion.finish_in_place();
         written
     }
@@ -10896,22 +10937,34 @@ impl CoreRegistry {
             return crate::source::viewmodel::viewmodel_instance_trigger::ViewModelInstanceTrigger::trigger_handle(handle);
         }
         let mut completion = crate::source::core::PropertySetterCompletion::default();
+        let setter = crate::source::core::SetterInProgress::new(
+            handle,
+            "CoreRegistry::set_callback_handle",
+            property_key,
+        );
         let written = handle
             .with_mut(|object| {
                 Self::set_callback_with_completion(object, property_key, value, &mut completion)
             })
             .is_some();
+        drop(setter);
         completion.finish();
         written
     }
 
     pub fn set_int_handle(handle: &CoreHandle, property_key: i32, value: i32) -> bool {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
+        let setter = crate::source::core::SetterInProgress::new(
+            handle,
+            "CoreRegistry::set_int_handle",
+            property_key,
+        );
         let written = handle
             .with_mut(|object| {
                 Self::set_int_with_completion(object, property_key, value, &mut completion)
             })
             .is_some();
+        drop(setter);
         completion.finish();
         written
     }
@@ -64109,8 +64162,7 @@ impl CoreCapabilities
 {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
     }
     // Preserve the lifecycle methods inherited by this source owner.
@@ -64178,8 +64230,7 @@ impl CoreCapabilities
 {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
     }
     // Preserve the lifecycle methods inherited by this source owner.
@@ -64258,7 +64309,7 @@ impl CoreCapabilities
 impl CoreCapabilities for crate::mechanical_port::source::constraints::list_follow_path_constraint::ListFollowPathConstraint {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
     }
     // Preserve the lifecycle methods inherited by this source owner.
@@ -64293,8 +64344,7 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::list_foll
 impl CoreCapabilities for crate::mechanical_port::source::constraints::ik_constraint::IkConstraint {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
     }
     // Preserve the lifecycle methods inherited by this source owner.
@@ -64369,8 +64419,7 @@ impl CoreCapabilities
 {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
     }
     // Preserve the lifecycle methods inherited by this source owner.
@@ -64511,8 +64560,7 @@ impl CoreCapabilities
     }
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
     }
     fn is_advancing_component(&self) -> bool {
@@ -64638,7 +64686,7 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling
 impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling::scroll_bar_constraint::ScrollBarConstraint {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
     }
     // Preserve the lifecycle methods inherited by this source owner.
@@ -64682,8 +64730,7 @@ impl CoreCapabilities
 {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
     }
     // Preserve the lifecycle methods inherited by this source owner.
@@ -64751,8 +64798,7 @@ impl CoreCapabilities
 {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
     }
     // Preserve the lifecycle methods inherited by this source owner.
@@ -64860,8 +64906,7 @@ impl CoreCapabilities
 {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
     }
     // Preserve the lifecycle methods inherited by this source owner.
@@ -72928,8 +72973,7 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::mesh::Mesh {
 impl CoreCapabilities for crate::mechanical_port::source::shapes::points_path::PointsPath {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
     }
     fn component_on_dirty(
@@ -73253,8 +73297,7 @@ impl CoreCapabilities
 impl CoreCapabilities for crate::mechanical_port::source::shapes::rectangle::Rectangle {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
     }
     fn component_on_dirty(
@@ -73572,8 +73615,7 @@ impl CoreCapabilities
 impl CoreCapabilities for crate::mechanical_port::source::shapes::triangle::Triangle {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
     }
     fn component_on_dirty(
@@ -73804,8 +73846,7 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::triangle::Tria
 impl CoreCapabilities for crate::mechanical_port::source::shapes::ellipse::Ellipse {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
     }
     fn component_on_dirty(
@@ -74036,8 +74077,7 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::ellipse::Ellip
 impl CoreCapabilities for crate::mechanical_port::source::shapes::list_path::ListPath {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
     }
     fn component_on_dirty(
@@ -74347,8 +74387,7 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::clipping_shape
 impl CoreCapabilities for crate::mechanical_port::source::shapes::polygon::Polygon {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
     }
     fn component_on_dirty(
@@ -74579,8 +74618,7 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::polygon::Polyg
 impl CoreCapabilities for crate::mechanical_port::source::shapes::star::Star {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
     }
     fn component_on_dirty(
@@ -77522,8 +77560,7 @@ impl CoreCapabilities for crate::mechanical_port::source::bones::root_bone::Root
 impl CoreCapabilities for crate::mechanical_port::source::bones::skin::Skin {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::bones::skin::Skin::on_dirty_occurrence)
     }
     fn component_update(
@@ -78567,8 +78604,7 @@ impl CoreCapabilities
 impl CoreCapabilities for crate::mechanical_port::source::text::text_style::TextStyle {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::text::text_style::TextStyle::on_dirty_occurrence)
     }
     fn component_on_dirty(
@@ -78672,8 +78708,7 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_style_paint
     }
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::text::text_style::TextStyle::on_dirty_occurrence)
     }
     fn component_on_dirty(
@@ -79593,8 +79628,7 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text::Text {
 
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
-    {
+    ) -> Option<crate::mechanical_port::source::component::DirtyHandler> {
         Some(crate::mechanical_port::source::text::text::Text::on_dirty_occurrence)
     }
     fn component_on_dirty(

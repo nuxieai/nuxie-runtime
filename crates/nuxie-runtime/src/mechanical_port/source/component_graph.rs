@@ -18,7 +18,7 @@ use std::rc::Rc;
 use crate::mechanical_port::source::{
     artboard::RuntimeArtboardDirtyHandle,
     bones::{bone::Bone, root_bone::RootBone, skin::Skin},
-    component::ComponentOccurrenceHandle,
+    component::{ComponentOccurrenceHandle, DirtyHandler},
     component_dirt::ComponentDirt,
     core::CoreHandle,
     core::CoreObject,
@@ -29,7 +29,6 @@ use crate::mechanical_port::source::{
 use std::any::Any;
 
 type UpdateHandler = fn(&CoreHandle, ComponentDirt) -> bool;
-type DirtyHandler = fn(&CoreHandle, ComponentDirt);
 
 /// Where a member's dirt lives and what its onDirty runs. Types whose
 /// dirt-phase state lives outside the component carry the cells it runs on.
@@ -614,7 +613,7 @@ impl ComponentGraph {
         node.dirt.set(dirt);
         match &node.on_dirty {
             OnDirty::Noop => {}
-            OnDirty::Handler(handler) => handler(self.authored(i), dirt),
+            OnDirty::Handler(handler) => handler(self.authored(i), dirt, value),
             OnDirty::Receiver => {
                 self.authored(i).with_mut(|object| {
                     object.component_on_dirty(dirt);

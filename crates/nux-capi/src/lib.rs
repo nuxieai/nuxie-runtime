@@ -1050,6 +1050,8 @@ mod text_geometry;
 pub use text_geometry::*;
 mod island_frames;
 pub use island_frames::*;
+mod text_fields;
+pub use text_fields::*;
 
 mod semantic_snapshot;
 mod semantic_types;

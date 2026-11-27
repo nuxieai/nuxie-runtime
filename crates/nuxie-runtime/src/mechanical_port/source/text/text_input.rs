@@ -218,6 +218,9 @@ impl TextInput {
     pub fn raw_text_input(&mut self) -> &mut RawTextInput {
         &mut self.raw_text_input
     }
+    pub(crate) fn text_style(&self) -> Option<&CoreHandle> {
+        self.text_style.as_ref()
+    }
     pub fn mark_paint_dirty(&mut self) {
         self.restart_cursor_blink();
         self.base.add_dirt(ComponentDirt::PAINT, false);

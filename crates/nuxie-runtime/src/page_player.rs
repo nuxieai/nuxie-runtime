@@ -3,9 +3,11 @@ mod driver;
 mod island;
 mod renew;
 mod reset;
+mod text_field;
 pub use crate::FieldText;
 pub use driver::*;
 pub use island::{IslandClip, IslandFrame, IslandReadError, island_frame};
+pub use text_field::{TextFieldLook, TextFieldReadError, scene_text, text_field_look};
 
 use crate::mechanical_port::source::animation::state_machine_instance::FieldTextWindow;
 use crate::source::input::focusable::{Key, KeyModifiers};

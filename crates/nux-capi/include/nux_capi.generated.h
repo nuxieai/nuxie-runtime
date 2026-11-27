@@ -1651,6 +1651,44 @@ typedef struct NuxPlayerStateChangeView {
 } NuxPlayerStateChangeView;
 
 /**
+ * One field to read: an engine text input and, when `has_placeholder`
+ * is 1, the text that shows its placeholder.
+ */
+typedef struct NuxTextFieldObjects {
+  uint32_t struct_size;
+  struct NuxSceneObject field;
+  uint32_t has_placeholder;
+  struct NuxSceneObject placeholder;
+} NuxTextFieldObjects;
+
+/**
+ * A text field's look, copied out of a step. Colors are ARGB.
+ * `font_asset` is the index of its font in the file's assets, or
+ * UINT32_MAX when it names none. `has_weight` is 0 when its style sets
+ * no `wght`. `align` is 0 left, 1 right, 2 center. `max_characters` is 0
+ * for no limit. `value_length` and `placeholder_length` are UTF-8
+ * bytes, for `nux_player_scene_text_copy`. Canonical 0/1 flags.
+ */
+typedef struct NuxTextFieldLook {
+  uint32_t struct_size;
+  uint64_t render_revision;
+  uint32_t font_asset;
+  float font_size;
+  uint32_t has_weight;
+  float weight;
+  float letter_spacing;
+  uint32_t color;
+  uint32_t has_placeholder;
+  uint32_t placeholder_color;
+  uint32_t align;
+  uint32_t obscured;
+  uint32_t max_characters;
+  uint32_t disabled;
+  size_t value_length;
+  size_t placeholder_length;
+} NuxTextFieldLook;
+
+/**
  * Native TextInput geometry for an exact presented semantic occurrence.
  * The transform maps input-local coordinates into the root artboard, including
  * nested placement. Bounds describe shaped text, NOT the field container;
@@ -3137,6 +3175,22 @@ NuxStatus nux_player_reveal_semantic_node(struct NuxPlayer *player,
                                           bool *out_moved);
 
 /**
+ * Copy the words `object` holds in the state named by `step`, a text
+ * input's text or a text's, as UTF-8 with no terminator, into `buffer`,
+ * as `nux_player_field_string_copy` copies: `*out_length` is the length
+ * it needs; a null `buffer` with `capacity` 0 asks for it;
+ * LIMIT_EXCEEDED copies nothing when `capacity` is short or the text is
+ * over 1 MiB. A password's text is copied too: the host shows it in a
+ * secure field and must never log it.
+ */
+NuxStatus nux_player_scene_text_copy(const struct NuxPlayer *player,
+                                     const struct NuxPlayerStepResult *step,
+                                     const struct NuxSceneObject *object,
+                                     uint8_t *buffer,
+                                     size_t capacity,
+                                     size_t *out_length);
+
+/**
  * Move a captured scroll region's content by `dx`, `dy` points in the
  * scroller's own space, the sense of a scroll wheel's delta: a negative
  * `dy` moves the content up, showing what is below, and a negative `dx`
@@ -3411,6 +3465,22 @@ NuxStatus nux_player_step_result_view_model_change_list_item(const struct NuxPla
                                                              size_t change_index,
                                                              size_t item_index,
                                                              uint64_t *out_instance_id);
+
+/**
+ * Read `count` fields' looks from the state named by `step`, in order,
+ * into `out`, as `nux_player_island_frames` reads boxes: the step must
+ * be this player's and name its current render revision, or
+ * HANDLE_MISMATCH. NOT_FOUND when an object names nothing,
+ * INVALID_ARGUMENT when a field is not a text input or a placeholder
+ * is not a text, INVALID_STRUCT_SIZE when a record's `struct_size` is
+ * not its struct's size. `out` is written only when every field reads.
+ * Changes nothing in the scene.
+ */
+NuxStatus nux_player_text_fields(const struct NuxPlayer *player,
+                                 const struct NuxPlayerStepResult *step,
+                                 const struct NuxTextFieldObjects *fields,
+                                 size_t count,
+                                 struct NuxTextFieldLook *out);
 
 /**
  * Synchronize a native editor's content displacement with the input's existing

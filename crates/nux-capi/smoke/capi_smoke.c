@@ -437,6 +437,17 @@ static int run_smoke(int argc, char** argv)
     CHECK(nux_player_island_frames(player, step_result, NULL, 1, &island) ==
           NUX_STATUS_NULL_ARGUMENT);
     CHECK(island.struct_size == sizeof(NuxIslandFrame));
+    NuxTextFieldLook look = {.struct_size = sizeof(NuxTextFieldLook)};
+    CHECK(nux_player_text_fields(player, step_result, NULL, 0, &look) ==
+          NUX_STATUS_OK);
+    CHECK(nux_player_text_fields(player, step_result, NULL, 1, &look) ==
+          NUX_STATUS_NULL_ARGUMENT);
+    CHECK(look.struct_size == sizeof(NuxTextFieldLook));
+    size_t text_length = 1;
+    CHECK(nux_player_scene_text_copy(player, step_result, NULL, NULL, 0,
+                                     &text_length) ==
+          NUX_STATUS_NULL_ARGUMENT);
+    CHECK(text_length == 0);
     CHECK(nux_player_step_result_free(step_result) == NUX_STATUS_OK);
 
     /* A host driver: asked after the advance, asked again after the round

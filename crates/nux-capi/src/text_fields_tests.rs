@@ -74,7 +74,8 @@ fn obj(b: &mut Vec<u8>, kind: &str, props: &[(&str, V)]) {
 const FONT: &[u8] = include_bytes!("../../../fixtures/fonts/roboto-input.ttf");
 
 /// The page's file-global artboard id: the Backboard is record 0 and the
-/// two fonts, each an asset and its contents, are records 1 to 4.
+/// two fonts, each an asset and its contents, are records 1 to 4, in a
+/// file with no view model.
 const PAGE_GLOBAL_ID: u32 = 5;
 
 /// The field's text paint, the placeholder's (the same gray at a third of
@@ -100,6 +101,9 @@ struct Spec {
     /// Its FocusData's flags: 7 can focus, be touched and be reached in
     /// order; 6 cannot focus.
     focus_flags: u64,
+    /// Whether its style's font is bound to the view model's `font`, which
+    /// names the file's first font.
+    font_bound: bool,
 }
 
 /// "Ada" in the second font at 17 points, spaced 0.5, weight 600,
@@ -112,6 +116,7 @@ const AT_REST: Spec = Spec {
     obscured: false,
     disabled: false,
     focus_flags: 7,
+    font_bound: false,
 };
 
 fn size(width: f32, height: f32) -> Vec<(&'static str, V)> {
@@ -257,6 +262,21 @@ impl Board {
         ];
         paint.extend(font);
         let style = self.named("Input style", "TextStylePaint", &paint);
+        if spec.font_bound {
+            // The style's font, bound to property 0 of view model 0. A
+            // binding is not one of the artboard's objects and takes no id.
+            obj(
+                &mut self.b,
+                "DataBindContext",
+                &[
+                    (
+                        "propertyKey",
+                        U(u64::from(key("TextStylePaint", "fontAssetId"))),
+                    ),
+                    ("sourcePathIds", B(&[0, 0])),
+                ],
+            );
+        }
         if let Some(weight) = spec.weight {
             self.named(
                 "Weight",
@@ -292,6 +312,11 @@ struct Artboard {
     holds: Holds,
 }
 
+/// Whether `artboard` holds a field whose font is bound.
+fn binds_font(artboard: &Artboard) -> bool {
+    matches!(artboard.holds, Holds::Field(spec) if spec.font_bound)
+}
+
 fn board(artboard: &Artboard, style_base: usize) -> Board {
     use V::*;
     let mut board = Board {
@@ -302,16 +327,17 @@ fn board(artboard: &Artboard, style_base: usize) -> Board {
         ids: Vec::new(),
     };
     let style = board.next_style(0);
-    board.add(
-        "Artboard",
-        &[
-            ("name", S(artboard.name)),
-            ("width", F(artboard.size.0)),
-            ("height", F(artboard.size.1)),
-            ("styleId", U(style)),
-            ("clip", U(0)),
-        ],
-    );
+    let mut record = vec![
+        ("name", S(artboard.name)),
+        ("width", F(artboard.size.0)),
+        ("height", F(artboard.size.1)),
+        ("styleId", U(style)),
+        ("clip", U(0)),
+    ];
+    if binds_font(artboard) {
+        record.push(("viewModelId", U(0)));
+    }
+    board.add("Artboard", &record);
     board.add("LayoutCssStyle", &[("parentId", U(0))]);
     match artboard.holds {
         Holds::Field(spec) => board.field(0, spec),
@@ -341,6 +367,21 @@ fn file(artboards: &[Artboard]) -> (Vec<u8>, Vec<Vec<(&'static str, usize)>>) {
     for asset in 0..2 {
         obj(&mut b, "FontAsset", &[("assetId", V::U(asset))]);
         obj(&mut b, "FileAssetContents", &[("bytes", V::B(FONT))]);
+    }
+    if artboards.iter().any(binds_font) {
+        // A view model whose `font` names the file's first font.
+        obj(&mut b, "ViewModel", &[("name", V::S("Field"))]);
+        obj(
+            &mut b,
+            "ViewModelPropertyAssetFont",
+            &[("name", V::S("font"))],
+        );
+        obj(&mut b, "ViewModelInstance", &[("viewModelId", V::U(0))]);
+        obj(
+            &mut b,
+            "ViewModelInstanceAssetFont",
+            &[("viewModelPropertyId", V::U(0)), ("propertyValue", V::U(0))],
+        );
     }
     let mut ids = Vec::new();
     for (index, artboard) in artboards.iter().enumerate() {
@@ -536,6 +577,8 @@ fn write_color(object: Object, value: u32) -> Write {
 struct Played {
     file: *mut NuxFile,
     instance: *mut NuxArtboardInstance,
+    /// The view model bound to the page, when a field's font is bound.
+    model: *mut NuxViewModelInstance,
     player: *mut NuxPlayer,
     drive: Box<Drive>,
     ids: Vec<Vec<(&'static str, usize)>>,
@@ -546,6 +589,7 @@ impl Played {
         let (bytes, ids) = file(artboards);
         let mut file = ptr::null_mut();
         let mut instance = ptr::null_mut();
+        let mut model = ptr::null_mut();
         let mut player = ptr::null_mut();
         let driving = Box::new(Drive::default());
         unsafe {
@@ -562,6 +606,16 @@ impl Played {
                 nux_artboard_instance_new(file, 0, &mut instance),
                 NuxStatus::Ok
             );
+            if artboards.iter().any(binds_font) {
+                assert_eq!(
+                    nux_view_model_instance_new_default(instance, &mut model),
+                    NuxStatus::Ok
+                );
+                assert_eq!(
+                    nux_artboard_instance_bind_view_model(instance, model),
+                    NuxStatus::Ok
+                );
+            }
             assert_eq!(nux_player_new_default(instance, &mut player), NuxStatus::Ok);
             let driver = NuxPlayerDriver {
                 struct_size: sized::<NuxPlayerDriver>(),
@@ -574,6 +628,7 @@ impl Played {
         Self {
             file,
             instance,
+            model,
             player,
             drive: driving,
             ids,
@@ -698,6 +753,9 @@ impl Drop for Played {
     fn drop(&mut self) {
         unsafe {
             assert_eq!(nux_player_free(self.player), NuxStatus::Ok);
+            if !self.model.is_null() {
+                assert_eq!(nux_view_model_instance_free(self.model), NuxStatus::Ok);
+            }
             assert_eq!(nux_artboard_instance_free(self.instance), NuxStatus::Ok);
             assert_eq!(nux_file_free(self.file), NuxStatus::Ok);
         }
@@ -753,6 +811,7 @@ fn a_field_at_rest_reads_its_look() {
             struct_size: sized::<NuxTextFieldLook>(),
             render_revision: step.revision(),
             font_asset: 1,
+            font_from_host: 0,
             font_size: 17.0,
             has_weight: 1,
             weight: 600.0,
@@ -795,6 +854,7 @@ fn a_field_without_a_placeholder_weight_or_font_reads_none() {
     assert_eq!(look.has_weight, 0);
     assert_eq!(look.weight, 0.0);
     assert_eq!(look.font_asset, u32::MAX);
+    assert_eq!(look.font_from_host, 0);
     assert_eq!(look.font_size, 17.0);
     assert_eq!(look.value_length, 3);
 }
@@ -872,6 +932,46 @@ fn typed_text_reads_as_the_value() {
         scene.copy(&step, &scene.object("Input")).as_deref(),
         Ok("Bob")
     );
+}
+
+/// A font binding's choice is the font that draws, and the read names it:
+/// the file's first font, though the style names the second. A font the
+/// host gives through the binding has no index in the file's assets, and
+/// the read says so.
+#[test]
+fn a_bound_font_reads_as_the_font_that_draws() {
+    use nuxie::runtime::{
+        text::font_hb::HbFont,
+        viewmodel::{
+            viewmodel_instance::ViewModelInstance,
+            viewmodel_instance_asset_font::ViewModelInstanceAssetFont,
+        },
+    };
+    let scene = Played::new(&[page(Spec {
+        font_bound: true,
+        ..AT_REST
+    })]);
+    let step = scene.settle();
+    let look = scene.look(&step);
+    assert_eq!((look.font_asset, look.font_from_host), (0, 0));
+    drop(step);
+
+    // The C API sets no font in a view model; a host on the Rust API does,
+    // as this does.
+    let font = HbFont::decode(FONT).expect("the fixture's font");
+    unsafe { &*scene.model }
+        .instance
+        .native_handle()
+        .with_downcast::<ViewModelInstance, _>(|model| model.property_value_named("font"))
+        .flatten()
+        .expect("the view model's font")
+        .with_downcast_mut::<ViewModelInstanceAssetFont, _>(|font_value| {
+            font_value.set_value(Some(font))
+        })
+        .expect("a font value");
+    let step = scene.settle();
+    let look = scene.look(&step);
+    assert_eq!((look.font_asset, look.font_from_host), (u32::MAX, 1));
 }
 
 /// A field that hides its text reads obscured, and the copy gives the

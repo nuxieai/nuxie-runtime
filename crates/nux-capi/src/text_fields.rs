@@ -23,17 +23,21 @@ pub struct NuxTextFieldObjects {
 }
 
 /// A text field's look, copied out of a step. Colors are ARGB.
-/// `font_asset` is the index of its font in the file's assets, or
-/// UINT32_MAX when it names none. `has_weight` is 0 when its style sets
-/// no `wght`. `align` is 0 left, 1 right, 2 center. `max_characters` is 0
-/// for no limit. `value_length` and `placeholder_length` are UTF-8
-/// bytes, for `nux_player_scene_text_copy`. Canonical 0/1 flags.
+/// `font_asset` is the index, in the file's assets, of the font it draws
+/// with, a font binding's choice included, or UINT32_MAX when it draws
+/// with none. `font_from_host` is 1 when the font that draws was given by
+/// the host and has no index in the file's assets; `font_asset` is then
+/// UINT32_MAX. `has_weight` is 0 when its style sets no `wght`. `align`
+/// is 0 left, 1 right, 2 center. `max_characters` is 0 for no limit.
+/// `value_length` and `placeholder_length` are UTF-8 bytes, for
+/// `nux_player_scene_text_copy`. Canonical 0/1 flags.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct NuxTextFieldLook {
     pub struct_size: u32,
     pub render_revision: u64,
     pub font_asset: u32,
+    pub font_from_host: u32,
     pub font_size: f32,
     pub has_weight: u32,
     pub weight: f32,
@@ -156,6 +160,7 @@ pub unsafe extern "C" fn nux_player_text_fields(
                 struct_size: std::mem::size_of::<NuxTextFieldLook>() as u32,
                 render_revision: step.scheduling.render_revision,
                 font_asset: look.font_asset.unwrap_or(u32::MAX),
+                font_from_host: u32::from(look.font_from_host),
                 font_size: look.font_size,
                 has_weight: u32::from(look.weight.is_some()),
                 weight: look.weight.unwrap_or(0.0),

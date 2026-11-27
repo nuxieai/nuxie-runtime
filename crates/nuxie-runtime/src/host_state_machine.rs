@@ -2,6 +2,8 @@
 
 mod listener_invocation;
 mod nested_events;
+#[cfg(test)]
+mod settle_tests;
 pub use listener_invocation::{
     ListenerInvocationKind, ScriptGamepadInputChange, ScriptGamepadMappingKind,
     ScriptGamepadSnapshot, ScriptListenerInvocation, ScriptPointerEventKind,
@@ -487,7 +489,12 @@ fn advance_native_state_machines(
 
 /// The settle half of `advance_native_state_machines`: update, try each
 /// machine's transitions and advance by zero without starting a frame, up to
-/// five passes, until no component is dirty. Whether anything changed.
+/// five passes, until no component is dirty and no layout is left to solve.
+/// Only an update pass solves the layout, before it updates the components,
+/// so a layout marked dirty while they update (a text that reshaped in a
+/// font its solve did not measure) waits for the next pass, as upstream's
+/// `StateMachineInstance::advanceAndApply` keeps going for it. Whether
+/// anything changed.
 fn settle_native_state_machines(
     artboard: &RuntimeArtboardInstanceHandle,
     machines: &[RuntimeStateMachineInstanceHandle],
@@ -506,7 +513,9 @@ fn settle_native_state_machines(
             }
         }
         changed |= artboard.advance_internal(0.0, settle_flags);
-        if !artboard.with_artboard(|artboard| artboard.base.has_component_dirt()) {
+        if artboard.with_artboard(|artboard| {
+            !artboard.base.has_component_dirt() && !artboard.base.has_dirty_layout()
+        }) {
             break;
         }
     }

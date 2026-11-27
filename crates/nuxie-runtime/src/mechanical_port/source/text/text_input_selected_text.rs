@@ -13,7 +13,14 @@ pub struct TextInputSelectedText {
 }
 crate::mechanical_port::source::transform_component::impl_transform_update!(
     TextInputSelectedText,
-    crate::mechanical_port::source::transform_component::update_transform_super::<Self>,
+    |owner, dirt| {
+        crate::mechanical_port::source::transform_component::update_transform_super::<Self>(
+            owner, dirt,
+        );
+        owner.with_downcast_mut::<Self, _>(|object| {
+            object.base.base.update_after_transform_super(dirt)
+        });
+    },
     crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
     crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
     crate::mechanical_port::source::transform_component::compose_world_transform::<Self>,

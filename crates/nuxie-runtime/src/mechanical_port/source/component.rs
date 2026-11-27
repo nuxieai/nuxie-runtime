@@ -121,6 +121,38 @@ impl ActiveLayoutOwner<'_> {
             Self::Artboard(artboard) => artboard.component_update_collapsables(),
         }
     }
+
+    /// One step of Node::markLayoutNodeDirty's walk up its ancestors, when it
+    /// reaches this owner: LayoutComponent::markLayoutNodeDirty(false) on the
+    /// borrowed owner. Returns the parent the walk continues from.
+    pub(crate) fn mark_layout_node_dirty(
+        &mut self,
+        active_handle: &CoreHandle,
+    ) -> Option<CoreHandle> {
+        match self {
+            Self::Layout(layout) => {
+                layout.mark_layout_node_dirty(false);
+                layout.base.base.base.base.base.parent_handle()
+            }
+            Self::Artboard(artboard) => {
+                // LayoutComponent::markLayoutNodeDirty(false) on the Artboard's
+                // own layout. Its artboard is itself, which is the borrow held
+                // here, so the root is marked through it.
+                let layout = &mut artboard.base.base;
+                layout.layout_data.mark_dirty();
+                match layout.base.base.base.base.base.artboard_handle() {
+                    Some(root) if root == *active_handle => {
+                        artboard.mark_layout_dirty(root);
+                    }
+                    Some(root) => {
+                        Artboard::mark_layout_dirty_occurrence(&root, active_handle.clone(), None);
+                    }
+                    None => {}
+                }
+                artboard.base.base.base.base.base.base.base.parent_handle()
+            }
+        }
+    }
 }
 
 impl From<CoreHandle> for ComponentOccurrenceHandle {
@@ -248,6 +280,12 @@ impl ComponentOccurrenceHandle {
             crate::mechanical_port::source::generated::bones::skin_base::SkinBase::TYPE_KEY,
         ) {
             crate::mechanical_port::source::bones::skin::Skin::on_dirty_from_layout(
+                handle, dirt, active, active_handle,
+            );
+        } else if handle.is_type_of(
+            crate::mechanical_port::source::generated::text::text_style_base::TextStyleBase::TYPE_KEY,
+        ) {
+            crate::mechanical_port::source::text::text_style::TextStyle::on_dirty_from_layout(
                 handle, dirt, active, active_handle,
             );
         } else {

@@ -14,6 +14,21 @@ thread_local! {
     static VERIFY_QUIET_ROWS: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
 }
 
+/// Test support: the row update passes lists have run, and the layout
+/// solves those passes ran.
+#[cfg(any(test, feature = "test-support"))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RowUpdates {
+    pub passes: u64,
+    pub solves: u64,
+}
+
+#[cfg(any(test, feature = "test-support"))]
+thread_local! {
+    static ROW_UPDATES: std::cell::Cell<RowUpdates> =
+        const { std::cell::Cell::new(RowUpdates { passes: 0, solves: 0 }) };
+}
+
 #[derive(Clone, Copy)]
 enum RowPass {
     Advance,
@@ -1625,6 +1640,13 @@ impl ArtboardComponentList {
         }
     }
 
+    /// Test support: the row update passes this thread's lists have run,
+    /// counting each list's update of its rows, and the solves in them.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn row_updates() -> RowUpdates {
+        ROW_UPDATES.with(std::cell::Cell::get)
+    }
+
     #[cfg(any(test, feature = "testing"))]
     pub fn quiet_row_skips() -> u64 {
         QUIET_ROW_SKIPS.with(std::cell::Cell::get)
@@ -2367,7 +2389,16 @@ impl ArtboardComponentList {
                     break;
                 };
                 if let Some(artboard) = artboard {
+                    #[cfg(any(test, feature = "test-support"))]
+                    let solves = Artboard::layout_pass_count();
                     artboard.update_pass(false);
+                    #[cfg(any(test, feature = "test-support"))]
+                    ROW_UPDATES.with(|count| {
+                        let mut updates = count.get();
+                        updates.passes += 1;
+                        updates.solves += Artboard::layout_pass_count() - solves;
+                        count.set(updates);
+                    });
                 }
                 index = owner
                     .with_downcast::<Self, _>(|list| list.next_awake_row(index as usize + 1))

@@ -126,10 +126,19 @@ pub fn resolve_semantic_data(component: Option<&CoreHandle>) -> ResolvedSemantic
 /// Authored visibility is checked again at action dispatch, before a pending
 /// opacity update has necessarily propagated into the rendered component tree.
 pub fn semantic_source_is_visible(component: &CoreHandle) -> bool {
-    source_ancestors_are_visible(component) && !semantic_is_fully_clipped(component)
+    source_ancestors_are_visible(component, None) && !semantic_is_fully_clipped(component)
 }
 
-pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
+/// Whether `component` and every ancestor across hosts shows: authored
+/// visibility and an opacity above zero. With `stop` the walk ends at that
+/// ancestor, for a host reading a box under a copy flying in place
+/// (page_player/island.rs): the flight draws the copy's entries alone, and
+/// at the copy only hidden and collapsed count, since the copy's render
+/// opacity, which the reader takes, starts from it or leaves its own out.
+pub(crate) fn source_ancestors_are_visible(
+    component: &CoreHandle,
+    stop: Option<&CoreHandle>,
+) -> bool {
     use crate::css_layout::group_opacity::{ScreenLayer, screen_fade_is_zero, screen_layer_of};
     let mut current = Some(component.clone());
     let mut visited = std::collections::HashSet::new();
@@ -141,7 +150,7 @@ pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
             return false;
         }
         let kept_here = kept.get_or_insert_with(|| component.clone()).clone();
-        let Some((visible, screen_at_zero, parent, crosses)) = component.with(|component| {
+        let Some((shown, visible, screen_at_zero, parent, crosses)) = component.with(|component| {
             let shown = !component.component_is_collapsed()
                 && !(component.as_drawable().is_some() && component.drawable_is_hidden());
             let opacity = component
@@ -156,6 +165,7 @@ pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
                 .component_parent_handle()
                 .or_else(|| component.as_artboard().and_then(Artboard::host));
             (
+                shown,
                 visible,
                 screen_at_zero,
                 parent,
@@ -164,6 +174,9 @@ pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
         }) else {
             return false;
         };
+        if stop == Some(&component) {
+            return shown;
+        }
         let visible = visible
             || (screen_at_zero
                 && matches!(
@@ -194,21 +207,30 @@ fn semantic_is_fully_clipped(component: &CoreHandle) -> bool {
 /// the geometry budget fails with its error, as `validate_semantic_geometry`
 /// fails a node's, rather than reading as cut away; every part is checked.
 pub(crate) fn semantic_clipped_away(component: &CoreHandle) -> Result<bool, SemanticGeometryError> {
-    clipped_away(component, true)
+    clipped_away(component, true, None)
 }
 
 /// `semantic_clipped_away` without the box's own overflow clip, for a
 /// host laying a platform view over the box (page_player/island.rs): that
 /// clip cuts what is inside the box, not the box, as `island_clip` reads.
-pub(crate) fn island_clipped_away(component: &CoreHandle) -> Result<bool, SemanticGeometryError> {
-    clipped_away(component, false)
+/// Under `flight`, the box and the clips it draws under are those
+/// `island_clip` reads, in the root's space as the flight draws them.
+pub(crate) fn island_clipped_away(
+    component: &CoreHandle,
+    flight: Option<&IslandFlight>,
+) -> Result<bool, SemanticGeometryError> {
+    clipped_away(component, false, flight)
 }
 
-fn clipped_away(component: &CoreHandle, own_clip: bool) -> Result<bool, SemanticGeometryError> {
+fn clipped_away(
+    component: &CoreHandle,
+    own_clip: bool,
+    flight: Option<&IslandFlight>,
+) -> Result<bool, SemanticGeometryError> {
     let geometry = semantic_geometry(component);
     let mut clipped = !geometry.is_empty();
     for (owner, polygon) in geometry {
-        let region = clip_region(&owner, polygon.to_vec(), own_clip);
+        let region = clip_region(&owner, polygon.to_vec(), own_clip, flight);
         region.status()?;
         clipped &= region.is_empty();
     }
@@ -216,22 +238,24 @@ fn clipped_away(component: &CoreHandle, own_clip: bool) -> Result<bool, Semantic
 }
 
 fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> SemanticClipRegion {
-    clip_region(component, polygon, true)
+    clip_region(component, polygon, true, None)
 }
 
-fn clip_region(component: &CoreHandle, polygon: Vec<Vec2D>, own_clip: bool) -> SemanticClipRegion {
+/// `polygon`, in the root's space where `component` rests, cut by every clip
+/// `component` draws under: through `flight`'s pose while it flies.
+fn clip_region(
+    component: &CoreHandle,
+    mut polygon: Vec<Vec2D>,
+    own_clip: bool,
+    flight: Option<&IslandFlight>,
+) -> SemanticClipRegion {
+    if let Some(flight) = flight {
+        for point in &mut polygon {
+            *point = flight.pose * *point;
+        }
+    }
     let mut region = SemanticClipRegion::from_polygon(&polygon);
-    let complete = walk_rendered_clips(component, own_clip, |artboard, clip| {
-        let clip = if let Some(artboard) = artboard {
-            let Some(clip) = artboard.with_downcast_mut::<Artboard, _>(|artboard| {
-                clip.mapped(|point| artboard.semantic_root_transform(point))
-            }) else {
-                return false;
-            };
-            clip
-        } else {
-            clip
-        };
+    let complete = walk_drawn_clips(component, own_clip, flight, |clip| {
         clip.intersect(&mut region);
         !region.is_empty()
     });
@@ -241,24 +265,87 @@ fn clip_region(component: &CoreHandle, polygon: Vec<Vec2D>, own_clip: bool) -> S
     region
 }
 
+/// A copy flying in place, as its lift draws it (css_layout/lift.rs), for
+/// a host reading a box at or under it (page_player/island.rs).
+pub(crate) struct IslandFlight {
+    /// The copy. The box's own walk ends with its clips: the lift draws
+    /// the copy above its ancestors' clips.
+    pub(crate) copy: CoreHandle,
+    /// From the root's space where the box rests to the root's space where
+    /// the lift draws it.
+    pub(crate) pose: Mat2D,
+    /// The outline of the flight's zoom clip, in the root's space as drawn.
+    pub(crate) zoom: Option<RawPath>,
+    /// The upper Screen: the lift draws as its content, under its own clips
+    /// and its page's.
+    pub(crate) upper: CoreHandle,
+}
+
+/// Yields each clip `component` draws under, in the root's space as drawn,
+/// in the draw's order. At rest: every clip from `component` to the root.
+/// Under `flight`: the clips from `component` up to and including the copy,
+/// through the flight's pose; then the zoom clip; then the upper Screen's
+/// own clips and every clip above it. False when `visit` stops the walk or
+/// a clip can't be read.
+fn walk_drawn_clips(
+    component: &CoreHandle,
+    own_clip: bool,
+    flight: Option<&IslandFlight>,
+    mut visit: impl FnMut(RenderedClip) -> bool,
+) -> bool {
+    let pose = flight.map(|flight| flight.pose);
+    let mut to_root = |artboard: Option<&CoreHandle>, clip: RenderedClip, pose: Option<Mat2D>| {
+        let clip = match artboard {
+            Some(artboard) => {
+                match artboard.with_downcast_mut::<Artboard, _>(|artboard| {
+                    clip.mapped(|point| artboard.semantic_root_transform(point))
+                }) {
+                    Some(clip) => clip,
+                    None => return false,
+                }
+            }
+            None => clip,
+        };
+        visit(match pose {
+            Some(pose) => clip.mapped(|point| pose * point),
+            None => clip,
+        })
+    };
+    if !walk_rendered_clips(
+        component,
+        own_clip,
+        flight.map(|flight| &flight.copy),
+        |artboard, clip| to_root(artboard, clip, pose),
+    ) {
+        return false;
+    }
+    let Some(flight) = flight else {
+        return true;
+    };
+    if let Some(zoom) = &flight.zoom
+        && !to_root(
+            None,
+            RenderedClip::Path(zoom.clone(), nuxie_render_api::FillRule::NonZero),
+            None,
+        )
+    {
+        return false;
+    }
+    walk_rendered_clips(&flight.upper, true, None, |artboard, clip| {
+        to_root(artboard, clip, None)
+    })
+}
+
 /// What clips `component` in the root artboard's space, for a host that
 /// lays a platform view over it (page_player/island.rs). Its own overflow
 /// clip is left out: that clips what is inside the box, not the box.
 /// Rectangles meet in their intersection. A walk that cannot finish, such
-/// as a clip with no path, which draws nothing, clips the box away.
-pub(crate) fn island_clip(component: &CoreHandle) -> IslandClip {
+/// as a clip with no path, which draws nothing, clips the box away. Under
+/// `flight`, the clips the flight draws the box under, as drawn
+/// (`walk_drawn_clips`).
+pub(crate) fn island_clip(component: &CoreHandle, flight: Option<&IslandFlight>) -> IslandClip {
     let mut met = IslandClip::None;
-    let complete = walk_rendered_clips(component, false, |artboard, clip| {
-        let clip = if let Some(artboard) = artboard {
-            let Some(clip) = artboard.with_downcast_mut::<Artboard, _>(|artboard| {
-                clip.mapped(|point| artboard.semantic_root_transform(point))
-            }) else {
-                return false;
-            };
-            clip
-        } else {
-            clip
-        };
+    let complete = walk_drawn_clips(component, false, flight, |clip| {
         met = match (met, clip.axis_aligned_rect()) {
             (IslandClip::NotRect, _) | (_, None) => IslandClip::NotRect,
             (IslandClip::None, Some(rect)) => IslandClip::Rect(rect),
@@ -375,7 +462,7 @@ fn walk_geometry_clips(
     mut visit: impl FnMut(RenderedClip) -> bool,
 ) -> bool {
     let mut hosts = None;
-    walk_rendered_clips(component, false, |artboard, clip| {
+    walk_rendered_clips(component, false, None, |artboard, clip| {
         let clip = if let Some(artboard) = artboard {
             let find = |spaces: &[(CoreHandle, Mat2D)]| {
                 spaces
@@ -487,9 +574,11 @@ pub(crate) fn rendered_geometry_contains_point(
 /// Yield each rendered clip once, crossing hosts into their parent
 /// artboards. Own paint precedes the owner's content clip, but stays
 /// inside an artboard's frame and any clipping shapes that cover it.
+/// With `stop` the walk ends, complete, after that ancestor's clips.
 fn walk_rendered_clips(
     component: &CoreHandle,
     own_clip: bool,
+    stop: Option<&CoreHandle>,
     mut visit: impl FnMut(Option<&CoreHandle>, RenderedClip) -> bool,
 ) -> bool {
     use crate::css_layout::group_opacity::{lifted_on, marked_above};
@@ -630,6 +719,9 @@ fn walk_rendered_clips(
             if !visit(artboard.as_ref(), clip) {
                 return false;
             }
+        }
+        if stop == Some(&owner) {
+            return true;
         }
         current = parent;
     }
@@ -818,7 +910,7 @@ pub fn rendered_geometry_intersects_host_clip(
     {
         return Err(SemanticGeometryError::InvalidPath);
     }
-    if viewport.is_empty_or_nan() || !source_ancestors_are_visible(component) {
+    if viewport.is_empty_or_nan() || !source_ancestors_are_visible(component, None) {
         return Ok(false);
     }
     let corners = [

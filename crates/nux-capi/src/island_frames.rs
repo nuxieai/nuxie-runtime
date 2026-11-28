@@ -15,7 +15,10 @@ const NUX_PLAYER_ISLAND_FRAMES_MAX: usize = 4096;
 /// `clip` is 0 when nothing clips the box, 1 when `clip_*` is the
 /// rectangle that does, in root space, and 2 when a clip is not a
 /// rectangle. `placeable` is 0 when the transform rotates, skews or
-/// mirrors, `clip` is 2, or the box or anything above it flies in place.
+/// mirrors, or `clip` is 2. A box under a copy flying in place reads
+/// as the flight draws it: under its pose, at its opacity, and cut by
+/// the clips it draws under. When `visible` is 0, the clip rectangle
+/// carries no meaning, and a host must not read it.
 /// Canonical 0/1 flags.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]

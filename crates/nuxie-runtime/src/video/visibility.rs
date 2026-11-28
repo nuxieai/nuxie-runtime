@@ -53,7 +53,7 @@ fn reader_is_visible_in(
         nuxie_render_api::FillRule,
     )>,
 ) -> Result<bool, SemanticGeometryError> {
-    if !source_ancestors_are_visible(reader) {
+    if !source_ancestors_are_visible(reader, None) {
         return Ok(false);
     }
     let mut current = Some(reader.clone());

@@ -1779,7 +1779,14 @@ impl ArtboardComponentList {
                 if artboard.advance_internal(elapsed_seconds, advancing_flags) {
                     keep_going = true;
                 }
-                if artboard.with_artboard(|artboard| artboard.has_component_dirt()) {
+                // Nuxie: the lift also takes a row that lays itself out (no
+                // layout parent took its layout) and owes a solve. Only the
+                // row's own update pass solves it, and this list runs that
+                // pass on its Components dirt.
+                if artboard.with_artboard(|artboard| {
+                    artboard.has_component_dirt()
+                        || (artboard.base.updates_own_layout() && artboard.base.has_dirty_layout())
+                }) {
                     owner.with_downcast_mut::<Self, _>(|owner| {
                         owner
                             .component_mut()

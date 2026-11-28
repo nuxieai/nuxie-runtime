@@ -487,9 +487,41 @@ fn advance_native_state_machines(
     }
 }
 
+/// The most update passes one settle runs.
+const SETTLE_PASS_LIMIT: usize = 5;
+
+/// Test support: one settle's update passes, and whether it ended with the
+/// artboard it settled having no component dirt and no layout to solve.
+#[cfg(any(test, feature = "test-support"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SettlePasses {
+    pub passes: usize,
+    pub settled: bool,
+}
+
+#[cfg(any(test, feature = "test-support"))]
+thread_local! {
+    static SETTLES: std::cell::RefCell<Option<Vec<SettlePasses>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Test support: the settle loop's limit on update passes.
+#[cfg(any(test, feature = "test-support"))]
+pub fn settle_pass_limit() -> usize {
+    SETTLE_PASS_LIMIT
+}
+
+/// Test support: starts (`true`) or stops recording each settle on this
+/// thread, and returns the settles recorded since the last start.
+#[cfg(any(test, feature = "test-support"))]
+pub fn measure_settles(enabled: bool) -> Vec<SettlePasses> {
+    SETTLES.with(|settles| settles.replace(enabled.then(Vec::new)).unwrap_or_default())
+}
+
 /// The settle half of `advance_native_state_machines`: update, try each
 /// machine's transitions and advance by zero without starting a frame, up to
-/// five passes, until no component is dirty and no layout is left to solve.
+/// `SETTLE_PASS_LIMIT` passes, until no component is dirty and no layout is
+/// left to solve.
 /// Only an update pass solves the layout, before it updates the components,
 /// so a layout marked dirty while they update (a text that reshaped in a
 /// font its solve did not measure) waits for the next pass, as upstream's
@@ -503,7 +535,7 @@ fn settle_native_state_machines(
         AdvanceFlags::IS_ROOT.0 | AdvanceFlags::ANIMATE.0 | AdvanceFlags::ADVANCE_NESTED.0,
     );
     let mut changed = false;
-    for _ in 0..5 {
+    for _pass in 1..=SETTLE_PASS_LIMIT {
         changed |= artboard.update_pass(true);
         for machine in machines {
             let transitioned = machine.with_instance_mut(|machine| machine.try_change_state());
@@ -513,9 +545,21 @@ fn settle_native_state_machines(
             }
         }
         changed |= artboard.advance_internal(0.0, settle_flags);
-        if artboard.with_artboard(|artboard| {
+        let settled = artboard.with_artboard(|artboard| {
             !artboard.base.has_component_dirt() && !artboard.base.has_dirty_layout()
-        }) {
+        });
+        #[cfg(any(test, feature = "test-support"))]
+        if settled || _pass == SETTLE_PASS_LIMIT {
+            SETTLES.with(|settles| {
+                if let Some(settles) = settles.borrow_mut().as_mut() {
+                    settles.push(SettlePasses {
+                        passes: _pass,
+                        settled,
+                    });
+                }
+            });
+        }
+        if settled {
             break;
         }
     }
